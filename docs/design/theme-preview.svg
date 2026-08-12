@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="650" viewBox="0 0 960 650" role="img" aria-labelledby="title desc">
+  <title id="title">Temas claro y oscuro de MACHUCO</title>
+  <desc id="desc">Comparación de fondos, superficies, textos, acciones y estados en los temas claro y oscuro.</desc>
+  <defs>
+    <linearGradient id="brand" x1="0" x2="1"><stop stop-color="#8B5CF6"/><stop offset=".5" stop-color="#A855F7"/><stop offset="1" stop-color="#D946EF"/></linearGradient>
+    <style>.h{font:700 22px Inter,Arial}.sh{font:700 17px Inter,Arial}.b{font:600 13px Inter,Arial}.c{font:500 11px Inter,Arial}</style>
+  </defs>
+  <rect width="960" height="650" rx="24" fill="#30283A"/>
+  <text x="40" y="48" class="h" fill="#fff">MACHUCO · Temas del sistema</text>
+  <text x="40" y="74" class="c" fill="#fff" opacity=".7">Los colores de marca se conservan; fondos, superficies y texto se adaptan al brillo del dispositivo.</text>
+
+  <g transform="translate(34 100)">
+    <rect width="430" height="510" rx="28" fill="#100B18" stroke="#fff" stroke-opacity=".14"/>
+    <text x="26" y="42" class="sh" fill="#F8F6FF">Modo oscuro</text><text x="26" y="64" class="c" fill="#fff" opacity=".55">Brightness.dark</text>
+    <rect x="26" y="88" width="112" height="72" rx="14" fill="#0D0913" stroke="#fff" stroke-opacity=".12"/><text x="38" y="132" class="b" fill="#F8F6FF">Canvas</text><text x="38" y="150" class="c" fill="#fff" opacity=".55">#0D0913</text>
+    <rect x="151" y="88" width="112" height="72" rx="14" fill="#15111F"/><text x="163" y="132" class="b" fill="#F8F6FF">Surface</text><text x="163" y="150" class="c" fill="#fff" opacity=".55">#15111F</text>
+    <rect x="276" y="88" width="128" height="72" rx="14" fill="#21182B"/><text x="288" y="132" class="b" fill="#F8F6FF">Elevated</text><text x="288" y="150" class="c" fill="#fff" opacity=".55">#21182B</text>
+    <text x="26" y="198" class="b" fill="#F8F6FF">Texto primario</text><text x="26" y="221" class="b" fill="#fff" opacity=".62">Texto secundario</text><text x="26" y="244" class="b" fill="#fff" opacity=".42">Texto atenuado</text>
+    <rect x="26" y="270" width="378" height="54" rx="16" fill="url(#brand)"/><text x="215" y="303" class="b" fill="#fff" text-anchor="middle">Acción principal</text>
+    <rect x="26" y="340" width="378" height="112" rx="18" fill="#15111F" stroke="#fff" stroke-opacity=".08"/><text x="46" y="372" class="sh" fill="#F8F6FF">Suite Aurora</text><text x="46" y="396" class="c" fill="#fff" opacity=".55">Jacuzzi · Wi-Fi · Parqueadero</text><rect x="46" y="414" width="94" height="24" rx="12" fill="#6EE7B7" fill-opacity=".13"/><text x="93" y="430" class="c" font-weight="700" fill="#6EE7B7" text-anchor="middle">Disponible</text><text x="382" y="430" class="b" fill="#F8F6FF" text-anchor="end">$120.000</text>
+    <text x="26" y="482" class="c" fill="#fff" opacity=".55">Contraste alto · ideal para baja iluminación</text>
+  </g>
+
+  <g transform="translate(496 100)">
+    <rect width="430" height="510" rx="28" fill="#FAF7FC" stroke="#21152C" stroke-opacity=".12"/>
+    <text x="26" y="42" class="sh" fill="#21152C">Modo claro</text><text x="26" y="64" class="c" fill="#5F5668">Brightness.light</text>
+    <rect x="26" y="88" width="112" height="72" rx="14" fill="#F4EFF7" stroke="#21152C" stroke-opacity=".10"/><text x="38" y="132" class="b" fill="#21152C">Canvas</text><text x="38" y="150" class="c" fill="#5F5668">#F4EFF7</text>
+    <rect x="151" y="88" width="112" height="72" rx="14" fill="#FFFFFF" stroke="#21152C" stroke-opacity=".10"/><text x="163" y="132" class="b" fill="#21152C">Surface</text><text x="163" y="150" class="c" fill="#5F5668">#FFFFFF</text>
+    <rect x="276" y="88" width="128" height="72" rx="14" fill="#F0E8F5" stroke="#21152C" stroke-opacity=".08"/><text x="288" y="132" class="b" fill="#21152C">Elevated</text><text x="288" y="150" class="c" fill="#5F5668">#F0E8F5</text>
+    <text x="26" y="198" class="b" fill="#21152C">Texto primario</text><text x="26" y="221" class="b" fill="#5F5668">Texto secundario</text><text x="26" y="244" class="b" fill="#7D7286">Texto atenuado</text>
+    <rect x="26" y="270" width="378" height="54" rx="16" fill="url(#brand)"/><text x="215" y="303" class="b" fill="#fff" text-anchor="middle">Acción principal</text>
+    <rect x="26" y="340" width="378" height="112" rx="18" fill="#FFFFFF" stroke="#21152C" stroke-opacity=".10"/><text x="46" y="372" class="sh" fill="#21152C">Suite Aurora</text><text x="46" y="396" class="c" fill="#5F5668">Jacuzzi · Wi-Fi · Parqueadero</text><rect x="46" y="414" width="94" height="24" rx="12" fill="#047857" fill-opacity=".10"/><text x="93" y="430" class="c" font-weight="700" fill="#047857" text-anchor="middle">Disponible</text><text x="382" y="430" class="b" fill="#21152C" text-anchor="end">$120.000</text>
+    <text x="26" y="482" class="c" fill="#5F5668">Superficies claras · legible con luz ambiental</text>
+  </g>
+</svg>
