@@ -460,6 +460,90 @@ class App extends StatelessWidget {
 }
 ```
 
+### 6.1 Implementación rápida: tokens, componentes y vistas
+
+La dependencia visual debe seguir una sola dirección:
+
+```text
+Tokens → ThemeData → Componentes reutilizables → Vistas
+```
+
+**1. Definir tokens:** contienen valores reutilizables, nunca widgets ni lógica de negocio.
+
+```dart
+abstract final class AppSpacing {
+  static const sm = 8.0;
+  static const md = 16.0;
+  static const lg = 24.0;
+}
+
+abstract final class AppRadius {
+  static const md = 12.0;
+  static const lg = 16.0;
+}
+```
+
+**2. Llevar los tokens al tema:** los componentes Material reciben aquí su apariencia global.
+
+```dart
+final appTheme = ThemeData(
+  useMaterial3: true,
+  colorScheme: ColorScheme.fromSeed(seedColor: AppColors.violet),
+  cardTheme: CardThemeData(
+    margin: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+    ),
+  ),
+);
+```
+
+**3. Crear componentes:** consumen el tema y los tokens; la vista solo entrega contenido y acciones.
+
+```dart
+class AppCard extends StatelessWidget {
+  const AppCard({required this.child, super.key});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          child: child,
+        ),
+      );
+}
+```
+
+**4. Componer la vista:** no usar hexadecimales, radios ni estilos duplicados directamente.
+
+```dart
+class MotelsView extends StatelessWidget {
+  const MotelsView({required this.motelNames, super.key});
+
+  final List<String> motelNames;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        appBar: AppBar(title: const Text('Moteles')),
+        body: ListView.separated(
+          padding: const EdgeInsets.all(AppSpacing.md),
+          itemCount: motelNames.length,
+          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
+          itemBuilder: (_, index) => AppCard(
+            child: Text(
+              motelNames[index],
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ),
+        ),
+      );
+}
+```
+
+Regla práctica: si un valor visual se repite, se convierte en token; si una estructura visual se repite, se convierte en componente; la vista únicamente organiza componentes y conecta el estado.
+
 ---
 
 ## 7. Tipografía

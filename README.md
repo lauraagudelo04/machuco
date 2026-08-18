@@ -38,25 +38,65 @@ Permitir que los clientes encuentren y reserven habitaciones y servicios desde u
 
 ### Cliente
 
-Puede explorar establecimientos, consultar habitaciones y disponibilidad, seleccionar productos o servicios adicionales, reservar, pagar, gestionar sus reservas, presentar PQRS y publicar reseñas.
+Puede consultar y utilizar los servicios de la plataforma desde la aplicación. Tiene acceso a:
+
+- La lista de moteles y la información de cada establecimiento.
+- Las habitaciones disponibles de cada motel y sus detalles.
+- La creación de reservas de habitaciones.
+- La lista de sus reservas y el detalle de cada una.
+- La creación de PQRS y la consulta de su información y estado.
+- La pasarela de pagos para completar sus transacciones.
+- El historial y los detalles de los pagos realizados.
+- Las facturas asociadas a sus pagos y reservas.
 
 ### Propietario
 
-Puede administrar establecimientos, habitaciones, disponibilidad, reservas, productos, servicios, pagos, reseñas y suscripciones mediante un panel diferenciado.
+Puede administrar la operación de sus establecimientos mediante un panel diferenciado. Tiene acceso a:
+
+- La lista de sus moteles y la información detallada de cada uno.
+- La creación y eliminación de moteles.
+- La lista de habitaciones de cada motel y sus detalles.
+- La lista de clientes asociados a sus moteles.
+- La desasociación de clientes y su desactivación dentro de la lista de clientes.
+- La lista general de reservas y su consulta filtrada por cliente, motel o habitación.
+- La consulta de pagos pendientes, pagos recibidos y demás información relacionada con los pagos.
+- La consulta de facturas.
+- La creación de recibos de caja.
+- El envío de notificaciones sobre reservas canceladas desde la vista de reservas.
+
+### Administrador del sistema
+
+Puede supervisar y consultar la operación general de la plataforma mediante un panel administrativo. Tiene acceso a:
+
+- La lista de propietarios y el detalle de cada uno.
+- La lista de moteles y su información.
+- La información financiera de la plataforma y de los moteles.
+- Las reservas y los indicadores estadísticos de los moteles.
+- Las PQRS, sus estados y demás información asociada.
+- Los servicios adicionales disponibles.
+- Las habitaciones y sus detalles.
 
 ## Alcance funcional
 
 - Autenticación y sesiones.
 - Acceso y perfiles según el rol.
-- Consulta y gestión de moteles.
+- Consulta de propietarios y sus detalles por parte del administrador.
+- Creación, consulta y eliminación de moteles.
 - Habitaciones, clases y disponibilidad.
 - Creación y administración de reservas.
+- Consulta de reservas por cliente, motel o habitación.
+- Administración de clientes asociados a los moteles.
 - Productos y servicios adicionales.
-- Pagos y consulta de pagos.
+- Finanzas e indicadores estadísticos.
+- Pasarela de pagos e historial de pagos.
+- Consulta de facturas.
+- Creación de recibos de caja.
+- Notificaciones de reservas canceladas.
 - Reseñas y su gestión.
-- PQRS.
+- Creación de PQRS y seguimiento de sus estados.
 - Suscripciones.
 - Panel del propietario.
+- Panel del administrador del sistema.
 
 Este alcance describe el producto; todavía no determina la implementación técnica de cada módulo.
 
