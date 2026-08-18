@@ -1,0 +1,173 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="830" viewBox="0 0 1100 830" role="img" aria-labelledby="title desc">
+  <title id="title">Ejemplo sencillo del diseño de MACHUCO</title>
+  <desc id="desc">Referencia visual con colores, una pantalla móvil, componentes básicos y reglas de implementación.</desc>
+
+  <defs>
+    <linearGradient id="brand" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#8B5CF6"/>
+      <stop offset="0.5" stop-color="#A855F7"/>
+      <stop offset="1" stop-color="#D946EF"/>
+    </linearGradient>
+    <linearGradient id="roomImage" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#49305F"/>
+      <stop offset="1" stop-color="#21152C"/>
+    </linearGradient>
+    <style>
+      .text { font-family: Inter, Arial, sans-serif; fill: #F8F6FF; }
+      .muted { font-family: Inter, Arial, sans-serif; fill: #AAA3B6; }
+      .label { font-family: Inter, Arial, sans-serif; fill: #8F879B; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; }
+      .code { font-family: Consolas, monospace; fill: #AAA3B6; font-size: 10px; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="830" fill="#0D0913"/>
+
+  <!-- Header -->
+  <g transform="translate(44 38)">
+    <rect width="40" height="40" rx="12" fill="url(#brand)"/>
+    <text x="20" y="27" text-anchor="middle" class="text" font-size="18" font-weight="800">M</text>
+    <text x="56" y="18" class="text" font-size="18" font-weight="800">MACHUCO</text>
+    <text x="56" y="36" class="muted" font-size="11">Referencia visual sencilla para Flutter</text>
+  </g>
+
+  <!-- Phone example -->
+  <g transform="translate(44 108)">
+    <text class="label">EJEMPLO DE PANTALLA</text>
+    <rect y="24" width="320" height="584" rx="32" fill="#100B18" stroke="#FFFFFF" stroke-opacity="0.12" stroke-width="2"/>
+    <rect x="112" y="36" width="96" height="8" rx="4" fill="#FFFFFF" fill-opacity="0.1"/>
+
+    <text x="22" y="82" class="muted" font-size="11">Explorar habitaciones</text>
+    <text x="22" y="110" class="text" font-size="22" font-weight="800">Encuentra tu espacio</text>
+
+    <rect x="22" y="132" width="276" height="46" rx="14" fill="#21182B"/>
+    <circle cx="43" cy="154" r="7" fill="none" stroke="#AAA3B6" stroke-width="1.6"/>
+    <path d="m48 159 5 5" stroke="#AAA3B6" stroke-width="1.6" stroke-linecap="round"/>
+    <text x="64" y="159" class="muted" font-size="11">Buscar motel o habitación</text>
+
+    <rect x="22" y="198" width="276" height="280" rx="20" fill="#171120" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <rect x="22" y="198" width="276" height="132" rx="20" fill="url(#roomImage)"/>
+    <path d="M22 309 75 259l38 34 46-57 48 50 41-41 50 48v37H22Z" fill="#A855F7" fill-opacity="0.18"/>
+
+    <rect x="36" y="212" width="82" height="26" rx="13" fill="#10271F"/>
+    <circle cx="51" cy="225" r="4" fill="#6EE7B7"/>
+    <text x="62" y="229" fill="#B7F7DB" font-family="Inter,Arial" font-size="9" font-weight="700">DISPONIBLE</text>
+
+    <text x="38" y="359" class="text" font-size="17" font-weight="750">Suite Aurora</text>
+    <text x="38" y="380" class="muted" font-size="11">Jacuzzi · Wi-Fi · Parqueadero</text>
+    <text x="38" y="414" class="text" font-size="19" font-weight="800">$120.000</text>
+    <text x="132" y="414" class="muted" font-size="10">por 4 horas</text>
+
+    <rect x="38" y="434" width="244" height="34" rx="12" fill="#21182B"/>
+    <text x="160" y="456" text-anchor="middle" class="text" font-size="11" font-weight="700">Ver detalles</text>
+
+    <rect x="22" y="496" width="276" height="50" rx="16" fill="url(#brand)"/>
+    <text x="160" y="527" text-anchor="middle" class="text" font-size="13" font-weight="750">Reservar ahora</text>
+
+    <line x1="0" y1="566" x2="320" y2="566" stroke="#FFFFFF" stroke-opacity="0.08"/>
+    <g font-family="Inter,Arial" font-size="9" text-anchor="middle">
+      <text x="54" y="592" fill="#E879F9" font-weight="700">Inicio</text>
+      <text x="132" y="592" fill="#777080">Explorar</text>
+      <text x="213" y="592" fill="#777080">Reservas</text>
+      <text x="275" y="592" fill="#777080">Perfil</text>
+    </g>
+  </g>
+
+  <!-- Right column -->
+  <g transform="translate(414 108)">
+    <text class="label">COLORES PRINCIPALES</text>
+
+    <g transform="translate(0 24)">
+      <rect width="116" height="70" rx="16" fill="#100B18" stroke="#FFFFFF" stroke-opacity="0.12"/>
+      <text x="12" y="44" class="text" font-size="10" font-weight="700">Fondo</text>
+      <text x="12" y="59" class="code">#100B18</text>
+
+      <rect x="128" width="116" height="70" rx="16" fill="#21182B" stroke="#FFFFFF" stroke-opacity="0.12"/>
+      <text x="140" y="44" class="text" font-size="10" font-weight="700">Superficie</text>
+      <text x="140" y="59" class="code">#21182B</text>
+
+      <rect x="256" width="116" height="70" rx="16" fill="#8B5CF6"/>
+      <text x="268" y="44" class="text" font-size="10" font-weight="700">Primario</text>
+      <text x="268" y="59" font-family="Consolas,monospace" fill="#FFFFFF" fill-opacity="0.75" font-size="10">#8B5CF6</text>
+
+      <rect x="384" width="116" height="70" rx="16" fill="#D946EF"/>
+      <text x="396" y="44" class="text" font-size="10" font-weight="700">Acento</text>
+      <text x="396" y="59" font-family="Consolas,monospace" fill="#FFFFFF" fill-opacity="0.75" font-size="10">#D946EF</text>
+
+      <rect x="512" width="130" height="70" rx="16" fill="url(#brand)"/>
+      <text x="524" y="44" class="text" font-size="10" font-weight="700">Gradiente</text>
+      <text x="524" y="59" font-family="Consolas,monospace" fill="#FFFFFF" fill-opacity="0.75" font-size="10">CTA PRINCIPAL</text>
+    </g>
+
+    <text y="132" class="label">COMPONENTES BÁSICOS</text>
+
+    <g transform="translate(0 154)">
+      <rect width="198" height="48" rx="16" fill="url(#brand)"/>
+      <text x="99" y="30" text-anchor="middle" class="text" font-size="12" font-weight="700">Botón principal</text>
+
+      <rect x="212" width="198" height="48" rx="16" fill="#21182B" stroke="#FFFFFF" stroke-opacity="0.12"/>
+      <text x="311" y="30" text-anchor="middle" class="text" font-size="12" font-weight="700">Botón secundario</text>
+
+      <rect x="424" width="218" height="48" rx="16" fill="#171120"/>
+      <text x="533" y="30" text-anchor="middle" fill="#686271" font-family="Inter,Arial" font-size="12" font-weight="700">Botón deshabilitado</text>
+    </g>
+
+    <g transform="translate(0 222)">
+      <rect width="310" height="58" rx="16" fill="#21182B" stroke="#8B5CF6" stroke-width="1.5"/>
+      <text x="15" y="22" fill="#C4B5FD" font-family="Inter,Arial" font-size="9" font-weight="700">FECHA</text>
+      <text x="15" y="44" class="text" font-size="12">12 de agosto de 2026</text>
+
+      <rect x="326" width="316" height="58" rx="16" fill="#21182B" stroke="#FB7185" stroke-width="1.5"/>
+      <text x="341" y="22" fill="#FDA4AF" font-family="Inter,Arial" font-size="9" font-weight="700">CORREO</text>
+      <text x="341" y="44" class="text" font-size="12">usuario@correo</text>
+    </g>
+
+    <g transform="translate(0 302)">
+      <rect width="110" height="34" rx="17" fill="#10271F" stroke="#6EE7B7" stroke-opacity="0.22"/>
+      <circle cx="17" cy="17" r="4" fill="#6EE7B7"/>
+      <text x="30" y="21" fill="#B7F7DB" font-family="Inter,Arial" font-size="10" font-weight="700">Disponible</text>
+
+      <rect x="122" width="104" height="34" rx="17" fill="#30240E" stroke="#FBBF24" stroke-opacity="0.22"/>
+      <circle cx="139" cy="17" r="4" fill="#FBBF24"/>
+      <text x="152" y="21" fill="#FDE68A" font-family="Inter,Arial" font-size="10" font-weight="700">Pendiente</text>
+
+      <rect x="238" width="104" height="34" rx="17" fill="#34131C" stroke="#FB7185" stroke-opacity="0.22"/>
+      <text x="290" y="21" text-anchor="middle" fill="#FECDD3" font-family="Inter,Arial" font-size="10" font-weight="700">Cancelada</text>
+
+      <rect x="354" width="88" height="34" rx="17" fill="#8B5CF6"/>
+      <text x="398" y="21" text-anchor="middle" class="text" font-size="10" font-weight="700">Jacuzzi</text>
+
+      <rect x="454" width="76" height="34" rx="17" fill="#21182B"/>
+      <text x="492" y="21" text-anchor="middle" class="muted" font-size="10">Wi-Fi</text>
+    </g>
+
+    <text y="386" class="label">CARD SENCILLA</text>
+    <g transform="translate(0 408)">
+      <rect width="642" height="104" rx="20" fill="#171120" stroke="#FFFFFF" stroke-opacity="0.09"/>
+      <rect x="14" y="14" width="92" height="76" rx="14" fill="url(#roomImage)"/>
+      <path d="M14 77 44 49l22 19 19-26 21 22v26H14Z" fill="#A855F7" fill-opacity="0.2"/>
+      <text x="124" y="37" class="text" font-size="14" font-weight="750">Habitación Deluxe</text>
+      <text x="124" y="58" class="muted" font-size="10">2 personas · 4 horas · Jacuzzi</text>
+      <text x="124" y="82" class="text" font-size="16" font-weight="800">$95.000</text>
+      <rect x="500" y="30" width="124" height="42" rx="14" fill="#21182B"/>
+      <text x="562" y="56" text-anchor="middle" class="text" font-size="10" font-weight="700">Seleccionar</text>
+    </g>
+
+    <text y="554" class="label">REGLAS DE IMPLEMENTACIÓN</text>
+    <g transform="translate(0 578)">
+      <circle cx="5" cy="5" r="4" fill="#8B5CF6"/>
+      <text x="18" y="9" class="muted" font-size="11">Usar tokens; no escribir colores, radios o espacios directamente en las vistas.</text>
+
+      <circle cx="5" cy="29" r="4" fill="#8B5CF6"/>
+      <text x="18" y="33" class="muted" font-size="11">Mantener una sola acción principal por sección o pantalla.</text>
+
+      <circle cx="5" cy="53" r="4" fill="#8B5CF6"/>
+      <text x="18" y="57" class="muted" font-size="11">Aplicar la escala de 4, 8, 12, 16, 20, 24 y 32 px.</text>
+
+      <circle cx="5" cy="77" r="4" fill="#8B5CF6"/>
+      <text x="18" y="81" class="muted" font-size="11">Garantizar áreas táctiles de 48 × 48 px y contraste mínimo AA.</text>
+
+      <circle cx="5" cy="101" r="4" fill="#8B5CF6"/>
+      <text x="18" y="105" class="muted" font-size="11">Comunicar estados con texto o icono además del color.</text>
+    </g>
+  </g>
+</svg>
