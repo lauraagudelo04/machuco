@@ -102,6 +102,7 @@ class _ClientDashboardPageState extends State<ClientDashboardPage> {
   }
 }
 
+
 class _StatCard extends StatelessWidget {
   const _StatCard({required this.icon, required this.label, required this.value});
 
