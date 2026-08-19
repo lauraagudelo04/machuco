@@ -4,79 +4,27 @@ import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+
+import 'owner_models.dart';
+import 'owner_summary.dart';
 
 const _minimumFullNameLength = 3;
 const _compactWidthBreakpoint = 360.0;
 const _formMaxWidth = 520.0;
 
-/// Tipos de documento admitidos para identificar a un propietario.
-///
-/// Cada valor define cómo se valida y cómo se captura el número asociado, para
-/// evitar cadenas libres y condicionales dispersos en la vista.
-enum DocumentType {
-  citizenshipCard('CC', 'Cédula de ciudadanía', r'^\d{6,10}$', '1020304050'),
-  foreignerCard('CE', 'Cédula de extranjería', r'^\d{6,12}$', '345678'),
-  taxId(
-    'NIT',
-    'Número de identificación tributaria',
-    r'^\d{9,10}(-\d)?$',
-    '900123456-7',
-  ),
-  passport('Pasaporte', 'Pasaporte', r'^[A-Za-z0-9]{6,12}$', 'AV123456');
-
-  const DocumentType(
-    this.shortLabel,
-    this.description,
-    this.pattern,
-    this.example,
-  );
-
-  final String shortLabel;
-  final String description;
-  final String pattern;
-  final String example;
-
-  TextInputType get keyboardType => switch (this) {
-    DocumentType.passport => TextInputType.text,
-    _ => TextInputType.number,
-  };
-
-  bool acceptsDocumentNumber(String value) => RegExp(pattern).hasMatch(value);
-}
-
 /// Modo en el que se abre el formulario, derivado de los datos recibidos.
 enum OwnerFormMode { create, edit }
-
-/// Datos con los que se precarga el formulario en modo edición.
-///
-/// Es una representación de presentación temporal: cuando exista la capa de
-/// modelos debe reemplazarse por el modelo de dominio correspondiente.
-@immutable
-class OwnerFormData {
-  const OwnerFormData({
-    required this.fullName,
-    required this.documentType,
-    required this.documentNumber,
-    required this.email,
-    required this.phone,
-    this.address,
-    this.isActive = true,
-  });
-
-  final String fullName;
-  final DocumentType documentType;
-  final String documentNumber;
-  final String email;
-  final String phone;
-  final String? address;
-  final bool isActive;
-}
 
 /// Formulario de creación y edición de un propietario de moteles.
 ///
 /// Si [initialData] es `null` el formulario crea un propietario nuevo; en caso
-/// contrario precarga los datos recibidos y guarda cambios sobre ellos.
+/// contrario precarga los datos recibidos y solo permite ajustar el teléfono,
+/// porque el resto de la información identifica legalmente al propietario.
+///
+/// Al cerrarse devuelve el [OwnerFormData] resultante, o `null` si el usuario
+/// canceló.
 class OwnerFormPage extends StatefulWidget {
   const OwnerFormPage({super.key, this.initialData});
 
@@ -105,8 +53,14 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   String? _emailError;
   String? _phoneError;
 
+  // Al crear, el formulario cede su lugar a un resumen de lo registrado: deja
+  // de ser editable y confirma exactamente qué información quedó guardada.
+  OwnerFormData? _createdOwner;
+
   OwnerFormMode get _mode =>
       widget.initialData == null ? OwnerFormMode.create : OwnerFormMode.edit;
+
+  bool get _isEditing => _mode == OwnerFormMode.edit;
 
   bool get _hasErrors =>
       _fullNameError != null ||
@@ -178,13 +132,19 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     return null;
   }
 
+  /// En edición solo el teléfono es editable, así que los demás campos no se
+  /// validan: no pueden haber cambiado desde esta pantalla.
   void _updateErrors() {
-    _fullNameError = _validateFullName(_fullNameController.text);
-    _documentNumberError = _validateDocumentNumber(
-      _documentNumberController.text,
-      _documentType,
-    );
-    _emailError = _validateEmail(_emailController.text);
+    _fullNameError = _isEditing
+        ? null
+        : _validateFullName(_fullNameController.text);
+    _documentNumberError = _isEditing
+        ? null
+        : _validateDocumentNumber(
+            _documentNumberController.text,
+            _documentType,
+          );
+    _emailError = _isEditing ? null : _validateEmail(_emailController.text);
     _phoneError = _validatePhone(_phoneController.text);
   }
 
@@ -206,6 +166,19 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   void _focusNextField() => FocusScope.of(context).nextFocus();
 
+  OwnerFormData _buildFormData() {
+    final address = _addressController.text.trim();
+    return OwnerFormData(
+      fullName: _fullNameController.text.trim(),
+      documentType: _documentType,
+      documentNumber: _documentNumberController.text.trim(),
+      email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
+      address: address.isEmpty ? null : address,
+      isActive: _isActive,
+    );
+  }
+
   void _submitForm() {
     setState(() {
       _hasAttemptedSubmit = true;
@@ -222,142 +195,255 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       return;
     }
 
-    // Todavía no existe capa de datos: la confirmación es únicamente visual.
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(
-          _mode == OwnerFormMode.create
-              ? 'Propietario creado correctamente.'
-              : 'Cambios guardados correctamente.',
-        ),
-      ),
-    );
+    // Todavía no existe capa de datos: el resultado se devuelve a la pantalla
+    // anterior y la confirmación es únicamente visual.
+    final owner = _buildFormData();
+    if (_isEditing) {
+      Navigator.of(context).pop(owner);
+      return;
+    }
+
+    FocusScope.of(context).unfocus();
+    setState(() => _createdOwner = owner);
   }
 
   void _cancelForm() => Navigator.of(context).maybePop();
 
+  void _finishCreation() => Navigator.of(context).pop(_createdOwner);
+
+  String get _title {
+    if (_createdOwner != null) return 'Propietario creado';
+    return _isEditing ? 'Editar propietario' : 'Nuevo propietario';
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          _mode == OwnerFormMode.create
-              ? 'Nuevo propietario'
-              : 'Editar propietario',
+    final createdOwner = _createdOwner;
+    return PopScope(
+      // Tras crear, el gesto de volver debe entregar el propietario registrado
+      // en lugar de descartarlo.
+      canPop: createdOwner == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        _finishCreation();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: createdOwner == null,
+          title: Text(_title),
         ),
-      ),
-      body: SafeArea(
-        bottom: false,
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontalPadding =
-                constraints.maxWidth < _compactWidthBreakpoint
-                ? AppSpacing.screenCompact
-                : AppSpacing.screen;
-            return Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: _formMaxWidth),
-                child: ListView(
-                  padding: EdgeInsets.symmetric(
-                    horizontal: horizontalPadding,
-                    vertical: AppSpacing.s5,
+        body: SafeArea(
+          bottom: false,
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final horizontalPadding =
+                  constraints.maxWidth < _compactWidthBreakpoint
+                  ? AppSpacing.screenCompact
+                  : AppSpacing.screen;
+              return Center(
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: _formMaxWidth),
+                  child: ListView(
+                    padding: EdgeInsets.symmetric(
+                      horizontal: horizontalPadding,
+                      vertical: AppSpacing.s5,
+                    ),
+                    children: createdOwner == null
+                        ? _buildFormFields()
+                        : [_OwnerCreatedSummary(owner: createdOwner)],
                   ),
-                  children: [
-                    _FormSection(
-                      title: 'Identificación',
-                      children: [
-                        AppTextField(
-                          label: 'Nombre completo',
-                          controller: _fullNameController,
-                          hint: 'Ej.: Laura Gómez Restrepo',
-                          errorText: _fullNameError,
-                          keyboardType: TextInputType.name,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.name],
-                          onChanged: (_) => _revalidateAfterChange(),
-                          onSubmitted: (_) => _focusNextField(),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        _DocumentTypeSelector(
-                          selectedType: _documentType,
-                          onSelected: _selectDocumentType,
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        AppTextField(
-                          label: 'Número de documento',
-                          controller: _documentNumberController,
-                          hint: 'Ej.: ${_documentType.example}',
-                          errorText: _documentNumberError,
-                          keyboardType: _documentType.keyboardType,
-                          textInputAction: TextInputAction.next,
-                          onChanged: (_) => _revalidateAfterChange(),
-                          onSubmitted: (_) => _focusNextField(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.s6),
-                    _FormSection(
-                      title: 'Contacto',
-                      children: [
-                        AppTextField(
-                          label: 'Correo electrónico',
-                          controller: _emailController,
-                          hint: 'nombre@dominio.com',
-                          errorText: _emailError,
-                          keyboardType: TextInputType.emailAddress,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.email],
-                          onChanged: (_) => _revalidateAfterChange(),
-                          onSubmitted: (_) => _focusNextField(),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        AppTextField(
-                          label: 'Teléfono',
-                          controller: _phoneController,
-                          hint: '+57 300 123 4567',
-                          errorText: _phoneError,
-                          keyboardType: TextInputType.phone,
-                          textInputAction: TextInputAction.next,
-                          autofillHints: const [AutofillHints.telephoneNumber],
-                          onChanged: (_) => _revalidateAfterChange(),
-                          onSubmitted: (_) => _focusNextField(),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        AppTextField(
-                          label: 'Dirección (opcional)',
-                          controller: _addressController,
-                          hint: 'Ej.: Calle 10 # 43-25',
-                          keyboardType: TextInputType.streetAddress,
-                          textInputAction: TextInputAction.done,
-                          autofillHints: const [
-                            AutofillHints.fullStreetAddress,
-                          ],
-                          onSubmitted: (_) => _submitForm(),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: AppSpacing.s6),
-                    _FormSection(
-                      title: 'Estado',
-                      children: [
-                        _ActiveStateField(
-                          isActive: _isActive,
-                          onChanged: _toggleActiveState,
-                        ),
-                      ],
-                    ),
-                  ],
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
+        bottomNavigationBar: createdOwner == null
+            ? _OwnerFormActions(
+                mode: _mode,
+                onSubmit: _submitForm,
+                onCancel: _cancelForm,
+              )
+            : _OwnerCreatedActions(onFinish: _finishCreation),
       ),
-      bottomNavigationBar: _OwnerFormActions(
-        mode: _mode,
-        onSubmit: _submitForm,
-        onCancel: _cancelForm,
+    );
+  }
+
+  List<Widget> _buildFormFields() {
+    return [
+      if (_isEditing) ...[
+        const _EditingNotice(),
+        const SizedBox(height: AppSpacing.s5),
+      ],
+      _FormSection(
+        title: 'Identificación',
+        children: [
+          AppTextField(
+            label: 'Nombre completo',
+            controller: _fullNameController,
+            hint: 'Ej.: Laura Gómez Restrepo',
+            errorText: _fullNameError,
+            enabled: !_isEditing,
+            keyboardType: TextInputType.name,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.name],
+            onChanged: (_) => _revalidateAfterChange(),
+            onSubmitted: (_) => _focusNextField(),
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          _DocumentTypeSelector(
+            selectedType: _documentType,
+            onSelected: _isEditing ? null : _selectDocumentType,
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          AppTextField(
+            label: 'Número de documento',
+            controller: _documentNumberController,
+            hint: 'Ej.: ${_documentType.example}',
+            errorText: _documentNumberError,
+            enabled: !_isEditing,
+            keyboardType: _documentType.keyboardType,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _revalidateAfterChange(),
+            onSubmitted: (_) => _focusNextField(),
+          ),
+        ],
       ),
+      const SizedBox(height: AppSpacing.s6),
+      _FormSection(
+        title: 'Contacto',
+        children: [
+          AppTextField(
+            label: 'Correo electrónico',
+            controller: _emailController,
+            hint: 'nombre@dominio.com',
+            errorText: _emailError,
+            enabled: !_isEditing,
+            keyboardType: TextInputType.emailAddress,
+            textInputAction: TextInputAction.next,
+            autofillHints: const [AutofillHints.email],
+            onChanged: (_) => _revalidateAfterChange(),
+            onSubmitted: (_) => _focusNextField(),
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          AppTextField(
+            label: 'Teléfono',
+            controller: _phoneController,
+            hint: '+57 300 123 4567',
+            errorText: _phoneError,
+            keyboardType: TextInputType.phone,
+            textInputAction: _isEditing
+                ? TextInputAction.done
+                : TextInputAction.next,
+            autofillHints: const [AutofillHints.telephoneNumber],
+            onChanged: (_) => _revalidateAfterChange(),
+            onSubmitted: (_) {
+              if (_isEditing) {
+                _submitForm();
+              } else {
+                _focusNextField();
+              }
+            },
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          AppTextField(
+            label: 'Dirección (opcional)',
+            controller: _addressController,
+            hint: 'Ej.: Calle 10 # 43-25',
+            enabled: !_isEditing,
+            keyboardType: TextInputType.streetAddress,
+            textInputAction: TextInputAction.done,
+            autofillHints: const [AutofillHints.fullStreetAddress],
+            onSubmitted: (_) => _submitForm(),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.s6),
+      _FormSection(
+        title: 'Estado',
+        children: [
+          _ActiveStateField(
+            isActive: _isActive,
+            // En edición el estado se cambia desde la lista de propietarios.
+            onChanged: _isEditing ? null : _toggleActiveState,
+          ),
+        ],
+      ),
+    ];
+  }
+}
+
+/// Aviso de por qué la mayoría de los campos están bloqueados en edición.
+class _EditingNotice extends StatelessWidget {
+  const _EditingNotice();
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            size: 20,
+            color: context.appColors.textSecondary,
+          ),
+          const SizedBox(width: AppSpacing.s3),
+          Expanded(
+            child: Text(
+              'Solo puedes actualizar el teléfono. Los demás datos identifican '
+              'al propietario y se muestran como referencia.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Confirmación con el resumen de la información que quedó registrada.
+class _OwnerCreatedSummary extends StatelessWidget {
+  const _OwnerCreatedSummary({required this.owner});
+
+  final OwnerFormData owner;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Semantics(
+          liveRegion: true,
+          child: Column(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                size: 48,
+                color: AppColors.available,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              Text(
+                'Propietario creado correctamente',
+                style: textTheme.headlineSmall,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: AppSpacing.s2),
+              Text(
+                'Esta es la información que quedó registrada.',
+                style: textTheme.bodyMedium?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s6),
+        OwnerSummary(owner: owner),
+      ],
     );
   }
 }
@@ -388,11 +474,19 @@ class _DocumentTypeSelector extends StatelessWidget {
   });
 
   final DocumentType selectedType;
-  final ValueChanged<DocumentType> onSelected;
+
+  /// `null` deja el selector en solo lectura.
+  final ValueChanged<DocumentType>? onSelected;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    final onSelected = this.onSelected;
+    // En solo lectura solo se conserva el tipo seleccionado: las demás opciones
+    // no aportan nada si no se pueden elegir.
+    final documentTypes = onSelected == null
+        ? [selectedType]
+        : DocumentType.values;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -407,13 +501,15 @@ class _DocumentTypeSelector extends StatelessWidget {
           spacing: AppSpacing.s2,
           runSpacing: AppSpacing.s2,
           children: [
-            for (final documentType in DocumentType.values)
+            for (final documentType in documentTypes)
               Tooltip(
                 message: documentType.description,
                 child: ChoiceChip(
                   label: Text(documentType.shortLabel),
                   selected: documentType == selectedType,
-                  onSelected: (_) => onSelected(documentType),
+                  onSelected: onSelected == null
+                      ? null
+                      : (_) => onSelected(documentType),
                 ),
               ),
           ],
@@ -434,7 +530,9 @@ class _ActiveStateField extends StatelessWidget {
   const _ActiveStateField({required this.isActive, required this.onChanged});
 
   final bool isActive;
-  final ValueChanged<bool> onChanged;
+
+  /// `null` deja el interruptor en solo lectura.
+  final ValueChanged<bool>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -471,6 +569,54 @@ class _OwnerFormActions extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return _ActionsBar(
+      children: [
+        Expanded(
+          child: AppButton(
+            label: 'Cancelar',
+            variant: AppButtonVariant.secondary,
+            onPressed: onCancel,
+          ),
+        ),
+        const SizedBox(width: AppSpacing.s3),
+        Expanded(
+          flex: 2,
+          child: AppButton(
+            label: mode == OwnerFormMode.create
+                ? 'Crear propietario'
+                : 'Guardar cambios',
+            onPressed: onSubmit,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _OwnerCreatedActions extends StatelessWidget {
+  const _OwnerCreatedActions({required this.onFinish});
+
+  final VoidCallback onFinish;
+
+  @override
+  Widget build(BuildContext context) {
+    return _ActionsBar(
+      children: [
+        Expanded(
+          child: AppButton(label: 'Ir a propietarios', onPressed: onFinish),
+        ),
+      ],
+    );
+  }
+}
+
+class _ActionsBar extends StatelessWidget {
+  const _ActionsBar({required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
         color: context.appColors.canvas,
@@ -479,27 +625,7 @@ class _OwnerFormActions extends StatelessWidget {
       child: SafeArea(
         top: false,
         minimum: const EdgeInsets.all(AppSpacing.s4),
-        child: Row(
-          children: [
-            Expanded(
-              child: AppButton(
-                label: 'Cancelar',
-                variant: AppButtonVariant.secondary,
-                onPressed: onCancel,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s3),
-            Expanded(
-              flex: 2,
-              child: AppButton(
-                label: mode == OwnerFormMode.create
-                    ? 'Crear propietario'
-                    : 'Guardar cambios',
-                onPressed: onSubmit,
-              ),
-            ),
-          ],
-        ),
+        child: Row(children: children),
       ),
     );
   }
