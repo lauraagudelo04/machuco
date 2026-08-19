@@ -155,3 +155,4 @@ const _recentClients = [
   _RecentClient(name: 'Ana Torres', initials: 'AT', reservations: '5 reservas'),
   _RecentClient(name: 'Juan Gómez', initials: 'JG', reservations: '1 reserva'),
 ];
+
