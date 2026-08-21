@@ -52,7 +52,7 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Fila de Descripción y Botón "Ver habitaciones" (según el boceto)
+                  // Fila de Descripción y Botón "Ver habitaciones"
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -60,8 +60,8 @@ class ClientMotelDetailPage extends StatelessWidget {
                       Text('Descripción', style: Theme.of(context).textTheme.headlineSmall),
                       AppButton(
                         label: 'Ver habitaciones',
-                        size: AppButtonSize.medium, // Cambiado de small a medium
-                        expanded: false, // Quitamos el variant: AppButtonVariant.outline
+                        size: AppButtonSize.medium, 
+                        expanded: false, 
                         onPressed: () {
                           // TODO: Navegar a la lista de habitaciones
                         },
@@ -111,7 +111,7 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s3),
 
-                  // Lista de reseñas (Usando NeverScrollableScrollPhysics para que scrollee con la pantalla completa)
+                  // Lista de reseñas
                   ListView.separated(
                     padding: EdgeInsets.zero,
                     physics: const NeverScrollableScrollPhysics(),
@@ -121,28 +121,16 @@ class ClientMotelDetailPage extends StatelessWidget {
                     itemBuilder: (context, index) {
                       return _ReviewItem(
                         userName: 'Usuario Anónimo ${index + 1}',
-                        rating: index == 0 ? 5 : 4, // 5 estrellas al primero, 4 a los demás
+                        rating: index == 0 ? 5 : 4, 
                         comment: 'Excelente lugar, muy limpio y la atención fue rápida. La privacidad es total. Volveremos pronto.',
                       );
                     },
                   ),
-                  const SizedBox(height: AppSpacing.s6), // Margen inferior extra para que no pegue con el botón fijo
+                  const SizedBox(height: AppSpacing.s4), // Espaciado final normal para el scroll
                 ],
               ),
             ),
           ],
-        ),
-      ),
-      // Botón inferior fijo para la reserva global
-      bottomNavigationBar: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.s4),
-          child: AppButton(
-            label: 'Reservar ahora',
-            onPressed: () {
-              // TODO: Navegar a la lógica de selección de habitación/reserva
-            },
-          ),
         ),
       ),
     );
@@ -151,7 +139,6 @@ class ClientMotelDetailPage extends StatelessWidget {
 
 // --- Componentes Privados Auxiliares ---
 
-// Widget para las etiquetas (chips) de los servicios
 class _ServiceChip extends StatelessWidget {
   const _ServiceChip({required this.label});
   final String label;
@@ -162,20 +149,17 @@ class _ServiceChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s3, vertical: AppSpacing.s1),
       decoration: BoxDecoration(
         color: context.appColors.elevated,
-        // Usamos 100.0 directo en lugar de AppRadius.full para que sea siempre redondo
         borderRadius: BorderRadius.circular(100.0), 
         border: Border.all(color: context.appColors.border),
       ),
       child: Text(
         label,
-        // Quitamos el color: textPrimary para que use el color de texto por defecto
         style: Theme.of(context).textTheme.bodySmall, 
       ),
     );
   }
 }
 
-// Widget para cada tarjeta de reseña
 class _ReviewItem extends StatelessWidget {
   const _ReviewItem({
     required this.userName,
@@ -210,7 +194,7 @@ class _ReviewItem extends StatelessWidget {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
-              // Estrellas quemadas según la calificación
+              // Estrellas quemadas
               Row(
                 children: List.generate(5, (index) {
                   return Icon(
