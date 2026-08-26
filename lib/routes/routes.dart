@@ -7,6 +7,7 @@ import 'package:machuco/views/booking/client_view/client_booking_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_page.dart';
 import 'package:machuco/views/booking/system_admin_view/admin_booking_page.dart';
+import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/payment/client/client_payment_page.dart';
 
 abstract final class AppRoutes {
@@ -17,6 +18,7 @@ abstract final class AppRoutes {
   static const ownerBookings = '/booking/owner';
   static const adminBookings = '/booking/admin';
   static const payment = '/payment/client';
+  static const ownerManagement = '/owner-management';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
@@ -31,6 +33,9 @@ abstract final class AppRoutes {
       ownerBookings => const OwnerBookingPage(),
       adminBookings => const AdminBookingPage(),
       payment => const ClientDashboardPage(),
+      // El formulario y el detalle de propietarios se navegan dentro del
+      // módulo, porque reciben el controlador que tiene su estado.
+      ownerManagement => const OwnerPage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
