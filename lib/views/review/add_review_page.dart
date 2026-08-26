@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/design_system/design_system.dart';
 
-// Model
 class Review {
   final String author;
   final String title;
@@ -147,7 +146,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
     final bottomInset = MediaQuery.viewInsetsOf(context).bottom;
     final theme = Theme.of(context);
 
-    // Ajustamos la decoración del input dentro del sheet para que contraste con la superficie
     return Theme(
       data: theme.copyWith(
         inputDecorationTheme: theme.inputDecorationTheme.copyWith(
@@ -191,7 +189,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ),
               const SizedBox(height: AppSpacing.s4),
               
-              // Stars
               StarRatingSelector(
                 onChanged: (v) => setState(() => _rating = v),
               ),
@@ -207,7 +204,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ],
               const SizedBox(height: AppSpacing.s5),
               
-              // Title field
               AppTextField(
                 label: 'Título',
                 controller: _titleController,
@@ -219,7 +215,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ),
               const SizedBox(height: AppSpacing.s4),
               
-              // Body field
               AppTextField(
                 label: 'Tu reseña',
                 controller: _bodyController,
@@ -232,7 +227,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ),
               const SizedBox(height: AppSpacing.s6),
               
-              // Action buttons
               Row(
                 children: [
                   Expanded(
@@ -260,7 +254,6 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   }
 }
 
-// Review card
 class ReviewCard extends StatelessWidget {
   final Review review;
 
@@ -322,7 +315,6 @@ class ReviewCard extends StatelessWidget {
   }
 }
 
-// Star row (display-only)
 class _StarRow extends StatelessWidget {
   final int rating;
   final double size;
@@ -372,7 +364,6 @@ class _AuthorAvatar extends StatelessWidget {
   }
 }
 
-// Reviews section
 class ReviewsSection extends StatefulWidget {
   const ReviewsSection({super.key});
 
@@ -415,7 +406,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Header
         Row(
           children: [
             Text(
@@ -443,7 +433,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
         ),
         const SizedBox(height: AppSpacing.s4),
         
-        // Review cards
         ListView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -452,7 +441,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
         ),
         const SizedBox(height: AppSpacing.s2),
         
-        // CTA
         AppButton(
           label: 'Añadir reseña',
           icon: Icons.rate_review_outlined,
