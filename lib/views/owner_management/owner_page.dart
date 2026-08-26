@@ -6,9 +6,11 @@ import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
+import 'package:machuco/controllers/owner_management/owner_controller.dart';
+import 'package:machuco/models/owner_management/owner.dart';
+
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
-import 'owner_models.dart';
 import 'owner_summary.dart';
 
 const _compactWidthBreakpoint = 360.0;
@@ -16,8 +18,8 @@ const _listMaxWidth = 640.0;
 
 /// Lista de propietarios de moteles: es el punto de entrada del módulo.
 ///
-/// Mientras no exista capa de datos, los propietarios viven en el estado de
-/// esta pantalla y los cambios se pierden al reiniciar la aplicación.
+/// Presenta el estado que expone `OwnerController` y le delega cada acción;
+/// esta pantalla solo confirma el resultado al usuario.
 class OwnerPage extends StatefulWidget {
   const OwnerPage({super.key});
 
@@ -26,32 +28,13 @@ class OwnerPage extends StatefulWidget {
 }
 
 class _OwnerPageState extends State<OwnerPage> {
-  final List<OwnerFormData> _owners = [
-    const OwnerFormData(
-      fullName: 'Laura Gómez Restrepo',
-      documentType: DocumentType.citizenshipCard,
-      documentNumber: '1020304050',
-      email: 'laura.gomez@machuco.com',
-      phone: '+57 300 123 4567',
-      address: 'Calle 10 # 43-25, Medellín',
-    ),
-    const OwnerFormData(
-      fullName: 'Inversiones Machuco S.A.S.',
-      documentType: DocumentType.taxId,
-      documentNumber: '900123456-7',
-      email: 'contacto@inversionesmachuco.com',
-      phone: '+57 604 444 5566',
-      address: 'Carrera 50 # 12-80, Rionegro',
-    ),
-    const OwnerFormData(
-      fullName: 'Simón Restrepo Vélez',
-      documentType: DocumentType.foreignerCard,
-      documentNumber: '345678',
-      email: 'simon.restrepo@machuco.com',
-      phone: '+57 311 987 6543',
-      isActive: false,
-    ),
-  ];
+  final OwnerController _controller = OwnerController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   void _showMessage(String message) {
     ScaffoldMessenger.of(context)
@@ -60,25 +43,25 @@ class _OwnerPageState extends State<OwnerPage> {
   }
 
   Future<void> _createOwner() async {
-    final created = await Navigator.of(context).push<OwnerFormData>(
-      MaterialPageRoute(builder: (_) => const OwnerFormPage()),
+    final created = await Navigator.of(context).push<Owner>(
+      MaterialPageRoute(builder: (_) => OwnerFormPage(controller: _controller)),
     );
     if (created == null || !mounted) return;
-    setState(() => _owners.add(created));
+    _showMessage('${created.fullName} quedó registrado.');
   }
 
-  Future<void> _editOwner(OwnerFormData owner) async {
-    final updated = await Navigator.of(context).push<OwnerFormData>(
-      MaterialPageRoute(builder: (_) => OwnerFormPage(initialData: owner)),
+  Future<void> _editOwner(Owner owner) async {
+    final updated = await Navigator.of(context).push<Owner>(
+      MaterialPageRoute(
+        builder: (_) =>
+            OwnerFormPage(controller: _controller, initialData: owner),
+      ),
     );
     if (updated == null || !mounted) return;
-    final index = _owners.indexOf(owner);
-    if (index == -1) return;
-    setState(() => _owners[index] = updated);
     _showMessage('Cambios guardados correctamente.');
   }
 
-  Future<void> _openDetail(OwnerFormData owner) async {
+  Future<void> _openDetail(Owner owner) async {
     final wantsToEdit = await Navigator.of(context).push<bool>(
       MaterialPageRoute(builder: (_) => OwnerDetailPage(owner: owner)),
     );
@@ -86,22 +69,24 @@ class _OwnerPageState extends State<OwnerPage> {
     await _editOwner(owner);
   }
 
-  Future<void> _toggleActiveState(OwnerFormData owner) async {
+  Future<void> _toggleActiveState(Owner owner) async {
     // Inactivar deja al propietario sin operación, así que se confirma; volver
     // a activarlo es inocuo y no necesita confirmación.
     if (owner.isActive && !await _confirmDeactivation(owner)) return;
     if (!mounted) return;
-    final index = _owners.indexOf(owner);
-    if (index == -1) return;
-    setState(() => _owners[index] = owner.copyWith(isActive: !owner.isActive));
+    final updated = _controller.setActiveState(
+      owner.id,
+      isActive: !owner.isActive,
+    );
+    if (updated == null) return;
     _showMessage(
-      owner.isActive
-          ? '${owner.fullName} quedó inactivo.'
-          : '${owner.fullName} quedó activo.',
+      updated.isActive
+          ? '${updated.fullName} quedó activo.'
+          : '${updated.fullName} quedó inactivo.',
     );
   }
 
-  Future<bool> _confirmDeactivation(OwnerFormData owner) async {
+  Future<bool> _confirmDeactivation(Owner owner) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -131,57 +116,84 @@ class _OwnerPageState extends State<OwnerPage> {
       appBar: AppBar(title: const Text('Propietarios')),
       body: SafeArea(
         bottom: false,
-        child: _owners.isEmpty
-            ? AppEmptyState(
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, _) {
+            if (!_controller.hasOwners) {
+              return AppEmptyState(
                 icon: Icons.people_outline,
                 title: 'Aún no hay propietarios',
                 message:
                     'Registra al primer propietario para asociarle sus moteles.',
                 actionLabel: 'Crear propietario',
                 onAction: _createOwner,
-              )
-            : LayoutBuilder(
-                builder: (context, constraints) {
-                  final horizontalPadding =
-                      constraints.maxWidth < _compactWidthBreakpoint
-                      ? AppSpacing.screenCompact
-                      : AppSpacing.screen;
-                  return Center(
-                    child: ConstrainedBox(
-                      constraints: const BoxConstraints(
-                        maxWidth: _listMaxWidth,
-                      ),
-                      child: ListView.separated(
-                        padding: EdgeInsets.fromLTRB(
-                          horizontalPadding,
-                          AppSpacing.s5,
-                          horizontalPadding,
-                          // Deja respirar la última tarjeta por encima del FAB.
-                          AppSpacing.s12 + AppSpacing.s5,
-                        ),
-                        itemCount: _owners.length,
-                        separatorBuilder: (_, _) =>
-                            const SizedBox(height: AppSpacing.s3),
-                        itemBuilder: (context, index) {
-                          final owner = _owners[index];
-                          return _OwnerCard(
-                            owner: owner,
-                            onDetail: () => _openDetail(owner),
-                            onEdit: () => _editOwner(owner),
-                            onToggleActive: () => _toggleActiveState(owner),
-                          );
-                        },
-                      ),
-                    ),
-                  );
-                },
-              ),
+              );
+            }
+            return _OwnerList(
+              owners: _controller.owners,
+              onDetail: _openDetail,
+              onEdit: _editOwner,
+              onToggleActive: _toggleActiveState,
+            );
+          },
+        ),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _createOwner,
         tooltip: 'Crear propietario',
         child: const Icon(Icons.add),
       ),
+    );
+  }
+}
+
+/// Listado desplazable de propietarios, centrado y con ancho acotado.
+class _OwnerList extends StatelessWidget {
+  const _OwnerList({
+    required this.owners,
+    required this.onDetail,
+    required this.onEdit,
+    required this.onToggleActive,
+  });
+
+  final List<Owner> owners;
+  final ValueChanged<Owner> onDetail;
+  final ValueChanged<Owner> onEdit;
+  final ValueChanged<Owner> onToggleActive;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final horizontalPadding = constraints.maxWidth < _compactWidthBreakpoint
+            ? AppSpacing.screenCompact
+            : AppSpacing.screen;
+        return Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: _listMaxWidth),
+            child: ListView.separated(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                AppSpacing.s5,
+                horizontalPadding,
+                // Deja respirar la última tarjeta por encima del FAB.
+                AppSpacing.s12 + AppSpacing.s5,
+              ),
+              itemCount: owners.length,
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
+              itemBuilder: (context, index) {
+                final owner = owners[index];
+                return _OwnerCard(
+                  owner: owner,
+                  onDetail: () => onDetail(owner),
+                  onEdit: () => onEdit(owner),
+                  onToggleActive: () => onToggleActive(owner),
+                );
+              },
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -195,7 +207,7 @@ class _OwnerCard extends StatelessWidget {
     required this.onToggleActive,
   });
 
-  final OwnerFormData owner;
+  final Owner owner;
   final VoidCallback onDetail;
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;

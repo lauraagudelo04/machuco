@@ -6,7 +6,7 @@ import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
-import 'owner_models.dart';
+import 'package:machuco/models/owner_management/owner.dart';
 
 /// Resumen de solo lectura con los datos de un propietario.
 ///
@@ -15,7 +15,7 @@ import 'owner_models.dart';
 class OwnerSummary extends StatelessWidget {
   const OwnerSummary({super.key, required this.owner});
 
-  final OwnerFormData owner;
+  final Owner owner;
 
   @override
   Widget build(BuildContext context) {

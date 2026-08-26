@@ -4,7 +4,8 @@ import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
-import 'owner_models.dart';
+import 'package:machuco/models/owner_management/owner.dart';
+
 import 'owner_summary.dart';
 
 const _compactWidthBreakpoint = 360.0;
@@ -17,7 +18,7 @@ const _detailMaxWidth = 520.0;
 class OwnerDetailPage extends StatelessWidget {
   const OwnerDetailPage({super.key, required this.owner});
 
-  final OwnerFormData owner;
+  final Owner owner;
 
   @override
   Widget build(BuildContext context) {

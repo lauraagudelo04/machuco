@@ -7,10 +7,12 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
-import 'owner_models.dart';
+import 'package:machuco/controllers/owner_management/owner_controller.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
+import 'package:machuco/models/owner_management/owner.dart';
+
 import 'owner_summary.dart';
 
-const _minimumFullNameLength = 3;
 const _compactWidthBreakpoint = 360.0;
 const _formMaxWidth = 520.0;
 
@@ -23,12 +25,13 @@ enum OwnerFormMode { create, edit }
 /// contrario precarga los datos recibidos y solo permite ajustar el teléfono,
 /// porque el resto de la información identifica legalmente al propietario.
 ///
-/// Al cerrarse devuelve el [OwnerFormData] resultante, o `null` si el usuario
-/// canceló.
+/// Guarda a través de [controller] y al cerrarse devuelve el [Owner]
+/// resultante, o `null` si el usuario canceló.
 class OwnerFormPage extends StatefulWidget {
-  const OwnerFormPage({super.key, this.initialData});
+  const OwnerFormPage({super.key, required this.controller, this.initialData});
 
-  final OwnerFormData? initialData;
+  final OwnerController controller;
+  final Owner? initialData;
 
   @override
   State<OwnerFormPage> createState() => _OwnerFormPageState();
@@ -55,7 +58,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   // Al crear, el formulario cede su lugar a un resumen de lo registrado: deja
   // de ser editable y confirma exactamente qué información quedó guardada.
-  OwnerFormData? _createdOwner;
+  Owner? _createdOwner;
 
   OwnerFormMode get _mode =>
       widget.initialData == null ? OwnerFormMode.create : OwnerFormMode.edit;
@@ -93,59 +96,22 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     super.dispose();
   }
 
-  static String? _validateFullName(String value) {
-    final fullName = value.trim();
-    if (fullName.isEmpty) return 'Ingresa el nombre completo.';
-    if (fullName.length < _minimumFullNameLength) {
-      return 'El nombre debe tener al menos $_minimumFullNameLength caracteres.';
-    }
-    return null;
-  }
-
-  static String? _validateDocumentNumber(
-    String value,
-    DocumentType documentType,
-  ) {
-    final documentNumber = value.trim();
-    if (documentNumber.isEmpty) return 'Ingresa el número de documento.';
-    if (!documentType.acceptsDocumentNumber(documentNumber)) {
-      return 'Número no válido para ${documentType.shortLabel}. Ejemplo: ${documentType.example}.';
-    }
-    return null;
-  }
-
-  static String? _validateEmail(String value) {
-    final email = value.trim();
-    if (email.isEmpty) return 'Ingresa el correo electrónico.';
-    if (!RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$').hasMatch(email)) {
-      return 'Ingresa un correo válido, por ejemplo nombre@dominio.com.';
-    }
-    return null;
-  }
-
-  static String? _validatePhone(String value) {
-    if (value.trim().isEmpty) return 'Ingresa el teléfono.';
-    final phone = value.replaceAll(RegExp(r'[\s\-()]'), '');
-    if (!RegExp(r'^\+?\d{7,15}$').hasMatch(phone)) {
-      return 'Ingresa un teléfono válido, por ejemplo +57 300 123 4567.';
-    }
-    return null;
-  }
-
   /// En edición solo el teléfono es editable, así que los demás campos no se
   /// validan: no pueden haber cambiado desde esta pantalla.
   void _updateErrors() {
     _fullNameError = _isEditing
         ? null
-        : _validateFullName(_fullNameController.text);
+        : OwnerController.validateFullName(_fullNameController.text);
     _documentNumberError = _isEditing
         ? null
-        : _validateDocumentNumber(
+        : OwnerController.validateDocumentNumber(
             _documentNumberController.text,
             _documentType,
           );
-    _emailError = _isEditing ? null : _validateEmail(_emailController.text);
-    _phoneError = _validatePhone(_phoneController.text);
+    _emailError = _isEditing
+        ? null
+        : OwnerController.validateEmail(_emailController.text);
+    _phoneError = OwnerController.validatePhone(_phoneController.text);
   }
 
   void _revalidateAfterChange() {
@@ -166,19 +132,6 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   void _focusNextField() => FocusScope.of(context).nextFocus();
 
-  OwnerFormData _buildFormData() {
-    final address = _addressController.text.trim();
-    return OwnerFormData(
-      fullName: _fullNameController.text.trim(),
-      documentType: _documentType,
-      documentNumber: _documentNumberController.text.trim(),
-      email: _emailController.text.trim(),
-      phone: _phoneController.text.trim(),
-      address: address.isEmpty ? null : address,
-      isActive: _isActive,
-    );
-  }
-
   void _submitForm() {
     setState(() {
       _hasAttemptedSubmit = true;
@@ -195,16 +148,30 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       return;
     }
 
-    // Todavía no existe capa de datos: el resultado se devuelve a la pantalla
-    // anterior y la confirmación es únicamente visual.
-    final owner = _buildFormData();
-    if (_isEditing) {
-      Navigator.of(context).pop(owner);
+    final initialData = widget.initialData;
+    if (initialData != null) {
+      Navigator.of(context).pop(
+        widget.controller.updateOwnerPhone(
+          initialData.id,
+          _phoneController.text.trim(),
+        ),
+      );
       return;
     }
 
     FocusScope.of(context).unfocus();
-    setState(() => _createdOwner = owner);
+    final address = _addressController.text.trim();
+    setState(() {
+      _createdOwner = widget.controller.createOwner(
+        fullName: _fullNameController.text.trim(),
+        documentType: _documentType,
+        documentNumber: _documentNumberController.text.trim(),
+        email: _emailController.text.trim(),
+        phone: _phoneController.text.trim(),
+        address: address.isEmpty ? null : address,
+        isActive: _isActive,
+      );
+    });
   }
 
   void _cancelForm() => Navigator.of(context).maybePop();
@@ -407,7 +374,7 @@ class _EditingNotice extends StatelessWidget {
 class _OwnerCreatedSummary extends StatelessWidget {
   const _OwnerCreatedSummary({required this.owner});
 
-  final OwnerFormData owner;
+  final Owner owner;
 
   @override
   Widget build(BuildContext context) {
@@ -629,4 +596,15 @@ class _ActionsBar extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Teclado adecuado para capturar cada tipo de documento.
+///
+/// Vive en la vista porque `DocumentType` describe el dominio y no debe
+/// depender de Flutter.
+extension on DocumentType {
+  TextInputType get keyboardType => switch (this) {
+    DocumentType.passport => TextInputType.text,
+    _ => TextInputType.number,
+  };
 }
