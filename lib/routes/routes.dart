@@ -8,6 +8,10 @@ import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_page.dart';
 import 'package:machuco/views/booking/system_admin_view/admin_booking_page.dart';
 import 'package:machuco/views/payment/client/client_payment_page.dart';
+import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -17,6 +21,10 @@ abstract final class AppRoutes {
   static const ownerBookings = '/booking/owner';
   static const adminBookings = '/booking/admin';
   static const payment = '/payment/client';
+  static const pqrs = '/pqrs';
+  static const clientPqrs = '/pqrs/client';
+  static const ownerPqrs = '/pqrs/owner';
+  static const adminPqrs = '/pqrs/admin';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
@@ -31,6 +39,10 @@ abstract final class AppRoutes {
       ownerBookings => const OwnerBookingPage(),
       adminBookings => const AdminBookingPage(),
       payment => const ClientDashboardPage(),
+      pqrs => const PqrsPage(),
+      clientPqrs => const ClientPqrsPage(),
+      ownerPqrs => const OwnerPqrsPage(),
+      adminPqrs => const SystemAdminPqrsPage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
