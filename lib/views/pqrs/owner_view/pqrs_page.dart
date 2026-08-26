@@ -1,13 +1,10 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design_system/components/app_feedback.dart';
-import '../../../core/design_system/theme/app_theme_extensions.dart';
-import '../../../core/design_system/tokens/app_spacing.dart';
-import '../data/pqrs_mock_data.dart';
-import '../data/pqrs_store.dart';
-import '../models/pqrs_models.dart';
-import '../widgets/pqrs_request_card.dart';
-import '../widgets/pqrs_stats_panel.dart';
+import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+import 'package:machuco/widgets/pqrs/pqrs_request_card.dart';
+import 'package:machuco/widgets/pqrs/pqrs_stats_panel.dart';
 import 'pqrs_detail_page.dart';
 
 /// PQRS view of the motel owner: attends the requests filed against the motel,
@@ -15,9 +12,9 @@ import 'pqrs_detail_page.dart';
 ///
 /// The owner never closes a request: closing belongs to the client.
 class OwnerPqrsPage extends StatefulWidget {
-  const OwnerPqrsPage({super.key, this.store, this.motelId = pqrsDemoOwnerMotelId});
+  const OwnerPqrsPage({super.key, this.store, this.motelId = pqrsCurrentMotelId});
 
-  final PqrsStore? store;
+  final PqrsController? store;
   final String motelId;
 
   @override
@@ -27,7 +24,7 @@ class OwnerPqrsPage extends StatefulWidget {
 class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
   PqrsStatus? _filter;
 
-  PqrsStore get _store => widget.store ?? PqrsStore.instance;
+  PqrsController get _store => widget.store ?? PqrsController.instance;
 
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(

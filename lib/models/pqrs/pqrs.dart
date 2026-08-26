@@ -1,25 +1,5 @@
-import 'package:flutter/material.dart';
-
-import '../../../core/design_system/tokens/app_colors.dart';
-
 /// Kind of PQRS request submitted by a client.
 enum PqrsType { peticion, queja, reclamo, sugerencia }
-
-extension PqrsTypeData on PqrsType {
-  String get label => switch (this) {
-        PqrsType.peticion => 'Petición',
-        PqrsType.queja => 'Queja',
-        PqrsType.reclamo => 'Reclamo',
-        PqrsType.sugerencia => 'Sugerencia',
-      };
-
-  IconData get icon => switch (this) {
-        PqrsType.peticion => Icons.request_page_outlined,
-        PqrsType.queja => Icons.sentiment_dissatisfied_outlined,
-        PqrsType.reclamo => Icons.report_gmailerrorred_outlined,
-        PqrsType.sugerencia => Icons.lightbulb_outline,
-      };
-}
 
 /// Lifecycle of a PQRS request.
 ///
@@ -27,31 +7,7 @@ extension PqrsTypeData on PqrsType {
 /// created the request may confirm it and move it to [closed].
 enum PqrsStatus { pending, inProgress, resolved, closed, rejected }
 
-extension PqrsStatusData on PqrsStatus {
-  String get label => switch (this) {
-        PqrsStatus.pending => 'Pendiente',
-        PqrsStatus.inProgress => 'En trámite',
-        PqrsStatus.resolved => 'Solucionada',
-        PqrsStatus.closed => 'Cerrada',
-        PqrsStatus.rejected => 'Rechazada',
-      };
-
-  Color get color => switch (this) {
-        PqrsStatus.pending => AppColors.maintenance,
-        PqrsStatus.inProgress => AppColors.reserved,
-        PqrsStatus.resolved => AppColors.available,
-        PqrsStatus.closed => AppColors.violet,
-        PqrsStatus.rejected => AppColors.rose,
-      };
-
-  IconData get icon => switch (this) {
-        PqrsStatus.pending => Icons.hourglass_empty_outlined,
-        PqrsStatus.inProgress => Icons.autorenew,
-        PqrsStatus.resolved => Icons.verified_outlined,
-        PqrsStatus.closed => Icons.lock_outline,
-        PqrsStatus.rejected => Icons.cancel_outlined,
-      };
-
+extension PqrsStatusRules on PqrsStatus {
   /// A closed or rejected request is final: it accepts no further updates.
   bool get isFinal => this == PqrsStatus.closed || this == PqrsStatus.rejected;
 }
@@ -59,31 +15,10 @@ extension PqrsStatusData on PqrsStatus {
 /// Who produced a trace entry.
 enum PqrsActor { client, owner, systemAdmin }
 
-extension PqrsActorData on PqrsActor {
-  String get label => switch (this) {
-        PqrsActor.client => 'Cliente',
-        PqrsActor.owner => 'Propietario',
-        PqrsActor.systemAdmin => 'Administrador',
-      };
-
-  IconData get icon => switch (this) {
-        PqrsActor.client => Icons.person_outline,
-        PqrsActor.owner => Icons.storefront_outlined,
-        PqrsActor.systemAdmin => Icons.admin_panel_settings_outlined,
-      };
-
-  Color get color => switch (this) {
-        PqrsActor.client => AppColors.fuchsia,
-        PqrsActor.owner => AppColors.reserved,
-        PqrsActor.systemAdmin => AppColors.violet,
-      };
-}
-
 /// A photo attached to a trace entry.
 ///
-/// The project has no image picker or network layer yet, so an attachment is
-/// simulated: [seed] drives a deterministic placeholder rendered by the UI.
-@immutable
+/// There is no image picker in the project yet, so an attachment is simulated:
+/// [seed] drives a deterministic placeholder rendered by the view layer.
 class PqrsAttachment {
   const PqrsAttachment({
     required this.id,
@@ -119,7 +54,6 @@ class PqrsAttachment {
 
 /// One traceability step: a comment, optional photos and an optional status
 /// change, always attributed to the actor that produced it.
-@immutable
 class PqrsTraceEntry {
   const PqrsTraceEntry({
     required this.id,
@@ -139,7 +73,6 @@ class PqrsTraceEntry {
 }
 
 /// A PQRS request, together with its full traceability.
-@immutable
 class PqrsRequest {
   const PqrsRequest({
     required this.id,
@@ -173,10 +106,7 @@ class PqrsRequest {
   /// Photos attached when the client opened the request.
   final List<PqrsAttachment> attachments;
 
-  PqrsRequest copyWith({
-    PqrsStatus? status,
-    List<PqrsTraceEntry>? trace,
-  }) {
+  PqrsRequest copyWith({PqrsStatus? status, List<PqrsTraceEntry>? trace}) {
     return PqrsRequest(
       id: id,
       motelId: motelId,
@@ -195,9 +125,9 @@ class PqrsRequest {
 
   /// Every photo of the request: the opening ones plus those in the trace.
   List<PqrsAttachment> get allAttachments => [
-        ...attachments,
-        for (final entry in trace) ...entry.attachments,
-      ];
+    ...attachments,
+    for (final entry in trace) ...entry.attachments,
+  ];
 
   /// Time between creation and the first owner answer, when it exists.
   Duration? get firstResponseTime {
@@ -215,7 +145,6 @@ class PqrsRequest {
 
 /// Aggregated PQRS indicators used by the owner and system administrator
 /// statistics panels.
-@immutable
 class PqrsStats {
   const PqrsStats._({
     required this.total,
@@ -224,7 +153,9 @@ class PqrsStats {
   });
 
   factory PqrsStats.from(List<PqrsRequest> requests) {
-    final counts = <PqrsStatus, int>{for (final status in PqrsStatus.values) status: 0};
+    final counts = <PqrsStatus, int>{
+      for (final status in PqrsStatus.values) status: 0,
+    };
     var responseTotal = Duration.zero;
     var responseCount = 0;
 
@@ -240,8 +171,11 @@ class PqrsStats {
     return PqrsStats._(
       total: requests.length,
       countsByStatus: Map.unmodifiable(counts),
-      averageFirstResponse:
-          responseCount == 0 ? null : Duration(microseconds: responseTotal.inMicroseconds ~/ responseCount),
+      averageFirstResponse: responseCount == 0
+          ? null
+          : Duration(
+              microseconds: responseTotal.inMicroseconds ~/ responseCount,
+            ),
     );
   }
 
@@ -260,7 +194,8 @@ class PqrsStats {
   double get attentionRate => _rate(total - countOf(PqrsStatus.pending));
 
   /// Share of requests with a solution proposed or already confirmed.
-  double get resolutionRate => _rate(countOf(PqrsStatus.resolved) + countOf(PqrsStatus.closed));
+  double get resolutionRate =>
+      _rate(countOf(PqrsStatus.resolved) + countOf(PqrsStatus.closed));
 
   /// Share of requests the client confirmed as solved.
   double get closureRate => _rate(countOf(PqrsStatus.closed));

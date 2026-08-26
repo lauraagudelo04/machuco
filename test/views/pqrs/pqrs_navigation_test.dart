@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/core/design_system/theme/app_theme.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
-import 'package:machuco/views/pqrs/data/pqrs_store.dart';
-import 'package:machuco/views/pqrs/models/pqrs_models.dart';
 
-PqrsStore _storeWith({PqrsStatus status = PqrsStatus.resolved}) {
-  return PqrsStore.seeded([
+PqrsController _storeWith({PqrsStatus status = PqrsStatus.resolved}) {
+  return PqrsController.seeded([
     PqrsRequest(
       id: 'r1',
       motelId: 'm1',
@@ -31,7 +32,7 @@ PqrsStore _storeWith({PqrsStatus status = PqrsStatus.resolved}) {
   ]);
 }
 
-Widget _app(PqrsStore store) => MaterialApp(
+Widget _app(PqrsController store) => MaterialApp(
       theme: AppTheme.light,
       home: PqrsPage(store: store),
     );

@@ -1,12 +1,8 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design_system/components/app_button.dart';
-import '../../../core/design_system/components/app_card.dart';
-import '../../../core/design_system/components/app_text_field.dart';
-import '../../../core/design_system/theme/app_theme_extensions.dart';
-import '../../../core/design_system/tokens/app_spacing.dart';
-import '../models/pqrs_models.dart';
-import 'pqrs_photo.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/widgets/pqrs/pqrs_photo.dart';
+import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 
 /// Composer used by the client and the owner to push a new trace entry.
 ///

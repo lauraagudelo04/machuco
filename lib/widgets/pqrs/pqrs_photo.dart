@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design_system/theme/app_theme_extensions.dart';
-import '../../../core/design_system/tokens/app_radius.dart';
-import '../../../core/design_system/tokens/app_spacing.dart';
-import '../models/pqrs_models.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 
 /// Placeholder for a simulated photo.
 ///

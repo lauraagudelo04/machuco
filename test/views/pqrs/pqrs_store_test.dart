@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/views/pqrs/data/pqrs_store.dart';
-import 'package:machuco/views/pqrs/models/pqrs_models.dart';
+import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
 
 PqrsRequest _request({
   String id = 'r1',
@@ -23,9 +23,9 @@ PqrsRequest _request({
 }
 
 void main() {
-  group('PqrsStore - traceability', () {
+  group('PqrsController - traceability', () {
     test('owner reply appends a trace entry and moves the request to inProgress', () {
-      final store = PqrsStore.seeded([_request()]);
+      final store = PqrsController.seeded([_request()]);
 
       store.addUpdate(
         requestId: 'r1',
@@ -41,7 +41,7 @@ void main() {
     });
 
     test('a client comment does not change the status', () {
-      final store = PqrsStore.seeded([_request(status: PqrsStatus.inProgress)]);
+      final store = PqrsController.seeded([_request(status: PqrsStatus.inProgress)]);
 
       store.addUpdate(
         requestId: 'r1',
@@ -54,7 +54,7 @@ void main() {
     });
 
     test('attachments from both actors are preserved in the trace', () {
-      final store = PqrsStore.seeded([_request()]);
+      final store = PqrsController.seeded([_request()]);
 
       store.addUpdate(
         requestId: 'r1',
@@ -75,7 +75,7 @@ void main() {
     });
 
     test('every status change is recorded in the trace', () {
-      final store = PqrsStore.seeded([_request()]);
+      final store = PqrsController.seeded([_request()]);
 
       store.markResolved(requestId: 'r1', message: 'Solucionado.');
 
@@ -85,9 +85,9 @@ void main() {
     });
   });
 
-  group('PqrsStore - closing rules', () {
+  group('PqrsController - closing rules', () {
     test('the client closes a request the owner already resolved', () {
-      final store = PqrsStore.seeded([_request(status: PqrsStatus.resolved)]);
+      final store = PqrsController.seeded([_request(status: PqrsStatus.resolved)]);
 
       store.closeByClient(requestId: 'r1', message: 'Confirmo la solucion.');
 
@@ -96,7 +96,7 @@ void main() {
     });
 
     test('the client cannot close a request that is still pending', () {
-      final store = PqrsStore.seeded([_request(status: PqrsStatus.pending)]);
+      final store = PqrsController.seeded([_request(status: PqrsStatus.pending)]);
 
       expect(
         () => store.closeByClient(requestId: 'r1', message: 'Cierro.'),
@@ -106,7 +106,7 @@ void main() {
     });
 
     test('the owner cannot resolve a request already closed by the client', () {
-      final store = PqrsStore.seeded([_request(status: PqrsStatus.closed)]);
+      final store = PqrsController.seeded([_request(status: PqrsStatus.closed)]);
 
       expect(
         () => store.markResolved(requestId: 'r1', message: 'Reabro.'),
@@ -115,7 +115,7 @@ void main() {
     });
 
     test('a closed request no longer accepts updates', () {
-      final store = PqrsStore.seeded([_request(status: PqrsStatus.closed)]);
+      final store = PqrsController.seeded([_request(status: PqrsStatus.closed)]);
 
       expect(
         () => store.addUpdate(requestId: 'r1', author: PqrsActor.owner, message: 'Hola.'),
@@ -124,9 +124,9 @@ void main() {
     });
   });
 
-  group('PqrsStore - queries', () {
+  group('PqrsController - queries', () {
     test('filters by motel and by client', () {
-      final store = PqrsStore.seeded([
+      final store = PqrsController.seeded([
         _request(id: 'a', motelId: 'm1', clientId: 'c1'),
         _request(id: 'b', motelId: 'm2', clientId: 'c1'),
         _request(id: 'c', motelId: 'm1', clientId: 'c2'),
@@ -137,7 +137,7 @@ void main() {
     });
 
     test('notifies listeners when a request changes', () {
-      final store = PqrsStore.seeded([_request()]);
+      final store = PqrsController.seeded([_request()]);
       var notifications = 0;
       store.addListener(() => notifications++);
 

@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design_system/tokens/app_radius.dart';
-import '../../../core/design_system/tokens/app_spacing.dart';
-import '../models/pqrs_models.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 
 /// Pill showing the status of a PQRS request.
 class PqrsStatusBadge extends StatelessWidget {

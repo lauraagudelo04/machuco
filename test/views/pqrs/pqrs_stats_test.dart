@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/views/pqrs/models/pqrs_models.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
 
 PqrsRequest _request({
   required String id,

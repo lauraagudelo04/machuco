@@ -1,16 +1,10 @@
 import 'package:flutter/material.dart';
-
-import '../../../core/design_system/components/app_button.dart';
-import '../../../core/design_system/components/app_card.dart';
-import '../../../core/design_system/components/app_feedback.dart';
-import '../../../core/design_system/components/app_text_field.dart';
-import '../../../core/design_system/theme/app_theme_extensions.dart';
-import '../../../core/design_system/tokens/app_spacing.dart';
-import '../data/pqrs_mock_data.dart';
-import '../data/pqrs_store.dart';
-import '../models/pqrs_models.dart';
-import '../widgets/pqrs_photo.dart';
-import '../widgets/pqrs_request_card.dart';
+import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/widgets/pqrs/pqrs_photo.dart';
+import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+import 'package:machuco/widgets/pqrs/pqrs_request_card.dart';
 import 'pqrs_detail_page.dart';
 
 /// PQRS view of the client: files requests, attaches photos of what was found,
@@ -19,7 +13,7 @@ class ClientPqrsPage extends StatefulWidget {
   const ClientPqrsPage({super.key, this.store});
 
   /// Injectable for tests; defaults to the shared instance.
-  final PqrsStore? store;
+  final PqrsController? store;
 
   @override
   State<ClientPqrsPage> createState() => _ClientPqrsPageState();
@@ -34,7 +28,7 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
   bool _validationAttempted = false;
   bool _sending = false;
 
-  PqrsStore get _store => widget.store ?? PqrsStore.instance;
+  PqrsController get _store => widget.store ?? PqrsController.instance;
 
   @override
   void dispose() {
@@ -83,9 +77,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
     if (!mounted) return;
 
     _store.createRequest(
-      motelId: pqrsDemoOwnerMotelId,
+      motelId: pqrsCurrentMotelId,
       motelName: 'Motel Aurora',
-      clientId: pqrsDemoClientId,
+      clientId: pqrsCurrentClientId,
       clientName: 'Ana Pérez',
       type: _selectedType!,
       subject: _subjectController.text.trim(),
@@ -126,7 +120,7 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
         child: ListenableBuilder(
           listenable: _store,
           builder: (context, _) {
-            final requests = _store.byClient(pqrsDemoClientId);
+            final requests = _store.byClient(pqrsCurrentClientId);
             final awaitingClosure =
                 requests.where((request) => request.canBeClosedByClient).length;
 
