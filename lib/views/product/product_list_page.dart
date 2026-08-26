@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/design_system/design_system.dart';
-import 'product_form_view.dart';
+import 'product_form_page.dart';
 
 class ProductListView extends StatefulWidget {
   const ProductListView({super.key});
