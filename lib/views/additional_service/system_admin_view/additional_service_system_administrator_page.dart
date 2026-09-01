@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/additional_service/additional_service_controller.dart';
+import 'package:machuco/models/additional_service/additional_service.dart';
+import 'package:machuco/routes/routes.dart';
 import '../../../../core/design_system/components/app_button.dart';
 import '../../../../core/design_system/components/app_card.dart';
 import '../../../../core/design_system/components/app_text_field.dart';
@@ -7,9 +10,10 @@ import '../../../../core/design_system/theme/app_theme_extensions.dart';
 import '../../../../core/design_system/tokens/app_radius.dart';
 import '../../../../core/design_system/tokens/app_spacing.dart';
 
-class AdditionalServiceSystemAdministratorPage
-    extends StatefulWidget {
-  const AdditionalServiceSystemAdministratorPage({super.key});
+class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
+  const AdditionalServiceSystemAdministratorPage({super.key, this.controller});
+
+  final AdditionalServiceController? controller;
 
   @override
   State<AdditionalServiceSystemAdministratorPage> createState() =>
@@ -20,176 +24,50 @@ class _AdditionalServiceSystemAdministratorPageState
     extends State<AdditionalServiceSystemAdministratorPage> {
   final TextEditingController _searchController = TextEditingController();
 
-  final List<_AdminService> _services = [
-    _AdminService(
-      icon: Icons.shield_outlined,
-      name: 'Seguro de pantalla',
-      description: 'Protección para dispositivos ante daños accidentales.',
-      category: 'Protección',
-      price: 9900,
-      active: true,
-    ),
-    _AdminService(
-      icon: Icons.cloud_outlined,
-      name: 'Respaldo en la nube',
-      description: 'Almacenamiento seguro para archivos y fotografías.',
-      category: 'Almacenamiento',
-      price: 5900,
-      active: true,
-    ),
-    _AdminService(
-      icon: Icons.support_agent_outlined,
-      name: 'Asistencia técnica',
-      description: 'Servicio de asistencia y soporte técnico.',
-      category: 'Soporte',
-      price: 12900,
-      active: true,
-    ),
-    _AdminService(
-      icon: Icons.cleaning_services_outlined,
-      name: 'Limpieza adicional',
-      description: 'Servicio adicional de limpieza durante la estadía.',
-      category: 'Servicios',
-      price: 7900,
-      active: false,
-    ),
-  ];
+  late final AdditionalServiceController _controller;
 
-  List<_AdminService> get _filteredServices {
-    final query = _searchController.text.trim().toLowerCase();
-    if (query.isEmpty) return _services;
-    return _services.where((service) {
-      return service.name.toLowerCase().contains(query) ||
-          service.description.toLowerCase().contains(query) ||
-          service.category.toLowerCase().contains(query);
-    }).toList();
+  List<AdditionalService> get _filteredServices =>
+      _controller.searchAdmin(_searchController.text);
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller.addListener(_refresh);
   }
 
-  int get _activeCount =>
-      _services.where((service) => service.active).length;
+  void _refresh() => setState(() {});
 
-  int get _inactiveCount =>
-      _services.where((service) => !service.active).length;
-
-  void _toggleActive(_AdminService service) {
-    setState(() => service.active = !service.active);
-  }
-
-  void _deleteService(_AdminService service) {
-    setState(() => _services.remove(service));
-  }
-
-  void _openForm([_AdminService? service]) {
-    final isEdit = service != null;
-    final nameController = TextEditingController(text: isEdit ? service.name : '');
-    final descriptionController = TextEditingController(text: isEdit ? service.description : '');
-    final categoryController = TextEditingController(text: isEdit ? service.category : '');
-    final priceController = TextEditingController(text: isEdit ? '${service.price}' : '');
-    final icon = isEdit ? service.icon : Icons.miscellaneous_services_outlined;
-
-    showModalBottomSheet(
+  Future<void> _confirmDelete(AdditionalService service) async {
+    final shouldDelete = await showDialog<bool>(
       context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Eliminar servicio'),
+        content: Text(
+          '¿Estás seguro de que deseas eliminar “${service.name}”? Esta acción no se puede deshacer.',
         ),
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.s5),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                isEdit ? 'Editar servicio' : 'Nuevo servicio',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-              const SizedBox(height: AppSpacing.s4),
-              AppTextField(
-                label: 'Nombre',
-                controller: nameController,
-                hint: 'Nombre del servicio',
-                prefixIcon: const Icon(Icons.title_outlined),
-              ),
-              const SizedBox(height: AppSpacing.s3),
-              AppTextField(
-                label: 'Descripción',
-                controller: descriptionController,
-                hint: 'Descripción breve',
-                maxLines: 3,
-                prefixIcon: const Icon(Icons.description_outlined),
-              ),
-              const SizedBox(height: AppSpacing.s3),
-              AppTextField(
-                label: 'Categoría',
-                controller: categoryController,
-                hint: 'Ej: Soporte',
-                prefixIcon: const Icon(Icons.category_outlined),
-              ),
-              const SizedBox(height: AppSpacing.s3),
-              AppTextField(
-                label: 'Precio',
-                controller: priceController,
-                hint: '0',
-                keyboardType: TextInputType.number,
-                prefixIcon: const Icon(Icons.attach_money_outlined),
-              ),
-              const SizedBox(height: AppSpacing.s4),
-              Row(
-                children: [
-                  Expanded(
-                    child: AppButton(
-                      label: 'Cancelar',
-                      expanded: true,
-                      variant: AppButtonVariant.secondary,
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                  ),
-                  const SizedBox(width: AppSpacing.s3),
-                  Expanded(
-                    child: AppButton(
-                      label: isEdit ? 'Guardar' : 'Crear',
-                      expanded: true,
-                      onPressed: () {
-                        final name = nameController.text.trim();
-                        final description = descriptionController.text.trim();
-                        final category = categoryController.text.trim();
-                        final price = int.tryParse(priceController.text.trim()) ?? 0;
-                        if (name.isEmpty || description.isEmpty || category.isEmpty || price <= 0) return;
-                        setState(() {
-                          if (isEdit) {
-                            service.name = name;
-                            service.description = description;
-                            service.category = category;
-                            service.price = price;
-                          } else {
-                            _services.add(_AdminService(
-                              icon: icon,
-                              name: name,
-                              description: description,
-                              category: category,
-                              price: price,
-                              active: true,
-                            ));
-                          }
-                        });
-                        Navigator.pop(context);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: AppSpacing.s6),
-            ],
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancelar'),
           ),
-        ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: Theme.of(context).colorScheme.error,
+            ),
+            child: const Text('Sí, eliminar'),
+          ),
+        ],
       ),
     );
+    if (!mounted || shouldDelete != true) return;
+    _controller.delete(service);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_refresh);
     _searchController.dispose();
     super.dispose();
   }
@@ -197,9 +75,7 @@ class _AdditionalServiceSystemAdministratorPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Servicios adicionales'),
-      ),
+      appBar: AppBar(title: const Text('Servicios adicionales')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screen),
@@ -224,7 +100,10 @@ class _AdditionalServiceSystemAdministratorPageState
                   label: 'Nuevo',
                   icon: Icons.add,
                   expanded: false,
-                  onPressed: () => _openForm(),
+                  onPressed: () => Navigator.pushNamed(
+                    context,
+                    AppRoutes.createAdminAdditionalService,
+                  ),
                 ),
               ],
             ),
@@ -239,11 +118,9 @@ class _AdditionalServiceSystemAdministratorPageState
                 ),
                 Text(
                   '${_filteredServices.length} registros',
-                  style: Theme.of(context)
-                      .textTheme.labelMedium
-                      ?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -256,9 +133,13 @@ class _AdditionalServiceSystemAdministratorPageState
                   padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                   child: _AdminServiceCard(
                     service: service,
-                    onToggleActive: () => _toggleActive(service),
-                    onEdit: () => _openForm(service),
-                    onDelete: () => _deleteService(service),
+                    onToggleActive: () => _controller.toggleActive(service),
+                    onEdit: () => Navigator.pushNamed(
+                      context,
+                      AppRoutes.createAdminAdditionalService,
+                      arguments: service,
+                    ),
+                    onDelete: () => _confirmDelete(service),
                   ),
                 ),
               ),
@@ -285,8 +166,8 @@ class _AdditionalServiceSystemAdministratorPageState
         Text(
           'Crea y administra los servicios que estarán disponibles para los clientes.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.appColors.textSecondary,
-              ),
+            color: context.appColors.textSecondary,
+          ),
         ),
       ],
     );
@@ -300,17 +181,17 @@ class _AdditionalServiceSystemAdministratorPageState
           _StatisticCard(
             icon: Icons.miscellaneous_services_outlined,
             title: 'Total',
-            value: '${_services.length}',
+            value: '${_controller.services.length}',
           ),
           _StatisticCard(
             icon: Icons.check_circle_outline,
             title: 'Activos',
-            value: '$_activeCount',
+            value: '${_controller.activeCount}',
           ),
           _StatisticCard(
             icon: Icons.pause_circle_outline,
             title: 'Inactivos',
-            value: '$_inactiveCount',
+            value: '${_controller.inactiveCount}',
           ),
         ];
         if (compact) {
@@ -327,8 +208,7 @@ class _AdditionalServiceSystemAdministratorPageState
           children: [
             for (var i = 0; i < cards.length; i++) ...[
               Expanded(child: cards[i]),
-              if (i != cards.length - 1)
-                const SizedBox(width: AppSpacing.s3),
+              if (i != cards.length - 1) const SizedBox(width: AppSpacing.s3),
             ],
           ],
         );
@@ -356,8 +236,8 @@ class _AdditionalServiceSystemAdministratorPageState
             Text(
               'No encontramos servicios que coincidan con la búsqueda.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
@@ -387,16 +267,12 @@ class _StatisticCard extends StatelessWidget {
             width: 44,
             height: 44,
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: .10),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-            child: Icon(
-              icon,
-              color: Theme.of(context).colorScheme.primary,
-            ),
+            child: Icon(icon, color: Theme.of(context).colorScheme.primary),
           ),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
@@ -405,18 +281,12 @@ class _StatisticCard extends StatelessWidget {
               children: [
                 Text(
                   title,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodySmall
-                      ?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s1),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.headlineSmall,
-                ),
+                Text(value, style: Theme.of(context).textTheme.headlineSmall),
               ],
             ),
           ),
@@ -434,7 +304,7 @@ class _AdminServiceCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  final _AdminService service;
+  final AdditionalService service;
   final VoidCallback onToggleActive;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -451,14 +321,13 @@ class _AdminServiceCard extends StatelessWidget {
                 width: 52,
                 height: 52,
                 decoration: BoxDecoration(
-                  color: Theme.of(context)
-                      .colorScheme
-                      .primary
-                      .withValues(alpha: .10),
+                  color: Theme.of(
+                    context,
+                  ).colorScheme.primary.withValues(alpha: .10),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Icon(
-                  service.icon,
+                  _iconFor(service.icon),
                   color: Theme.of(context).colorScheme.primary,
                   size: 26,
                 ),
@@ -470,20 +339,16 @@ class _AdminServiceCard extends StatelessWidget {
                   children: [
                     Text(
                       service.name,
-                      style: Theme.of(context)
-                          .textTheme
-                          .titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
                       service.description,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.appColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -515,11 +380,7 @@ class _AdminServiceCard extends StatelessWidget {
                     value: 'toggle',
                     child: ListTile(
                       leading: Icon(Icons.power_settings_new_outlined),
-                      title: Text(
-                        service.active
-                            ? 'Desactivar'
-                            : 'Activar',
-                      ),
+                      title: Text(service.active ? 'Desactivar' : 'Activar'),
                     ),
                   ),
                   const PopupMenuItem(
@@ -537,20 +398,15 @@ class _AdminServiceCard extends StatelessWidget {
           Row(
             children: [
               StatusBadge(
-                status: service.active
-                    ? AppStatus.active
-                    : AppStatus.blocked,
+                status: service.active ? AppStatus.active : AppStatus.blocked,
               ),
               const Spacer(),
               Text(
                 '\$${_formatPrice(service.price)}',
-                style: Theme.of(context)
-                    .textTheme
-                    .titleMedium
-                    ?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                      fontWeight: FontWeight.w700,
-                    ),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.primary,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
             ],
           ),
@@ -558,24 +414,6 @@ class _AdminServiceCard extends StatelessWidget {
       ),
     );
   }
-}
-
-class _AdminService {
-  _AdminService({
-    required this.icon,
-    required this.name,
-    required this.description,
-    required this.category,
-    required this.price,
-    required this.active,
-  });
-
-  IconData icon;
-  String name;
-  String description;
-  String category;
-  int price;
-  bool active;
 }
 
 String _formatPrice(int value) {
@@ -589,3 +427,11 @@ String _formatPrice(int value) {
   }
   return buffer.toString();
 }
+
+IconData _iconFor(AdditionalServiceIcon icon) => switch (icon) {
+  AdditionalServiceIcon.shield => Icons.shield_outlined,
+  AdditionalServiceIcon.cloud => Icons.cloud_outlined,
+  AdditionalServiceIcon.support => Icons.support_agent_outlined,
+  AdditionalServiceIcon.cleaning => Icons.cleaning_services_outlined,
+  AdditionalServiceIcon.miscellaneous => Icons.miscellaneous_services_outlined,
+};
