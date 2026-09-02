@@ -7,7 +7,9 @@ import 'package:machuco/views/booking/client_view/client_booking_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_page.dart';
 import 'package:machuco/views/booking/system_admin_view/admin_booking_page.dart';
-import 'package:machuco/views/payment/client/client_payment_page.dart';
+import 'package:machuco/views/payment/client_view/client_payment_page.dart';
+import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
+import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -16,7 +18,12 @@ abstract final class AppRoutes {
   static const bookingDetail = '/booking/client/detail';
   static const ownerBookings = '/booking/owner';
   static const adminBookings = '/booking/admin';
-  static const payment = '/payment/client';
+  static const clientPayments = '/payment/client';
+  static const ownerPayments = '/payment/owner';
+  static const adminPayments = '/payment/admin';
+
+  /// Alias conservado para los enlaces existentes desde las reservas.
+  static const payment = clientPayments;
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
@@ -30,7 +37,9 @@ abstract final class AppRoutes {
       ),
       ownerBookings => const OwnerBookingPage(),
       adminBookings => const AdminBookingPage(),
-      payment => const ClientDashboardPage(),
+      clientPayments => const ClientDashboardPage(),
+      ownerPayments => const UserReservationsPage(),
+      adminPayments => const AdminFinancePage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
