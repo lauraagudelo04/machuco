@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/additional_service/additional_service_controller.dart';
+import 'package:machuco/controllers/additional_service/client_view/additional_service_client_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 
 class AddAdditionalServiceClientPage extends StatefulWidget {
   const AddAdditionalServiceClientPage({super.key, this.controller});
 
-  final AdditionalServiceController? controller;
+  final AdditionalServiceClientController? controller;
 
   @override
   State<AddAdditionalServiceClientPage> createState() =>
@@ -16,16 +16,17 @@ class AddAdditionalServiceClientPage extends StatefulWidget {
 class _AddAdditionalServiceClientPageState
     extends State<AddAdditionalServiceClientPage> {
   final TextEditingController _searchController = TextEditingController();
-  late final AdditionalServiceController _controller;
+  late final AdditionalServiceClientController _controller;
   String _category = 'Todos';
 
   List<AdditionalService> get _services =>
-      _controller.searchClient(_searchController.text, _category);
+      _controller.searchAvailable(_searchController.text, _category);
 
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller =
+        widget.controller ?? AdditionalServiceClientController.instance;
     _controller
       ..beginSelection()
       ..addListener(_refresh);

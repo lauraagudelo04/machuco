@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/additional_service/additional_service_controller.dart';
+import 'package:machuco/controllers/additional_service/client_view/additional_service_client_controller.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/routes/routes.dart';
 import '../../../../core/design_system/components/app_button.dart';
@@ -13,7 +13,7 @@ import '../../../../core/design_system/theme/app_theme_extensions.dart';
 class AdditionalServiceClientPage extends StatefulWidget {
   const AdditionalServiceClientPage({super.key, this.controller});
 
-  final AdditionalServiceController? controller;
+  final AdditionalServiceClientController? controller;
 
   @override
   State<AdditionalServiceClientPage> createState() =>
@@ -24,7 +24,7 @@ class _AdditionalServiceClientPageState
     extends State<AdditionalServiceClientPage> {
   final TextEditingController _searchController = TextEditingController();
 
-  late final AdditionalServiceController _controller;
+  late final AdditionalServiceClientController _controller;
 
   List<AdditionalService> get _filteredServices =>
       _controller.searchSelected(_searchController.text);
@@ -32,7 +32,8 @@ class _AdditionalServiceClientPageState
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller =
+        widget.controller ?? AdditionalServiceClientController.instance;
     _controller.addListener(_refresh);
   }
 

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/additional_service/additional_service_controller.dart';
+import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 
@@ -11,7 +11,7 @@ class AdditionalServiceAdminFormPage extends StatefulWidget {
   });
 
   final AdditionalService? service;
-  final AdditionalServiceController? controller;
+  final AdditionalServiceSystemAdministratorController? controller;
 
   @override
   State<AdditionalServiceAdminFormPage> createState() =>
@@ -20,7 +20,7 @@ class AdditionalServiceAdminFormPage extends StatefulWidget {
 
 class _AdditionalServiceAdminFormPageState
     extends State<AdditionalServiceAdminFormPage> {
-  late final AdditionalServiceController _controller;
+  late final AdditionalServiceSystemAdministratorController _controller;
   late final TextEditingController _nameController;
   late final TextEditingController _descriptionController;
   late final TextEditingController _categoryController;
@@ -30,7 +30,9 @@ class _AdditionalServiceAdminFormPageState
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller =
+        widget.controller ??
+        AdditionalServiceSystemAdministratorController.instance;
     _controller
       ..resetFormValidation()
       ..addListener(_refresh);

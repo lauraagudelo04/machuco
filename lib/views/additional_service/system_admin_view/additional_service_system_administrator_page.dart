@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/additional_service/additional_service_controller.dart';
+import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/routes/routes.dart';
 import '../../../../core/design_system/components/app_button.dart';
@@ -13,7 +13,7 @@ import '../../../../core/design_system/tokens/app_spacing.dart';
 class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
   const AdditionalServiceSystemAdministratorPage({super.key, this.controller});
 
-  final AdditionalServiceController? controller;
+  final AdditionalServiceSystemAdministratorController? controller;
 
   @override
   State<AdditionalServiceSystemAdministratorPage> createState() =>
@@ -24,15 +24,17 @@ class _AdditionalServiceSystemAdministratorPageState
     extends State<AdditionalServiceSystemAdministratorPage> {
   final TextEditingController _searchController = TextEditingController();
 
-  late final AdditionalServiceController _controller;
+  late final AdditionalServiceSystemAdministratorController _controller;
 
   List<AdditionalService> get _filteredServices =>
-      _controller.searchAdmin(_searchController.text);
+      _controller.search(_searchController.text);
 
   @override
   void initState() {
     super.initState();
-    _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller =
+        widget.controller ??
+        AdditionalServiceSystemAdministratorController.instance;
     _controller.addListener(_refresh);
   }
 
