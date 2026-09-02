@@ -17,7 +17,6 @@ class _AddAdditionalServiceClientPageState
     extends State<AddAdditionalServiceClientPage> {
   final TextEditingController _searchController = TextEditingController();
   late final AdditionalServiceController _controller;
-  late final Set<String> _draftSelection;
   String _category = 'Todos';
 
   List<AdditionalService> get _services =>
@@ -27,39 +26,35 @@ class _AddAdditionalServiceClientPageState
   void initState() {
     super.initState();
     _controller = widget.controller ?? AdditionalServiceController.instance;
-    _draftSelection = {..._controller.selectedServiceIds};
+    _controller
+      ..beginSelection()
+      ..addListener(_refresh);
   }
 
-  void _toggle(AdditionalService service) {
-    setState(() {
-      if (!_draftSelection.add(service.id)) {
-        _draftSelection.remove(service.id);
-      }
-    });
+  void _refresh() {
+    if (mounted) setState(() {});
   }
 
   void _confirm() {
-    _controller.replaceSelected(_draftSelection);
+    _controller.confirmSelection();
     Navigator.of(context).pop(true);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_refresh);
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final total = _controller.activeServices
-        .where((service) => _draftSelection.contains(service.id))
-        .fold(0, (sum, service) => sum + service.price);
     return Scaffold(
       appBar: AppBar(title: const Text('Agregar servicios')),
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.all(AppSpacing.screen),
         child: AppButton(
-          label: 'Guardar ${_draftSelection.length} servicio(s)',
+          label: 'Guardar ${_controller.draftSelectedCount} servicio(s)',
           icon: Icons.check,
           onPressed: _confirm,
         ),
@@ -110,8 +105,8 @@ class _AddAdditionalServiceClientPageState
               (service) => Padding(
                 padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                 child: AppCard(
-                  selected: _draftSelection.contains(service.id),
-                  onTap: () => _toggle(service),
+                  selected: _controller.isDraftSelected(service),
+                  onTap: () => _controller.toggleDraftSelected(service),
                   child: Row(
                     children: [
                       Icon(
@@ -149,8 +144,9 @@ class _AddAdditionalServiceClientPageState
                         ),
                       ),
                       Checkbox(
-                        value: _draftSelection.contains(service.id),
-                        onChanged: (_) => _toggle(service),
+                        value: _controller.isDraftSelected(service),
+                        onChanged: (_) =>
+                            _controller.toggleDraftSelected(service),
                       ),
                     ],
                   ),
@@ -166,7 +162,7 @@ class _AddAdditionalServiceClientPageState
                   const SizedBox(width: AppSpacing.s3),
                   const Expanded(child: Text('Total estimado')),
                   Text(
-                    '\$${_formatPrice(total)}',
+                    '\$${_formatPrice(_controller.draftSelectedTotal)}',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ],

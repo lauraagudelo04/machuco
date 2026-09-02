@@ -25,17 +25,15 @@ class _AdditionalServiceAdminFormPageState
   late final TextEditingController _descriptionController;
   late final TextEditingController _categoryController;
   late final TextEditingController _priceController;
-  String? _nameError;
-  String? _descriptionError;
-  String? _categoryError;
-  String? _priceError;
-
   bool get _isEditing => widget.service != null;
 
   @override
   void initState() {
     super.initState();
     _controller = widget.controller ?? AdditionalServiceController.instance;
+    _controller
+      ..resetFormValidation()
+      ..addListener(_refresh);
     final service = widget.service;
     _nameController = TextEditingController(text: service?.name ?? '');
     _descriptionController = TextEditingController(
@@ -47,50 +45,25 @@ class _AdditionalServiceAdminFormPageState
     );
   }
 
-  void _save() {
-    final name = _nameController.text.trim();
-    final description = _descriptionController.text.trim();
-    final category = _categoryController.text.trim();
-    final price = int.tryParse(_priceController.text.trim());
-    setState(() {
-      _nameError = name.isEmpty ? 'El nombre es obligatorio' : null;
-      _descriptionError = description.isEmpty
-          ? 'La descripción es obligatoria'
-          : null;
-      _categoryError = category.isEmpty ? 'La categoría es obligatoria' : null;
-      _priceError = price == null || price <= 0
-          ? 'Ingresa un precio mayor que cero'
-          : null;
-    });
-    if (_nameError != null ||
-        _descriptionError != null ||
-        _categoryError != null ||
-        _priceError != null) {
-      return;
-    }
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
-    final service = widget.service;
-    if (service == null) {
-      _controller.create(
-        name: name,
-        description: description,
-        category: category,
-        price: price!,
-      );
-    } else {
-      _controller.update(
-        service,
-        name: name,
-        description: description,
-        category: category,
-        price: price!,
-      );
-    }
+  void _save() {
+    final saved = _controller.save(
+      service: widget.service,
+      name: _nameController.text,
+      description: _descriptionController.text,
+      category: _categoryController.text,
+      priceText: _priceController.text,
+    );
+    if (!saved) return;
     Navigator.of(context).pop(true);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_refresh);
     _nameController.dispose();
     _descriptionController.dispose();
     _categoryController.dispose();
@@ -131,7 +104,7 @@ class _AdditionalServiceAdminFormPageState
                     label: 'Nombre',
                     hint: 'Ej. Decoración romántica',
                     controller: _nameController,
-                    errorText: _nameError,
+                    errorText: _controller.nameError,
                     prefixIcon: const Icon(Icons.title_outlined),
                     textInputAction: TextInputAction.next,
                   ),
@@ -140,7 +113,7 @@ class _AdditionalServiceAdminFormPageState
                     label: 'Descripción',
                     hint: 'Describe qué incluye el servicio',
                     controller: _descriptionController,
-                    errorText: _descriptionError,
+                    errorText: _controller.descriptionError,
                     prefixIcon: const Icon(Icons.description_outlined),
                     maxLines: 3,
                   ),
@@ -149,7 +122,7 @@ class _AdditionalServiceAdminFormPageState
                     label: 'Categoría',
                     hint: 'Ej. Experiencias',
                     controller: _categoryController,
-                    errorText: _categoryError,
+                    errorText: _controller.categoryError,
                     prefixIcon: const Icon(Icons.category_outlined),
                     textInputAction: TextInputAction.next,
                   ),
@@ -158,7 +131,7 @@ class _AdditionalServiceAdminFormPageState
                     label: 'Precio',
                     hint: 'Ej. 25000',
                     controller: _priceController,
-                    errorText: _priceError,
+                    errorText: _controller.priceError,
                     prefixIcon: const Icon(Icons.attach_money_outlined),
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.done,
