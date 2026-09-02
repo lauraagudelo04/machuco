@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-// Ajusta la ruta de importación según tu árbol de directorios
 import '../../../core/design_system/design_system.dart';
 import 'client_motel_detail_page.dart';
+import './../../../models/motel/motel_model.dart'; // Importa el modelo
+import './../../../controllers/motel/client_controller/client_motel_controller.dart'; // Importa el controlador
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -12,7 +13,19 @@ class ClientMotelsPage extends StatefulWidget {
 
 class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
-  int _selectedIndex = 0; // Para el AppNavigationBar
+  int _selectedIndex = 0;
+  
+  // Instanciamos el controlador
+  final ClientMotelController _motelController = ClientMotelController();
+  // Variable para almacenar el Future de los moteles
+  late Future<List<Motel>> _motelsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    // Iniciamos la petición de datos al cargar la pantalla
+    _motelsFuture = _motelController.getRecommendedMotels();
+  }
 
   @override
   void dispose() {
@@ -26,27 +39,22 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
       appBar: AppBar(
         centerTitle: true,
         title: const Text('Lista Moteles'),
-        // Ampliamos el espacio del leading para que el botón mantenga su forma circular
-        leadingWidth: 68, 
+        leadingWidth: 68,
         leading: Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.s4), // AppSpacing.s4 = 16.0
+          padding: const EdgeInsets.only(left: AppSpacing.s4),
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {
-              // TODO: Navegar a notificaciones
-            },
+            onPressed: () {},
           ),
         ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.s4), // Mismo padding que la izquierda
+            padding: const EdgeInsets.only(right: AppSpacing.s4),
             child: AppIconButton(
               icon: Icons.person_outline,
               tooltip: 'Perfil',
-              onPressed: () {
-                // TODO: Navegar al perfil del cliente
-              },
+              onPressed: () {},
             ),
           ),
         ],
@@ -57,13 +65,10 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: AppSpacing.s2),
-            // Barra de búsqueda del Design System
             AppSearchField(
               label: 'Buscar moteles, zonas o servicios...',
               controller: _searchController,
-              onChanged: (value) {
-                // Aquí se conectará el controlador para filtrar
-              },
+              onChanged: (value) {},
               onClear: () {
                 _searchController.clear();
               },
@@ -75,24 +80,51 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
             ),
             const SizedBox(height: AppSpacing.s3),
             Expanded(
-              // Este ListView se alimentará después del Modelo/Controlador
-              child: ListView.separated(
-                itemCount: 5,
-                separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
-                itemBuilder: (context, index) {
-                  return _ClientMotelCard(
-                    name: 'Motel Paraíso Élite',
-                    location: 'Rionegro, Antioquia',
-                    price: '\$80.000 / 4 horas',
-                    isAvailable: index % 2 == 0, // Simulando disponibilidad
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const ClientMotelDetailPage(
-                            motelName: "Motel Machuco",
-                          ),
-                        ),
+              // Usamos FutureBuilder para manejar los estados de la petición asíncrona
+              child: FutureBuilder<List<Motel>>(
+                future: _motelsFuture,
+                builder: (context, snapshot) {
+                  // Estado 1: Cargando
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  
+                  // Estado 2: Error
+                  if (snapshot.hasError) {
+                    return Center(child: Text('Error al cargar: ${snapshot.error}'));
+                  }
+                  
+                  // Estado 3: Sin datos
+                  if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    return const Center(child: Text('No hay moteles disponibles en este momento.'));
+                  }
+
+                  // Estado 4: Éxito
+                  final motels = snapshot.data!;
+                  
+                  return ListView.separated(
+                    itemCount: motels.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
+                    itemBuilder: (context, index) {
+                      final motel = motels[index]; // Obtenemos el modelo actual
+                      
+                      return _ClientMotelCard(
+                        // Alimentamos la UI con los datos del modelo
+                        name: motel.name,
+                        location: motel.address,
+                        // Formateamos el precio básico
+                        price: '\$${motel.basePrice.toStringAsFixed(0)} / 4 horas',
+                        isAvailable: motel.isAvailable,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ClientMotelDetailPage(
+                                motel: motel,
+                              ),
+                            ),
+                          );
+                        },
                       );
                     },
                   );
@@ -102,28 +134,26 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           ],
         ),
       ),
-      // Navegación inferior con las 3 secciones solicitadas
       bottomNavigationBar: AppNavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);
-          // TODO: Manejar la navegación entre las vistas de Reservas y PQRS
         },
         destinations: const [
           AppNavigationDestination(
             icon: Icons.home_outlined,
             selectedIcon: Icons.home,
-            label: 'Moteles', // Izquierda
+            label: 'Moteles',
           ),
           AppNavigationDestination(
             icon: Icons.event_note_outlined,
             selectedIcon: Icons.event_note,
-            label: 'Mis Reservas', // Centro
+            label: 'Mis Reservas',
           ),
           AppNavigationDestination(
             icon: Icons.support_agent_outlined,
             selectedIcon: Icons.support_agent,
-            label: 'Mis PQRS', // Derecha
+            label: 'Mis PQRS',
           ),
         ],
       ),
@@ -131,7 +161,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
   }
 }
 
-// Sub-componente privado para la tarjeta del motel (Sin cambios mayores, listo para usar)
+// El _ClientMotelCard se mantiene igual, no requiere cambios internos
 class _ClientMotelCard extends StatelessWidget {
   const _ClientMotelCard({
     required this.name,
@@ -154,7 +184,6 @@ class _ClientMotelCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Imagen simulada (Placeholder)
           Container(
             height: 120,
             width: double.infinity,
@@ -204,7 +233,7 @@ class _ClientMotelCard extends StatelessWidget {
                 ),
               ),
               AppButton(
-                label: 'Ver más', // Según tu boceto "Ver" o "Reservar", este botón lleva al detalle
+                label: 'Ver más',
                 size: AppButtonSize.medium,
                 expanded: false,
                 onPressed: onTap,
