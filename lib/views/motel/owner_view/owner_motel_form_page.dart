@@ -22,12 +22,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
 
   // Estado para los chips de métodos de pago
   final List<String> _selectedPaymentMethods = ['Efectivo'];
-  final List<String> _availablePaymentMethods = [
-    'Efectivo',
-    'Tarjeta Crédito/Débito',
-    'Transferencia',
-    'Nequi / Daviplata',
-  ];
+  final List<String> _availablePaymentMethods = ['Efectivo', 'Tarjeta Crédito/Débito', 'Transferencia', 'Nequi / Daviplata'];
 
   @override
   void dispose() {
@@ -93,7 +88,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 ],
               ),
             ),
-
+            
             const SizedBox(height: AppSpacing.s2),
 
             // Formulario de datos básicos
@@ -103,35 +98,35 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: AppSpacing.s3),
-
+            
             _buildTextField(
               controller: _nameController,
               label: 'Nombre',
               keyboardType: TextInputType.name,
             ),
             const SizedBox(height: AppSpacing.s3),
-
+            
             _buildTextField(
               controller: _roomsController,
               label: '# Habitaciones',
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: AppSpacing.s3),
-
+            
             _buildTextField(
               controller: _nitController,
               label: 'NIT',
               keyboardType: TextInputType.number,
             ),
             const SizedBox(height: AppSpacing.s3),
-
+            
             _buildTextField(
               controller: _addressController,
               label: 'Dirección',
               keyboardType: TextInputType.streetAddress,
             ),
             const SizedBox(height: AppSpacing.s3),
-
+            
             _buildTextField(
               controller: _phoneController,
               label: 'Teléfono',
@@ -140,10 +135,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
             const SizedBox(height: AppSpacing.s5),
 
             // Sección de Métodos de Pago
-            Text(
-              'Métodos de pago',
-              style: Theme.of(context).textTheme.titleMedium,
-            ),
+            Text('Métodos de pago', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s2),
             Wrap(
               spacing: AppSpacing.s2,
@@ -155,9 +147,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                   selected: isSelected,
                   onSelected: (_) => _togglePaymentMethod(method),
                   selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  checkmarkColor: Theme.of(
-                    context,
-                  ).colorScheme.onPrimaryContainer,
+                  checkmarkColor: Theme.of(context).colorScheme.onPrimaryContainer,
                 );
               }).toList(),
             ),
@@ -175,21 +165,17 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 height: 120,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: context.appColors.mediaFallback,
+                  color: context.appColors.mediaFallback ?? Colors.grey.shade200,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: context.appColors.border,
+                    color: context.appColors.border ?? Colors.grey.shade400,
                     style: BorderStyle.solid,
                   ),
                 ),
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.add_photo_alternate_outlined,
-                      size: 40,
-                      color: context.appColors.textSecondary,
-                    ),
+                    Icon(Icons.add_photo_alternate_outlined, size: 40, color: context.appColors.textSecondary),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
                       'Toca para agregar imágenes',
@@ -201,7 +187,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 ),
               ),
             ),
-
+            
             const SizedBox(height: AppSpacing.s6),
           ],
         ),
@@ -232,11 +218,10 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       keyboardType: keyboardType,
       decoration: InputDecoration(
         labelText: label,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8.0),
         ),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }

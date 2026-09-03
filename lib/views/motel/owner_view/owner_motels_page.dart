@@ -65,44 +65,18 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary, // AppColors.violet
+                color: Theme.of(context).colorScheme.primary, // AppColors.violet
               ),
               child: const Text(
                 'Opciones',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
+                style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
               ),
             ),
-            _MenuTile(
-              icon: Icons.star_outline,
-              title: 'Suscripción',
-              onTap: () {},
-            ),
-            _MenuTile(
-              icon: Icons.person_outline,
-              title: 'Perfil',
-              onTap: () {},
-            ),
-            _MenuTile(
-              icon: Icons.support_agent_outlined,
-              title: 'PQRS',
-              onTap: () {},
-            ),
-            _MenuTile(
-              icon: Icons.room_preferences_outlined,
-              title: 'Servicios adicionales',
-              onTap: () {},
-            ),
-            _MenuTile(
-              icon: Icons.bed_outlined,
-              title: 'Habitaciones',
-              onTap: () {},
-            ),
+            _MenuTile(icon: Icons.star_outline, title: 'Suscripción', onTap: () {}),
+            _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
+            _MenuTile(icon: Icons.support_agent_outlined, title: 'PQRS', onTap: () {}),
+            _MenuTile(icon: Icons.room_preferences_outlined, title: 'Servicios adicionales', onTap: () {}),
+            _MenuTile(icon: Icons.bed_outlined, title: 'Habitaciones', onTap: () {}),
           ],
         ),
       ),
@@ -112,17 +86,13 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: AppSpacing.s4),
-            Text(
-              'Tus establecimientos',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
+            Text('Tus establecimientos', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: AppSpacing.s3),
             Expanded(
               // Lista de moteles del propietario basada en la lista mutable
               child: ListView.separated(
                 itemCount: _motels.length,
-                separatorBuilder: (_, _) =>
-                    const SizedBox(height: AppSpacing.s3),
+                separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
                 itemBuilder: (context, index) {
                   final motel = _motels[index];
                   return _OwnerMotelCard(
@@ -208,9 +178,7 @@ class _OwnerMotelCard extends StatelessWidget {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(
-                dialogContext,
-              ), // Cierra el pop-up sin hacer nada
+              onPressed: () => Navigator.pop(dialogContext), // Cierra el pop-up sin hacer nada
               child: const Text('Cancelar'),
             ),
             FilledButton(
@@ -240,16 +208,12 @@ class _OwnerMotelCard extends StatelessWidget {
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: isActive
-                  ? context.appColors.elevated
-                  : context.appColors.mediaFallback,
+              color: isActive ? context.appColors.elevated : context.appColors.mediaFallback,
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
             child: Icon(
               Icons.domain,
-              color: isActive
-                  ? Theme.of(context).colorScheme.primary
-                  : context.appColors.textDisabled,
+              color: isActive ? Theme.of(context).colorScheme.primary : context.appColors.textDisabled,
             ),
           ),
           const SizedBox(width: AppSpacing.s4),
@@ -284,8 +248,7 @@ class _OwnerMotelCard extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) =>
-                          const OwnerMotelFormPage(isEditing: true),
+                      builder: (context) => const OwnerMotelFormPage(isEditing: true),
                     ),
                   );
                 },
@@ -294,8 +257,7 @@ class _OwnerMotelCard extends StatelessWidget {
                 icon: Icon(isActive ? Icons.block : Icons.check_circle_outline),
                 tooltip: isActive ? 'Inhabilitar Motel' : 'Habilitar Motel',
                 color: isActive ? Colors.redAccent : Colors.green,
-                onPressed: () =>
-                    _showConfirmDialog(context), // Llama al pop-up de seguridad
+                onPressed: () => _showConfirmDialog(context), // Llama al pop-up de seguridad
               ),
             ],
           ),
@@ -306,12 +268,8 @@ class _OwnerMotelCard extends StatelessWidget {
 }
 
 class _MenuTile extends StatelessWidget {
-  const _MenuTile({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
-
+  const _MenuTile({required this.icon, required this.title, required this.onTap});
+  
   final IconData icon;
   final String title;
   final VoidCallback onTap;
