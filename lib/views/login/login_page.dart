@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
+import 'package:machuco/service/auth/backend_registered_user_directory.dart';
+import 'package:machuco/service/auth/registered_user_directory.dart';
+import 'package:machuco/views/booking/booking_home_page.dart';
 
 enum AuthTab { login, register }
 
@@ -22,10 +26,12 @@ class LoginPage extends StatefulWidget {
     super.key,
     this.initialTab = AuthTab.login,
     this.authService,
+    this.controller,
   });
 
   final AuthTab initialTab;
   final Auth0AuthService? authService;
+  final LoginController? controller;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -47,20 +53,48 @@ class _LoginPageState extends State<LoginPage> {
   bool _loginPasswordVisible = false;
   bool _registerPasswordVisible = false;
   bool _registerConfirmVisible = false;
-  bool _isSubmitting = false;
-  late final Auth0AuthService? _authService;
-  AuthSession? _session;
+  late final LoginController _controller;
+  late final bool _ownsController;
+
+  bool get _isSubmitting => _controller.isSubmitting;
+  AuthSession? get _session => _controller.session;
 
   @override
   void initState() {
     super.initState();
     _selectedTab = widget.initialTab;
-    _authService = widget.authService ?? Auth0AuthService.fromEnvironment();
-    _restoreSession();
+    final providedController = widget.controller;
+    if (providedController != null) {
+      _controller = providedController;
+      _ownsController = false;
+    } else {
+      final authService =
+          widget.authService ?? Auth0AuthService.fromEnvironment();
+      final RegisteredUserDirectory userDirectory;
+      if (Auth0Config.useBackendUsers && Auth0Config.hasUsersApiConfigured) {
+        userDirectory = BackendRegisteredUserDirectory(
+          baseUrl: Auth0Config.usersApiBaseUrl,
+          usersPath: Auth0Config.usersApiPath,
+        );
+      } else {
+        userDirectory = InMemoryRegisteredUserDirectory();
+      }
+      _controller = LoginController(
+        authService: authService,
+        userDirectory: userDirectory,
+      );
+      _ownsController = true;
+    }
+    _controller.addListener(_onControllerChanged);
+    _bootstrap();
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onControllerChanged);
+    if (_ownsController) {
+      _controller.dispose();
+    }
     _loginEmailController.dispose();
     _loginPasswordController.dispose();
     _fullNameController.dispose();
@@ -71,16 +105,24 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
-  Future<void> _restoreSession() async {
-    if (_authService == null) {
+  void _onControllerChanged() {
+    if (!mounted) {
+      return;
+    }
+    setState(() {});
+  }
+
+  Future<void> _bootstrap() async {
+    await _refreshRegisteredUsers();
+    if (!_controller.isAuthConfigured) {
       return;
     }
     try {
-      final session = await _authService.restoreSession();
-      if (!mounted || session == null) {
+      await _controller.restoreSession();
+      if (!mounted) {
         return;
       }
-      setState(() => _session = session);
+      await _refreshRegisteredUsers(showError: false);
     } catch (_) {
       if (!mounted) {
         return;
@@ -97,30 +139,26 @@ class _LoginPageState extends State<LoginPage> {
     if (formState == null || !formState.validate()) {
       return;
     }
-    if (_authService == null) {
+    if (!_controller.isAuthConfigured) {
       _showAuth0NotConfigured();
       return;
     }
 
-    setState(() => _isSubmitting = true);
     try {
-      final session = await _authService.login(
+      final session = await _controller.login(
         email: _loginEmailController.text,
         password: _loginPasswordController.text,
       );
       if (!mounted) {
         return;
       }
-      setState(() {
-        _isSubmitting = false;
-        _session = session;
-      });
+      await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
+      _goToMainMenu();
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
       }
-      setState(() => _isSubmitting = false);
       _showSnack(message: failure.message, isError: true);
     }
   }
@@ -133,14 +171,13 @@ class _LoginPageState extends State<LoginPage> {
     if (formState == null || !formState.validate()) {
       return;
     }
-    if (_authService == null) {
+    if (!_controller.isAuthConfigured) {
       _showAuth0NotConfigured();
       return;
     }
 
-    setState(() => _isSubmitting = true);
     try {
-      await _authService.register(
+      await _controller.register(
         fullName: _fullNameController.text.trim(),
         email: _registerEmailController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
@@ -150,7 +187,6 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) {
         return;
       }
-      setState(() => _isSubmitting = false);
 
       _loginEmailController.text = _registerEmailController.text.trim();
       _loginPasswordController.text = _registerPasswordController.text;
@@ -162,7 +198,6 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) {
         return;
       }
-      setState(() => _isSubmitting = false);
       _showSnack(message: failure.message, isError: true);
     }
   }
@@ -171,30 +206,26 @@ class _LoginPageState extends State<LoginPage> {
     if (_isSubmitting) {
       return;
     }
-    if (_authService == null) {
+    if (!_controller.isAuthConfigured) {
       _showAuth0NotConfigured();
       return;
     }
 
-    setState(() => _isSubmitting = true);
     try {
-      final session = await _authService.loginWithGoogle(
+      final session = await _controller.loginWithGoogle(
         preferSignup: preferSignup,
       );
       if (!mounted) {
         return;
       }
-      setState(() {
-        _isSubmitting = false;
-        _session = session;
-      });
+      await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
       setState(() => _selectedTab = AuthTab.login);
+      _goToMainMenu();
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
       }
-      setState(() => _isSubmitting = false);
       _showSnack(message: failure.message, isError: true);
     }
   }
@@ -211,9 +242,28 @@ class _LoginPageState extends State<LoginPage> {
       );
   }
 
+  Future<void> _refreshRegisteredUsers({bool showError = true}) async {
+    try {
+      await _controller.listRegisteredUsers();
+    } on AuthFailure catch (failure) {
+      if (!mounted || !showError) {
+      return;
+      }
+      _showSnack(message: failure.message, isError: true);
+    } on Exception {
+      if (!mounted || !showError) {
+      return;
+      }
+      _showSnack(
+      message: 'No fue posible actualizar el listado de usuarios.',
+      isError: true,
+      );
+    }
+  }
+
   Future<void> _showForgotPasswordMessage() async {
     final email = _loginEmailController.text.trim();
-    if (_authService == null) {
+    if (!_controller.isAuthConfigured) {
       _showAuth0NotConfigured();
       return;
     }
@@ -225,7 +275,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     try {
-      await _authService.requestPasswordReset(email: email);
+      await _controller.requestPasswordReset(email: email);
       if (!mounted) {
         return;
       }
@@ -241,14 +291,10 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _logout() async {
-    if (_authService == null) {
-      return;
-    }
-    await _authService.logout();
+    await _controller.logout();
     if (!mounted) {
       return;
     }
-    setState(() => _session = null);
     _showSnack(message: 'Sesión cerrada.');
   }
 
@@ -257,6 +303,13 @@ class _LoginPageState extends State<LoginPage> {
       isError: true,
       message:
           'Auth0 no está configurado. Define AUTH0_DOMAIN y AUTH0_CLIENT_ID.',
+    );
+  }
+
+  void _goToMainMenu() {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => const BookingHomePage()),
+      (_) => false,
     );
   }
 
@@ -321,7 +374,7 @@ class _LoginPageState extends State<LoginPage> {
                         title: 'Machuco',
                         subtitle: 'Inicia sesión o crea tu cuenta',
                       ),
-                      if (!Auth0Config.isConfigured) ...[
+                      if (!_controller.isAuthConfigured) ...[
                         const SizedBox(height: AppSpacing.s4),
                         _Auth0SetupAlert(
                           message:
