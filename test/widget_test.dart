@@ -2,13 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/main.dart';
 
 void main() {
-  testWidgets('shows login screen', (tester) async {
-    await tester.pumpWidget(const MachucoApp());
-    await tester.pumpAndSettle();
+  testWidgets('shows booking role demo home', (tester) async {
+    await tester.pumpWidget(const MyApp());
 
-    expect(find.text('Machuco'), findsOneWidget);
-    expect(find.text('Inicia sesión o crea tu cuenta'), findsOneWidget);
-    expect(find.text('Iniciar sesión'), findsOneWidget);
-    expect(find.text('Registrarse'), findsOneWidget);
+    expect(find.text('Demostración por perfil'), findsOneWidget);
+    expect(find.text('Cliente'), findsOneWidget);
+    expect(find.text('Propietario'), findsOneWidget);
+    expect(find.text('Administrador'), findsOneWidget);
   });
 }
