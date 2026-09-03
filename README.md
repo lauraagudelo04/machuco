@@ -149,3 +149,30 @@ Machuco se encuentra en desarrollo. Antes de modificar significativamente su est
 4. Establecer navegación, entornos y gestión de secretos.
 5. Configurar pruebas automatizadas y CI/CD.
 6. Implementar la interfaz conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md).
+
+## Configuración de Auth0 para login y registro
+
+El flujo de autenticación en la app está integrado con Auth0 mediante `auth0_flutter` y usa conexión de base de datos (`Username-Password-Authentication` por defecto).
+
+Ejecute la aplicación con:
+
+```bash
+flutter run \
+  --dart-define=AUTH0_DOMAIN=tu-dominio.auth0.com \
+  --dart-define=AUTH0_CLIENT_ID=tu-client-id \
+  --dart-define=AUTH0_CONNECTION=Username-Password-Authentication
+```
+
+Parámetros opcionales:
+
+- `AUTH0_AUDIENCE` para solicitar access token de una API concreta.
+- `AUTH0_CONNECTION` si usa una conexión de base de datos distinta en Auth0.
+
+### Inicio de sesión con Google
+
+La pantalla de autenticación incluye botón de **Continuar con Google** para login/registro directo con Auth0.
+
+En Auth0, habilite:
+
+- La conexión social de Google en `Authentication > Social`.
+- La aplicación `Machuco Mobile` dentro de la pestaña `Applications` de esa conexión.
