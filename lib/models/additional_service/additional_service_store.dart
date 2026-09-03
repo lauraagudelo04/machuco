@@ -3,53 +3,66 @@ import 'package:machuco/models/additional_service/additional_service.dart';
 class AdditionalServiceStore {
   AdditionalServiceStore({
     Iterable<AdditionalService>? initialServices,
-    Iterable<String>? initialSelectedServiceIds,
+    Map<String, Set<String>>? initialSelectedServiceIdsByUser,
   }) : services = List.of(initialServices ?? defaultServices),
-       selectedServiceIds = Set.of(
-         initialSelectedServiceIds ?? const {'service-cloud-backup'},
-       );
+       selectedServiceIdsByUser =
+           initialSelectedServiceIdsByUser ??
+           {
+             'user-demo-001': {
+               'service-romantic-decoration',
+               'service-breakfast',
+             },
+             'user-demo-002': {'service-extra-cleaning'},
+           };
 
   static final AdditionalServiceStore instance = AdditionalServiceStore();
 
   static const List<AdditionalService> defaultServices = [
     AdditionalService(
-      id: 'service-screen-insurance',
-      icon: AdditionalServiceIcon.shield,
-      name: 'Seguro de pantalla',
-      description: 'Protección para dispositivos ante daños accidentales.',
-      category: 'Protección',
-      price: 9900,
+      id: 'service-romantic-decoration',
+      motelId: 'motel-demo-001',
+      icon: AdditionalServiceIcon.miscellaneous,
+      name: 'Decoración romántica',
+      description: 'Decoración especial con pétalos, globos y velas.',
+      category: 'Experiencias',
+      price: 45000,
       active: true,
     ),
     AdditionalService(
-      id: 'service-cloud-backup',
-      icon: AdditionalServiceIcon.cloud,
-      name: 'Respaldo en la nube',
-      description: 'Almacenamiento seguro para archivos y fotografías.',
-      category: 'Almacenamiento',
-      price: 5900,
+      id: 'service-breakfast',
+      motelId: 'motel-demo-001',
+      icon: AdditionalServiceIcon.miscellaneous,
+      name: 'Desayuno para dos',
+      description: 'Desayuno completo entregado en la habitación.',
+      category: 'Alimentación',
+      price: 28000,
       active: true,
     ),
     AdditionalService(
-      id: 'service-technical-support',
+      id: 'service-late-checkout',
+      motelId: 'motel-demo-001',
       icon: AdditionalServiceIcon.support,
-      name: 'Asistencia técnica',
-      description: 'Servicio de asistencia y soporte técnico.',
-      category: 'Soporte',
-      price: 12900,
+      name: 'Salida extendida',
+      description: 'Extiende la estadía dos horas adicionales.',
+      category: 'Estadía',
+      price: 30000,
       active: true,
     ),
     AdditionalService(
       id: 'service-extra-cleaning',
+      motelId: 'motel-demo-002',
       icon: AdditionalServiceIcon.cleaning,
       name: 'Limpieza adicional',
       description: 'Servicio adicional de limpieza durante la estadía.',
       category: 'Servicios',
       price: 7900,
-      active: false,
+      active: true,
     ),
   ];
 
   final List<AdditionalService> services;
-  final Set<String> selectedServiceIds;
+  final Map<String, Set<String>> selectedServiceIdsByUser;
+
+  Set<String> selectedServiceIdsFor(String userId) =>
+      selectedServiceIdsByUser.putIfAbsent(userId, () => <String>{});
 }

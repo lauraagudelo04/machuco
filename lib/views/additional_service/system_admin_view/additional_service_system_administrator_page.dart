@@ -1,14 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
+import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
-import 'package:machuco/routes/routes.dart';
-import '../../../../core/design_system/components/app_button.dart';
-import '../../../../core/design_system/components/app_card.dart';
-import '../../../../core/design_system/components/app_text_field.dart';
-import '../../../../core/design_system/components/status_badge.dart';
-import '../../../../core/design_system/theme/app_theme_extensions.dart';
-import '../../../../core/design_system/tokens/app_radius.dart';
-import '../../../../core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
+
+const _serviceIconExtent = 52.0;
+const _serviceIconSize = 26.0;
 
 class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
   const AdditionalServiceSystemAdministratorPage({super.key, this.controller});
@@ -25,20 +24,36 @@ class _AdditionalServiceSystemAdministratorPageState
   final TextEditingController _searchController = TextEditingController();
 
   late final AdditionalServiceSystemAdministratorController _controller;
+  bool _controllerInitialized = false;
 
   List<AdditionalService> get _filteredServices =>
       _controller.search(_searchController.text);
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controllerInitialized) return;
+    final routeArgument = ModalRoute.of(context)?.settings.arguments;
     _controller =
         widget.controller ??
-        AdditionalServiceSystemAdministratorController.instance;
+        AdditionalServiceSystemAdministratorController(
+          motelId: routeArgument is String
+              ? routeArgument
+              : AdditionalServiceSystemAdministratorController.demoMotelId,
+        );
+    _controllerInitialized = true;
     _controller.addListener(_refresh);
+    unawaited(_controller.loadServicesByMotelId());
   }
 
-  void _refresh() => setState(() {});
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {});
+  }
 
   Future<void> _confirmDelete(AdditionalService service) async {
     final shouldDelete = await showDialog<bool>(
@@ -69,7 +84,7 @@ class _AdditionalServiceSystemAdministratorPageState
 
   @override
   void dispose() {
-    _controller.removeListener(_refresh);
+    if (_controllerInitialized) _controller.removeListener(_refresh);
     _searchController.dispose();
     super.dispose();
   }
@@ -79,73 +94,143 @@ class _AdditionalServiceSystemAdministratorPageState
     return Scaffold(
       appBar: AppBar(title: const Text('Servicios adicionales')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: AppSpacing.s5),
-            _buildStatistics(context),
-            const SizedBox(height: AppSpacing.s5),
-            Row(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 960),
+            child: _buildBody(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_controller.isLoading) {
+      return ListView(
+        padding: const EdgeInsets.all(AppSpacing.screen),
+        children: const [
+          AppSkeleton(height: 32),
+          SizedBox(height: AppSpacing.s3),
+          AppSkeleton(height: 20),
+          SizedBox(height: AppSpacing.s5),
+          AppSkeleton(height: 96),
+          SizedBox(height: AppSpacing.s5),
+          AppSkeleton(height: 56),
+          SizedBox(height: AppSpacing.s6),
+          AppSkeleton(height: 148),
+        ],
+      );
+    }
+
+    final errorMessage = _controller.errorMessage;
+    if (errorMessage != null) {
+      return AppErrorState(
+        message: errorMessage,
+        onRetry: () => unawaited(_controller.loadServicesByMotelId()),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(AppSpacing.screen),
+      children: [
+        _buildHeader(context),
+        const SizedBox(height: AppSpacing.s5),
+        _buildStatistics(context),
+        const SizedBox(height: AppSpacing.s5),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 480;
+            final search = AppSearchField(
+              label: 'Buscar servicio',
+              controller: _searchController,
+              onChanged: (_) => setState(() {}),
+              onClear: _clearSearch,
+            );
+            final createButton = AppButton(
+              label: 'Nuevo',
+              icon: Icons.add,
+              expanded: compact,
+              onPressed: _openCreateForm,
+            );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  search,
+                  const SizedBox(height: AppSpacing.s3),
+                  createButton,
+                ],
+              );
+            }
+            return Row(
               children: [
-                Expanded(
-                  child: AppTextField(
-                    label: 'Buscar servicio',
-                    controller: _searchController,
-                    hint: 'Nombre, categoría...',
-                    prefixIcon: const Icon(Icons.search),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                ),
+                Expanded(child: search),
                 const SizedBox(width: AppSpacing.s3),
-                AppButton(
-                  label: 'Nuevo',
-                  icon: Icons.add,
-                  expanded: false,
-                  onPressed: () => Navigator.pushNamed(
-                    context,
-                    AppRoutes.createAdminAdditionalService,
-                  ),
-                ),
+                createButton,
               ],
-            ),
-            const SizedBox(height: AppSpacing.s6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Servicios',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                Text(
-                  '${_filteredServices.length} registros',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            if (_filteredServices.isEmpty)
-              _buildEmptyState(context)
-            else
-              ..._filteredServices.map(
-                (service) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: _AdminServiceCard(
-                    service: service,
-                    onToggleActive: () => _controller.toggleActive(service),
-                    onEdit: () => Navigator.pushNamed(
-                      context,
-                      AppRoutes.createAdminAdditionalService,
-                      arguments: service,
-                    ),
-                    onDelete: () => _confirmDelete(service),
-                  ),
-                ),
+            );
+          },
+        ),
+        const SizedBox(height: AppSpacing.s6),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Servicios',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
+            ),
+            Text(
+              '${_filteredServices.length} registros',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
+            ),
           ],
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        if (_filteredServices.isEmpty)
+          const AppEmptyState(
+            icon: Icons.miscellaneous_services_outlined,
+            title: 'No hay servicios',
+            message: 'No encontramos servicios que coincidan con la búsqueda.',
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredServices.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
+            itemBuilder: (context, index) {
+              final service = _filteredServices[index];
+              return _AdminServiceCard(
+                service: service,
+                onToggleActive: () => _controller.toggleActive(service),
+                onEdit: () => _openEditForm(service),
+                onDelete: () => _confirmDelete(service),
+              );
+            },
+          ),
+      ],
+    );
+  }
+
+  void _openCreateForm() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AdditionalServiceAdminFormPage(controller: _controller),
+      ),
+    );
+  }
+
+  void _openEditForm(AdditionalService service) {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AdditionalServiceAdminFormPage(
+          service: service,
+          controller: _controller,
         ),
       ),
     );
@@ -217,36 +302,6 @@ class _AdditionalServiceSystemAdministratorPageState
       },
     );
   }
-
-  Widget _buildEmptyState(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s6),
-        child: Column(
-          children: [
-            Icon(
-              Icons.miscellaneous_services_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            Text(
-              'No hay servicios',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              'No encontramos servicios que coincidan con la búsqueda.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.appColors.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _StatisticCard extends StatelessWidget {
@@ -266,8 +321,8 @@ class _StatisticCard extends StatelessWidget {
       child: Row(
         children: [
           Container(
-            width: 44,
-            height: 44,
+            width: AppSpacing.s12,
+            height: AppSpacing.s12,
             decoration: BoxDecoration(
               color: Theme.of(
                 context,
@@ -320,8 +375,8 @@ class _AdminServiceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: _serviceIconExtent,
+                height: _serviceIconExtent,
                 decoration: BoxDecoration(
                   color: Theme.of(
                     context,
@@ -331,7 +386,7 @@ class _AdminServiceCard extends StatelessWidget {
                 child: Icon(
                   _iconFor(service.icon),
                   color: Theme.of(context).colorScheme.primary,
-                  size: 26,
+                  size: _serviceIconSize,
                 ),
               ),
               const SizedBox(width: AppSpacing.s3),

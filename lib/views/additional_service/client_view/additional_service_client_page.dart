@@ -1,14 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/client_view/additional_service_client_controller.dart';
+import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
-import 'package:machuco/routes/routes.dart';
-import '../../../../core/design_system/components/app_button.dart';
-import '../../../../core/design_system/components/app_card.dart';
-import '../../../../core/design_system/components/app_icon_button.dart';
-import '../../../../core/design_system/components/app_text_field.dart';
-import '../../../../core/design_system/tokens/app_radius.dart';
-import '../../../../core/design_system/tokens/app_spacing.dart';
-import '../../../../core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
+
+const _serviceIconExtent = 52.0;
+const _serviceIconSize = 26.0;
 
 class AdditionalServiceClientPage extends StatefulWidget {
   const AdditionalServiceClientPage({super.key, this.controller});
@@ -25,19 +24,31 @@ class _AdditionalServiceClientPageState
   final TextEditingController _searchController = TextEditingController();
 
   late final AdditionalServiceClientController _controller;
+  bool _controllerInitialized = false;
 
   List<AdditionalService> get _filteredServices =>
       _controller.searchSelected(_searchController.text);
 
   @override
-  void initState() {
-    super.initState();
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_controllerInitialized) return;
+    final routeArgument = ModalRoute.of(context)?.settings.arguments;
     _controller =
-        widget.controller ?? AdditionalServiceClientController.instance;
+        widget.controller ??
+        AdditionalServiceClientController(
+          userId: routeArgument is String
+              ? routeArgument
+              : AdditionalServiceClientController.demoUserId,
+        );
+    _controllerInitialized = true;
     _controller.addListener(_refresh);
+    unawaited(_controller.loadServicesByUserId());
   }
 
-  void _refresh() => setState(() {});
+  void _refresh() {
+    if (mounted) setState(() {});
+  }
 
   Future<void> _confirmRemove(AdditionalService service) async {
     final shouldRemove = await showDialog<bool>(
@@ -68,7 +79,7 @@ class _AdditionalServiceClientPageState
 
   @override
   void dispose() {
-    _controller.removeListener(_refresh);
+    if (_controllerInitialized) _controller.removeListener(_refresh);
     _searchController.dispose();
     super.dispose();
   }
@@ -81,67 +92,119 @@ class _AdditionalServiceClientPageState
         actions: [
           IconButton(
             tooltip: 'Agregar servicios',
-            onPressed: () => Navigator.pushNamed(
+            onPressed: () => Navigator.push(
               context,
-              AppRoutes.addClientAdditionalServices,
+              MaterialPageRoute<void>(
+                builder: (_) =>
+                    AddAdditionalServiceClientPage(controller: _controller),
+              ),
             ),
             icon: const Icon(Icons.add),
           ),
         ],
       ),
       body: SafeArea(
-        child: Column(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 720),
+            child: _buildBody(context),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_controller.isLoading) {
+      return ListView(
+        padding: const EdgeInsets.all(AppSpacing.screen),
+        children: const [
+          AppSkeleton(height: 32),
+          SizedBox(height: AppSpacing.s3),
+          AppSkeleton(height: 20),
+          SizedBox(height: AppSpacing.s5),
+          AppSkeleton(height: 56),
+          SizedBox(height: AppSpacing.s6),
+          AppSkeleton(height: 148),
+          SizedBox(height: AppSpacing.s3),
+          AppSkeleton(height: 148),
+        ],
+      );
+    }
+
+    final errorMessage = _controller.errorMessage;
+    if (errorMessage != null) {
+      return AppErrorState(
+        message: errorMessage,
+        onRetry: () => unawaited(_controller.loadServicesByUserId()),
+      );
+    }
+
+    return ListView(
+      padding: const EdgeInsets.all(AppSpacing.screen),
+      children: [
+        _buildHeader(context),
+        const SizedBox(height: AppSpacing.s5),
+        AppSearchField(
+          label: 'Buscar servicios',
+          controller: _searchController,
+          onChanged: (_) => setState(() {}),
+          onClear: _clearSearch,
+        ),
+        const SizedBox(height: AppSpacing.s6),
+        Row(
           children: [
             Expanded(
-              child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.screen),
-                children: [
-                  _buildHeader(context),
-                  const SizedBox(height: AppSpacing.s5),
-                  AppTextField(
-                    label: 'Buscar servicios',
-                    controller: _searchController,
-                    hint: '¿Qué servicio necesitas?',
-                    prefixIcon: const Icon(Icons.search),
-                    onChanged: (_) => setState(() {}),
-                  ),
-                  const SizedBox(height: AppSpacing.s6),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Mis servicios asociados',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                      ),
-                      Text(
-                        '${_filteredServices.length} asociados',
-                        style: Theme.of(context).textTheme.labelMedium
-                            ?.copyWith(color: context.appColors.textSecondary),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: AppSpacing.s3),
-                  if (_filteredServices.isEmpty)
-                    _buildEmptyState(context)
-                  else
-                    ..._filteredServices.map(
-                      (service) => Padding(
-                        padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                        child: _ClientServiceCard(
-                          service: service,
-                          selected: _controller.isSelected(service),
-                          onPressed: () => _confirmRemove(service),
-                        ),
-                      ),
-                    ),
-                  if (_controller.selectedCount > 0)
-                    _buildSelectedSummary(context),
-                ],
+              child: Text(
+                'Mis servicios asociados',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+            ),
+            Text(
+              '${_filteredServices.length} asociados',
+              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                color: context.appColors.textSecondary,
               ),
             ),
           ],
         ),
+        const SizedBox(height: AppSpacing.s3),
+        if (_filteredServices.isEmpty)
+          const AppEmptyState(
+            icon: Icons.miscellaneous_services_outlined,
+            title: 'No encontramos servicios',
+            message: 'Prueba con otro término de búsqueda.',
+          )
+        else
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _filteredServices.length,
+            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
+            itemBuilder: (context, index) {
+              final service = _filteredServices[index];
+              return _ClientServiceCard(
+                service: service,
+                selected: _controller.isSelected(service),
+                onPressed: () => _confirmRemove(service),
+              );
+            },
+          ),
+        if (_controller.selectedCount > 0) _buildSelectedSummary(context),
+      ],
+    );
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    setState(() {});
+  }
+
+  void _openSelection() {
+    Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => AddAdditionalServiceClientPage(controller: _controller),
       ),
     );
   }
@@ -165,90 +228,79 @@ class _AdditionalServiceClientPageState
     );
   }
 
-  Widget _buildEmptyState(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s6),
-        child: Column(
-          children: [
-            Icon(
-              Icons.miscellaneous_services_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            Text(
-              'No encontramos servicios',
-              style: Theme.of(context).textTheme.titleLarge,
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              'Prueba con otro término de búsqueda o categoría.',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.appColors.textSecondary,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildSelectedSummary(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(top: AppSpacing.s3),
       child: AppCard(
         selected: true,
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: Theme.of(
-                  context,
-                ).colorScheme.primary.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(AppRadius.md),
-              ),
-              child: Icon(
-                Icons.check_circle_outline,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s3),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${_controller.selectedCount} servicio(s) seleccionado(s)',
-                    style: Theme.of(context).textTheme.titleMedium,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final compact = constraints.maxWidth < 480;
+            final information = Row(
+              children: [
+                Container(
+                  width: AppSpacing.s12,
+                  height: AppSpacing.s12,
+                  decoration: BoxDecoration(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
                   ),
-                  const SizedBox(height: AppSpacing.s1),
-                  Text(
-                    'Total estimado: \$${_formatPrice(_controller.selectedTotal)}',
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  child: Icon(
+                    Icons.check_circle_outline,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(width: AppSpacing.s2),
-            AppButton(
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(child: _buildSummaryText(context)),
+              ],
+            );
+            final button = AppButton(
               label: 'Administrar',
-              expanded: false,
+              expanded: compact,
               size: AppButtonSize.medium,
-              onPressed: () => Navigator.pushNamed(
-                context,
-                AppRoutes.addClientAdditionalServices,
-              ),
-            ),
-          ],
+              onPressed: _openSelection,
+            );
+            if (compact) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  information,
+                  const SizedBox(height: AppSpacing.s3),
+                  button,
+                ],
+              );
+            }
+            return Row(
+              children: [
+                Expanded(child: information),
+                const SizedBox(width: AppSpacing.s3),
+                button,
+              ],
+            );
+          },
         ),
       ),
+    );
+  }
+
+  Widget _buildSummaryText(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '${_controller.selectedCount} servicio(s) seleccionado(s)',
+          style: Theme.of(context).textTheme.titleMedium,
+        ),
+        const SizedBox(height: AppSpacing.s1),
+        Text(
+          'Total estimado: \$${_formatPrice(_controller.selectedTotal)}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
+        ),
+      ],
     );
   }
 }
@@ -276,8 +328,8 @@ class _ClientServiceCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                width: 52,
-                height: 52,
+                width: _serviceIconExtent,
+                height: _serviceIconExtent,
                 decoration: BoxDecoration(
                   color: Theme.of(
                     context,
@@ -287,7 +339,7 @@ class _ClientServiceCard extends StatelessWidget {
                 child: Icon(
                   _iconFor(service.icon),
                   color: Theme.of(context).colorScheme.primary,
-                  size: 26,
+                  size: _serviceIconSize,
                 ),
               ),
               const SizedBox(width: AppSpacing.s3),

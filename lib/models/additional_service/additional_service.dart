@@ -3,6 +3,7 @@ enum AdditionalServiceIcon { shield, cloud, support, cleaning, miscellaneous }
 class AdditionalService {
   const AdditionalService({
     required this.id,
+    required this.motelId,
     required this.icon,
     required this.name,
     required this.description,
@@ -12,6 +13,7 @@ class AdditionalService {
   });
 
   final String id;
+  final String motelId;
   final AdditionalServiceIcon icon;
   final String name;
   final String description;
@@ -28,6 +30,7 @@ class AdditionalService {
   }) {
     return AdditionalService(
       id: id,
+      motelId: motelId,
       icon: icon,
       name: name ?? this.name,
       description: description ?? this.description,

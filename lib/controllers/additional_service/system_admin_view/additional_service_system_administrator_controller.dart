@@ -4,22 +4,31 @@ import 'package:machuco/models/additional_service/additional_service_store.dart'
 
 class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
   AdditionalServiceSystemAdministratorController({
+    this.motelId = demoMotelId,
     AdditionalServiceStore? store,
   }) : _store = store ?? AdditionalServiceStore.instance;
+
+  static const String demoMotelId = 'motel-demo-001';
 
   static final AdditionalServiceSystemAdministratorController instance =
       AdditionalServiceSystemAdministratorController();
 
   final AdditionalServiceStore _store;
+  final String motelId;
+  bool _isLoading = false;
+  String? _errorMessage;
   String? _nameError;
   String? _descriptionError;
   String? _categoryError;
   String? _priceError;
 
-  List<AdditionalService> get services => List.unmodifiable(_store.services);
-  int get activeCount =>
-      _store.services.where((service) => service.active).length;
-  int get inactiveCount => _store.services.length - activeCount;
+  List<AdditionalService> get services => List.unmodifiable(
+    _store.services.where((service) => service.motelId == motelId),
+  );
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+  int get activeCount => services.where((service) => service.active).length;
+  int get inactiveCount => services.length - activeCount;
   String? get nameError => _nameError;
   String? get descriptionError => _descriptionError;
   String? get categoryError => _categoryError;
@@ -27,7 +36,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
 
   List<AdditionalService> search(String query) {
     final normalizedQuery = query.trim().toLowerCase();
-    return _store.services
+    return services
         .where((service) {
           return normalizedQuery.isEmpty ||
               service.name.toLowerCase().contains(normalizedQuery) ||
@@ -35,6 +44,20 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
               service.category.toLowerCase().contains(normalizedQuery);
         })
         .toList(growable: false);
+  }
+
+  Future<void> loadServicesByMotelId() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+    } catch (_) {
+      _errorMessage = 'No fue posible cargar los servicios del motel.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
   void resetFormValidation() {
@@ -79,6 +102,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       _store.services.add(
         AdditionalService(
           id: 'service-${DateTime.now().microsecondsSinceEpoch}',
+          motelId: motelId,
           icon: AdditionalServiceIcon.miscellaneous,
           name: normalizedName,
           description: normalizedDescription,
@@ -105,13 +129,19 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     final index = _store.services.indexWhere((item) => item.id == service.id);
     if (index < 0) return;
     _store.services[index] = service.copyWith(active: !service.active);
-    if (service.active) _store.selectedServiceIds.remove(service.id);
+    if (service.active) {
+      for (final selectedIds in _store.selectedServiceIdsByUser.values) {
+        selectedIds.remove(service.id);
+      }
+    }
     notifyListeners();
   }
 
   void delete(AdditionalService service) {
     _store.services.removeWhere((item) => item.id == service.id);
-    _store.selectedServiceIds.remove(service.id);
+    for (final selectedIds in _store.selectedServiceIdsByUser.values) {
+      selectedIds.remove(service.id);
+    }
     notifyListeners();
   }
 }
