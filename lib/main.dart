@@ -1,24 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/routes/routes.dart';
+import 'package:machuco/views/login/login_page.dart';
 
 void main() {
-  runApp(const MyApp());
+  runApp(const MachucoApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class MachucoApp extends StatelessWidget {
+  const MachucoApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'MACHUCO Demo',
+      title: 'MACHUCO',
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      initialRoute: AppRoutes.home,
-      onGenerateRoute: AppRoutes.onGenerateRoute,
+      home: const LoginPage(),
     );
   }
 }
