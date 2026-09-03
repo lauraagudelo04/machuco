@@ -37,8 +37,8 @@ abstract final class AppRoutes {
       ),
       ownerBookings => const OwnerBookingPage(),
       adminBookings => const AdminBookingPage(),
-      clientPayments => const ClientDashboardPage(),
-      ownerPayments => const UserReservationsPage(),
+      clientPayments => const ClientPaymentsPage(),
+      ownerPayments => const OwnerPaymentsPage(),
       adminPayments => const AdminFinancePage(),
       _ => const _UnknownRoutePage(),
     };
