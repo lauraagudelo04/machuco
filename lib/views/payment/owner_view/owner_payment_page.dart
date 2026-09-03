@@ -12,17 +12,29 @@ class OwnerPaymentsPage extends StatefulWidget {
 }
 
 class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
-  late final List<PaymentRecord> _payments = List.of(
-    PaymentController.ownerPayments,
-  );
+  final PaymentController _controller = PaymentController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    final finance = PaymentController.ownerFinance;
-    final pending = _payments
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
+    final finance = _controller.ownerFinance;
+    final payments = _controller.ownerPayments;
+    final pending = payments
         .where((payment) => payment.status == PaymentStatus.pending)
         .toList();
-    final completed = _payments
+    final completed = payments
         .where((payment) => payment.status != PaymentStatus.pending)
         .toList();
 
@@ -134,7 +146,7 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s3),
-                ...PaymentController.frequentClients.map(
+                ..._controller.frequentClients.map(
                   (client) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                     child: _FrequentClientCard(client: client),
@@ -186,10 +198,7 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    final index = _payments.indexWhere((item) => item.id == payment.id);
-    setState(
-      () => _payments[index] = PaymentController.registerCashPayment(payment),
-    );
+    _controller.registerCashPayment(payment);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(

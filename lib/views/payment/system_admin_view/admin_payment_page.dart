@@ -4,12 +4,32 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
 
-class AdminFinancePage extends StatelessWidget {
+class AdminFinancePage extends StatefulWidget {
   const AdminFinancePage({super.key});
 
   @override
+  State<AdminFinancePage> createState() => _AdminFinancePageState();
+}
+
+class _AdminFinancePageState extends State<AdminFinancePage> {
+  final PaymentController _controller = PaymentController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final motels = PaymentController.motelFinances;
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
+    final motels = _controller.motelFinances;
     final income = motels.fold<int>(0, (sum, item) => sum + item.income);
     final payments = motels.fold<int>(
       0,

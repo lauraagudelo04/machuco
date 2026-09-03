@@ -4,53 +4,72 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
 
-class ClientPaymentsPage extends StatelessWidget {
+class ClientPaymentsPage extends StatefulWidget {
   const ClientPaymentsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final payments = PaymentController.clientPayments;
-    return Scaffold(
-      appBar: AppBar(title: const Text('Mis pagos')),
-      body: SafeArea(
-        child: Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 720),
-            child: payments.isEmpty
-                ? const AppEmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: 'Sin pagos',
-                    message:
-                        'Tus pagos aparecerán cuando realices una reserva.',
-                  )
-                : ListView(
-                    padding: const EdgeInsets.all(AppSpacing.screen),
-                    children: [
-                      Text(
-                        'Pagos de mis reservas',
-                        style: Theme.of(context).textTheme.headlineMedium,
-                      ),
-                      const SizedBox(height: AppSpacing.s2),
-                      Text(
-                        'Consulta el estado y el comprobante de tus reservas en cualquier motel.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: context.appColors.textSecondary,
+  State<ClientPaymentsPage> createState() => _ClientPaymentsPageState();
+}
+
+class _ClientPaymentsPageState extends State<ClientPaymentsPage> {
+  final PaymentController _controller = PaymentController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => ListenableBuilder(
+    listenable: _controller,
+    builder: (context, _) {
+      final payments = _controller.clientPayments;
+      return Scaffold(
+        appBar: AppBar(title: const Text('Mis pagos')),
+        body: SafeArea(
+          child: Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 720),
+              child: payments.isEmpty
+                  ? const AppEmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: 'Sin pagos',
+                      message:
+                          'Tus pagos aparecerán cuando realices una reserva.',
+                    )
+                  : ListView(
+                      padding: const EdgeInsets.all(AppSpacing.screen),
+                      children: [
+                        Text(
+                          'Pagos de mis reservas',
+                          style: Theme.of(context).textTheme.headlineMedium,
                         ),
-                      ),
-                      const SizedBox(height: AppSpacing.s5),
-                      ...payments.map(
-                        (payment) => Padding(
-                          padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                          child: _ClientPaymentCard(payment: payment),
+                        const SizedBox(height: AppSpacing.s2),
+                        Text(
+                          'Consulta el estado y el comprobante de tus reservas en cualquier motel.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: context.appColors.textSecondary,
+                              ),
                         ),
-                      ),
-                    ],
-                  ),
+                        const SizedBox(height: AppSpacing.s5),
+                        ...payments.map(
+                          (payment) => Padding(
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.s3,
+                            ),
+                            child: _ClientPaymentCard(payment: payment),
+                          ),
+                        ),
+                      ],
+                    ),
+            ),
           ),
         ),
-      ),
-    );
-  }
+      );
+    },
+  );
 }
 
 class _ClientPaymentCard extends StatelessWidget {

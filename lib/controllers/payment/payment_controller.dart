@@ -1,11 +1,12 @@
+import 'package:flutter/foundation.dart';
 import 'package:machuco/models/payment/payment.dart';
 
 /// Datos demostrativos y transformaciones de presentación del módulo de pagos.
 /// La fuente debe sustituirse por un repositorio cuando se defina el backend.
-abstract final class PaymentController {
+class PaymentController extends ChangeNotifier {
   static const ownerMotelName = 'Motel Paraíso';
 
-  static final List<PaymentRecord> clientPayments = [
+  final List<PaymentRecord> _clientPayments = [
     PaymentRecord(
       id: 'pay-001',
       bookingReference: 'RES-1048',
@@ -44,7 +45,7 @@ abstract final class PaymentController {
     ),
   ];
 
-  static final List<PaymentRecord> ownerPayments = [
+  final List<PaymentRecord> _ownerPayments = [
     PaymentRecord(
       id: 'owner-pay-001',
       bookingReference: 'RES-1082',
@@ -80,7 +81,7 @@ abstract final class PaymentController {
     ),
   ];
 
-  static const List<FrequentClient> frequentClients = [
+  final List<FrequentClient> _frequentClients = const [
     FrequentClient(
       name: 'Ana Torres',
       initials: 'AT',
@@ -101,7 +102,7 @@ abstract final class PaymentController {
     ),
   ];
 
-  static const List<MotelFinance> motelFinances = [
+  final List<MotelFinance> _motelFinances = const [
     MotelFinance(
       name: ownerMotelName,
       rooms: 24,
@@ -136,13 +137,27 @@ abstract final class PaymentController {
     ),
   ];
 
-  static MotelFinance get ownerFinance => motelFinances.first;
+  List<PaymentRecord> get clientPayments => List.unmodifiable(_clientPayments);
 
-  static PaymentRecord registerCashPayment(PaymentRecord payment) =>
-      payment.copyWith(
-        status: PaymentStatus.paid,
-        method: PaymentMethod.cash,
-        paidAt: DateTime.now(),
-        receiptNumber: 'CAJA-${payment.bookingReference}',
-      );
+  List<PaymentRecord> get ownerPayments => List.unmodifiable(_ownerPayments);
+
+  List<FrequentClient> get frequentClients =>
+      List.unmodifiable(_frequentClients);
+
+  List<MotelFinance> get motelFinances => List.unmodifiable(_motelFinances);
+
+  MotelFinance get ownerFinance => _motelFinances.first;
+
+  void registerCashPayment(PaymentRecord payment) {
+    final index = _ownerPayments.indexWhere((item) => item.id == payment.id);
+    if (index == -1) return;
+
+    _ownerPayments[index] = payment.copyWith(
+      status: PaymentStatus.paid,
+      method: PaymentMethod.cash,
+      paidAt: DateTime.now(),
+      receiptNumber: 'CAJA-${payment.bookingReference}',
+    );
+    notifyListeners();
+  }
 }
