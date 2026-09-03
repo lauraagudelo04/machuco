@@ -24,7 +24,7 @@ class BookingHomePage extends StatelessWidget {
         'Administrador',
         'Comparar volumen, promedio, ocupación e ingresos.',
         Icons.admin_panel_settings_outlined,
-        AppRoutes.adminBookings,
+        AppRoutes.systemAdminBookings,
       ),
     ];
     return Scaffold(

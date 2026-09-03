@@ -10,8 +10,13 @@
 .history
 .svn/
 .swiftpm/
+.claude/
+.agents/
+.docs/
 migrate_working_dir/
 **/main.dart
+openspec/
+test/
 
 # IntelliJ related
 *.iml

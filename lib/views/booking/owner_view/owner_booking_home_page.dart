@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/booking_controller.dart';
+import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/booking.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/views/booking/booking_view_support.dart';
 
-class OwnerBookingPage extends StatefulWidget {
-  const OwnerBookingPage({super.key});
+class OwnerBookingHomePage extends StatefulWidget {
+  const OwnerBookingHomePage({super.key});
 
   @override
-  State<OwnerBookingPage> createState() => _OwnerBookingPageState();
+  State<OwnerBookingHomePage> createState() => _OwnerBookingHomePageState();
 }
 
-class _OwnerBookingPageState extends State<OwnerBookingPage> {
+class _OwnerBookingHomePageState extends State<OwnerBookingHomePage> {
   late final List<Booking> _bookings = List<Booking>.from(
-    BookingController.ownerBookings,
+    OwnerBookingController.bookings,
   );
   String? _selectedMotelId;
 

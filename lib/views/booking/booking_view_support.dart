@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/booking.dart';
+import 'package:machuco/models/booking/booking.dart';
 
 extension BookingStatusPresentation on BookingStatus {
   String get label => switch (this) {

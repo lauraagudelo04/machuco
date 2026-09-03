@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/booking_controller.dart';
+import 'package:machuco/controllers/booking/system_admin_view/system_admin_booking_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/booking.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/views/booking/booking_view_support.dart';
 
-class AdminBookingPage extends StatelessWidget {
-  const AdminBookingPage({super.key});
+class SystemAdminBookingHomePage extends StatelessWidget {
+  const SystemAdminBookingHomePage({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final summaries = BookingController.motelSummaries;
+    final summaries = SystemAdminBookingController.motelSummaries;
     final total = summaries.fold<int>(
       0,
       (sum, item) => sum + item.totalBookings,
