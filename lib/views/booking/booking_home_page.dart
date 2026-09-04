@@ -22,9 +22,9 @@ class BookingHomePage extends StatelessWidget {
       ),
       _ProfileData(
         'Administrador',
-        'Comparar volumen, promedio, ocupación e ingresos.',
+        'Administrar los propietarios de moteles y su estado.',
         Icons.admin_panel_settings_outlined,
-        AppRoutes.adminBookings,
+        AppRoutes.ownerManagement,
       ),
     ];
     return Scaffold(
