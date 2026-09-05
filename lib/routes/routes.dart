@@ -12,10 +12,14 @@ import 'package:machuco/views/booking/client_view/client_booking_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_page.dart';
 import 'package:machuco/views/booking/system_admin_view/admin_booking_page.dart';
+import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
-import 'package:machuco/views/owner_management/owner_page.dart';
+import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -32,6 +36,10 @@ abstract final class AppRoutes {
   static const adminAdditionalServices = '/additional-service/admin';
   static const createAdminAdditionalService = '/additional-service/admin/new';
   static const ownerManagement = '/owner-management';
+  static const pqrs = '/pqrs';
+  static const clientPqrs = '/pqrs/client';
+  static const ownerPqrs = '/pqrs/owner';
+  static const adminPqrs = '/pqrs/admin';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -61,6 +69,10 @@ abstract final class AppRoutes {
             : null,
       ),
       ownerManagement => const OwnerPage(),
+      pqrs => const PqrsPage(),
+      clientPqrs => const ClientPqrsPage(),
+      ownerPqrs => const OwnerPqrsPage(),
+      adminPqrs => const SystemAdminPqrsPage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
