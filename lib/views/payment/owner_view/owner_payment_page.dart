@@ -1,165 +1,333 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/payment/payment_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import '../payment_models.dart';
+import 'package:machuco/models/payment/payment.dart';
+import 'package:machuco/views/payment/payment_view_support.dart';
 
-class UserReservationsPage extends StatefulWidget {
-  const UserReservationsPage({super.key});
+class OwnerPaymentsPage extends StatefulWidget {
+  const OwnerPaymentsPage({super.key});
 
   @override
-  State<UserReservationsPage> createState() => _UserReservationsPageState();
+  State<OwnerPaymentsPage> createState() => _OwnerPaymentsPageState();
 }
 
-class _UserReservationsPageState extends State<UserReservationsPage> {
-  final List<_UserReservation> _reservations = [
-    _UserReservation(id: '1', motel: 'Motel Paraíso', room: 'Habitación 305 · Suite', date: '22 jul 2026', amount: '\$ 180.000', status: ReservationStatus.pending),
-    _UserReservation(id: '2', motel: 'Motel Paraíso', room: 'Habitación 112 · Junior', date: '25 jul 2026', amount: '\$ 120.000', status: ReservationStatus.pending),
-    _UserReservation(id: '3', motel: 'Hotel Mar y Sol', room: 'Habitación 208 · Deluxe', date: '28 jul 2026', amount: '\$ 210.000', status: ReservationStatus.pending),
-  ];
+class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
+  final PaymentController _controller = PaymentController();
 
-  void _markAsPaid(String id) {
-    setState(() {
-      final index = _reservations.indexWhere((r) => r.id == id);
-      if (index != -1) {
-        _reservations[index] = _UserReservation(
-          id: _reservations[index].id,
-          motel: _reservations[index].motel,
-          room: _reservations[index].room,
-          date: _reservations[index].date,
-          amount: _reservations[index].amount,
-          status: ReservationStatus.paid,
-        );
-      }
-    });
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('Pago registrado en efectivo'),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(AppRadius.md)),
-        ),
-      );
-    }
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final semantic = context.appColors;
-    final pending = _reservations.where((r) => r.status == ReservationStatus.pending).toList();
-    final paid = _reservations.where((r) => r.status == ReservationStatus.paid).toList();
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _buildPage(context),
+    );
+  }
+
+  Widget _buildPage(BuildContext context) {
+    final finance = _controller.ownerFinance;
+    final payments = _controller.ownerPayments;
+    final pending = payments
+        .where((payment) => payment.status == PaymentStatus.pending)
+        .toList();
+    final completed = payments
+        .where((payment) => payment.status != PaymentStatus.pending)
+        .toList();
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Mis reservas')),
-      body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.s5),
-        children: [
-          if (pending.isNotEmpty) ...[
-            Text('Pendientes de pago', style: AppTextStyles.h3),
-            const SizedBox(height: AppSpacing.s3),
-            ...pending.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: AppCard(
-                    padding: const EdgeInsets.all(AppSpacing.s4),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      appBar: AppBar(title: const Text('Finanzas de mi motel')),
+      body: SafeArea(
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 920),
+            child: ListView(
+              padding: const EdgeInsets.all(AppSpacing.screen),
+              children: [
+                Text(
+                  finance.name,
+                  style: Theme.of(context).textTheme.headlineMedium,
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  'Resumen financiero del mes actual.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s4),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final columns = constraints.maxWidth >= 720 ? 4 : 2;
+                    final width =
+                        (constraints.maxWidth - AppSpacing.s3 * (columns - 1)) /
+                        columns;
+                    return Wrap(
+                      spacing: AppSpacing.s3,
+                      runSpacing: AppSpacing.s3,
                       children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(r.motel, style: AppTextStyles.h3),
-                                  const SizedBox(height: AppSpacing.s1),
-                                  Text(r.room, style: AppTextStyles.bodySmall.copyWith(color: semantic.textSecondary)),
-                                ],
-                              ),
+                        PaymentMetricCard(
+                          width: width,
+                          icon: Icons.trending_up_outlined,
+                          label: 'Ingresos',
+                          value: formatPaymentMoney(finance.income),
+                        ),
+                        PaymentMetricCard(
+                          width: width,
+                          icon: Icons.receipt_long_outlined,
+                          label: 'Pagos recibidos',
+                          value: '${finance.paymentsReceived}',
+                        ),
+                        PaymentMetricCard(
+                          width: width,
+                          icon: Icons.schedule_outlined,
+                          label: 'Por recaudar',
+                          value: formatPaymentMoney(
+                            pending.fold<int>(
+                              0,
+                              (sum, item) => sum + item.amount,
                             ),
-                            StatusBadge(status: r.status.toAppStatus, size: StatusBadgeSize.small),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.s3),
-                        _Row(icon: Icons.event_outlined, label: r.date),
-                        const SizedBox(height: AppSpacing.s2),
-                        _Row(icon: Icons.attach_money_rounded, label: r.amount),
-                        const SizedBox(height: AppSpacing.s4),
-                        SizedBox(
-                          width: double.infinity,
-                          child: AppButton(
-                            label: 'Pagar en efectivo',
-                            variant: AppButtonVariant.secondary,
-                            onPressed: () => _markAsPaid(r.id),
-                            icon: Icons.money_outlined,
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                )),
-          ],
-          if (paid.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.s5),
-            Text('Pagadas', style: AppTextStyles.h3),
-            const SizedBox(height: AppSpacing.s3),
-            ...paid.map((r) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: AppCard(
-                    padding: const EdgeInsets.all(AppSpacing.s4),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(r.motel, style: AppTextStyles.bodyLarge),
-                              const SizedBox(height: AppSpacing.s1),
-                              Text(r.room, style: AppTextStyles.bodySmall.copyWith(color: semantic.textSecondary)),
-                            ],
-                          ),
+                        PaymentMetricCard(
+                          width: width,
+                          icon: Icons.percent_outlined,
+                          label: 'Comisiones',
+                          value: formatPaymentMoney(finance.commissions),
                         ),
-                        Text(r.amount, style: AppTextStyles.bodyLarge.copyWith(fontWeight: FontWeight.w700, color: AppColors.available)),
                       ],
+                    );
+                  },
+                ),
+                const SizedBox(height: AppSpacing.s6),
+                _SectionTitle(title: 'Pagos pendientes', count: pending.length),
+                const SizedBox(height: AppSpacing.s3),
+                if (pending.isEmpty)
+                  const AppEmptyState(
+                    icon: Icons.check_circle_outline,
+                    title: 'Pagos al día',
+                    message: 'No hay reservas pendientes de pago.',
+                  )
+                else
+                  ...pending.map(
+                    (payment) => Padding(
+                      padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                      child: _OwnerPaymentCard(
+                        payment: payment,
+                        onRegisterCash: () => _confirmCashPayment(payment),
+                      ),
                     ),
                   ),
-                )),
-          ],
-          if (pending.isEmpty && paid.isEmpty)
-            AppEmptyState(
-              icon: Icons.confirmation_number_outlined,
-              title: 'Sin reservas',
-              message: 'Aún no tienes reservas creadas.',
+                const SizedBox(height: AppSpacing.s6),
+                _SectionTitle(
+                  title: 'Pagos realizados',
+                  count: completed.length,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                ...completed.map(
+                  (payment) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _OwnerPaymentCard(payment: payment),
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s6),
+                Text(
+                  'Clientes frecuentes',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  'Ordenados por número de reservas en este motel.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                ..._controller.frequentClients.map(
+                  (client) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _FrequentClientCard(client: client),
+                  ),
+                ),
+              ],
             ),
-        ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _confirmCashPayment(PaymentRecord payment) async {
+    final confirmed = await showModalBottomSheet<bool>(
+      context: context,
+      showDragHandle: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(AppSpacing.s5),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Registrar pago en efectivo',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              Text(
+                'Confirma que recibiste ${formatPaymentMoney(payment.amount)} de ${payment.client} para la reserva ${payment.bookingReference}.',
+              ),
+              const SizedBox(height: AppSpacing.s2),
+              Text(
+                'Se generará un comprobante de caja automáticamente.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s5),
+              AppButton(
+                label: 'Confirmar pago en efectivo',
+                icon: Icons.payments_outlined,
+                onPressed: () => Navigator.pop(context, true),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    _controller.registerCashPayment(payment);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Pago registrado. Comprobante CAJA-${payment.bookingReference} generado.',
+        ),
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
 }
 
-class _Row extends StatelessWidget {
-  const _Row({required this.icon, required this.label});
-
-  final IconData icon;
-  final String label;
-
+class _SectionTitle extends StatelessWidget {
+  const _SectionTitle({required this.title, required this.count});
+  final String title;
+  final int count;
   @override
-  Widget build(BuildContext context) {
-    final semantic = context.appColors;
-    return Row(
-      children: [
-        Icon(icon, size: 18, color: semantic.textSecondary),
-        const SizedBox(width: AppSpacing.s2),
-        Text(label, style: AppTextStyles.body.copyWith(color: semantic.textSecondary)),
-      ],
-    );
-  }
+  Widget build(BuildContext context) => Row(
+    children: [
+      Expanded(
+        child: Text(title, style: Theme.of(context).textTheme.headlineSmall),
+      ),
+      Text('$count', style: Theme.of(context).textTheme.labelLarge),
+    ],
+  );
 }
 
-class _UserReservation {
-  final String id;
-  final String motel;
-  final String room;
-  final String date;
-  final String amount;
-  final ReservationStatus status;
+class _OwnerPaymentCard extends StatelessWidget {
+  const _OwnerPaymentCard({required this.payment, this.onRegisterCash});
+  final PaymentRecord payment;
+  final VoidCallback? onRegisterCash;
 
-  const _UserReservation({required this.id, required this.motel, required this.room, required this.date, required this.amount, required this.status});
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    payment.client,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  Text(
+                    '${payment.bookingReference} · ${payment.room}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: AppSpacing.s2),
+            PaymentStatusBadge(status: payment.status),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                formatPaymentDate(payment.reservationDate),
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+            ),
+            Text(
+              formatPaymentMoney(payment.amount),
+              style: Theme.of(context).textTheme.titleMedium,
+            ),
+          ],
+        ),
+        if (payment.receiptNumber != null) ...[
+          const SizedBox(height: AppSpacing.s2),
+          Text(
+            'Comprobante: ${payment.receiptNumber}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
+          ),
+        ],
+        if (onRegisterCash != null) ...[
+          const SizedBox(height: AppSpacing.s4),
+          AppButton(
+            label: 'Registrar pago en efectivo',
+            icon: Icons.money_outlined,
+            variant: AppButtonVariant.secondary,
+            onPressed: onRegisterCash,
+          ),
+        ],
+      ],
+    ),
+  );
+}
+
+class _FrequentClientCard extends StatelessWidget {
+  const _FrequentClientCard({required this.client});
+  final FrequentClient client;
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Row(
+      children: [
+        CircleAvatar(
+          backgroundColor: context.appColors.elevated,
+          child: Text(client.initials),
+        ),
+        const SizedBox(width: AppSpacing.s3),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(client.name, style: Theme.of(context).textTheme.titleMedium),
+              Text(
+                '${client.reservations} reservas',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+        Text(
+          formatPaymentMoney(client.totalPaid),
+          style: Theme.of(context).textTheme.labelLarge,
+        ),
+      ],
+    ),
+  );
 }

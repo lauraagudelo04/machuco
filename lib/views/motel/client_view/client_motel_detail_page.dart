@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import './../../../models/motel/motel_model.dart'; // Asegúrate de importar el modelo
 
 class ClientMotelDetailPage extends StatelessWidget {
-  const ClientMotelDetailPage({super.key, required this.motelName});
+  // Ahora recibimos el objeto Motel completo en lugar de solo el nombre
+  const ClientMotelDetailPage({super.key, required this.motel});
 
-  final String motelName;
+  final Motel motel;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      extendBodyBehindAppBar: true, // Para que la imagen cubra el tope si es necesario
+      extendBodyBehindAppBar: true, 
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         foregroundColor: Colors.white,
@@ -19,33 +21,40 @@ class ClientMotelDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección de imagen (Hero)
+            // Sección de imagen (Hero) - Lógica adaptada al modelo
             Container(
               height: 300,
               width: double.infinity,
               color: context.appColors.mediaFallback,
-              child: const Center(child: Icon(Icons.hotel, size: 64, color: Colors.white)),
+              child: Center(
+                child: motel.imageUrls.isNotEmpty 
+                    ? const Icon(Icons.image, size: 64, color: Colors.white) // Simulación de imagen real
+                    : const Icon(Icons.hotel, size: 64, color: Colors.white), // Fallback
+              ),
             ),
             Padding(
               padding: const EdgeInsets.all(AppSpacing.s4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título y Disponibilidad
+                  // Título y Disponibilidad dinámicos
                   Row(
                     children: [
                       Expanded(
                         child: Text(
-                          motelName,
+                          motel.name,
                           style: Theme.of(context).textTheme.headlineLarge,
                         ),
                       ),
-                      const StatusBadge(status: AppStatus.available),
+                      StatusBadge(
+                        status: motel.isAvailable ? AppStatus.available : AppStatus.occupied,
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
+                  // Dirección dinámica
                   Text(
-                    'Rionegro, Antioquia - A 5 min del centro',
+                    motel.address,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: context.appColors.textSecondary,
                     ),
@@ -63,12 +72,13 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium, 
                         expanded: false, 
                         onPressed: () {
-                          // TODO: Navegar a la lista de habitaciones
+                          // TODO: Navegar a la lista de habitaciones pasando el motel.id
                         },
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
+                  // Descripción (Sigue quemada porque no está en el modelo, podríamos agregarla luego)
                   Text(
                     'Disfruta de nuestras instalaciones de lujo, diseñadas para tu máximo confort y privacidad. Contamos con servicio a la habitación 24/7 y parqueadero privado.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -76,13 +86,35 @@ class ClientMotelDetailPage extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s5),
+                  
+                  // NUEVA SECCIÓN: Información y Contacto (Usando los datos del modelo)
+                  Text('Información y Contacto', style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: AppSpacing.s3),
+                  _InfoRow(icon: Icons.phone_outlined, label: 'Teléfono', value: motel.phone),
+                  const SizedBox(height: AppSpacing.s2),
+                  _InfoRow(icon: Icons.email_outlined, label: 'Correo', value: motel.email),
+                  const SizedBox(height: AppSpacing.s2),
+                  _InfoRow(icon: Icons.domain_outlined, label: 'NIT', value: motel.nit),
+                  const SizedBox(height: AppSpacing.s2),
+                  _InfoRow(icon: Icons.bed_outlined, label: 'Capacidad', value: '${motel.roomCount} habitaciones en total'),
+                  const SizedBox(height: AppSpacing.s5),
 
-                  // Servicios Adicionales quemados
+                  // Métodos de Pago dinámicos
+                  Text('Métodos de Pago', style: Theme.of(context).textTheme.headlineSmall),
+                  const SizedBox(height: AppSpacing.s3),
+                  Wrap(
+                    spacing: AppSpacing.s2,
+                    runSpacing: AppSpacing.s2,
+                    children: motel.paymentMethods.map((method) => _ServiceChip(label: method)).toList(),
+                  ),
+                  const SizedBox(height: AppSpacing.s5),
+
+                  // Servicios Adicionales (Aún quemados, ideal para un nuevo modelo en el futuro)
                   Text('Servicios Adicionales', style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
                   Wrap(
-                    spacing: AppSpacing.s2, // Espacio horizontal
-                    runSpacing: AppSpacing.s2, // Espacio vertical
+                    spacing: AppSpacing.s2, 
+                    runSpacing: AppSpacing.s2, 
                     children: const [
                       _ServiceChip(label: 'Jacuzzi'),
                       _ServiceChip(label: 'Wi-Fi de alta velocidad'),
@@ -96,27 +128,24 @@ class ClientMotelDetailPage extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: AppSpacing.s4),
 
-                  // Sección de Reseñas y Botón Agregar
+                  // Sección de Reseñas y Botón Agregar (Aún quemados)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text('Reseñas', style: Theme.of(context).textTheme.headlineSmall),
                       TextButton(
-                        onPressed: () {
-                          // TODO: Abrir modal para agregar reseña
-                        },
+                        onPressed: () {},
                         child: const Text('Agregar reseña'),
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s3),
 
-                  // Lista de reseñas
                   ListView.separated(
                     padding: EdgeInsets.zero,
                     physics: const NeverScrollableScrollPhysics(),
                     shrinkWrap: true, 
-                    itemCount: 3, // 3 reseñas de prueba
+                    itemCount: 3, 
                     separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s3),
                     itemBuilder: (context, index) {
                       return _ReviewItem(
@@ -126,7 +155,7 @@ class ClientMotelDetailPage extends StatelessWidget {
                       );
                     },
                   ),
-                  const SizedBox(height: AppSpacing.s4), // Espaciado final normal para el scroll
+                  const SizedBox(height: AppSpacing.s4), 
                 ],
               ),
             ),
@@ -138,6 +167,35 @@ class ClientMotelDetailPage extends StatelessWidget {
 }
 
 // --- Componentes Privados Auxiliares ---
+
+// Nuevo widget para mostrar filas de información con ícono
+class _InfoRow extends StatelessWidget {
+  const _InfoRow({required this.icon, required this.label, required this.value});
+  
+  final IconData icon;
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Icon(icon, size: 20, color: context.appColors.textSecondary),
+        const SizedBox(width: AppSpacing.s2),
+        Text(
+          '$label: ',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        Expanded(
+          child: Text(
+            value,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 class _ServiceChip extends StatelessWidget {
   const _ServiceChip({required this.label});
@@ -180,21 +238,18 @@ class _ReviewItem extends StatelessWidget {
         children: [
           Row(
             children: [
-              // Avatar genérico
               CircleAvatar(
                 backgroundColor: context.appColors.mediaFallback,
                 radius: 16,
                 child: Icon(Icons.person, size: 20, color: context.appColors.textDisabled),
               ),
               const SizedBox(width: AppSpacing.s2),
-              // Nombre
               Expanded(
                 child: Text(
                   userName,
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ),
-              // Estrellas quemadas
               Row(
                 children: List.generate(5, (index) {
                   return Icon(
@@ -207,7 +262,6 @@ class _ReviewItem extends StatelessWidget {
             ],
           ),
           const SizedBox(height: AppSpacing.s2),
-          // Comentario
           Text(
             comment,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(

@@ -13,6 +13,19 @@ import 'package:machuco/views/booking/client_view/client_booking_home_page.dart'
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_home_page.dart';
 import 'package:machuco/views/booking/system_admin_view/system_admin_booking_home_page.dart';
+import 'package:machuco/views/owner_management/owner_page.dart';
+import 'package:machuco/views/payment/client_view/client_payment_page.dart';
+import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
+import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
+import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
+
+import '../models/additional_service/additional_service.dart';
+import '../views/additional_service/client_view/add_additional_service_client_page.dart';
+import '../views/additional_service/client_view/additional_service_client_page.dart';
+import '../views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
+import '../views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 
 enum BookingRole { client, owner, systemAdmin }
 
@@ -25,7 +38,6 @@ abstract final class AppRoutes {
   static const bookingDetail = '/booking/client/detail';
   static const ownerBookings = '/booking/owner';
   static const systemAdminBookings = '/booking/system-admin';
-  static const payment = '/payment/client';
   static const paymentConfirmation = '/payment/client/confirmation';
 
   static BookingCheckoutData get demoCheckout =>
@@ -37,6 +49,20 @@ abstract final class AppRoutes {
     BookingRole.owner => ownerBookings,
     BookingRole.systemAdmin => systemAdminBookings,
   };
+  static const clientPayments = '/payment/client/history';
+  static const ownerPayments = '/payment/owner';
+  static const adminPayments = '/payment/admin';
+  static const clientAdditionalServices = '/additional-service/client';
+  static const addClientAdditionalServices = '/additional-service/client/add';
+  static const adminAdditionalServices = '/additional-service/admin';
+  static const createAdminAdditionalService = '/additional-service/admin/new';
+  static const ownerManagement = '/owner-management';
+  static const pqrs = '/pqrs';
+  static const ownerPqrs = '/pqrs/owner';
+  static const adminPqrs = '/pqrs/admin';
+
+  /// Ruta usada por el flujo de reservas para seleccionar método de pago.
+  static const payment = '/payment/client';
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
@@ -58,6 +84,22 @@ abstract final class AppRoutes {
             : demoCheckout,
       ),
       paymentConfirmation => _buildPaymentConfirmation(settings.arguments),
+      clientPayments => const ClientPaymentsPage(),
+      ownerPayments => const OwnerPaymentsPage(),
+      adminPayments => const AdminFinancePage(),
+      clientAdditionalServices => const AdditionalServiceClientPage(),
+      addClientAdditionalServices => const AddAdditionalServiceClientPage(),
+      adminAdditionalServices =>
+        const AdditionalServiceSystemAdministratorPage(),
+      createAdminAdditionalService => AdditionalServiceAdminFormPage(
+        service: settings.arguments is AdditionalService
+            ? settings.arguments! as AdditionalService
+            : null,
+      ),
+      ownerManagement => const OwnerPage(),
+      pqrs => const PqrsPage(),
+      ownerPqrs => const OwnerPqrsPage(),
+      adminPqrs => const SystemAdminPqrsPage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
