@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/views/paymentmethod/PaymentMethodPage.dart';
 
 void main() {
   runApp(const MyApp());
@@ -17,7 +18,7 @@ class MyApp extends StatelessWidget {
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const PaymentMethodPage(),
     );
   }
 }
