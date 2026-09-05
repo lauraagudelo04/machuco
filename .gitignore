@@ -17,6 +17,9 @@ migrate_working_dir/
 **/main.dart
 openspec/
 test/
+CLAUDE.md
+README_AGENTES_CLAUDE.md
+contexts/
 
 # IntelliJ related
 *.iml
