@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../models/motel/motel_model.dart'; 
+import '../../../controllers/motel/owner_controller/owner_motel_controller.dart'; 
 import 'owner_motel_form_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
@@ -10,18 +12,43 @@ class OwnerMotelsPage extends StatefulWidget {
 }
 
 class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
-  int _selectedIndex = 0; // Para el BottomNavigationBar
+  int _selectedIndex = 0; 
+  
+  final OwnerMotelController _motelController = OwnerMotelController();
+  
+  List<Motel> _motels = [];
+  bool _isLoading = true;
 
-  // Lista simulada de moteles en el estado para que el cambio de activo/inhabilitado se refleje en pantalla
-  final List<Map<String, dynamic>> _motels = [
-    {'name': 'Motel Paraíso 1', 'reservations': 3, 'isActive': true},
-    {'name': 'Motel Paraíso 2', 'reservations': 6, 'isActive': true},
-    {'name': 'Motel Paraíso 3', 'reservations': 9, 'isActive': false},
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _loadMotels();
+  }
+
+  Future<void> _loadMotels() async {
+    final motelesObtenidos = await _motelController.getMyMotels();
+    setState(() {
+      _motels = motelesObtenidos;
+      _isLoading = false;
+    });
+  }
 
   void _toggleMotelStatus(int index) {
     setState(() {
-      _motels[index]['isActive'] = !_motels[index]['isActive'];
+      final current = _motels[index];
+      _motels[index] = Motel(
+        id: current.id,
+        name: current.name,
+        email: current.email,
+        roomCount: current.roomCount,
+        nit: current.nit,
+        address: current.address,
+        phone: current.phone,
+        paymentMethods: current.paymentMethods,
+        imageUrls: current.imageUrls,
+        basePrice: current.basePrice,
+        isAvailable: !current.isAvailable, 
+      );
     });
   }
 
@@ -31,19 +58,15 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
       appBar: AppBar(
         centerTitle: true,
         title: const Text('Lista Moteles'),
-        // Notificaciones a la izquierda
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {
-              // TODO: Navegar a notificaciones
-            },
+            onPressed: () {},
           ),
         ),
-        // Menú de hamburguesa a la derecha
         actions: [
           Builder(
             builder: (context) => Padding(
@@ -57,7 +80,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           ),
         ],
       ),
-      // Menú lateral desplegable (Hamburger Menu)
       endDrawer: Drawer(
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         child: ListView(
@@ -65,18 +87,17 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           children: [
             DrawerHeader(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.primary, // AppColors.violet
+                color: Theme.of(context).colorScheme.primary, 
               ),
               child: const Text(
                 'Opciones',
                 style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
               ),
             ),
+            // El menú global ahora está limpio y solo tiene acciones de cuenta
             _MenuTile(icon: Icons.star_outline, title: 'Suscripción', onTap: () {}),
             _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
             _MenuTile(icon: Icons.support_agent_outlined, title: 'PQRS', onTap: () {}),
-            _MenuTile(icon: Icons.room_preferences_outlined, title: 'Servicios adicionales', onTap: () {}),
-            _MenuTile(icon: Icons.bed_outlined, title: 'Habitaciones', onTap: () {}),
           ],
         ),
       ),
@@ -89,25 +110,26 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
             Text('Tus establecimientos', style: Theme.of(context).textTheme.headlineSmall),
             const SizedBox(height: AppSpacing.s3),
             Expanded(
-              // Lista de moteles del propietario basada en la lista mutable
-              child: ListView.separated(
-                itemCount: _motels.length,
-                separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
-                itemBuilder: (context, index) {
-                  final motel = _motels[index];
-                  return _OwnerMotelCard(
-                    name: motel['name'],
-                    activeReservations: motel['reservations'],
-                    isActive: motel['isActive'],
-                    onToggleStatus: () => _toggleMotelStatus(index),
-                  );
-                },
-              ),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _motels.isEmpty
+                      ? const Center(child: Text('Aún no tienes establecimientos registrados.'))
+                      : ListView.separated(
+                          itemCount: _motels.length,
+                          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
+                          itemBuilder: (context, index) {
+                            final motel = _motels[index];
+                            return _OwnerMotelCard(
+                              motel: motel,
+                              activeReservations: 3, 
+                              onToggleStatus: () => _toggleMotelStatus(index),
+                            );
+                          },
+                        ),
             ),
           ],
         ),
       ),
-      // Botón flotante para Agregar Motel
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.push(
@@ -121,7 +143,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         icon: const Icon(Icons.add, color: Colors.white),
         label: const Text('Agregar', style: TextStyle(color: Colors.white)),
       ),
-      // Barra de navegación inferior
       bottomNavigationBar: AppNavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
@@ -153,19 +174,18 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
 class _OwnerMotelCard extends StatelessWidget {
   const _OwnerMotelCard({
-    required this.name,
+    required this.motel,
     required this.activeReservations,
-    required this.isActive,
     required this.onToggleStatus,
   });
 
-  final String name;
+  final Motel motel;
   final int activeReservations;
-  final bool isActive;
   final VoidCallback onToggleStatus;
 
-  // Función para mostrar el diálogo de confirmación (Pop-up)
   void _showConfirmDialog(BuildContext context) {
+    final isActive = motel.isAvailable;
+    
     showDialog(
       context: context,
       builder: (BuildContext dialogContext) {
@@ -173,12 +193,12 @@ class _OwnerMotelCard extends StatelessWidget {
           title: Text(isActive ? '¿Inhabilitar motel?' : '¿Habilitar motel?'),
           content: Text(
             isActive
-                ? 'Al inhabilitar "$name", los clientes no podrán ver ni realizar nuevas reservas en este establecimiento.'
-                : 'Al habilitar "$name", el establecimiento volverá a estar visible y disponible para reservas.',
+                ? 'Al inhabilitar "${motel.name}", los clientes no podrán ver ni realizar nuevas reservas en este establecimiento.'
+                : 'Al habilitar "${motel.name}", el establecimiento volverá a estar visible y disponible para reservas.',
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext), // Cierra el pop-up sin hacer nada
+              onPressed: () => Navigator.pop(dialogContext), 
               child: const Text('Cancelar'),
             ),
             FilledButton(
@@ -186,8 +206,8 @@ class _OwnerMotelCard extends StatelessWidget {
                 backgroundColor: isActive ? Colors.redAccent : Colors.green,
               ),
               onPressed: () {
-                Navigator.pop(dialogContext); // Cierra el pop-up
-                onToggleStatus(); // Ejecuta el cambio de estado
+                Navigator.pop(dialogContext); 
+                onToggleStatus(); 
               },
               child: Text(isActive ? 'Sí, inhabilitar' : 'Sí, habilitar'),
             ),
@@ -199,11 +219,12 @@ class _OwnerMotelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isActive = motel.isAvailable;
+
     return AppCard(
       padding: const EdgeInsets.all(AppSpacing.s3),
       child: Row(
         children: [
-          // Ícono de estado del motel
           Container(
             width: 48,
             height: 48,
@@ -217,13 +238,12 @@ class _OwnerMotelCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: AppSpacing.s4),
-          // Información del motel
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
+                  motel.name,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                     decoration: isActive ? null : TextDecoration.lineThrough,
                   ),
@@ -238,8 +258,9 @@ class _OwnerMotelCard extends StatelessWidget {
               ],
             ),
           ),
-          // Botones de acción rápida (Editar e Inhabilitar/Habilitar)
+          // Botones de acción agrupados
           Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
@@ -248,7 +269,10 @@ class _OwnerMotelCard extends StatelessWidget {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => const OwnerMotelFormPage(isEditing: true),
+                      builder: (context) => OwnerMotelFormPage(
+                        isEditing: true, 
+                        motel: motel,
+                      ),
                     ),
                   );
                 },
@@ -257,7 +281,45 @@ class _OwnerMotelCard extends StatelessWidget {
                 icon: Icon(isActive ? Icons.block : Icons.check_circle_outline),
                 tooltip: isActive ? 'Inhabilitar Motel' : 'Habilitar Motel',
                 color: isActive ? Colors.redAccent : Colors.green,
-                onPressed: () => _showConfirmDialog(context), // Llama al pop-up de seguridad
+                onPressed: () => _showConfirmDialog(context), 
+              ),
+              // Nuevo menú contextual por motel para manejar servicios y habitaciones
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Gestionar establecimiento',
+                onSelected: (String value) {
+                  // TODO: Aquí navegaremos a las vistas de CRUD específicas pasándole el motel.id
+                  switch (value) {
+                    case 'habitaciones':
+                      // Navigator.push(context, HabitacionesPage(motelId: motel.id));
+                      break;
+                    case 'servicios':
+                      // Navigator.push(context, ServiciosAdicionalesPage(motelId: motel.id));
+                      break;
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'habitaciones',
+                    child: Row(
+                      children: [
+                        Icon(Icons.bed_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Habitaciones'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'servicios',
+                    child: Row(
+                      children: [
+                        Icon(Icons.room_preferences_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Servicios adicionales'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

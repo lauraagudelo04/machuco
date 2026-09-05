@@ -1,18 +1,23 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../models/motel/motel_model.dart'; // Importamos el modelo
 
 class OwnerMotelFormPage extends StatefulWidget {
-  // Si es true, estamos editando un motel existente. Si es false, estamos creando uno nuevo.
-  const OwnerMotelFormPage({super.key, this.isEditing = false});
+  // Ahora recibimos opcionalmente el modelo del motel
+  const OwnerMotelFormPage({
+    super.key, 
+    this.isEditing = false, 
+    this.motel,
+  });
 
   final bool isEditing;
+  final Motel? motel; // Puede ser nulo porque al crear desde cero no existe
 
   @override
   State<OwnerMotelFormPage> createState() => _OwnerMotelFormPageState();
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
-  // Controladores básicos para el ejemplo
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   final _roomsController = TextEditingController();
@@ -20,9 +25,27 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
 
-  // Estado para los chips de métodos de pago
-  final List<String> _selectedPaymentMethods = ['Efectivo'];
+  // Quitamos 'Efectivo' por defecto de aquí, lo manejaremos en el initState
+  final List<String> _selectedPaymentMethods = [];
   final List<String> _availablePaymentMethods = ['Efectivo', 'Tarjeta Crédito/Débito', 'Transferencia', 'Nequi / Daviplata'];
+
+  @override
+  void initState() {
+    super.initState();
+    // Si estamos editando y el motel no es nulo, cargamos sus datos
+    if (widget.isEditing && widget.motel != null) {
+      _emailController.text = widget.motel!.email;
+      _nameController.text = widget.motel!.name;
+      _roomsController.text = widget.motel!.roomCount.toString();
+      _nitController.text = widget.motel!.nit;
+      _addressController.text = widget.motel!.address;
+      _phoneController.text = widget.motel!.phone;
+      _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
+    } else {
+      // Si estamos creando uno nuevo, dejamos un valor por defecto
+      _selectedPaymentMethods.add('Efectivo');
+    }
+  }
 
   @override
   void dispose() {
@@ -57,41 +80,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección superior derecha (Botones de Habitaciones y Reseñas)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: () {
-                      // TODO: Navegar a la vista de agregar/gestionar habitaciones
-                    },
-                    icon: const Icon(Icons.bed_outlined),
-                    label: const Text('Agregar habitaciones'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  // Solo mostramos "Ver reseña" si estamos en modo edición
-                  if (widget.isEditing)
-                    TextButton.icon(
-                      onPressed: () {
-                        // TODO: Navegar o abrir modal de reseñas
-                      },
-                      icon: const Icon(Icons.star_outline),
-                      label: const Text('Ver reseña'),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            
             const SizedBox(height: AppSpacing.s2),
 
-            // Formulario de datos básicos
             _buildTextField(
               controller: _emailController,
               label: 'Correo',
@@ -134,7 +124,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
             ),
             const SizedBox(height: AppSpacing.s5),
 
-            // Sección de Métodos de Pago
             Text('Métodos de pago', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s2),
             Wrap(
@@ -153,13 +142,10 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
             ),
             const SizedBox(height: AppSpacing.s5),
 
-            // Sección de Imágenes
             Text('Imágenes', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s2),
             InkWell(
-              onTap: () {
-                // TODO: Lógica para abrir selector de imágenes de la galería/cámara
-              },
+              onTap: () {},
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 height: 120,
@@ -192,14 +178,14 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
           ],
         ),
       ),
-      // Botón "Guardar" fijo en la parte inferior
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.s4),
           child: AppButton(
             label: 'Guardar',
             onPressed: () {
-              // TODO: Validar formulario y guardar/actualizar datos en Supabase
+              // Aquí podrías construir un nuevo objeto Motel con los datos de los controladores
+              // y pasarlo a un método del controlador para guardarlo o actualizarlo.
             },
           ),
         ),
@@ -207,7 +193,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     );
   }
 
-  // Widget auxiliar para mantener el código limpio y estandarizar los campos de texto
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
