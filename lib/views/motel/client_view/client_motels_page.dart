@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
-import 'client_motel_detail_page.dart';
-import './../../../models/motel/motel_model.dart'; // Importa el modelo
-import './../../../controllers/motel/client_controller/client_motel_controller.dart'; // Importa el controlador
+import './../../../models/motel/motel_model.dart';
+import './../../../controllers/motel/client_controller/client_motel_controller.dart';
+import './../../../routes/routes.dart';
+import '../../booking/client_view/client_booking_page.dart';
+import '../../pqrs/client_view/pqrs_page.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -15,15 +17,12 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedIndex = 0;
   
-  // Instanciamos el controlador
   final ClientMotelController _motelController = ClientMotelController();
-  // Variable para almacenar el Future de los moteles
   late Future<List<Motel>> _motelsFuture;
 
   @override
   void initState() {
     super.initState();
-    // Iniciamos la petición de datos al cargar la pantalla
     _motelsFuture = _motelController.getRecommendedMotels();
   }
 
@@ -35,6 +34,44 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
 
   @override
   Widget build(BuildContext context) {
+    return Scaffold(
+      body: IndexedStack(
+        index: _selectedIndex,
+        children: [
+          _buildMotelsContent(),
+          
+          const ClientBookingPage(),
+          
+          const ClientPqrsPage(),
+        ],
+      ),
+      bottomNavigationBar: AppNavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (index) {
+          setState(() => _selectedIndex = index);
+        },
+        destinations: const [
+          AppNavigationDestination(
+            icon: Icons.home_outlined,
+            selectedIcon: Icons.home,
+            label: 'Moteles',
+          ),
+          AppNavigationDestination(
+            icon: Icons.event_note_outlined,
+            selectedIcon: Icons.event_note,
+            label: 'Mis Reservas',
+          ),
+          AppNavigationDestination(
+            icon: Icons.support_agent_outlined,
+            selectedIcon: Icons.support_agent,
+            label: 'Mis PQRS',
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildMotelsContent() {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -80,49 +117,35 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
             ),
             const SizedBox(height: AppSpacing.s3),
             Expanded(
-              // Usamos FutureBuilder para manejar los estados de la petición asíncrona
               child: FutureBuilder<List<Motel>>(
                 future: _motelsFuture,
                 builder: (context, snapshot) {
-                  // Estado 1: Cargando
                   if (snapshot.connectionState == ConnectionState.waiting) {
                     return const Center(child: CircularProgressIndicator());
                   }
-                  
-                  // Estado 2: Error
                   if (snapshot.hasError) {
                     return Center(child: Text('Error al cargar: ${snapshot.error}'));
                   }
-                  
-                  // Estado 3: Sin datos
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
                     return const Center(child: Text('No hay moteles disponibles en este momento.'));
                   }
 
-                  // Estado 4: Éxito
                   final motels = snapshot.data!;
-                  
                   return ListView.separated(
                     itemCount: motels.length,
                     separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
                     itemBuilder: (context, index) {
-                      final motel = motels[index]; // Obtenemos el modelo actual
-                      
+                      final motel = motels[index];
                       return _ClientMotelCard(
-                        // Alimentamos la UI con los datos del modelo
                         name: motel.name,
                         location: motel.address,
-                        // Formateamos el precio básico
                         price: '\$${motel.basePrice.toStringAsFixed(0)} / 4 horas',
                         isAvailable: motel.isAvailable,
                         onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ClientMotelDetailPage(
-                                motel: motel,
-                              ),
-                            ),
+                          Navigator.pushNamed(
+                            context, 
+                            AppRoutes.clientMotelDetail, 
+                            arguments: motel,
                           );
                         },
                       );
@@ -134,34 +157,10 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           ],
         ),
       ),
-      bottomNavigationBar: AppNavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
-        },
-        destinations: const [
-          AppNavigationDestination(
-            icon: Icons.home_outlined,
-            selectedIcon: Icons.home,
-            label: 'Moteles',
-          ),
-          AppNavigationDestination(
-            icon: Icons.event_note_outlined,
-            selectedIcon: Icons.event_note,
-            label: 'Mis Reservas',
-          ),
-          AppNavigationDestination(
-            icon: Icons.support_agent_outlined,
-            selectedIcon: Icons.support_agent,
-            label: 'Mis PQRS',
-          ),
-        ],
-      ),
     );
   }
 }
 
-// El _ClientMotelCard se mantiene igual, no requiere cambios internos
 class _ClientMotelCard extends StatelessWidget {
   const _ClientMotelCard({
     required this.name,

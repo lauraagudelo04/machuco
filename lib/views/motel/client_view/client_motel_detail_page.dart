@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
-import './../../../models/motel/motel_model.dart'; // Asegúrate de importar el modelo
+import './../../../models/motel/motel_model.dart';
+import './../../../routes/routes.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
   // Ahora recibimos el objeto Motel completo en lugar de solo el nombre
