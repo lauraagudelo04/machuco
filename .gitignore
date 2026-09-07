@@ -15,8 +15,8 @@
 .docs/
 migrate_working_dir/
 **/main.dart
-openspec/
 test/
+openspec/
 CLAUDE.md
 README_AGENTES_CLAUDE.md
 contexts/
@@ -41,7 +41,6 @@ contexts/
 .pub/
 /build/
 /coverage/
-test/
 
 # Symbolication related
 app.*.symbols
