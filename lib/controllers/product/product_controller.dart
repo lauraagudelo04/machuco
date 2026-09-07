@@ -1,109 +1,82 @@
 import 'package:flutter/foundation.dart';
 
 import '../../models/product/product.dart';
-import '../../service/product/product_service.dart';
 
 class ProductController extends ChangeNotifier {
-  ProductController({
-    ProductService? productService,
-  }) : _productService = productService ?? ProductService();
+  final Map<String, Product> _products = {
+    'product-001': const Product(
+      id: 'product-001',
+      motelId: 'motel-001',
+      name: 'Gaseosa',
+      description: 'Bebida fría de 400 ml',
+      price: 6000,
+      stock: 12,
+      isAvailable: true,
+    ),
+    'product-002': const Product(
+      id: 'product-002',
+      motelId: 'motel-001',
+      name: 'Papas',
+      description: 'Snack personal',
+      price: 4500,
+      stock: 8,
+      isAvailable: true,
+    ),
+    'product-003': const Product(
+      id: 'product-003',
+      motelId: 'motel-001',
+      name: 'Kit de aseo',
+      description: 'Kit básico para huéspedes',
+      price: 12000,
+      stock: 0,
+      isAvailable: false,
+    ),
+    'product-004': const Product(
+      id: 'product-004',
+      motelId: 'motel-001',
+      name: 'Agua',
+      description: 'Botella de agua de 600 ml',
+      price: 3000,
+      stock: 20,
+      isAvailable: true,
+    ),
+    'product-005': const Product(
+      id: 'product-005',
+      motelId: 'motel-001',
+      name: 'Chocolate',
+      description: 'Barra de chocolate',
+      price: 5000,
+      stock: 15,
+      isAvailable: true,
+    ),
+  };
 
-  final ProductService _productService;
+  List<Product> get products => _products.values.toList();
 
-  List<Product> _products = [];
-  bool _isLoading = false;
-  String? _errorMessage;
+  List<Product> getProductsByMotel(String motelId) {
+    return _products.values
+        .where((product) => product.motelId == motelId)
+        .toList();
+  }
 
-  List<Product> get products => List.unmodifiable(_products);
-
-  bool get isLoading => _isLoading;
-
-  String? get errorMessage => _errorMessage;
-
-  bool get hasProducts => _products.isNotEmpty;
-
-  Future<void> loadProducts({
-    String? motelId,
-  }) async {
-    _isLoading = true;
-    _errorMessage = null;
+  void createProduct(Product product) {
+    _products[product.id] = product;
     notifyListeners();
-
-    try {
-      _products = await _productService.getProducts(
-        motelId: motelId,
-      );
-    } catch (_) {
-      _errorMessage = 'No fue posible cargar los productos.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
-  Future<bool> createProduct(Product product) async {
-    _errorMessage = null;
+  void updateProduct(Product product) {
+    if (!_products.containsKey(product.id)) return;
 
-    try {
-      final createdProduct = await _productService.createProduct(
-        product,
-      );
-
-      _products = [
-        ..._products,
-        createdProduct,
-      ];
-
-      notifyListeners();
-      return true;
-    } catch (_) {
-      _errorMessage = 'No fue posible crear el producto.';
-      notifyListeners();
-      return false;
-    }
+    _products[product.id] = product;
+    notifyListeners();
   }
 
-  Future<bool> updateProduct(Product product) async {
-    _errorMessage = null;
-
-    try {
-      final updatedProduct = await _productService.updateProduct(
-        product,
-      );
-
-      _products = _products.map((item) {
-        if (item.id == updatedProduct.id) {
-          return updatedProduct;
-        }
-
-        return item;
-      }).toList();
-
-      notifyListeners();
-      return true;
-    } catch (_) {
-      _errorMessage = 'No fue posible actualizar el producto.';
-      notifyListeners();
-      return false;
-    }
+  void deleteProduct(String productId) {
+    _products.remove(productId);
+    notifyListeners();
   }
 
-  Future<bool> deleteProduct(String productId) async {
-    _errorMessage = null;
-
-    try {
-      await _productService.deleteProduct(productId);
-
-      _products = _products
-          .where((product) => product.id != productId)
-          .toList();
-
-      notifyListeners();
-      return true;
-    } catch (_) {
-      _errorMessage = 'No fue posible eliminar el producto.';
-      notifyListeners();
-      return false;
-    }
+  Product? getProductById(String productId) {
+    return _products[productId];
   }
 }

@@ -16,15 +16,13 @@ class ProductListView extends StatefulWidget {
 class _ProductListViewState extends State<ProductListView> {
   late final ProductController _controller;
 
+  static const String _motelId = 'motel-001';
+
   @override
   void initState() {
     super.initState();
 
     _controller = ProductController();
-
-    _controller.loadProducts(
-      motelId: 'motel-001',
-    );
   }
 
   @override
@@ -37,31 +35,24 @@ class _ProductListViewState extends State<ProductListView> {
     final product = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
         builder: (_) => const ProductFormView(
-          motelId: 'motel-001',
+          motelId: _motelId,
         ),
       ),
     );
 
     if (!mounted || product == null) return;
 
-    final success = await _controller.createProduct(product);
-
-    if (!mounted) return;
+    _controller.createProduct(product);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Producto creado correctamente.'
-              : 'No fue posible crear el producto.',
-        ),
+      const SnackBar(
+        content: Text('Producto creado correctamente.'),
       ),
     );
   }
 
   Future<void> _openEditView(Product product) async {
-    final updatedProduct =
-    await Navigator.of(context).push<Product>(
+    final updatedProduct = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
         builder: (_) => ProductFormView(
           motelId: product.motelId,
@@ -72,19 +63,11 @@ class _ProductListViewState extends State<ProductListView> {
 
     if (!mounted || updatedProduct == null) return;
 
-    final success = await _controller.updateProduct(
-      updatedProduct,
-    );
-
-    if (!mounted) return;
+    _controller.updateProduct(updatedProduct);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          success
-              ? 'Producto actualizado correctamente.'
-              : 'No fue posible actualizar el producto.',
-        ),
+      const SnackBar(
+        content: Text('Producto actualizado correctamente.'),
       ),
     );
   }
@@ -129,19 +112,11 @@ class _ProductListViewState extends State<ProductListView> {
 
     if (!mounted || shouldDelete != true) return;
 
-    final success = await _controller.deleteProduct(
-      product.id,
-    );
-
-    if (!mounted) return;
+    _controller.deleteProduct(product.id);
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          success
-              ? '${product.name} fue eliminado.'
-              : 'No fue posible eliminar el producto.',
-        ),
+        content: Text('${product.name} fue eliminado.'),
       ),
     );
   }
@@ -176,38 +151,20 @@ class _ProductListViewState extends State<ProductListView> {
         child: ListenableBuilder(
           listenable: _controller,
           builder: (context, child) {
+            final products = _controller.getProductsByMotel(_motelId);
+
             return LayoutBuilder(
               builder: (context, constraints) {
                 final horizontalPadding = constraints.maxWidth < 360
                     ? AppSpacing.screenCompact
                     : AppSpacing.screen;
 
-                if (_controller.isLoading) {
-                  return const Center(
-                    child: CircularProgressIndicator(),
-                  );
-                }
-
-                if (_controller.errorMessage != null) {
-                  return AppEmptyState(
-                    icon: Icons.error_outline,
-                    title: 'No se pudieron cargar los productos',
-                    message: _controller.errorMessage!,
-                    actionLabel: 'Reintentar',
-                    onAction: () {
-                      _controller.loadProducts(
-                        motelId: 'motel-001',
-                      );
-                    },
-                  );
-                }
-
-                if (_controller.products.isEmpty) {
+                if (products.isEmpty) {
                   return AppEmptyState(
                     icon: Icons.inventory_2_outlined,
                     title: 'No hay productos',
                     message:
-                    'Agrega el primer producto al catálogo del motel.',
+                        'Agrega el primer producto al catálogo del motel.',
                     actionLabel: 'Agregar producto',
                     onAction: _openCreateView,
                   );
@@ -220,12 +177,12 @@ class _ProductListViewState extends State<ProductListView> {
                     horizontalPadding,
                     AppSpacing.s12,
                   ),
-                  itemCount: _controller.products.length,
+                  itemCount: products.length,
                   separatorBuilder: (_, __) => const SizedBox(
                     height: AppSpacing.s3,
                   ),
                   itemBuilder: (context, index) {
-                    final product = _controller.products[index];
+                    final product = products[index];
 
                     return _ProductCard(
                       product: product,
@@ -293,13 +250,11 @@ class _ProductCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           product.name,
-                          style:
-                          Theme.of(context).textTheme.titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
                       StatusBadge(
-                        status: product.isAvailable &&
-                            product.stock > 0
+                        status: product.isActive
                             ? AppStatus.available
                             : AppStatus.outOfService,
                         size: StatusBadgeSize.extraSmall,
@@ -312,11 +267,12 @@ class _ProductCard extends StatelessWidget {
                       product.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style:
-                      Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color:
-                        context.appColors.textSecondary,
-                      ),
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                            color: context.appColors.textSecondary,
+                          ),
                     ),
                   ],
                   const SizedBox(height: AppSpacing.s2),
@@ -326,17 +282,21 @@ class _ProductCard extends StatelessWidget {
                     children: [
                       Text(
                         priceText,
-                        style:
-                        Theme.of(context).textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                       ),
                       Text(
                         'Stock: ${product.stock}',
-                        style:
-                        Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.appColors.textMuted,
-                        ),
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: context.appColors.textMuted,
+                            ),
                       ),
                     ],
                   ),
@@ -367,3 +327,4 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
+
