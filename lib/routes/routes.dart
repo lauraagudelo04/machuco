@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/booking_controller.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/models/booking.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/views/motel/client_view/client_motels_page.dart';
+import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -40,6 +43,8 @@ abstract final class AppRoutes {
   static const clientPqrs = '/pqrs/client';
   static const ownerPqrs = '/pqrs/owner';
   static const adminPqrs = '/pqrs/admin';
+  static const clientMotels = '/motels/client';
+  static const clientMotelDetail = '/motels/client/detail';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -73,6 +78,14 @@ abstract final class AppRoutes {
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
       adminPqrs => const SystemAdminPqrsPage(),
+      
+      clientMotels => const ClientMotelsPage(),
+      clientMotelDetail => ClientMotelDetailPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : throw Exception('Error: Se requiere pasar un objeto Motel como argumento a esta ruta.'),
+      ),
+      
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
