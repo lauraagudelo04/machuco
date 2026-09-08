@@ -6,7 +6,8 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/tokens/app_text_styles.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
+import 'package:machuco/models/room/room_models.dart';
 
 class RoomDetailPage extends StatelessWidget {
   const RoomDetailPage({

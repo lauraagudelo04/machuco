@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_admin_controller.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
 
 class RoomAdminPage extends StatefulWidget {
   const RoomAdminPage({
     super.key,
     this.rooms,
+    this.motelId = 'motel-eclipse',
     this.motelName = 'Motel Eclipse',
   });
 
   final List<RoomVisualData>? rooms;
+  final String motelId;
   final String motelName;
 
   @override
@@ -23,33 +27,23 @@ class RoomAdminPage extends StatefulWidget {
 
 class _RoomAdminPageState extends State<RoomAdminPage> {
   final TextEditingController _searchController = TextEditingController();
-  late final List<RoomVisualData> _rooms;
+  late final RoomAdminController _controller;
   bool _sortAscending = true;
 
   @override
   void initState() {
     super.initState();
-    _rooms = List<RoomVisualData>.from(
-      widget.rooms ?? buildMockRooms(motelName: widget.motelName),
+    _controller = RoomAdminController(
+      motelId: widget.motelId,
+      motelName: widget.motelName,
+      seedRooms: widget.rooms,
     );
   }
 
-  List<RoomVisualData> get _filteredRooms {
-    final query = _searchController.text.trim().toLowerCase();
-    final filtered = _rooms.where((room) {
-      final matchesSearch = query.isEmpty ||
-          room.name.toLowerCase().contains(query) ||
-          room.roomNumber.toLowerCase().contains(query) ||
-          room.description.toLowerCase().contains(query);
-      return matchesSearch;
-    }).toList()
-      ..sort(
-        (a, b) => _sortAscending
-            ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-            : b.name.toLowerCase().compareTo(a.name.toLowerCase()),
-      );
-    return filtered;
-  }
+  List<RoomVisualData> get _filteredRooms => _controller.filteredRooms(
+    query: _searchController.text,
+    sortAscending: _sortAscending,
+  );
 
   @override
   void dispose() {
@@ -91,8 +85,8 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
                 Text(
                   '${_filteredRooms.length} habitaciones',
                   style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
               ],
             ),
@@ -142,8 +136,8 @@ class _AdminHeader extends StatelessWidget {
           Text(
             'Administracion',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(
@@ -154,8 +148,8 @@ class _AdminHeader extends StatelessWidget {
           Text(
             'Consulta inventario y estado administrativo efectivo en modo solo lectura.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Container(
@@ -176,10 +170,7 @@ class _AdminHeader extends StatelessWidget {
 }
 
 class _AdminSortBar extends StatelessWidget {
-  const _AdminSortBar({
-    required this.sortAscending,
-    required this.onChanged,
-  });
+  const _AdminSortBar({required this.sortAscending, required this.onChanged});
 
   final bool sortAscending;
   final ValueChanged<bool> onChanged;
@@ -206,10 +197,7 @@ class _AdminSortBar extends StatelessWidget {
 }
 
 class _AdminRoomCard extends StatelessWidget {
-  const _AdminRoomCard({
-    required this.room,
-    required this.onTap,
-  });
+  const _AdminRoomCard({required this.room, required this.onTap});
 
   final RoomVisualData room;
   final VoidCallback onTap;
@@ -230,13 +218,16 @@ class _AdminRoomCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(room.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      room.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
                       'Habitacion ${room.roomNumber} · ${room.motelName}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                        color: context.appColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -251,8 +242,8 @@ class _AdminRoomCard extends StatelessWidget {
           Text(
             room.description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Wrap(
@@ -273,8 +264,8 @@ class _AdminRoomCard extends StatelessWidget {
           Text(
             buildAdminReadOnlyMessage(room),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Text(
@@ -288,10 +279,7 @@ class _AdminRoomCard extends StatelessWidget {
 }
 
 class _AdministrativeBadge extends StatelessWidget {
-  const _AdministrativeBadge({
-    required this.label,
-    required this.color,
-  });
+  const _AdministrativeBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -310,7 +298,9 @@ class _AdministrativeBadge extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: color),
         ),
       ),
     );
@@ -318,10 +308,7 @@ class _AdministrativeBadge extends StatelessWidget {
 }
 
 class _InfoText extends StatelessWidget {
-  const _InfoText({
-    required this.icon,
-    required this.text,
-  });
+  const _InfoText({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
@@ -340,10 +327,7 @@ class _InfoText extends StatelessWidget {
 }
 
 class _AdminEmptyState extends StatelessWidget {
-  const _AdminEmptyState({
-    required this.title,
-    required this.description,
-  });
+  const _AdminEmptyState({required this.title, required this.description});
 
   final String title;
   final String description;
@@ -367,8 +351,8 @@ class _AdminEmptyState extends StatelessWidget {
               description,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
         ),

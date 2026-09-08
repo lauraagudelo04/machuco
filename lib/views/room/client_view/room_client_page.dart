@@ -1,20 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_client_controller.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
 
 class RoomClientPage extends StatefulWidget {
   const RoomClientPage({
     super.key,
     this.rooms,
+    this.motelId = 'motel-eclipse',
     this.motelName = 'Motel Eclipse',
   });
 
   final List<RoomVisualData>? rooms;
+  final String motelId;
   final String motelName;
 
   @override
@@ -24,7 +28,7 @@ class RoomClientPage extends StatefulWidget {
 class _RoomClientPageState extends State<RoomClientPage> {
   static final DateTime _initialPickerDate = DateTime(2026, 8, 19, 18);
 
-  late final List<RoomVisualData> _rooms;
+  late final RoomClientController _controller;
   DateTime? _startDateTime;
   DateTime? _endDateTime;
 
@@ -34,8 +38,10 @@ class _RoomClientPageState extends State<RoomClientPage> {
   @override
   void initState() {
     super.initState();
-    _rooms = List<RoomVisualData>.from(
-      widget.rooms ?? buildMockRooms(motelName: widget.motelName),
+    _controller = RoomClientController(
+      motelId: widget.motelId,
+      motelName: widget.motelName,
+      seedRooms: widget.rooms,
     );
   }
 
@@ -43,14 +49,7 @@ class _RoomClientPageState extends State<RoomClientPage> {
       reservationTotalHours(_startDateTime, _endDateTime) != null;
 
   List<RoomVisualData> get _availableRooms {
-    if (!_hasValidRange) {
-      return const [];
-    }
-
-    return _rooms.where((room) {
-      return roomIsAvailableForRange(room, _startDateTime!, _endDateTime!);
-    }).toList()
-      ..sort((a, b) => a.pricePerHour.compareTo(b.pricePerHour));
+    return _controller.availableRooms(start: _startDateTime, end: _endDateTime);
   }
 
   @override
@@ -83,7 +82,8 @@ class _RoomClientPageState extends State<RoomClientPage> {
                 title: _rangeError == null
                     ? 'Selecciona llegada y salida'
                     : 'Rango no valido',
-                description: _rangeError ??
+                description:
+                    _rangeError ??
                     'Define un rango en horas exactas. Luego veras solo habitaciones activas y disponibles.',
               )
             else if (_availableRooms.isEmpty)
@@ -105,8 +105,8 @@ class _RoomClientPageState extends State<RoomClientPage> {
                   Text(
                     '${_availableRooms.length} opciones',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -116,10 +116,14 @@ class _RoomClientPageState extends State<RoomClientPage> {
                   padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                   child: _ClientRoomCard(
                     room: room,
-                    selectedRangeLabel:
-                        formatDateRange(_startDateTime!, _endDateTime!),
-                    totalHours:
-                        reservationTotalHours(_startDateTime!, _endDateTime!)!,
+                    selectedRangeLabel: formatDateRange(
+                      _startDateTime!,
+                      _endDateTime!,
+                    ),
+                    totalHours: reservationTotalHours(
+                      _startDateTime!,
+                      _endDateTime!,
+                    )!,
                     totalPrice: reservationTotalPrice(
                       room,
                       start: _startDateTime,
@@ -174,9 +178,9 @@ class _RoomClientPageState extends State<RoomClientPage> {
 
     final rangeError = clientReservationRangeError(_startDateTime, selected);
     if (rangeError != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(rangeError)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(rangeError)));
       return;
     }
 
@@ -252,8 +256,8 @@ class _ClientHeader extends StatelessWidget {
           Text(
             'Cliente',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(
@@ -264,8 +268,8 @@ class _ClientHeader extends StatelessWidget {
           Text(
             'Define llegada y salida para ver unicamente habitaciones activas y disponibles para tu rango.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Container(
@@ -317,26 +321,23 @@ class _BookingRangeCard extends StatelessWidget {
                 ),
               ),
               if (startDateTime != null || endDateTime != null)
-                TextButton(
-                  onPressed: onClear,
-                  child: const Text('Limpiar'),
-                ),
+                TextButton(onPressed: onClear, child: const Text('Limpiar')),
             ],
           ),
           const SizedBox(height: AppSpacing.s2),
           Text(
             'Selecciona fecha y hora de llegada y salida en horas exactas.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           if (rangeError != null) ...[
             const SizedBox(height: AppSpacing.s2),
             Text(
               rangeError!,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Theme.of(context).colorScheme.error,
-                  ),
+                color: Theme.of(context).colorScheme.error,
+              ),
             ),
           ],
           const SizedBox(height: AppSpacing.s4),
@@ -465,21 +466,25 @@ class _ClientRoomCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(room.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      room.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
                       '${room.motelName} · Habitacion ${room.roomNumber}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                        color: context.appColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
               ),
               DecoratedBox(
                 decoration: BoxDecoration(
-                  color: roomOperationalColor(RoomOperationalStatus.available)
-                      .withValues(alpha: .14),
+                  color: roomOperationalColor(
+                    RoomOperationalStatus.available,
+                  ).withValues(alpha: .14),
                   borderRadius: BorderRadius.circular(AppRadius.pill),
                 ),
                 child: Padding(
@@ -490,10 +495,10 @@ class _ClientRoomCard extends StatelessWidget {
                   child: Text(
                     'Disponible',
                     style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                          color: roomOperationalColor(
-                            RoomOperationalStatus.available,
-                          ),
-                        ),
+                      color: roomOperationalColor(
+                        RoomOperationalStatus.available,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -503,8 +508,8 @@ class _ClientRoomCard extends StatelessWidget {
           Text(
             room.description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Wrap(
@@ -602,10 +607,7 @@ class _ClientRoomCard extends StatelessWidget {
 }
 
 class _ClientInfo extends StatelessWidget {
-  const _ClientInfo({
-    required this.icon,
-    required this.text,
-  });
+  const _ClientInfo({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
@@ -649,8 +651,8 @@ class _ClientEmptyState extends StatelessWidget {
               description,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
         ),

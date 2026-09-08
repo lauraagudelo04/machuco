@@ -1,21 +1,25 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
+import 'package:machuco/controllers/room/room_owner_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
 
 class RoomOwnerPage extends StatefulWidget {
   const RoomOwnerPage({
     super.key,
     this.rooms,
+    this.motelId = 'motel-eclipse',
     this.motelName = 'Motel Eclipse',
   });
 
   final List<RoomVisualData>? rooms;
+  final String motelId;
   final String motelName;
 
   @override
@@ -26,28 +30,22 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   static final DateTime _initialPickerDate = DateTime(2026, 8, 19, 18);
 
   final TextEditingController _searchController = TextEditingController();
-  late List<RoomVisualData> _rooms;
+  late final RoomOwnerController _controller;
 
   @override
   void initState() {
     super.initState();
-    _rooms = List<RoomVisualData>.from(
-      widget.rooms ?? buildMockRooms(motelName: widget.motelName),
+    _controller = RoomOwnerController(
+      motelId: widget.motelId,
+      motelName: widget.motelName,
+      seedRooms: widget.rooms,
     );
   }
 
-  List<RoomVisualData> get _filteredRooms {
-    final query = _searchController.text.trim().toLowerCase();
-    return _rooms.where((room) {
-      final matchesSearch = query.isEmpty ||
-          room.name.toLowerCase().contains(query) ||
-          room.roomNumber.toLowerCase().contains(query) ||
-          room.includedServices.any(
-            (service) => service.toLowerCase().contains(query),
-          );
-      return matchesSearch;
-    }).toList();
-  }
+  List<RoomVisualData> get _rooms => _controller.rooms;
+
+  List<RoomVisualData> get _filteredRooms =>
+      _controller.filteredRooms(_searchController.text);
 
   @override
   void dispose() {
@@ -155,7 +153,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       return;
     }
 
-    setState(() => _rooms = [..._rooms, created]);
+    setState(() => _controller.addRoom(created));
   }
 
   Future<void> _editRoom(RoomVisualData room) async {
@@ -165,9 +163,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     }
 
     setState(() {
-      _rooms = _rooms
-          .map((item) => item.id == room.id ? edited.copyWith(id: room.id) : item)
-          .toList();
+      _controller.updateRoom(room.id, edited.copyWith(id: room.id));
     });
   }
 
@@ -202,15 +198,13 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                       Text(
                         'Programa un estado operativo con inicio y fin. Se guardara localmente para ${room.name}.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: context.appColors.textSecondary,
-                            ),
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.s4),
                       DropdownButtonFormField<RoomOperationalStatus>(
                         initialValue: selectedStatus,
-                        decoration: const InputDecoration(
-                          labelText: 'Estado',
-                        ),
+                        decoration: const InputDecoration(labelText: 'Estado'),
                         items: roomOperationalStatusCatalog
                             .map(
                               (status) => DropdownMenuItem(
@@ -238,8 +232,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                             setModalState(() {
                               startDateTime = selected;
                               if (!startDateTime.isBefore(endDateTime)) {
-                                endDateTime =
-                                    startDateTime.add(const Duration(hours: 2));
+                                endDateTime = startDateTime.add(
+                                  const Duration(hours: 2),
+                                );
                               }
                             });
                           }
@@ -301,8 +296,8 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                     endDateTime: endDateTime,
                                     supportingText:
                                         noteController.text.trim().isEmpty
-                                            ? null
-                                            : noteController.text.trim(),
+                                        ? null
+                                        : noteController.text.trim(),
                                   ),
                                 );
                               },
@@ -325,14 +320,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     }
 
     setState(() {
-      _rooms = _rooms.map((item) {
-        if (item.id != room.id) {
-          return item;
-        }
-        final nextSchedules = [...item.statusSchedules, createdSchedule]
-          ..sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
-        return item.copyWith(statusSchedules: nextSchedules);
-      }).toList();
+      _controller.addStatusSchedule(room.id, createdSchedule);
     });
   }
 
@@ -351,7 +339,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     final capacityController = TextEditingController(
       text: room == null ? '' : '${room.capacity}',
     );
-    var selectedServices = List<String>.from(room?.includedServices ?? const []);
+    var selectedServices = List<String>.from(
+      room?.includedServices ?? const [],
+    );
     final imageControllers = (room?.imageUrls ?? const [''])
         .map((entry) => TextEditingController(text: entry))
         .toList();
@@ -382,7 +372,8 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                         const SizedBox(height: AppSpacing.s2),
                         Text(
                           'El mismo formulario se usa para crear o actualizar informacion base, servicios e imagenes dummy.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
                                 color: context.appColors.textSecondary,
                               ),
                         ),
@@ -410,8 +401,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                               controller: priceController,
                               hint: '68000',
                               keyboardType: TextInputType.number,
-                              prefixIcon:
-                                  const Icon(Icons.attach_money_outlined),
+                              prefixIcon: const Icon(
+                                Icons.attach_money_outlined,
+                              ),
                             );
                             final roomField = AppTextField(
                               label: 'Numero de habitacion',
@@ -502,8 +494,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                   TextEditingController(),
                                 ),
                               ),
-                              icon:
-                                  const Icon(Icons.add_photo_alternate_outlined),
+                              icon: const Icon(
+                                Icons.add_photo_alternate_outlined,
+                              ),
                               label: const Text('Agregar imagen'),
                             ),
                           ],
@@ -512,8 +505,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                         ...List.generate(imageControllers.length, (index) {
                           final controller = imageControllers[index];
                           return Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.s3),
+                            padding: const EdgeInsets.only(
+                              bottom: AppSpacing.s3,
+                            ),
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
@@ -522,8 +516,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                     label: 'Referencia visual ${index + 1}',
                                     controller: controller,
                                     hint: 'ej: aurora-jacuzzi',
-                                    prefixIcon:
-                                        const Icon(Icons.image_outlined),
+                                    prefixIcon: const Icon(
+                                      Icons.image_outlined,
+                                    ),
                                   ),
                                 ),
                                 const SizedBox(width: AppSpacing.s2),
@@ -535,12 +530,14 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                           final removedController =
                                               imageControllers[index];
                                           setModalState(
-                                            () => imageControllers.removeAt(index),
+                                            () => imageControllers.removeAt(
+                                              index,
+                                            ),
                                           );
                                           WidgetsBinding.instance
                                               .addPostFrameCallback((_) {
-                                            removedController.dispose();
-                                          });
+                                                removedController.dispose();
+                                              });
                                         },
                                   icon: const Icon(Icons.delete_outline),
                                 ),
@@ -566,19 +563,24 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                     : 'Crear habitacion',
                                 onPressed: () {
                                   final name = nameController.text.trim();
-                                  final description =
-                                      descriptionController.text.trim();
+                                  final description = descriptionController.text
+                                      .trim();
                                   final price =
-                                      int.tryParse(priceController.text.trim()) ??
-                                          0;
-                                  final roomNumber =
-                                      roomNumberController.text.trim();
-                                  final capacity = int.tryParse(
+                                      int.tryParse(
+                                        priceController.text.trim(),
+                                      ) ??
+                                      0;
+                                  final roomNumber = roomNumberController.text
+                                      .trim();
+                                  final capacity =
+                                      int.tryParse(
                                         capacityController.text.trim(),
                                       ) ??
                                       0;
                                   final cleanedImages = imageControllers
-                                      .map((controller) => controller.text.trim())
+                                      .map(
+                                        (controller) => controller.text.trim(),
+                                      )
                                       .where((entry) => entry.isNotEmpty)
                                       .toList();
 
@@ -599,9 +601,10 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
 
                                   Navigator.of(context).pop(
                                     RoomVisualData(
-                                      id: room?.id ??
+                                      id:
+                                          room?.id ??
                                           'room-${DateTime.now().millisecondsSinceEpoch}',
-                                      motelId: room?.motelId ?? 'motel-eclipse',
+                                      motelId: room?.motelId ?? widget.motelId,
                                       motelName: widget.motelName,
                                       name: name,
                                       description: description,
@@ -616,7 +619,8 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                                       statusSchedules:
                                           room?.statusSchedules ?? const [],
                                       reviewCount: room?.reviewCount ?? 0,
-                                      reviewSummary: room?.reviewSummary ??
+                                      reviewSummary:
+                                          room?.reviewSummary ??
                                           'Sin resenas todavia',
                                     ),
                                   );
@@ -683,9 +687,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   }
 
   void _showStub(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 }
 
@@ -703,8 +707,8 @@ class _OwnerHeader extends StatelessWidget {
           Text(
             'Owner',
             style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+              color: Theme.of(context).colorScheme.primary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(
@@ -715,8 +719,8 @@ class _OwnerHeader extends StatelessWidget {
           Text(
             'Administra inventario, consulta reservas proximas y programa estados operativos por rango de fecha y hora.',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Container(
@@ -762,8 +766,8 @@ class _OwnerStatsCard extends StatelessWidget {
           Text(
             'Inventario cargado localmente para gestion owner.',
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -804,13 +808,16 @@ class _OwnerRoomCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(room.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      room.name,
+                      style: Theme.of(context).textTheme.titleLarge,
+                    ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
                       'Habitacion ${room.roomNumber} · ${room.motelName}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                        color: context.appColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -825,8 +832,8 @@ class _OwnerRoomCard extends StatelessWidget {
           Text(
             room.description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Wrap(
@@ -945,10 +952,7 @@ class _ActionChip extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.text,
-  });
+  const _MetaChip({required this.icon, required this.text});
 
   final IconData icon;
   final String text;
@@ -967,10 +971,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _StateBadge extends StatelessWidget {
-  const _StateBadge({
-    required this.label,
-    required this.color,
-  });
+  const _StateBadge({required this.label, required this.color});
 
   final String label;
   final Color color;
@@ -989,7 +990,9 @@ class _StateBadge extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
+          style: Theme.of(
+            context,
+          ).textTheme.labelMedium?.copyWith(color: color),
         ),
       ),
     );
@@ -1022,8 +1025,8 @@ class _OwnerEmptyState extends StatelessWidget {
               description,
               textAlign: TextAlign.center,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
         ),
