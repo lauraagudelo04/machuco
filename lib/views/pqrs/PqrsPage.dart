@@ -32,9 +32,9 @@ class PqrsPage extends StatelessWidget {
       PqrsActor.systemAdmin => SystemAdminPqrsPage(store: _store),
     };
 
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => page),
-    );
+    await Navigator.of(
+      context,
+    ).push(MaterialPageRoute<void>(builder: (_) => page));
   }
 
   @override
@@ -61,8 +61,9 @@ class PqrsPage extends StatelessWidget {
                   'Una misma solicitud recorre tres perfiles: el cliente la radica, '
                   'el propietario la atiende y el cliente la cierra. El administrador '
                   'del sistema supervisa el comportamiento.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: context.appColors.textSecondary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s5),
                 const _FlowCard(),
@@ -111,7 +112,8 @@ class _FlowCard extends StatelessWidget {
     (
       actor: PqrsActor.systemAdmin,
       title: 'El administrador supervisa',
-      detail: 'Consulta detalle, estado y porcentajes por motel, sin intervenir.',
+      detail:
+          'Consulta detalle, estado y porcentajes por motel, sin intervenir.',
     ),
   ];
 
@@ -139,8 +141,9 @@ class _FlowCard extends StatelessWidget {
                   ),
                   child: Text(
                     '${index + 1}',
-                    style: theme.textTheme.labelLarge
-                        ?.copyWith(color: _steps[index].actor.color),
+                    style: theme.textTheme.labelLarge?.copyWith(
+                      color: _steps[index].actor.color,
+                    ),
                   ),
                 ),
                 const SizedBox(width: AppSpacing.s3),
@@ -150,14 +153,16 @@ class _FlowCard extends StatelessWidget {
                     children: [
                       Text(
                         _steps[index].title,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         _steps[index].detail,
-                        style: theme.textTheme.bodySmall
-                            ?.copyWith(color: context.appColors.textSecondary),
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),

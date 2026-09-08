@@ -56,7 +56,10 @@ class _ReadOnlyBanner extends StatelessWidget {
       padding: const EdgeInsets.all(AppSpacing.s3),
       child: Row(
         children: [
-          Icon(Icons.visibility_outlined, color: context.appColors.textSecondary),
+          Icon(
+            Icons.visibility_outlined,
+            color: context.appColors.textSecondary,
+          ),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
             child: Text(
@@ -98,12 +101,18 @@ class _RequestHeader extends StatelessWidget {
           _MetaLine(label: 'Motel', value: request.motelName),
           _MetaLine(label: 'Cliente', value: request.clientName),
           _MetaLine(label: 'Tipo', value: request.type.label),
-          _MetaLine(label: 'Radicada', value: formatPqrsDateTime(request.createdAt)),
+          _MetaLine(
+            label: 'Radicada',
+            value: formatPqrsDateTime(request.createdAt),
+          ),
           _MetaLine(
             label: 'Primera respuesta',
             value: response == null ? 'Sin respuesta' : '${response.inHours} h',
           ),
-          _MetaLine(label: 'Fotos adjuntas', value: '${request.allAttachments.length}'),
+          _MetaLine(
+            label: 'Fotos adjuntas',
+            value: '${request.allAttachments.length}',
+          ),
           const SizedBox(height: AppSpacing.s3),
           PqrsStatusBadge(status: request.status),
         ],
@@ -130,13 +139,12 @@ class _MetaLine extends StatelessWidget {
             width: 132,
             child: Text(
               label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.appColors.textSecondary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
             ),
           ),
-          Expanded(
-            child: Text(value, style: theme.textTheme.bodyMedium),
-          ),
+          Expanded(child: Text(value, style: theme.textTheme.bodyMedium)),
         ],
       ),
     );

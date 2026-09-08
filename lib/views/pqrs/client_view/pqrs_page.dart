@@ -43,13 +43,13 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
 
   String? get _subjectError =>
       _validationAttempted && _subjectController.text.trim().isEmpty
-          ? 'Campo requerido'
-          : null;
+      ? 'Campo requerido'
+      : null;
 
   String? get _descriptionError =>
       _validationAttempted && _descriptionController.text.trim().isEmpty
-          ? 'Campo requerido'
-          : null;
+      ? 'Campo requerido'
+      : null;
 
   bool get _isValid =>
       _selectedType != null &&
@@ -105,7 +105,8 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => ClientPqrsDetailPage(requestId: request.id, store: _store),
+        builder: (_) =>
+            ClientPqrsDetailPage(requestId: request.id, store: _store),
       ),
     );
   }
@@ -121,8 +122,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
           listenable: _store,
           builder: (context, _) {
             final requests = _store.byClient(pqrsCurrentClientId);
-            final awaitingClosure =
-                requests.where((request) => request.canBeClosedByClient).length;
+            final awaitingClosure = requests
+                .where((request) => request.canBeClosedByClient)
+                .length;
 
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.screen),
@@ -135,8 +137,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
                 Text(
                   'Cuéntanos qué pasó y adjunta fotos de lo que encontraste. '
                   'Cuando la solución te convenza, tú cierras la solicitud.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: context.appColors.textSecondary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 if (awaitingClosure > 0) ...[
                   const SizedBox(height: AppSpacing.s4),
@@ -161,8 +164,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
                         request: request,
                         showMotel: true,
                         onTap: () => _openDetail(request),
-                        trailingHint:
-                            request.canBeClosedByClient ? 'Requiere tu cierre' : null,
+                        trailingHint: request.canBeClosedByClient
+                            ? 'Requiere tu cierre'
+                            : null,
                       ),
                     ),
                   ),
@@ -201,8 +205,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
             const SizedBox(height: AppSpacing.s2),
             Text(
               _typeError!,
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: theme.colorScheme.error),
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
             ),
           ],
           const SizedBox(height: AppSpacing.s4),

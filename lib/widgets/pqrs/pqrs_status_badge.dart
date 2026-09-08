@@ -5,7 +5,11 @@ import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 
 /// Pill showing the status of a PQRS request.
 class PqrsStatusBadge extends StatelessWidget {
-  const PqrsStatusBadge({super.key, required this.status, this.compact = false});
+  const PqrsStatusBadge({
+    super.key,
+    required this.status,
+    this.compact = false,
+  });
 
   final PqrsStatus status;
   final bool compact;
@@ -33,10 +37,11 @@ class PqrsStatusBadge extends StatelessWidget {
                 const SizedBox(width: AppSpacing.s1),
                 Text(
                   status.label,
-                  style: (compact
-                          ? Theme.of(context).textTheme.labelSmall
-                          : Theme.of(context).textTheme.labelMedium)
-                      ?.copyWith(color: status.color),
+                  style:
+                      (compact
+                              ? Theme.of(context).textTheme.labelSmall
+                              : Theme.of(context).textTheme.labelMedium)
+                          ?.copyWith(color: status.color),
                 ),
               ],
             ),

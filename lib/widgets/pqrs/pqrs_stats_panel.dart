@@ -40,8 +40,9 @@ class PqrsStatsPanel extends StatelessWidget {
             const SizedBox(height: AppSpacing.s1),
             Text(
               subtitle!,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.appColors.textSecondary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
           const SizedBox(height: AppSpacing.s4),
@@ -129,14 +130,16 @@ class _RateRing extends StatelessWidget {
                 children: [
                   Text(
                     _percent(rate),
-                    style: theme.textTheme.headlineSmall
-                        ?.copyWith(fontWeight: FontWeight.w700),
+                    style: theme.textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   Text(
                     label,
                     textAlign: TextAlign.center,
-                    style: theme.textTheme.labelSmall
-                        ?.copyWith(color: context.appColors.textSecondary),
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -211,14 +214,17 @@ class _MetricRow extends StatelessWidget {
           Flexible(
             child: Text(
               label,
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.appColors.textSecondary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
             ),
           ),
           const SizedBox(width: AppSpacing.s2),
           Text(
             value,
-            style: theme.textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+            style: theme.textTheme.titleSmall?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
           ),
         ],
       ),
@@ -252,11 +258,14 @@ class _StatusBar extends StatelessWidget {
               children: [
                 Icon(status.icon, size: 16, color: status.color),
                 const SizedBox(width: AppSpacing.s2),
-                Expanded(child: Text(status.label, style: theme.textTheme.bodySmall)),
+                Expanded(
+                  child: Text(status.label, style: theme.textTheme.bodySmall),
+                ),
                 Text(
                   '$count · ${_percent(rate)}',
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: context.appColors.textSecondary),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
               ],
             ),
