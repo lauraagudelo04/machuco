@@ -1,6 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
-import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
@@ -9,11 +7,6 @@ import 'package:machuco/views/additional_service/client_view/add_additional_serv
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
-import 'package:machuco/views/booking/booking_home_page.dart';
-import 'package:machuco/views/booking/client_view/booking_detail_page.dart';
-import 'package:machuco/views/booking/client_view/create_booking_page.dart';
-import 'package:machuco/views/booking/owner_view/owner_booking_home_page.dart';
-import 'package:machuco/views/booking/system_admin_view/system_admin_booking_home_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
@@ -52,15 +45,7 @@ abstract final class AppRoutes {
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
-      home => const BookingHomePage(),
-      createBooking => const CreateBookingPage(),
-      bookingDetail => BookingDetailPage(
-        booking: settings.arguments is Booking
-            ? settings.arguments! as Booking
-            : ClientBookingController.bookings.first,
-      ),
-      ownerBookings => const OwnerBookingHomePage(),
-      systemAdminBookings => const SystemAdminBookingHomePage(),
+      home =>  ClientMotelsPage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       adminPayments => const AdminFinancePage(),
@@ -79,7 +64,6 @@ abstract final class AppRoutes {
       ownerPqrs => const OwnerPqrsPage(),
       adminPqrs => const SystemAdminPqrsPage(),
 
-      clientMotels => const ClientMotelsPage(),
       clientMotelDetail => ClientMotelDetailPage(
         motel: settings.arguments is Motel
             ? settings.arguments! as Motel

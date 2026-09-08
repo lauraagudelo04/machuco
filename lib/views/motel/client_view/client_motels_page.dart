@@ -3,7 +3,6 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/client_controller/client_motel_controller.dart';
 import './../../../routes/routes.dart';
-import '../../booking/client_view/create_booking_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 
 class ClientMotelsPage extends StatefulWidget {
@@ -39,8 +38,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          
-          const CreateBookingPage(),
+
           
           const ClientPqrsPage(),
         ],

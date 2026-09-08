@@ -5,7 +5,7 @@ import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
 import 'package:machuco/service/auth/backend_registered_user_directory.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
-import 'package:machuco/views/booking/booking_home_page.dart';
+import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 
 enum AuthTab { login, register }
 
@@ -308,7 +308,7 @@ class _LoginPageState extends State<LoginPage> {
 
   void _goToMainMenu() {
     Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => const BookingHomePage()),
+      MaterialPageRoute<void>(builder: (_) => const ClientMotelsPage()),
       (_) => false,
     );
   }
