@@ -15,15 +15,10 @@ import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
-
+import 'package:machuco/views/review/review_administration_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
-  static const clientBookings = '/booking/client';
-  static const createBooking = '/booking/client/create';
-  static const bookingDetail = '/booking/client/detail';
-  static const ownerBookings = '/booking/owner';
-  static const systemAdminBookings = '/booking/system-admin';
   static const paymentConfirmation = '/payment/client/confirmation';
   static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
@@ -39,6 +34,7 @@ abstract final class AppRoutes {
   static const adminPqrs = '/pqrs/admin';
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
+  static const adminReviews = '/reviews/admin';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -63,13 +59,15 @@ abstract final class AppRoutes {
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
       adminPqrs => const SystemAdminPqrsPage(),
+      adminReviews => const ReviewAdministrationPage(),
 
+      clientMotels => const ClientMotelsPage(),
       clientMotelDetail => ClientMotelDetailPage(
         motel: settings.arguments is Motel
             ? settings.arguments! as Motel
             : throw Exception('Error: Se requiere pasar un objeto Motel como argumento a esta ruta.'),
       ),
-
+      
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
