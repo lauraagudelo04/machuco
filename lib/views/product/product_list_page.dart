@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 
+import '../../controllers/product/product_controller.dart';
 import '../../core/design_system/design_system.dart';
+import '../../models/product/product.dart';
+import 'product_detail_page.dart';
 import 'product_form_page.dart';
 
 class ProductListView extends StatefulWidget {
@@ -11,55 +14,75 @@ class ProductListView extends StatefulWidget {
 }
 
 class _ProductListViewState extends State<ProductListView> {
-  final List<ProductViewData> _products = [
-    const ProductViewData(
-      name: 'Gaseosa',
-      description: 'Bebida fría de 400 ml',
-      price: 6000,
-      stock: 12,
-      isAvailable: true,
-    ),
-    const ProductViewData(
-      name: 'Papas',
-      description: 'Snack personal',
-      price: 4500,
-      stock: 8,
-      isAvailable: true,
-    ),
-    const ProductViewData(
-      name: 'Kit de aseo',
-      description: 'Kit básico para huéspedes',
-      price: 12000,
-      stock: 0,
-      isAvailable: false,
-    ),
-  ];
+  late final ProductController _controller;
+
+  static const String _motelId = 'motel-001';
+
+  @override
+  void initState() {
+    super.initState();
+
+    _controller = ProductController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _openCreateView() async {
-    final product = await Navigator.of(context).push<ProductViewData>(
+    final product = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
-        builder: (_) => const ProductFormView(),
+        builder: (_) => const ProductFormView(
+          motelId: _motelId,
+        ),
       ),
     );
 
     if (!mounted || product == null) return;
-    setState(() => _products.add(product));
+
+    _controller.createProduct(product);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Producto creado correctamente.'),
+      ),
+    );
   }
 
-  Future<void> _openEditView(int index) async {
-    final product = await Navigator.of(context).push<ProductViewData>(
+  Future<void> _openEditView(Product product) async {
+    final updatedProduct = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
-        builder: (_) => ProductFormView(product: _products[index]),
+        builder: (_) => ProductFormView(
+          motelId: product.motelId,
+          product: product,
+        ),
       ),
     );
 
-    if (!mounted || product == null) return;
-    setState(() => _products[index] = product);
+    if (!mounted || updatedProduct == null) return;
+
+    _controller.updateProduct(updatedProduct);
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Producto actualizado correctamente.'),
+      ),
+    );
   }
 
-  Future<void> _confirmDelete(int index) async {
-    final product = _products[index];
+  Future<void> _openDetailView(Product product) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductDetailView(
+          product: product,
+        ),
+      ),
+    );
+  }
 
+  Future<void> _confirmDelete(Product product) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -69,11 +92,15 @@ class _ProductListViewState extends State<ProductListView> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
+            onPressed: () {
+              Navigator.of(dialogContext).pop(false);
+            },
             child: const Text('Cancelar'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
+            onPressed: () {
+              Navigator.of(dialogContext).pop(true);
+            },
             style: TextButton.styleFrom(
               foregroundColor: Theme.of(context).colorScheme.error,
             ),
@@ -85,10 +112,12 @@ class _ProductListViewState extends State<ProductListView> {
 
     if (!mounted || shouldDelete != true) return;
 
-    setState(() => _products.removeAt(index));
+    _controller.deleteProduct(product.id);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('${product.name} fue eliminado.')),
+      SnackBar(
+        content: Text('${product.name} fue eliminado.'),
+      ),
     );
   }
 
@@ -100,6 +129,7 @@ class _ProductListViewState extends State<ProductListView> {
       if (i > 0 && (text.length - i) % 3 == 0) {
         buffer.write('.');
       }
+
       buffer.write(text[i]);
     }
 
@@ -118,40 +148,50 @@ class _ProductListViewState extends State<ProductListView> {
         child: const Icon(Icons.add),
       ),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            final horizontalPadding = constraints.maxWidth < 360
-                ? AppSpacing.screenCompact
-                : AppSpacing.screen;
+        child: ListenableBuilder(
+          listenable: _controller,
+          builder: (context, child) {
+            final products = _controller.getProductsByMotel(_motelId);
 
-            if (_products.isEmpty) {
-              return AppEmptyState(
-                icon: Icons.inventory_2_outlined,
-                title: 'No hay productos',
-                message: 'Agrega el primer producto al catálogo del motel.',
-                actionLabel: 'Agregar producto',
-                onAction: _openCreateView,
-              );
-            }
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontalPadding = constraints.maxWidth < 360
+                    ? AppSpacing.screenCompact
+                    : AppSpacing.screen;
 
-            return ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                AppSpacing.s5,
-                horizontalPadding,
-                AppSpacing.s12,
-              ),
-              itemCount: _products.length,
-              separatorBuilder: (_, __) => const SizedBox(
-                height: AppSpacing.s3,
-              ),
-              itemBuilder: (context, index) {
-                final product = _products[index];
-                return _ProductCard(
-                  product: product,
-                  priceText: _formatPrice(product.price),
-                  onEdit: () => _openEditView(index),
-                  onDelete: () => _confirmDelete(index),
+                if (products.isEmpty) {
+                  return AppEmptyState(
+                    icon: Icons.inventory_2_outlined,
+                    title: 'No hay productos',
+                    message:
+                        'Agrega el primer producto al catálogo del motel.',
+                    actionLabel: 'Agregar producto',
+                    onAction: _openCreateView,
+                  );
+                }
+
+                return ListView.separated(
+                  padding: EdgeInsets.fromLTRB(
+                    horizontalPadding,
+                    AppSpacing.s5,
+                    horizontalPadding,
+                    AppSpacing.s12,
+                  ),
+                  itemCount: products.length,
+                  separatorBuilder: (_, __) => const SizedBox(
+                    height: AppSpacing.s3,
+                  ),
+                  itemBuilder: (context, index) {
+                    final product = products[index];
+
+                    return _ProductCard(
+                      product: product,
+                      priceText: _formatPrice(product.price),
+                      onTap: () => _openDetailView(product),
+                      onEdit: () => _openEditView(product),
+                      onDelete: () => _confirmDelete(product),
+                    );
+                  },
                 );
               },
             );
@@ -166,109 +206,125 @@ class _ProductCard extends StatelessWidget {
   const _ProductCard({
     required this.product,
     required this.priceText,
+    required this.onTap,
     required this.onEdit,
     required this.onDelete,
   });
 
-  final ProductViewData product;
+  final Product product;
   final String priceText;
+  final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
-    return AppCard(
-      semanticLabel: 'Producto ${product.name}',
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(
-              color: context.appColors.mediaFallback,
-              borderRadius: BorderRadius.circular(AppRadius.md),
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      child: AppCard(
+        semanticLabel: 'Producto ${product.name}',
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(
+                color: context.appColors.mediaFallback,
+                borderRadius: BorderRadius.circular(AppRadius.md),
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                Icons.inventory_2_outlined,
+                color: Theme.of(context).colorScheme.primary,
+              ),
             ),
-            alignment: Alignment.center,
-            child: Icon(
-              Icons.inventory_2_outlined,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.s3),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        product.name,
-                        style: Theme.of(context).textTheme.titleMedium,
+            const SizedBox(width: AppSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          product.name,
+                          style: Theme.of(context).textTheme.titleMedium,
+                        ),
                       ),
-                    ),
-                    StatusBadge(
-                      status: product.isAvailable && product.stock > 0
-                          ? AppStatus.available
-                          : AppStatus.outOfService,
-                      size: StatusBadgeSize.extraSmall,
+                      StatusBadge(
+                        status: product.isActive
+                            ? AppStatus.available
+                            : AppStatus.outOfService,
+                        size: StatusBadgeSize.extraSmall,
+                      ),
+                    ],
+                  ),
+                  if (product.description.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.s1),
+                    Text(
+                      product.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: Theme.of(context)
+                          .textTheme
+                          .bodySmall
+                          ?.copyWith(
+                            color: context.appColors.textSecondary,
+                          ),
                     ),
                   ],
-                ),
-                if (product.description.isNotEmpty) ...[
-                  const SizedBox(height: AppSpacing.s1),
-                  Text(
-                    product.description,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
+                  const SizedBox(height: AppSpacing.s2),
+                  Wrap(
+                    spacing: AppSpacing.s3,
+                    runSpacing: AppSpacing.s1,
+                    children: [
+                      Text(
+                        priceText,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleSmall
+                            ?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
+                      ),
+                      Text(
+                        'Stock: ${product.stock}',
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodySmall
+                            ?.copyWith(
+                              color: context.appColors.textMuted,
+                            ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      AppIconButton(
+                        icon: Icons.edit_outlined,
+                        tooltip: 'Editar ${product.name}',
+                        onPressed: onEdit,
+                      ),
+                      const SizedBox(width: AppSpacing.s2),
+                      AppIconButton(
+                        icon: Icons.delete_outline,
+                        tooltip: 'Eliminar ${product.name}',
+                        variant: AppIconButtonVariant.destructive,
+                        onPressed: onDelete,
+                      ),
+                    ],
                   ),
                 ],
-                const SizedBox(height: AppSpacing.s2),
-                Wrap(
-                  spacing: AppSpacing.s3,
-                  runSpacing: AppSpacing.s1,
-                  children: [
-                    Text(
-                      priceText,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    Text(
-                      'Stock: ${product.stock}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textMuted,
-                          ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.s3),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    AppIconButton(
-                      icon: Icons.edit_outlined,
-                      tooltip: 'Editar ${product.name}',
-                      onPressed: onEdit,
-                    ),
-                    const SizedBox(width: AppSpacing.s2),
-                    AppIconButton(
-                      icon: Icons.delete_outline,
-                      tooltip: 'Eliminar ${product.name}',
-                      variant: AppIconButtonVariant.destructive,
-                      onPressed: onDelete,
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
+
