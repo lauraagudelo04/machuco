@@ -45,3 +45,9 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+
+
+macos/Runner/DebugProfile.entitlements
+macos/Runner/Release.entitlements
+macos/Runner.xcodeproj/project.pbxproj
