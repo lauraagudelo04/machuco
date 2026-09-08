@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/booking_controller.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/models/booking.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/views/motel/client_view/client_motels_page.dart';
+import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -12,10 +15,14 @@ import 'package:machuco/views/booking/client_view/client_booking_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_booking_page.dart';
 import 'package:machuco/views/booking/system_admin_view/admin_booking_page.dart';
+import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
-import 'package:machuco/views/owner_management/owner_page.dart';
+import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
+import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -32,6 +39,12 @@ abstract final class AppRoutes {
   static const adminAdditionalServices = '/additional-service/admin';
   static const createAdminAdditionalService = '/additional-service/admin/new';
   static const ownerManagement = '/owner-management';
+  static const pqrs = '/pqrs';
+  static const clientPqrs = '/pqrs/client';
+  static const ownerPqrs = '/pqrs/owner';
+  static const adminPqrs = '/pqrs/admin';
+  static const clientMotels = '/motels/client';
+  static const clientMotelDetail = '/motels/client/detail';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -61,6 +74,18 @@ abstract final class AppRoutes {
             : null,
       ),
       ownerManagement => const OwnerPage(),
+      pqrs => const PqrsPage(),
+      clientPqrs => const ClientPqrsPage(),
+      ownerPqrs => const OwnerPqrsPage(),
+      adminPqrs => const SystemAdminPqrsPage(),
+      
+      clientMotels => const ClientMotelsPage(),
+      clientMotelDetail => ClientMotelDetailPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : throw Exception('Error: Se requiere pasar un objeto Motel como argumento a esta ruta.'),
+      ),
+      
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
