@@ -24,6 +24,7 @@ import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
+import 'package:machuco/views/review/review_administration_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -47,6 +48,7 @@ abstract final class AppRoutes {
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
   static const ownerProducts = '/products/owner';
+  static const adminReviews = '/reviews/admin';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -88,7 +90,8 @@ abstract final class AppRoutes {
           'Se requiere el motelId para acceder a los productos.',
         ),
       ),
-      
+      adminReviews => const ReviewAdministrationPage(),
+
       clientMotels => const ClientMotelsPage(),
       clientMotelDetail => ClientMotelDetailPage(
         motel: settings.arguments is Motel
