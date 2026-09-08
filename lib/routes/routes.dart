@@ -23,6 +23,7 @@ import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
+import 'package:machuco/views/review/review_administration_page.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -45,6 +46,7 @@ abstract final class AppRoutes {
   static const adminPqrs = '/pqrs/admin';
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
+  static const adminReviews = '/reviews/admin';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -78,6 +80,7 @@ abstract final class AppRoutes {
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
       adminPqrs => const SystemAdminPqrsPage(),
+      adminReviews => const ReviewAdministrationPage(),
       
       clientMotels => const ClientMotelsPage(),
       clientMotelDetail => ClientMotelDetailPage(
