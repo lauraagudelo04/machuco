@@ -19,6 +19,7 @@ import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
+import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/views/room/room_view_models.dart';
 
@@ -39,6 +40,7 @@ abstract final class AppRoutes {
   static const adminPqrs = '/pqrs/admin';
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
+  static const ownerProducts = '/products/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
   static const clientCreateBooking = '/bookings/client/new';
@@ -68,6 +70,14 @@ abstract final class AppRoutes {
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
       adminPqrs => const SystemAdminPqrsPage(),
+
+      ownerProducts => ProductListView(
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+          'Se requiere el motelId para acceder a los productos.',
+        ),
+      ),
       adminReviews => const ReviewAdministrationPage(),
 
       clientMotels => const ClientMotelsPage(),

@@ -3,10 +3,14 @@ import 'package:flutter/foundation.dart';
 import '../../models/product/product.dart';
 
 class ProductController extends ChangeNotifier {
+  ProductController._internal();
+
+  static final ProductController instance = ProductController._internal();
+
   final Map<String, Product> _products = {
     'product-001': const Product(
       id: 'product-001',
-      motelId: 'motel-001',
+      motelId: '1',
       name: 'Gaseosa',
       description: 'Bebida fría de 400 ml',
       price: 6000,
@@ -15,7 +19,7 @@ class ProductController extends ChangeNotifier {
     ),
     'product-002': const Product(
       id: 'product-002',
-      motelId: 'motel-001',
+      motelId: '1',
       name: 'Papas',
       description: 'Snack personal',
       price: 4500,
@@ -24,7 +28,7 @@ class ProductController extends ChangeNotifier {
     ),
     'product-003': const Product(
       id: 'product-003',
-      motelId: 'motel-001',
+      motelId: '2',
       name: 'Kit de aseo',
       description: 'Kit básico para huéspedes',
       price: 12000,
@@ -33,7 +37,7 @@ class ProductController extends ChangeNotifier {
     ),
     'product-004': const Product(
       id: 'product-004',
-      motelId: 'motel-001',
+      motelId: '2',
       name: 'Agua',
       description: 'Botella de agua de 600 ml',
       price: 3000,
@@ -42,7 +46,7 @@ class ProductController extends ChangeNotifier {
     ),
     'product-005': const Product(
       id: 'product-005',
-      motelId: 'motel-001',
+      motelId: '3',
       name: 'Chocolate',
       description: 'Barra de chocolate',
       price: 5000,

@@ -7,7 +7,12 @@ import 'product_detail_page.dart';
 import 'product_form_page.dart';
 
 class ProductListView extends StatefulWidget {
-  const ProductListView({super.key});
+  const ProductListView({
+    super.key,
+    required this.motelId,
+  });
+
+  final String motelId;
 
   @override
   State<ProductListView> createState() => _ProductListViewState();
@@ -16,26 +21,18 @@ class ProductListView extends StatefulWidget {
 class _ProductListViewState extends State<ProductListView> {
   late final ProductController _controller;
 
-  static const String _motelId = 'motel-001';
-
   @override
   void initState() {
     super.initState();
 
-    _controller = ProductController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+    _controller = ProductController.instance;
   }
 
   Future<void> _openCreateView() async {
     final product = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
-        builder: (_) => const ProductFormView(
-          motelId: _motelId,
+        builder: (_) => ProductFormView(
+          motelId: widget.motelId,
         ),
       ),
     );
@@ -151,7 +148,8 @@ class _ProductListViewState extends State<ProductListView> {
         child: ListenableBuilder(
           listenable: _controller,
           builder: (context, child) {
-            final products = _controller.getProductsByMotel(_motelId);
+            final products =
+            _controller.getProductsByMotel(widget.motelId);
 
             return LayoutBuilder(
               builder: (context, constraints) {
