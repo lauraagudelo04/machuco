@@ -3,6 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/client_controller/client_motel_controller.dart';
 import './../../../routes/routes.dart';
+import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 
 class ClientMotelsPage extends StatefulWidget {
@@ -15,7 +16,7 @@ class ClientMotelsPage extends StatefulWidget {
 class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedIndex = 0;
-  
+
   final ClientMotelController _motelController = ClientMotelController();
   late Future<List<Motel>> _motelsFuture;
 
@@ -38,8 +39,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-
-          
+          const ClientReservationsPage(),
           const ClientPqrsPage(),
         ],
       ),
@@ -141,8 +141,8 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                         isAvailable: motel.isAvailable,
                         onTap: () {
                           Navigator.pushNamed(
-                            context, 
-                            AppRoutes.clientMotelDetail, 
+                            context,
+                            AppRoutes.clientMotelDetail,
                             arguments: motel,
                           );
                         },

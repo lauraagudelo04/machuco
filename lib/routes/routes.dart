@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
+import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
+import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
+import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
@@ -16,6 +20,7 @@ import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
+import 'package:machuco/views/room/room_view_models.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -35,13 +40,17 @@ abstract final class AppRoutes {
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
   static const adminReviews = '/reviews/admin';
+  static const clientReservations = '/bookings/client';
+  static const clientCreateBooking = '/bookings/client/new';
+  static const clientBookingCheckout = '/bookings/client/checkout';
+  static const clientReservationDetail = '/bookings/client/detail';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
-      home =>  ClientMotelsPage(),
+      home => ClientMotelsPage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       adminPayments => const AdminFinancePage(),
@@ -65,9 +74,34 @@ abstract final class AppRoutes {
       clientMotelDetail => ClientMotelDetailPage(
         motel: settings.arguments is Motel
             ? settings.arguments! as Motel
-            : throw Exception('Error: Se requiere pasar un objeto Motel como argumento a esta ruta.'),
+            : throw Exception(
+                'Error: Se requiere pasar un objeto Motel como argumento a esta ruta.',
+              ),
       ),
-      
+
+      clientReservations => const ClientReservationsPage(),
+      clientCreateBooking => CreateBookingPage(
+        room: settings.arguments is RoomVisualData
+            ? settings.arguments! as RoomVisualData
+            : throw Exception(
+                'Error: Se requiere pasar un objeto RoomVisualData como argumento a esta ruta.',
+              ),
+      ),
+      clientBookingCheckout => BookingCheckoutPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+      clientReservationDetail => ReservationDetailPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
