@@ -53,14 +53,16 @@ class PqrsRequestCard extends StatelessWidget {
                   children: [
                     Text(
                       request.subject,
-                      style: theme.textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: theme.textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       meta.join(' · '),
-                      style: theme.textTheme.bodySmall
-                          ?.copyWith(color: context.appColors.textSecondary),
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: context.appColors.textSecondary,
+                      ),
                     ),
                   ],
                 ),
@@ -77,8 +79,9 @@ class PqrsRequestCard extends StatelessWidget {
             request.description,
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.bodyMedium
-                ?.copyWith(color: context.appColors.textSecondary),
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Wrap(
@@ -101,8 +104,9 @@ class PqrsRequestCard extends StatelessWidget {
               if (trailingHint != null)
                 Text(
                   trailingHint!,
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: theme.colorScheme.primary),
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.primary,
+                  ),
                 ),
             ],
           ),
@@ -113,7 +117,11 @@ class PqrsRequestCard extends StatelessWidget {
 }
 
 class _MetaChip extends StatelessWidget {
-  const _MetaChip({required this.icon, required this.label, required this.tooltip});
+  const _MetaChip({
+    required this.icon,
+    required this.label,
+    required this.tooltip,
+  });
 
   final IconData icon;
   final String label;
@@ -134,8 +142,8 @@ class _MetaChip extends StatelessWidget {
               Text(
                 label,
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ],
           ),

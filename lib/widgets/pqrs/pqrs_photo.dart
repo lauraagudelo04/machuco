@@ -21,7 +21,8 @@ class PqrsPhotoTile extends StatelessWidget {
     final tint = HSLColor.fromAHSL(1, (hue + 40) % 360, .5, .48).toColor();
 
     return Semantics(
-      label: 'Foto ${attachment.label}, adjuntada por ${attachment.author.label}',
+      label:
+          'Foto ${attachment.label}, adjuntada por ${attachment.author.label}',
       image: true,
       child: ExcludeSemantics(
         child: Tooltip(
@@ -60,10 +61,9 @@ class PqrsPhotoTile extends StatelessWidget {
                       attachment.author.label,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelSmall
-                          ?.copyWith(color: Colors.white),
+                      style: Theme.of(
+                        context,
+                      ).textTheme.labelSmall?.copyWith(color: Colors.white),
                     ),
                   ),
                 ),

@@ -151,10 +151,10 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 height: 120,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: context.appColors.mediaFallback ?? Colors.grey.shade200,
+                  color: context.appColors.mediaFallback,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: context.appColors.border ?? Colors.grey.shade400,
+                    color: context.appColors.border,
                     style: BorderStyle.solid,
                   ),
                 ),

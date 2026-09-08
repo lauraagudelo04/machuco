@@ -27,12 +27,14 @@ class PqrsUpdateComposer extends StatefulWidget {
   final String submitLabel;
 
   /// Receives the message and the simulated photos attached to it.
-  final void Function(String message, List<PqrsAttachment> attachments) onSubmit;
+  final void Function(String message, List<PqrsAttachment> attachments)
+  onSubmit;
 
   /// Optional second action, e.g. "Marcar como solucionada" or "Cerrar".
   final String? secondaryLabel;
   final IconData? secondaryIcon;
-  final void Function(String message, List<PqrsAttachment> attachments)? onSecondary;
+  final void Function(String message, List<PqrsAttachment> attachments)?
+  onSecondary;
 
   @override
   State<PqrsUpdateComposer> createState() => _PqrsUpdateComposerState();
@@ -50,7 +52,9 @@ class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
   }
 
   String? get _messageError =>
-      _validationAttempted && _controller.text.trim().isEmpty ? 'Escribe un mensaje' : null;
+      _validationAttempted && _controller.text.trim().isEmpty
+      ? 'Escribe un mensaje'
+      : null;
 
   void _attachPhoto() {
     setState(() {
@@ -89,8 +93,9 @@ class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
           const SizedBox(height: AppSpacing.s1),
           Text(
             'Escribes como ${widget.author.label.toLowerCase()}.',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: context.appColors.textSecondary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s4),
           AppTextField(

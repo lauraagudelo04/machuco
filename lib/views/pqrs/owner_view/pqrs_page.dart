@@ -12,7 +12,11 @@ import 'pqrs_detail_page.dart';
 ///
 /// The owner never closes a request: closing belongs to the client.
 class OwnerPqrsPage extends StatefulWidget {
-  const OwnerPqrsPage({super.key, this.store, this.motelId = pqrsCurrentMotelId});
+  const OwnerPqrsPage({
+    super.key,
+    this.store,
+    this.motelId = pqrsCurrentMotelId,
+  });
 
   final PqrsController? store;
   final String motelId;
@@ -29,7 +33,8 @@ class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) => OwnerPqrsDetailPage(requestId: request.id, store: _store),
+        builder: (_) =>
+            OwnerPqrsDetailPage(requestId: request.id, store: _store),
       ),
     );
   }
@@ -48,7 +53,9 @@ class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
             final stats = PqrsStats.from(requests);
             final visible = _filter == null
                 ? requests
-                : requests.where((request) => request.status == _filter).toList();
+                : requests
+                      .where((request) => request.status == _filter)
+                      .toList();
 
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.screen),
@@ -58,19 +65,24 @@ class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
                 Text(
                   'Responde, adjunta el avance con fotos y marca la solicitud como '
                   'solucionada. El cierre definitivo lo hace el cliente.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: context.appColors.textSecondary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s5),
                 PqrsStatsPanel(
                   stats: stats,
                   title: 'Mi desempeño en PQRS',
-                  subtitle: 'Indicadores calculados sobre las solicitudes de tu motel.',
+                  subtitle:
+                      'Indicadores calculados sobre las solicitudes de tu motel.',
                   highlightLabel: 'Atendidas',
                   highlightRate: stats.attentionRate,
                 ),
                 const SizedBox(height: AppSpacing.s6),
-                Text('Bandeja de solicitudes', style: theme.textTheme.headlineSmall),
+                Text(
+                  'Bandeja de solicitudes',
+                  style: theme.textTheme.headlineSmall,
+                ),
                 const SizedBox(height: AppSpacing.s3),
                 _StatusFilter(
                   selected: _filter,
@@ -81,7 +93,8 @@ class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
                   const AppEmptyState(
                     icon: Icons.inbox_outlined,
                     title: 'Sin solicitudes',
-                    message: 'No hay PQRS que coincidan con el filtro seleccionado.',
+                    message:
+                        'No hay PQRS que coincidan con el filtro seleccionado.',
                   )
                 else
                   ...visible.map(
@@ -94,8 +107,8 @@ class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
                         trailingHint: request.status == PqrsStatus.pending
                             ? 'Sin atender'
                             : request.status == PqrsStatus.resolved
-                                ? 'Esperando al cliente'
-                                : null,
+                            ? 'Esperando al cliente'
+                            : null,
                       ),
                     ),
                   ),
