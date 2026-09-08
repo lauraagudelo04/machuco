@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/design_system/design_system.dart';
+import '../../models/product/product.dart';
 
 class ProductViewData {
   const ProductViewData({
@@ -19,9 +20,14 @@ class ProductViewData {
 }
 
 class ProductFormView extends StatefulWidget {
-  const ProductFormView({super.key, this.product});
+  const ProductFormView({
+    super.key,
+    this.product,
+    required this.motelId,
+  });
 
-  final ProductViewData? product;
+  final Product? product;
+  final String motelId;
 
   bool get isEditing => product != null;
 
@@ -72,28 +78,38 @@ class _ProductFormViewState extends State<ProductFormView> {
     final stock = int.tryParse(_stockController.text.trim());
 
     setState(() {
-      _nameError = name.isEmpty ? 'El nombre es obligatorio' : null;
+      _nameError = name.isEmpty
+          ? 'El nombre es obligatorio'
+          : null;
+
       _priceError = price == null || price < 0
           ? 'Ingresa un precio válido'
           : null;
+
       _stockError = stock == null || stock < 0
           ? 'Ingresa un stock válido'
           : null;
     });
 
-    if (_nameError != null || _priceError != null || _stockError != null) {
+    if (_nameError != null ||
+        _priceError != null ||
+        _stockError != null) {
       return;
     }
 
-    Navigator.of(context).pop(
-      ProductViewData(
-        name: name,
-        description: _descriptionController.text.trim(),
-        price: price!,
-        stock: stock!,
-        isAvailable: _isAvailable,
-      ),
+    final product = Product(
+      id: widget.product?.id ??
+          'product-${DateTime.now().millisecondsSinceEpoch}',
+      motelId: widget.motelId,
+      name: name,
+      description: _descriptionController.text.trim(),
+      price: price!,
+      stock: stock!,
+      isAvailable: _isAvailable,
+      imageUrl: widget.product?.imageUrl,
     );
+
+    Navigator.of(context).pop(product);
   }
 
   @override

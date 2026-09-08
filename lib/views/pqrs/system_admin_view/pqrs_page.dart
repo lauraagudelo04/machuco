@@ -50,7 +50,8 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
                 child: AppEmptyState(
                   icon: Icons.apartment_outlined,
                   title: 'Sin moteles',
-                  message: 'Todavía no hay moteles con solicitudes registradas.',
+                  message:
+                      'Todavía no hay moteles con solicitudes registradas.',
                 ),
               );
             }
@@ -62,13 +63,17 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.screen),
               children: [
-                Text('Supervisión de PQRS', style: theme.textTheme.headlineMedium),
+                Text(
+                  'Supervisión de PQRS',
+                  style: theme.textTheme.headlineMedium,
+                ),
                 const SizedBox(height: AppSpacing.s2),
                 Text(
                   'Consulta en solo lectura: revisas el detalle, el estado y el '
                   'comportamiento estadístico de cada motel.',
-                  style: theme.textTheme.bodyMedium
-                      ?.copyWith(color: context.appColors.textSecondary),
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s5),
                 _MotelSelector(
@@ -80,12 +85,16 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
                 PqrsStatsPanel(
                   stats: stats,
                   title: 'Comportamiento del motel',
-                  subtitle: 'Porcentajes calculados sobre las PQRS del motel seleccionado.',
+                  subtitle:
+                      'Porcentajes calculados sobre las PQRS del motel seleccionado.',
                   highlightLabel: 'Solucionadas',
                   highlightRate: stats.resolutionRate,
                 ),
                 const SizedBox(height: AppSpacing.s6),
-                Text('Solicitudes del motel', style: theme.textTheme.headlineSmall),
+                Text(
+                  'Solicitudes del motel',
+                  style: theme.textTheme.headlineSmall,
+                ),
                 const SizedBox(height: AppSpacing.s3),
                 if (requests.isEmpty)
                   const AppEmptyState(

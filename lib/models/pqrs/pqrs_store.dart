@@ -61,7 +61,8 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-001-t2',
             author: PqrsActor.owner,
-            message: 'Instalamos burletes en las puertas del pasillo. Adjuntamos el avance.',
+            message:
+                'Instalamos burletes en las puertas del pasillo. Adjuntamos el avance.',
             createdAt: ago(3),
             attachments: [
               PqrsAttachment.simulated(
@@ -75,7 +76,8 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-001-t3',
             author: PqrsActor.client,
-            message: 'Gracias, sigo atenta. Aún se escucha algo desde la habitación contigua.',
+            message:
+                'Gracias, sigo atenta. Aún se escucha algo desde la habitación contigua.',
             createdAt: ago(2),
           ),
         ],
@@ -126,7 +128,8 @@ class PqrsStore {
         clientName: 'Luis Gómez',
         type: PqrsType.peticion,
         subject: 'Solicitud de factura electrónica',
-        description: 'Necesito la factura electrónica de mi reserva del 2 de agosto.',
+        description:
+            'Necesito la factura electrónica de mi reserva del 2 de agosto.',
         createdAt: ago(1, hours: 4),
         status: PqrsStatus.pending,
       ),
@@ -152,14 +155,16 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-004-t2',
             author: PqrsActor.owner,
-            message: 'Ampliamos la recepción hasta las 2:00 a. m. desde este mes.',
+            message:
+                'Ampliamos la recepción hasta las 2:00 a. m. desde este mes.',
             createdAt: ago(16),
             statusChange: PqrsStatus.resolved,
           ),
           PqrsTraceEntry(
             id: 'pqrs-004-t3',
             author: PqrsActor.client,
-            message: 'Excelente, la solución cubre lo que necesitaba. Cierro la solicitud.',
+            message:
+                'Excelente, la solución cubre lo que necesitaba. Cierro la solicitud.',
             createdAt: ago(15),
             statusChange: PqrsStatus.closed,
           ),
@@ -173,7 +178,8 @@ class PqrsStore {
         clientName: 'Marta Ruiz',
         type: PqrsType.queja,
         subject: 'Aire acondicionado sin funcionar',
-        description: 'El aire acondicionado de la habitación 108 no encendió durante la noche.',
+        description:
+            'El aire acondicionado de la habitación 108 no encendió durante la noche.',
         createdAt: ago(12),
         status: PqrsStatus.rejected,
         trace: [
@@ -195,14 +201,16 @@ class PqrsStore {
         clientName: 'Jorge Salas',
         type: PqrsType.reclamo,
         subject: 'Demora en el check-in',
-        description: 'Esperé cuarenta minutos para recibir la llave de la habitación.',
+        description:
+            'Esperé cuarenta minutos para recibir la llave de la habitación.',
         createdAt: ago(2, hours: 6),
         status: PqrsStatus.inProgress,
         trace: [
           PqrsTraceEntry(
             id: 'pqrs-006-t1',
             author: PqrsActor.owner,
-            message: 'Estamos reforzando el turno de recepción los fines de semana.',
+            message:
+                'Estamos reforzando el turno de recepción los fines de semana.',
             createdAt: ago(2),
             statusChange: PqrsStatus.inProgress,
           ),
