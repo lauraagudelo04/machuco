@@ -43,7 +43,9 @@ class PqrsController extends ChangeNotifier {
     for (final request in _requests) {
       seen[request.motelId] = request.motelName;
     }
-    return [for (final entry in seen.entries) (id: entry.key, name: entry.value)];
+    return [
+      for (final entry in seen.entries) (id: entry.key, name: entry.value),
+    ];
   }
 
   /// Registers a new request opened by a client.
@@ -110,7 +112,9 @@ class PqrsController extends ChangeNotifier {
   }) {
     final request = _mutable(requestId);
     if (request.status == PqrsStatus.resolved) {
-      throw StateError('La solicitud ${request.id} ya está marcada como solucionada.');
+      throw StateError(
+        'La solicitud ${request.id} ya está marcada como solucionada.',
+      );
     }
 
     _append(
@@ -181,7 +185,11 @@ class PqrsController extends ChangeNotifier {
     return request;
   }
 
-  void _append(PqrsRequest request, PqrsTraceEntry entry, {PqrsStatus? status}) {
+  void _append(
+    PqrsRequest request,
+    PqrsTraceEntry entry, {
+    PqrsStatus? status,
+  }) {
     final index = _requests.indexWhere((item) => item.id == request.id);
     _requests[index] = request.copyWith(
       status: status,

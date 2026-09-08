@@ -40,7 +40,9 @@ class OwnerPqrsDetailPage extends StatelessWidget {
     );
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Marcada como solucionada. El cliente debe confirmar el cierre.'),
+        content: Text(
+          'Marcada como solucionada. El cliente debe confirmar el cierre.',
+        ),
       ),
     );
   }
@@ -54,7 +56,9 @@ class OwnerPqrsDetailPage extends StatelessWidget {
 
     _store.reject(requestId: requestId, message: reason);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Solicitud rechazada con la justificación registrada.')),
+      const SnackBar(
+        content: Text('Solicitud rechazada con la justificación registrada.'),
+      ),
     );
   }
 
@@ -81,7 +85,8 @@ class OwnerPqrsDetailPage extends StatelessWidget {
                   PqrsUpdateComposer(
                     author: PqrsActor.owner,
                     title: 'Registrar avance',
-                    hint: 'Describe la gestión realizada y adjunta el avance...',
+                    hint:
+                        'Describe la gestión realizada y adjunta el avance...',
                     submitLabel: 'Enviar avance',
                     secondaryLabel: request.status == PqrsStatus.resolved
                         ? null
@@ -91,7 +96,7 @@ class OwnerPqrsDetailPage extends StatelessWidget {
                     onSecondary: request.status == PqrsStatus.resolved
                         ? null
                         : (message, attachments) =>
-                            _markResolved(context, message, attachments),
+                              _markResolved(context, message, attachments),
                   ),
                   const SizedBox(height: AppSpacing.s4),
                   _ClosureNotice(status: request.status),
@@ -139,15 +144,17 @@ class _RequestHeader extends StatelessWidget {
           Text(
             '${request.type.label} · ${request.clientName} · '
             'Radicada el ${formatPqrsDate(request.createdAt)}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: context.appColors.textSecondary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           if (response != null) ...[
             const SizedBox(height: AppSpacing.s1),
             Text(
               'Primera respuesta a las ${response.inHours} h de radicada.',
-              style: theme.textTheme.bodySmall
-                  ?.copyWith(color: context.appColors.textSecondary),
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
           const SizedBox(height: AppSpacing.s3),

@@ -18,7 +18,9 @@ final class BackendRegisteredUserDirectory implements RegisteredUserDirectory {
 
   static String _normalizeUrl(String baseUrl, String usersPath) {
     final trimmedBase = baseUrl.trim().replaceAll(RegExp(r'/+$'), '');
-    final normalizedPath = usersPath.startsWith('/') ? usersPath : '/$usersPath';
+    final normalizedPath = usersPath.startsWith('/')
+        ? usersPath
+        : '/$usersPath';
     return '$trimmedBase$normalizedPath';
   }
 
