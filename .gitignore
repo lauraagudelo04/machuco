@@ -10,15 +10,11 @@
 .history
 .svn/
 .swiftpm/
-.claude/
 .agents/
 .docs/
 migrate_working_dir/
 test/
 openspec/
-CLAUDE.md
-README_AGENTES_CLAUDE.md
-contexts/
 
 # IntelliJ related
 *.iml
