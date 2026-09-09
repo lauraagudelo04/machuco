@@ -5,6 +5,7 @@ import 'package:machuco/models/review/review_type.dart';
 class ReviewsController extends ChangeNotifier {
   final List<Review> _reviews = [
     Review(
+      parentId: "M1",
       author: 'Carlos M.',
       title: 'Muy cómodo y tranquilo',
       body: 'Las habitaciones estaban limpias y el personal fue muy amable. La cama súper cómoda.',
@@ -13,6 +14,7 @@ class ReviewsController extends ChangeNotifier {
       type: ReviewType.motel
     ),
     Review(
+      parentId: "M1",
       author: 'Luisa P.',
       title: 'Buena ubicación',
       body: 'Está bien ubicado, cerca de todo. El precio es justo para lo que ofrece.',
@@ -21,6 +23,7 @@ class ReviewsController extends ChangeNotifier {
       type: ReviewType.motel
     ),
     Review(
+      parentId: "M1",
       author: 'Roberto V.',
       title: 'Aceptable',
       body: 'Correcto para una noche. El wifi un poco lento pero el resto bien.',
@@ -29,6 +32,7 @@ class ReviewsController extends ChangeNotifier {
       type: ReviewType.motel
     ),
     Review(
+      parentId: "R1",
       author: 'Roberto V.',
       title: 'Aceptable',
       body: 'Un poco desorganizada pero el ambiente se sentia bien.',
@@ -38,12 +42,12 @@ class ReviewsController extends ChangeNotifier {
     ),
   ];
 
-  List<Review> getReviewsByType(ReviewType type) {
-    return _reviews.where((review) => review.type == type).toList();
+  List<Review> getReviewsByType(ReviewType type, String parentId) {
+    return _reviews.where((review) => review.type == type && review.parentId == parentId).toList();
   }
 
-  double getAverageByType(ReviewType type) {
-    final filtered = getReviewsByType(type);
+  double getAverageByType(ReviewType type, String parentId) {
+    final filtered = getReviewsByType(type, parentId);
     if (filtered.isEmpty) return 0.0;
     
     final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
