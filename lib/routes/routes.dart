@@ -7,6 +7,8 @@ import 'package:machuco/views/booking/client_view/client_reservations_page.dart'
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -42,6 +44,8 @@ abstract final class AppRoutes {
   static const adminPqrs = '/pqrs/admin';
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
+  static const ownerMotels = '/motels/owner';
+  static const ownerMotelDetail = '/motels/owner/detail';
   static const ownerProducts = '/products/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
@@ -90,6 +94,13 @@ abstract final class AppRoutes {
             : throw Exception(
                 'Error: Se requiere pasar un objeto Motel como argumento a esta ruta.',
               ),
+      ),
+
+      ownerMotels => const OwnerMotelsPage(),
+      ownerMotelDetail => OwnerMotelFormPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : null,
       ),
 
       clientReservations => const ClientReservationsPage(),

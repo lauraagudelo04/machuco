@@ -4,7 +4,6 @@ import './../../../models/motel/motel_model.dart';
 import './../../../routes/routes.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
-  // Ahora recibimos el objeto Motel completo en lugar de solo el nombre
   const ClientMotelDetailPage({super.key, required this.motel});
 
   final Motel motel;
@@ -29,8 +28,8 @@ class ClientMotelDetailPage extends StatelessWidget {
               color: context.appColors.mediaFallback,
               child: Center(
                 child: motel.imageUrls.isNotEmpty 
-                    ? const Icon(Icons.image, size: 64, color: Colors.white) // Simulación de imagen real
-                    : const Icon(Icons.hotel, size: 64, color: Colors.white), // Fallback
+                    ? const Icon(Icons.image, size: 64, color: Colors.white) 
+                    : const Icon(Icons.hotel, size: 64, color: Colors.white), 
               ),
             ),
             Padding(
@@ -73,22 +72,25 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium, 
                         expanded: false, 
                         onPressed: () {
-                          // TODO: Navegar a la lista de habitaciones pasando el motel.id
+                          // Navegación pasando el ID del motel (o el objeto si tus rutas lo prefieren)
+                          // Ejemplo usando ruta nombrada y enviando el id como argumento tipo String:
+                          // Navigator.pushNamed(context, AppRoutes.clientRooms, arguments: motel.id);
                         },
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
-                  // Descripción (Sigue quemada porque no está en el modelo, podríamos agregarla luego)
+                  
+                  // --- DESCRIPCIÓN DINÁMICA (Manejo seguro por si es nula) ---
                   Text(
-                    'Disfruta de nuestras instalaciones de lujo, diseñadas para tu máximo confort y privacidad. Contamos con servicio a la habitación 24/7 y parqueadero privado.',
+                    motel.description ?? 'Sin descripción disponible para este establecimiento.', 
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: context.appColors.textSecondary,
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s5),
                   
-                  // NUEVA SECCIÓN: Información y Contacto (Usando los datos del modelo)
+                  // SECCIÓN: Información y Contacto (Usando los datos del modelo)
                   Text('Información y Contacto', style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
                   _InfoRow(icon: Icons.phone_outlined, label: 'Teléfono', value: motel.phone),
@@ -98,6 +100,13 @@ class ClientMotelDetailPage extends StatelessWidget {
                   _InfoRow(icon: Icons.domain_outlined, label: 'NIT', value: motel.nit),
                   const SizedBox(height: AppSpacing.s2),
                   _InfoRow(icon: Icons.bed_outlined, label: 'Capacidad', value: '${motel.roomCount} habitaciones en total'),
+                  
+                  // Si el motel tiene generalLocation, lo mostramos opcionalmente de forma limpia
+                  if (motel.generalLocation != null && motel.generalLocation!.isNotEmpty) ...[
+                    const SizedBox(height: AppSpacing.s2),
+                    _InfoRow(icon: Icons.location_on_outlined, label: 'Ubicación', value: motel.generalLocation!),
+                  ],
+
                   const SizedBox(height: AppSpacing.s5),
 
                   // Métodos de Pago dinámicos
@@ -169,7 +178,6 @@ class ClientMotelDetailPage extends StatelessWidget {
 
 // --- Componentes Privados Auxiliares ---
 
-// Nuevo widget para mostrar filas de información con ícono
 class _InfoRow extends StatelessWidget {
   const _InfoRow({required this.icon, required this.label, required this.value});
   
