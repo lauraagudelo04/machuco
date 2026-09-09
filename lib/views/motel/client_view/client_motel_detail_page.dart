@@ -69,14 +69,16 @@ class ClientMotelDetailPage extends StatelessWidget {
                       Text('Descripción', style: Theme.of(context).textTheme.headlineSmall),
                       AppButton(
                         label: 'Ver habitaciones',
-                        size: AppButtonSize.medium, 
-                        expanded: false, 
+                        size: AppButtonSize.medium,
+                        expanded: false,
                         onPressed: () {
-                          // Navegación pasando el ID del motel (o el objeto si tus rutas lo prefieren)
-                          // Ejemplo usando ruta nombrada y enviando el id como argumento tipo String:
-                          // Navigator.pushNamed(context, AppRoutes.clientRooms, arguments: motel.id);
+                          //Navigator.pushNamed(
+                            //context,
+                            //AppRoutes.clientRooms,
+                            //arguments: motel, // Pasa el objeto Motel que ya recibe ClientMotelDetailPage
+                          //);
                         },
-                      ),
+                      )
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),

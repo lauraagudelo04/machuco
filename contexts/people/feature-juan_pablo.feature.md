@@ -26,7 +26,7 @@ And el formulario muestra en la cabecera la información del motel y de la habit
 
 Scenario: Cliente completa el formulario de reserva (Camino feliz)
 Given un cliente autenticado en el formulario de reserva de una habitación
-When define su estancia eligiendo entre dos modalidades: fecha/hora de entrada y fecha/hora de salida, o fecha de entrada con un bloque de máximo 8 horas
+When define su estancia eligiendo fecha/hora de entrada y fecha/hora de salida
 And ajusta la cantidad de personas sin superar el límite máximo permitido por la habitación
 And agrega de forma opcional servicios adicionales ofrecidos por el motel
 And agrega de forma opcional uno o más productos para la habitación

@@ -6,13 +6,15 @@ import 'star_rating_selector.dart';
 
 class AddReviewSheet extends StatefulWidget {
   final ReviewType reviewType;
+  final String parentId;
   final void Function(Review review) onSave;
 
-  const AddReviewSheet({super.key, required this.onSave, required this.reviewType});
+  const AddReviewSheet({super.key, required this.onSave, required this.reviewType, required this.parentId});
 
   static Future<void> show(
     BuildContext context, {
     required ReviewType reviewType,
+    required String parentId,
     required void Function(Review review) onSave,
   }) {
     return showModalBottomSheet(
@@ -20,7 +22,7 @@ class AddReviewSheet extends StatefulWidget {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => AddReviewSheet(onSave: onSave, reviewType: reviewType,),
+      builder: (_) => AddReviewSheet(onSave: onSave, reviewType: reviewType, parentId: parentId),
     );
   }
 
@@ -49,6 +51,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
     widget.onSave(
       Review(
+        parentId: widget.parentId,
         author: 'Tú',
         title: title,
         body: body,
