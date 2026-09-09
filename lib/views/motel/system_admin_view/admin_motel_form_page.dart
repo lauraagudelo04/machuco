@@ -7,7 +7,7 @@ class OwnerMotelFormPage extends StatefulWidget {
     super.key, 
     this.isEditing = false, 
     this.motel,
-    this.ownerId, // Recibimos el ID del propietario actual
+    this.ownerId, 
   });
 
   final bool isEditing;
@@ -43,8 +43,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       _nitController.text = widget.motel!.nit;
       _addressController.text = widget.motel!.address;
       _phoneController.text = widget.motel!.phone;
-      // Solucionado el error de nulos usando el operador ?? ''
-      _descriptionController.text = widget.motel!.description ?? '';         
+      _descriptionController.text = widget.motel!.description ?? '';        
       _generalLocationController.text = widget.motel!.generalLocation ?? '';   
       _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
       _imageUrls = List.from(widget.motel!.imageUrls);
@@ -81,7 +80,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
 
     final Motel motelToSave = Motel(
       id: widget.isEditing && widget.motel != null ? widget.motel!.id : 'motel_${DateTime.now().millisecondsSinceEpoch}',
-      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner_1', // Incluido el ownerId requerido
+      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner_1', 
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       roomCount: roomCountParsed,
