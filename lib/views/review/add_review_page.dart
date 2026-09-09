@@ -80,6 +80,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
               onPressed: () => AddReviewSheet.show(
                 context,
                 onSave: (review) => _controller.addReview(review),
+                reviewType: widget.reviewType
               ),
             ),
             const SizedBox(height: AppSpacing.s4),
