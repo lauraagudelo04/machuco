@@ -3,8 +3,8 @@ import 'package:machuco/models/additional_service/additional_service.dart';
 
 // Datos de salida del controlador: un record de Dart, sin exponer el modelo.
 typedef AdditionalServiceData = ({
-  int id,
-  int motelId,
+  String id,
+  String motelId,
   String name,
   String description,
   String category,
@@ -15,13 +15,13 @@ typedef AdditionalServiceData = ({
 class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
   AdditionalServiceSystemAdministratorController({required this.motelId});
 
-  final int motelId;
+  final String motelId;
 
   // Datos temporales en memoria, compartidos al volver a abrir una vista.
   static const List<AdditionalService> _motel1Services = [
     AdditionalService(
-      id: 1,
-      motelId: 1,
+      id: '1',
+      motelId: '1',
       name: 'Decoración romántica',
       description: 'Pétalos, globos y velas para la habitación.',
       category: 'Experiencias',
@@ -29,8 +29,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 2,
-      motelId: 1,
+      id: '2',
+      motelId: '1',
       name: 'Desayuno para dos',
       description: 'Desayuno completo entregado en la habitación.',
       category: 'Alimentación',
@@ -38,8 +38,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 3,
-      motelId: 1,
+      id: '3',
+      motelId: '1',
       name: 'Salida extendida',
       description: 'Dos horas adicionales de estadía.',
       category: 'Estadía',
@@ -50,8 +50,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
 
   static const List<AdditionalService> _motel2Services = [
     AdditionalService(
-      id: 4,
-      motelId: 2,
+      id: '4',
+      motelId: '2',
       name: 'Limpieza adicional',
       description: 'Limpieza de la habitación durante la estadía.',
       category: 'Servicios',
@@ -59,8 +59,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 5,
-      motelId: 2,
+      id: '5',
+      motelId: '2',
       name: 'Cena para dos',
       description: 'Cena especial con bebida para dos personas.',
       category: 'Alimentación',
@@ -68,8 +68,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 6,
-      motelId: 2,
+      id: '6',
+      motelId: '2',
       name: 'Masaje relajante',
       description: 'Sesión de masaje de treinta minutos.',
       category: 'Bienestar',
@@ -80,8 +80,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
 
   static const List<AdditionalService> _motel3Services = [
     AdditionalService(
-      id: 7,
-      motelId: 3,
+      id: '7',
+      motelId: '3',
       name: 'Acceso al jacuzzi',
       description: 'Una hora de uso privado del jacuzzi.',
       category: 'Bienestar',
@@ -89,8 +89,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 8,
-      motelId: 3,
+      id: '8',
+      motelId: '3',
       name: 'Tabla de pasabocas',
       description: 'Selección de pasabocas para compartir.',
       category: 'Alimentación',
@@ -98,8 +98,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       active: true,
     ),
     AdditionalService(
-      id: 9,
-      motelId: 3,
+      id: '9',
+      motelId: '3',
       name: 'Decoración de cumpleaños',
       description: 'Globos y decoración para una celebración.',
       category: 'Celebraciones',
@@ -113,7 +113,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     ..._motel2Services,
     ..._motel3Services,
   ];
-  static int _nextServiceId = 10;
+  static int _nextServiceSequence = 10;
 
   String? _nameError;
   String? _descriptionError;
@@ -123,7 +123,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
   List<AdditionalServiceData> get services =>
       getAdditionalServicesByMotelId(motelId);
 
-  List<AdditionalServiceData> getAdditionalServicesByMotelId(int motelId) =>
+  List<AdditionalServiceData> getAdditionalServicesByMotelId(String motelId) =>
       List.unmodifiable(
         _services
             .where((service) => service.motelId == motelId)
@@ -132,11 +132,11 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
 
   /// Consulta solo los servicios activos del motel indicado.
   /// Devuelve una lista de solo lectura, vacia si no hay coincidencias.
-  List<AdditionalServiceData> getActiveAdditionalServicesByMotelId(int motelId) =>
-      List.unmodifiable(
-        getAdditionalServicesByMotelId(motelId)
-            .where((service) => service.active),
-      );
+  List<AdditionalServiceData> getActiveAdditionalServicesByMotelId(
+    String motelId,
+  ) => List.unmodifiable(
+    getAdditionalServicesByMotelId(motelId).where((service) => service.active),
+  );
 
   AdditionalServiceData _prepareServiceData(AdditionalService service) => (
     id: service.id,
@@ -148,7 +148,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     active: service.active,
   );
 
-  AdditionalServiceData? getAdditionalServiceById(int serviceId) {
+  AdditionalServiceData? getAdditionalServiceById(String serviceId) {
     for (final service in _services) {
       if (service.id == serviceId && service.motelId == motelId) {
         return _prepareServiceData(service);
@@ -157,7 +157,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     return null;
   }
 
-  List<String> getAdditionalServiceCategoriesByMotelId(int motelId) {
+  List<String> getAdditionalServiceCategoriesByMotelId(String motelId) {
     final categories = getAdditionalServicesByMotelId(
       motelId,
     ).map((service) => service.category).toSet().toList()..sort();
@@ -197,7 +197,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
   }
 
   bool saveAdditionalService({
-    int? serviceId,
+    String? serviceId,
     required String name,
     required String description,
     required String category,
@@ -230,7 +230,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     if (serviceId == null) {
       _services.add(
         AdditionalService(
-          id: _nextServiceId++,
+          id: (_nextServiceSequence++).toString(),
           motelId: motelId,
           name: normalizedName,
           description: normalizedDescription,
@@ -255,7 +255,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     return true;
   }
 
-  void toggleAdditionalServiceActive(int serviceId) {
+  void toggleAdditionalServiceActive(String serviceId) {
     final index = _services.indexWhere(
       (item) => item.id == serviceId && item.motelId == motelId,
     );
@@ -265,7 +265,7 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void deleteAdditionalService(int serviceId) {
+  void deleteAdditionalService(String serviceId) {
     _services.removeWhere(
       (item) => item.id == serviceId && item.motelId == motelId,
     );

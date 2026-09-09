@@ -13,7 +13,7 @@ class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
     this.controller,
   });
 
-  final int? motelId;
+  final String? motelId;
 
   final AdditionalServiceSystemAdministratorController? controller;
 
@@ -44,7 +44,8 @@ class _AdditionalServiceSystemAdministratorPageState
     _controller =
         widget.controller ??
         AdditionalServiceSystemAdministratorController(
-          motelId: widget.motelId ?? (routeArgument is int ? routeArgument : 1),
+          motelId:
+              widget.motelId ?? (routeArgument is String ? routeArgument : '1'),
         );
     _controllerInitialized = true;
     _controller.addListener(_refresh);
