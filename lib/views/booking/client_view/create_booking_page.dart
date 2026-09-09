@@ -58,7 +58,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     super.initState();
     _bookingController = ClientBookingController();
     _servicesController = AdditionalServiceClientController();
-    _productsController = ProductController.instance;
+    _productsController = ProductController();
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
     _externalBlocked = widget.room.reservations
         .map((r) => BlockedRange(r.startDateTime, r.endDateTime))
