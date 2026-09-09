@@ -87,6 +87,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
 
             Expanded(
               child: ListView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
                 padding: EdgeInsets.zero,
                 itemCount: reviews.length,
                 itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
