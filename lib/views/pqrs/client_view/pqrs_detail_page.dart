@@ -31,7 +31,9 @@ class ClientPqrsDetailPage extends StatelessWidget {
   void _close(BuildContext context, String message) {
     _store.closeByClient(requestId: requestId, message: message);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Solicitud cerrada. Gracias por confirmar.')),
+      const SnackBar(
+        content: Text('Solicitud cerrada. Gracias por confirmar.'),
+      ),
     );
   }
 
@@ -63,14 +65,16 @@ class ClientPqrsDetailPage extends StatelessWidget {
                     secondaryLabel: request.canBeClosedByClient
                         ? 'Confirmar solución y cerrar'
                         : null,
-                    secondaryIcon:
-                        request.canBeClosedByClient ? Icons.lock_outline : null,
+                    secondaryIcon: request.canBeClosedByClient
+                        ? Icons.lock_outline
+                        : null,
                     onSubmit: _addComment,
                     onSecondary: request.canBeClosedByClient
                         ? (message, _) => _close(context, message)
                         : null,
                   ),
-                if (!request.status.isFinal && !request.canBeClosedByClient) ...[
+                if (!request.status.isFinal &&
+                    !request.canBeClosedByClient) ...[
                   const SizedBox(height: AppSpacing.s4),
                   _ClosureHint(status: request.status),
                 ],
@@ -108,8 +112,9 @@ class _RequestHeader extends StatelessWidget {
           const SizedBox(height: AppSpacing.s3),
           Text(
             '${request.type.label} · ${request.motelName} · Radicada el ${formatPqrsDate(request.createdAt)}',
-            style: theme.textTheme.bodySmall
-                ?.copyWith(color: context.appColors.textSecondary),
+            style: theme.textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           PqrsStatusBadge(status: request.status),

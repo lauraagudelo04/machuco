@@ -36,8 +36,9 @@ class PqrsTimeline extends StatelessWidget {
         const SizedBox(height: AppSpacing.s1),
         Text(
           '${entries.length} ${entries.length == 1 ? 'movimiento' : 'movimientos'} registrados',
-          style: theme.textTheme.bodySmall
-              ?.copyWith(color: context.appColors.textSecondary),
+          style: theme.textTheme.bodySmall?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
         ),
         const SizedBox(height: AppSpacing.s4),
         for (var index = 0; index < entries.length; index++)
@@ -71,7 +72,12 @@ class _TimelineTile extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _Rail(accent: accent, icon: entry.author.icon, isFirst: isFirst, isLast: isLast),
+          _Rail(
+            accent: accent,
+            icon: entry.author.icon,
+            isFirst: isFirst,
+            isLast: isLast,
+          ),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
             child: Padding(
@@ -83,22 +89,25 @@ class _TimelineTile extends StatelessWidget {
                     children: [
                       Text(
                         entry.author.label,
-                        style: theme.textTheme.titleSmall
-                            ?.copyWith(fontWeight: FontWeight.w700),
+                        style: theme.textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(width: AppSpacing.s2),
                       Text(
                         formatPqrsDateTime(entry.createdAt),
-                        style: theme.textTheme.labelSmall
-                            ?.copyWith(color: context.appColors.textSecondary),
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
                   Text(
                     entry.message,
-                    style: theme.textTheme.bodyMedium
-                        ?.copyWith(color: context.appColors.textSecondary),
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                   if (entry.attachments.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.s3),
@@ -185,10 +194,9 @@ class _StatusChangeChip extends StatelessWidget {
             const SizedBox(width: AppSpacing.s1),
             Text(
               'Pasó a ${status.label}',
-              style: Theme.of(context)
-                  .textTheme
-                  .labelSmall
-                  ?.copyWith(color: status.color),
+              style: Theme.of(
+                context,
+              ).textTheme.labelSmall?.copyWith(color: status.color),
             ),
           ],
         ),
