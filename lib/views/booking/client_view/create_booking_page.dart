@@ -1,19 +1,15 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 
-import 'package:machuco/controllers/additional_service/client_view/additional_service_client_controller.dart';
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
+import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/controllers/product/product_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
-import 'package:machuco/core/design_system/components/app_feedback.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
-import 'package:machuco/core/design_system/components/app_skeleton.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
-import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/product/product.dart';
@@ -36,7 +32,7 @@ class CreateBookingPage extends StatefulWidget {
 
 class _CreateBookingPageState extends State<CreateBookingPage> {
   late final ClientBookingController _bookingController;
-  late final AdditionalServiceClientController _servicesController;
+  late final AdditionalServiceSystemAdministratorController _servicesController;
   late final ProductController _productsController;
   late final String _requestId;
   late final List<BlockedRange> _externalBlocked;
@@ -57,14 +53,20 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   void initState() {
     super.initState();
     _bookingController = ClientBookingController();
-    _servicesController = AdditionalServiceClientController();
+    // TODO(servicios-adicionales): el motelId de esta rama (Room/Product/
+    // Motel) es String (ej. 'motel-eclipse'), pero
+    // AdditionalServiceSystemAdministratorController (rama de servicios
+    // adicionales) usa int. No se puede pasar widget.room.motelId aquí
+    // hasta reconciliar el tipo entre features; ver _availableServices.
+    _servicesController = AdditionalServiceSystemAdministratorController(
+      motelId: 0,
+    );
     _productsController = ProductController();
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
     _externalBlocked = widget.room.reservations
         .map((r) => BlockedRange(r.startDateTime, r.endDateTime))
         .toList();
     _servicesController.addListener(_refresh);
-    unawaited(_servicesController.loadServicesByUserId());
   }
 
   @override
@@ -153,10 +155,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   bool get _isFormValid =>
       _hasCompleteSchedule && _rangeError == null && _isGuestCountValid;
 
-  List<AdditionalService> get _availableServices => _servicesController
-      .activeServices
-      .where((service) => service.motelId == widget.room.motelId)
-      .toList();
+  // Bloqueado por el desajuste de tipos de motelId entre features (ver
+  // TODO en initState): mientras no se reconcilie, no se consulta el
+  // catálogo real y el formulario no ofrece servicios adicionales.
+  List<AdditionalServiceData> get _availableServices => const [];
 
   List<Product> get _availableProducts => _productsController
       .getProductsByMotel(widget.room.motelId)
@@ -174,10 +176,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   int get _roomTotal => widget.room.pricePerHour * _hoursForTotal;
 
   List<ReservationLineItem> get _selectedServiceItems => _availableServices
-      .where((service) => _selectedServiceIds.contains(service.id))
+      .where((service) => _selectedServiceIds.contains(service.id.toString()))
       .map(
         (service) => ReservationLineItem(
-          id: service.id,
+          id: service.id.toString(),
           name: service.name,
           unitPrice: service.price,
         ),
@@ -333,12 +335,12 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
             ),
             const SizedBox(height: AppSpacing.s4),
             _ServicesCard(
-              controller: _servicesController,
               services: _availableServices,
               selectedIds: _selectedServiceIds,
               onToggle: (service) => setState(() {
-                if (!_selectedServiceIds.remove(service.id)) {
-                  _selectedServiceIds.add(service.id);
+                final serviceId = service.id.toString();
+                if (!_selectedServiceIds.remove(serviceId)) {
+                  _selectedServiceIds.add(serviceId);
                 }
               }),
             ),
@@ -670,16 +672,14 @@ class _InlineNotice extends StatelessWidget {
 
 class _ServicesCard extends StatelessWidget {
   const _ServicesCard({
-    required this.controller,
     required this.services,
     required this.selectedIds,
     required this.onToggle,
   });
 
-  final AdditionalServiceClientController controller;
-  final List<AdditionalService> services;
+  final List<AdditionalServiceData> services;
   final Set<String> selectedIds;
-  final ValueChanged<AdditionalService> onToggle;
+  final ValueChanged<AdditionalServiceData> onToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -692,17 +692,7 @@ class _ServicesCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: AppSpacing.s2),
-          if (controller.isLoading)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: AppSpacing.s2),
-              child: AppSkeleton(height: 48),
-            )
-          else if (controller.errorMessage != null)
-            AppErrorState(
-              message: controller.errorMessage!,
-              onRetry: controller.loadServicesByUserId,
-            )
-          else if (services.isEmpty)
+          if (services.isEmpty)
             Text(
               'Este motel no tiene servicios adicionales disponibles.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
@@ -715,7 +705,7 @@ class _ServicesCard extends StatelessWidget {
                 title: service.name,
                 subtitle: service.description,
                 priceLabel: formatCurrencyAmount(service.price),
-                value: selectedIds.contains(service.id),
+                value: selectedIds.contains(service.id.toString()),
                 onChanged: (_) => onToggle(service),
               ),
         ],
