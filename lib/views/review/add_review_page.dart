@@ -88,12 +88,12 @@ class _ReviewsSectionState extends State<ReviewsSection> {
             ),
             const SizedBox(height: AppSpacing.s4),
 
-            Expanded(
-                child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: reviews.length,
-                itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
-              ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              itemCount: reviews.length,
+              itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
             )
           ],
         );
