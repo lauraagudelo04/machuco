@@ -12,7 +12,6 @@ class ReviewsSection extends StatefulWidget {
 }
 
 class _ReviewsSectionState extends State<ReviewsSection> {
-  // Instanciamos el controlador que ahora maneja la lógica
   final ReviewsController _controller = ReviewsController();
 
   @override
@@ -23,7 +22,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
 
   @override
   Widget build(BuildContext context) {
-    // Para simplificar, escuchamos los cambios usando AnimatedBuilder o ListenableBuilder
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
@@ -33,6 +31,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            // 1. Encabezado con título, promedio y total
             Row(
               children: [
                 Text(
@@ -58,22 +57,25 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.s4),
-            
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: reviews.length,
-              itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
-            ),
-            const SizedBox(height: AppSpacing.s2),
-            
+            const SizedBox(height: AppSpacing.s3),
+
+            // 2. Botón de añadir reseña (justo debajo del promedio)
             AppButton(
               label: 'Añadir reseña',
               icon: Icons.rate_review_outlined,
               onPressed: () => AddReviewSheet.show(
                 context,
                 onSave: (review) => _controller.addReview(review),
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s4),
+
+            // 3. Contenedor con scroll con las reseñas adentro
+            Expanded(
+              child: ListView.builder(
+                padding: EdgeInsets.zero,
+                itemCount: reviews.length,
+                itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
               ),
             ),
           ],
