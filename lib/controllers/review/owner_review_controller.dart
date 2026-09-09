@@ -1,5 +1,5 @@
 import 'package:flutter/foundation.dart';
-import 'package:machuco/controllers/motel/owner_controller/owner_motel_controller.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/models/review/review_type.dart';
@@ -23,12 +23,12 @@ class OwnerReviewEntry {
 }
 
 class OwnerReviewController extends ChangeNotifier {
-  OwnerReviewController({OwnerMotelController? motelController})
-    : _motelController = motelController ?? OwnerMotelController();
+  OwnerReviewController({MotelController? motelController})
+    : _motelController = motelController ?? MotelController();
 
   static final OwnerReviewController instance = OwnerReviewController();
 
-  final OwnerMotelController _motelController;
+  final MotelController _motelController;
 
   List<Motel> _myMotels = [];
   List<OwnerReviewEntry> _entries = [];
@@ -108,6 +108,7 @@ class OwnerReviewController extends ChangeNotifier {
     return [
       OwnerReviewEntry(
         review: Review(
+          parentId: "M1",
           author: 'Diana R.',
           title: 'Excelente atención',
           body:
@@ -121,6 +122,7 @@ class OwnerReviewController extends ChangeNotifier {
       ),
       OwnerReviewEntry(
         review: Review(
+          parentId: "M1",
           author: 'Felipe A.',
           title: 'El aire acondicionado no enfriaba',
           body: 'Todo bien excepto el aire, que casi no funcionaba.',
