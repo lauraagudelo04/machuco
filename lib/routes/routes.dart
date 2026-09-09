@@ -7,11 +7,14 @@ import 'package:machuco/views/booking/client_view/client_reservations_page.dart'
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
+import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
@@ -33,6 +36,7 @@ abstract final class  AppRoutes {
   static const paymentConfirmation = '/payment/client/confirmation';
   static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
+  static const ownerSubscription = '/subscription/owner';
   static const adminPayments = '/payment/admin';
   static const clientAdditionalServices = '/additional-service/client';
   static const addClientAdditionalServices = '/additional-service/client/add';
@@ -45,6 +49,8 @@ abstract final class  AppRoutes {
   static const adminPqrs = '/pqrs/admin';
   static const clientMotels = '/motels/client';
   static const clientMotelDetail = '/motels/client/detail';
+  static const ownerMotels = '/motels/owner';
+  static const ownerMotelDetail = '/motels/owner/detail';
   static const ownerProducts = '/products/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
@@ -60,6 +66,7 @@ abstract final class  AppRoutes {
       home => TemporalHomePage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
+      ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
       clientAdditionalServices => const AdditionalServiceClientPage(),
       addClientAdditionalServices => const AddAdditionalServiceClientPage(),
@@ -80,8 +87,8 @@ abstract final class  AppRoutes {
         motelId: settings.arguments is String
             ? settings.arguments! as String
             : throw Exception(
-          'Se requiere el motelId para acceder a los productos.',
-        ),
+                'Se requiere el motelId para acceder a los productos.',
+              ),
       ),
       adminReviews => const ReviewAdministrationPage(),
 
@@ -92,6 +99,13 @@ abstract final class  AppRoutes {
             : throw Exception(
                 'Error: Se requiere pasar un objeto Motel como argumento a esta ruta.',
               ),
+      ),
+
+      ownerMotels => const OwnerMotelsPage(),
+      ownerMotelDetail => OwnerMotelFormPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : null,
       ),
 
       clientReservations => const ClientReservationsPage(),
