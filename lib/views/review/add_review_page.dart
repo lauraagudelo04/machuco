@@ -41,8 +41,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        final reviews = _controller.reviews;
-        final average = _controller.average;
+        final reviews = _controller.getReviewsByType(widget.reviewType);
+        final average = _controller.getAverageByType(widget.reviewType);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -77,21 +77,23 @@ class _ReviewsSectionState extends State<ReviewsSection> {
             AppButton(
               label: 'Añadir reseña',
               icon: Icons.rate_review_outlined,
-              onPressed: () => AddReviewSheet.show(
-                context,
-                onSave: (review) => _controller.addReview(review),
-                reviewType: widget.reviewType
-              ),
+              onPressed: widget.isComplete
+                  ? () => AddReviewSheet.show(
+                        context,
+                        reviewType: widget.reviewType,
+                        onSave: (review) => _controller.addReview(review),
+                      )
+                  : null,
             ),
             const SizedBox(height: AppSpacing.s4),
 
             Expanded(
-              child: ListView.builder(
+                child: ListView.builder(
                 padding: EdgeInsets.zero,
                 itemCount: reviews.length,
                 itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
               ),
-            ),
+            )
           ],
         );
       },
