@@ -22,6 +22,9 @@ import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/views/review/owner_view/owner_review_page.dart';
+
+
 
 import 'package:machuco/views/home/temporal_home_page.dart';
 
@@ -47,6 +50,7 @@ abstract final class AppRoutes {
   static const ownerMotels = '/motels/owner';
   static const ownerMotelDetail = '/motels/owner/detail';
   static const ownerProducts = '/products/owner';
+  static const ownerReviews = '/reviews/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
   static const clientCreateBooking = '/bookings/client/new';
@@ -78,6 +82,8 @@ abstract final class AppRoutes {
       pqrs => const PqrsPage(),
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
+      ownerPqrs => const OwnerPqrsPage(),
+      ownerReviews => const OwnerReviewPage(),
       adminPqrs => const SystemAdminPqrsPage(),
 
       ownerProducts => ProductListView(
