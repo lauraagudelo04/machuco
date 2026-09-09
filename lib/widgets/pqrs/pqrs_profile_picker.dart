@@ -57,12 +57,16 @@ class _PqrsProfilePicker extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('¿A qué vista de PQRS quieres ir?', style: theme.textTheme.headlineSmall),
+            Text(
+              '¿A qué vista de PQRS quieres ir?',
+              style: theme.textTheme.headlineSmall,
+            ),
             const SizedBox(height: AppSpacing.s2),
             Text(
               'Cada perfil ve la misma solicitud con permisos distintos.',
-              style: theme.textTheme.bodyMedium
-                  ?.copyWith(color: context.appColors.textSecondary),
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
             ),
             const SizedBox(height: AppSpacing.s5),
             for (final option in _options)
@@ -134,20 +138,25 @@ class _ProfileOption extends StatelessWidget {
                         children: [
                           Text(
                             title,
-                            style: theme.textTheme.titleMedium
-                                ?.copyWith(fontWeight: FontWeight.w700),
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                           const SizedBox(height: AppSpacing.s1),
                           Text(
                             description,
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: context.appColors.textSecondary),
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: context.appColors.textSecondary,
+                            ),
                           ),
                         ],
                       ),
                     ),
                     const SizedBox(width: AppSpacing.s2),
-                    Icon(Icons.arrow_forward, color: context.appColors.textSecondary),
+                    Icon(
+                      Icons.arrow_forward,
+                      color: context.appColors.textSecondary,
+                    ),
                   ],
                 ),
               ),
