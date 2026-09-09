@@ -1,32 +1,169 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
-import 'package:machuco/models/additional_service/additional_service_store.dart';
+
+// Datos de salida del controlador: un record de Dart, sin exponer el modelo.
+typedef AdditionalServiceData = ({
+  int id,
+  int motelId,
+  String name,
+  String description,
+  String category,
+  int price,
+  bool active,
+});
 
 class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
-  AdditionalServiceSystemAdministratorController({
-    this.motelId = demoMotelId,
-    AdditionalServiceStore? store,
-  }) : _store = store ?? AdditionalServiceStore.instance;
+  AdditionalServiceSystemAdministratorController({required this.motelId});
 
-  static const String demoMotelId = 'motel-demo-001';
+  final int motelId;
 
-  static final AdditionalServiceSystemAdministratorController instance =
-      AdditionalServiceSystemAdministratorController();
+  // Datos temporales en memoria, compartidos al volver a abrir una vista.
+  static const List<AdditionalService> _motel1Services = [
+    AdditionalService(
+      id: 1,
+      motelId: 1,
+      name: 'Decoración romántica',
+      description: 'Pétalos, globos y velas para la habitación.',
+      category: 'Experiencias',
+      price: 45000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 2,
+      motelId: 1,
+      name: 'Desayuno para dos',
+      description: 'Desayuno completo entregado en la habitación.',
+      category: 'Alimentación',
+      price: 28000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 3,
+      motelId: 1,
+      name: 'Salida extendida',
+      description: 'Dos horas adicionales de estadía.',
+      category: 'Estadía',
+      price: 30000,
+      active: false,
+    ),
+  ];
 
-  final AdditionalServiceStore _store;
-  final String motelId;
-  bool _isLoading = false;
-  String? _errorMessage;
+  static const List<AdditionalService> _motel2Services = [
+    AdditionalService(
+      id: 4,
+      motelId: 2,
+      name: 'Limpieza adicional',
+      description: 'Limpieza de la habitación durante la estadía.',
+      category: 'Servicios',
+      price: 12000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 5,
+      motelId: 2,
+      name: 'Cena para dos',
+      description: 'Cena especial con bebida para dos personas.',
+      category: 'Alimentación',
+      price: 65000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 6,
+      motelId: 2,
+      name: 'Masaje relajante',
+      description: 'Sesión de masaje de treinta minutos.',
+      category: 'Bienestar',
+      price: 55000,
+      active: false,
+    ),
+  ];
+
+  static const List<AdditionalService> _motel3Services = [
+    AdditionalService(
+      id: 7,
+      motelId: 3,
+      name: 'Acceso al jacuzzi',
+      description: 'Una hora de uso privado del jacuzzi.',
+      category: 'Bienestar',
+      price: 40000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 8,
+      motelId: 3,
+      name: 'Tabla de pasabocas',
+      description: 'Selección de pasabocas para compartir.',
+      category: 'Alimentación',
+      price: 25000,
+      active: true,
+    ),
+    AdditionalService(
+      id: 9,
+      motelId: 3,
+      name: 'Decoración de cumpleaños',
+      description: 'Globos y decoración para una celebración.',
+      category: 'Celebraciones',
+      price: 35000,
+      active: false,
+    ),
+  ];
+
+  static final List<AdditionalService> _services = [
+    ..._motel1Services,
+    ..._motel2Services,
+    ..._motel3Services,
+  ];
+  static int _nextServiceId = 10;
+
   String? _nameError;
   String? _descriptionError;
   String? _categoryError;
   String? _priceError;
 
-  List<AdditionalService> get services => List.unmodifiable(
-    _store.services.where((service) => service.motelId == motelId),
+  List<AdditionalServiceData> get services =>
+      getAdditionalServicesByMotelId(motelId);
+
+  List<AdditionalServiceData> getAdditionalServicesByMotelId(int motelId) =>
+      List.unmodifiable(
+        _services
+            .where((service) => service.motelId == motelId)
+            .map(_prepareServiceData),
+      );
+
+  /// Consulta solo los servicios activos del motel indicado.
+  /// Devuelve una lista de solo lectura, vacia si no hay coincidencias.
+  List<AdditionalServiceData> getActiveAdditionalServicesByMotelId(int motelId) =>
+      List.unmodifiable(
+        getAdditionalServicesByMotelId(motelId)
+            .where((service) => service.active),
+      );
+
+  AdditionalServiceData _prepareServiceData(AdditionalService service) => (
+    id: service.id,
+    motelId: service.motelId,
+    name: service.name,
+    description: service.description,
+    category: service.category,
+    price: service.price,
+    active: service.active,
   );
-  bool get isLoading => _isLoading;
-  String? get errorMessage => _errorMessage;
+
+  AdditionalServiceData? getAdditionalServiceById(int serviceId) {
+    for (final service in _services) {
+      if (service.id == serviceId && service.motelId == motelId) {
+        return _prepareServiceData(service);
+      }
+    }
+    return null;
+  }
+
+  List<String> getAdditionalServiceCategoriesByMotelId(int motelId) {
+    final categories = getAdditionalServicesByMotelId(
+      motelId,
+    ).map((service) => service.category).toSet().toList()..sort();
+    return List.unmodifiable(categories);
+  }
+
   int get activeCount => services.where((service) => service.active).length;
   int get inactiveCount => services.length - activeCount;
   String? get nameError => _nameError;
@@ -34,30 +171,22 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
   String? get categoryError => _categoryError;
   String? get priceError => _priceError;
 
-  List<AdditionalService> search(String query) {
+  List<AdditionalServiceData> filterAdditionalServices({
+    String query = '',
+    String? category,
+    bool activeOnly = false,
+  }) {
     final normalizedQuery = query.trim().toLowerCase();
     return services
         .where((service) {
-          return normalizedQuery.isEmpty ||
-              service.name.toLowerCase().contains(normalizedQuery) ||
-              service.description.toLowerCase().contains(normalizedQuery) ||
-              service.category.toLowerCase().contains(normalizedQuery);
+          return (!activeOnly || service.active) &&
+              (category == null || service.category == category) &&
+              (normalizedQuery.isEmpty ||
+                  service.name.toLowerCase().contains(normalizedQuery) ||
+                  service.description.toLowerCase().contains(normalizedQuery) ||
+                  service.category.toLowerCase().contains(normalizedQuery));
         })
         .toList(growable: false);
-  }
-
-  Future<void> loadServicesByMotelId() async {
-    _isLoading = true;
-    _errorMessage = null;
-    notifyListeners();
-    try {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-    } catch (_) {
-      _errorMessage = 'No fue posible cargar los servicios del motel.';
-    } finally {
-      _isLoading = false;
-      notifyListeners();
-    }
   }
 
   void resetFormValidation() {
@@ -67,8 +196,8 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     _priceError = null;
   }
 
-  bool save({
-    AdditionalService? service,
+  bool saveAdditionalService({
+    int? serviceId,
     required String name,
     required String description,
     required String category,
@@ -98,12 +227,11 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
       return false;
     }
 
-    if (service == null) {
-      _store.services.add(
+    if (serviceId == null) {
+      _services.add(
         AdditionalService(
-          id: 'service-${DateTime.now().microsecondsSinceEpoch}',
+          id: _nextServiceId++,
           motelId: motelId,
-          icon: AdditionalServiceIcon.miscellaneous,
           name: normalizedName,
           description: normalizedDescription,
           category: normalizedCategory,
@@ -112,9 +240,11 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
         ),
       );
     } else {
-      final index = _store.services.indexWhere((item) => item.id == service.id);
+      final index = _services.indexWhere(
+        (item) => item.id == serviceId && item.motelId == motelId,
+      );
       if (index < 0) return false;
-      _store.services[index] = service.copyWith(
+      _services[index] = _services[index].copyWith(
         name: normalizedName,
         description: normalizedDescription,
         category: normalizedCategory,
@@ -125,23 +255,20 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     return true;
   }
 
-  void toggleActive(AdditionalService service) {
-    final index = _store.services.indexWhere((item) => item.id == service.id);
+  void toggleAdditionalServiceActive(int serviceId) {
+    final index = _services.indexWhere(
+      (item) => item.id == serviceId && item.motelId == motelId,
+    );
     if (index < 0) return;
-    _store.services[index] = service.copyWith(active: !service.active);
-    if (service.active) {
-      for (final selectedIds in _store.selectedServiceIdsByUser.values) {
-        selectedIds.remove(service.id);
-      }
-    }
+    final current = _services[index];
+    _services[index] = current.copyWith(active: !current.active);
     notifyListeners();
   }
 
-  void delete(AdditionalService service) {
-    _store.services.removeWhere((item) => item.id == service.id);
-    for (final selectedIds in _store.selectedServiceIdsByUser.values) {
-      selectedIds.remove(service.id);
-    }
+  void deleteAdditionalService(int serviceId) {
+    _services.removeWhere(
+      (item) => item.id == serviceId && item.motelId == motelId,
+    );
     notifyListeners();
   }
 }
