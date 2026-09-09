@@ -150,7 +150,7 @@ class ReviewAdministrationController extends ChangeNotifier {
             'Las habitaciones estaban limpias y el personal fue muy amable.',
         rating: 5,
         date: DateTime(2026, 7, 20),
-        type: ReviewType.motel
+        type: ReviewType.motel,
       ),
     ),
     AdminReviewEntry(
@@ -161,7 +161,7 @@ class ReviewAdministrationController extends ChangeNotifier {
         body: 'Contiene lenguaje ofensivo y datos personales expuestos.',
         rating: 1,
         date: DateTime(2026, 8, 2),
-        type: ReviewType.motel
+        type: ReviewType.motel,
       ),
       status: ReviewModerationStatus.reported,
       reportReason: 'Lenguaje inapropiado y datos personales expuestos',
