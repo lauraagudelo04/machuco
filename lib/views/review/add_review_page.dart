@@ -1,18 +1,34 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/models/review/review_type.dart';
 import '../../core/design_system/design_system.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
 import 'package:machuco/widgets/review/review_card.dart';
 import 'package:machuco/widgets/review/add_review_sheet.dart';
 
 class ReviewsSection extends StatefulWidget {
-  const ReviewsSection({super.key});
+  const ReviewsSection({
+    super.key,
+    required this.id,
+    required this.reviewType,
+    required this.isComplete,
+  });
+
+  final String id;
+  final ReviewType reviewType;
+  final bool isComplete;
 
   @override
   State<ReviewsSection> createState() => _ReviewsSectionState();
 }
 
 class _ReviewsSectionState extends State<ReviewsSection> {
-  final ReviewsController _controller = ReviewsController();
+  late final ReviewsController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ReviewsController();
+  }
 
   @override
   void dispose() {
@@ -31,7 +47,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 1. Encabezado con título, promedio y total
             Row(
               children: [
                 Text(
@@ -59,7 +74,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
             ),
             const SizedBox(height: AppSpacing.s3),
 
-            // 2. Botón de añadir reseña (justo debajo del promedio)
             AppButton(
               label: 'Añadir reseña',
               icon: Icons.rate_review_outlined,
@@ -70,7 +84,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
             ),
             const SizedBox(height: AppSpacing.s4),
 
-            // 3. Contenedor con scroll con las reseñas adentro
             Expanded(
               child: ListView.builder(
                 padding: EdgeInsets.zero,
