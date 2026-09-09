@@ -3,65 +3,55 @@ import 'package:machuco/models/room/room_models.dart';
 
 class RoomOwnerController {
   RoomOwnerController({
-    required String motelId,
+    required this.motelId,
     List<RoomVisualData>? seedRooms,
-  }) : motelId = motelId,
-       _rooms = List<RoomVisualData>.from(
-         (seedRooms ?? buildRoomMockData()).where(
-           (room) => room.motelId == motelId,
-         ),
-       );
+    List<RoomTypeData>? seedTypes,
+  }) : _rooms = List.of(seedRooms ?? buildRoomMockData()),
+       _types = List.of(seedTypes ?? buildRoomTypeMockData());
 
   final String motelId;
-  List<RoomVisualData> _rooms;
+  final List<RoomVisualData> _rooms;
+  final List<RoomTypeData> _types;
 
-  List<RoomVisualData> get rooms => List.unmodifiable(_rooms);
+  List<RoomTypeData> get roomTypes =>
+      _types.where((type) => type.motelId == motelId).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
 
-  List<RoomVisualData> filteredRooms(String query) {
-    final normalizedQuery = query.trim().toLowerCase();
+  List<RoomVisualData> roomsForType(String typeId, String query) {
+    final normalized = query.trim().toLowerCase();
     return _rooms.where((room) {
-      final matchesSearch =
-          normalizedQuery.isEmpty ||
-          room.name.toLowerCase().contains(normalizedQuery) ||
-          room.roomNumber.toLowerCase().contains(normalizedQuery) ||
+      final matches =
+          normalized.isEmpty ||
+          room.name.toLowerCase().contains(normalized) ||
+          room.roomNumber.toLowerCase().contains(normalized) ||
           room.includedServices.any(
-            (service) => service.toLowerCase().contains(normalizedQuery),
+            (service) => service.toLowerCase().contains(normalized),
           );
-      return matchesSearch;
-    }).toList();
+      return room.motelId == motelId && room.idType == typeId && matches;
+    }).toList()..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
   }
 
-  void addRoom(RoomVisualData room) {
-    _ensureRoomBelongsToMotel(room);
-    _rooms = [..._rooms, room];
-  }
+  void addRoom(RoomVisualData room) => _rooms.add(room);
 
   void updateRoom(String roomId, RoomVisualData updatedRoom) {
-    _ensureRoomBelongsToMotel(updatedRoom);
-    _rooms = _rooms
-        .map((room) => room.id == roomId ? updatedRoom : room)
-        .toList();
+    final index = _rooms.indexWhere((room) => room.id == roomId);
+    if (index != -1) _rooms[index] = updatedRoom;
   }
 
-  void addStatusSchedule(String roomId, RoomStatusSchedule schedule) {
-    _rooms = _rooms.map((room) {
-      if (room.id != roomId) {
-        return room;
-      }
+  void addType(RoomTypeData type) => _types.add(type);
 
-      final nextSchedules = [...room.statusSchedules, schedule]
-        ..sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
-      return room.copyWith(statusSchedules: nextSchedules);
-    }).toList();
+  void updateType(String typeId, String name) {
+    final index = _types.indexWhere((type) => type.id == typeId);
+    if (index != -1) _types[index] = _types[index].copyWith(name: name);
   }
 
-  void _ensureRoomBelongsToMotel(RoomVisualData room) {
-    if (room.motelId != motelId) {
-      throw ArgumentError.value(
-        room.motelId,
-        'room.motelId',
-        'La habitación debe pertenecer al motel $motelId.',
-      );
-    }
+  int roomCountForType(String typeId) => _rooms
+      .where((room) => room.motelId == motelId && room.idType == typeId)
+      .length;
+
+  bool deleteType(String typeId) {
+    if (roomCountForType(typeId) > 0) return false;
+    _types.removeWhere((type) => type.id == typeId);
+    return true;
   }
 }

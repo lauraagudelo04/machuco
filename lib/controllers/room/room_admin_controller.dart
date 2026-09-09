@@ -3,38 +3,29 @@ import 'package:machuco/models/room/room_models.dart';
 
 class RoomAdminController {
   RoomAdminController({
-    required String motelId,
+    required this.motelId,
     List<RoomVisualData>? seedRooms,
-  }) : motelId = motelId,
-       _rooms = List<RoomVisualData>.from(
-         (seedRooms ?? buildRoomMockData()).where(
-           (room) => room.motelId == motelId,
-         ),
-       );
+    List<RoomTypeData>? seedTypes,
+  }) : _rooms = List.of(seedRooms ?? buildRoomMockData()),
+       _types = List.of(seedTypes ?? buildRoomTypeMockData());
 
   final String motelId;
   final List<RoomVisualData> _rooms;
+  final List<RoomTypeData> _types;
 
-  List<RoomVisualData> get rooms => List.unmodifiable(_rooms);
+  List<RoomTypeData> get roomTypes =>
+      _types.where((type) => type.motelId == motelId).toList()
+        ..sort((a, b) => a.name.compareTo(b.name));
 
-  List<RoomVisualData> filteredRooms({
-    required String query,
-    required bool sortAscending,
-  }) {
-    final normalizedQuery = query.trim().toLowerCase();
-    final filtered =
-        _rooms.where((room) {
-          final matchesSearch =
-              normalizedQuery.isEmpty ||
-              room.name.toLowerCase().contains(normalizedQuery) ||
-              room.roomNumber.toLowerCase().contains(normalizedQuery) ||
-              room.description.toLowerCase().contains(normalizedQuery);
-          return matchesSearch;
-        }).toList()..sort(
-          (a, b) => sortAscending
-              ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-              : b.name.toLowerCase().compareTo(a.name.toLowerCase()),
-        );
-    return filtered;
+  List<RoomVisualData> roomsForType(String typeId, {String query = ''}) {
+    final normalized = query.trim().toLowerCase();
+    return _rooms.where((room) {
+      final matches =
+          normalized.isEmpty ||
+          room.name.toLowerCase().contains(normalized) ||
+          room.roomNumber.toLowerCase().contains(normalized) ||
+          room.description.toLowerCase().contains(normalized);
+      return room.motelId == motelId && room.idType == typeId && matches;
+    }).toList()..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
   }
 }
