@@ -2,10 +2,7 @@ import 'package:machuco/models/room/room_models.dart';
 
 final DateTime roomMockBaseDate = DateTime(2026, 8, 19, 12);
 
-List<RoomVisualData> buildRoomMockData({
-  String motelId = 'motel-eclipse',
-  String motelName = 'Motel Eclipse',
-}) {
+List<RoomVisualData> buildRoomMockData() {
   DateTime at(int dayOffset, int hour, [int minute = 0]) => DateTime(
     roomMockBaseDate.year,
     roomMockBaseDate.month,
@@ -17,8 +14,8 @@ List<RoomVisualData> buildRoomMockData({
   return [
     RoomVisualData(
       id: 'room-101',
-      motelId: motelId,
-      motelName: motelName,
+      motelId: '1',
+      motelName: 'Motel Paraíso Élite',
       name: 'Suite Aurora',
       description:
           'Suite premium con ambientacion calida, acceso privado y enfoque en privacidad.',
@@ -55,8 +52,8 @@ List<RoomVisualData> buildRoomMockData({
     ),
     RoomVisualData(
       id: 'room-204',
-      motelId: motelId,
-      motelName: motelName,
+      motelId: '1',
+      motelName: 'Motel Paraíso Élite',
       name: 'Loft Neon',
       description:
           'Habitacion moderna con minibar, luces regulables y espacio lounge.',
@@ -93,8 +90,8 @@ List<RoomVisualData> buildRoomMockData({
     ),
     RoomVisualData(
       id: 'room-305',
-      motelId: motelId,
-      motelName: motelName,
+      motelId: '3',
+      motelName: 'Motel Paraíso 3',
       name: 'Cabina Prisma',
       description:
           'Opcion compacta para reservas agiles con check-in rapido y clima automatico.',
@@ -125,8 +122,8 @@ List<RoomVisualData> buildRoomMockData({
     ),
     RoomVisualData(
       id: 'room-402',
-      motelId: motelId,
-      motelName: motelName,
+      motelId: '2',
+      motelName: 'Motel El Edén',
       name: 'Studio Loto',
       description:
           'Unidad versatil para grupos pequenos con apoyo adicional y parqueadero.',

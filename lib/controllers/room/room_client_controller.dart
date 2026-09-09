@@ -4,14 +4,13 @@ import 'package:machuco/models/room/room_models.dart';
 
 class RoomClientController {
   RoomClientController({
-    String motelId = 'motel-eclipse',
-    String motelName = 'Motel Eclipse',
+    required String motelId,
     List<RoomVisualData>? seedRooms,
   }) : motelId = motelId,
        _rooms = List<RoomVisualData>.from(
-         (seedRooms ??
-                 buildRoomMockData(motelId: motelId, motelName: motelName))
-             .where((room) => room.motelId == motelId),
+         (seedRooms ?? buildRoomMockData()).where(
+           (room) => room.motelId == motelId,
+         ),
        );
 
   final String motelId;

@@ -13,8 +13,8 @@ class RoomAdminPage extends StatefulWidget {
   const RoomAdminPage({
     super.key,
     this.rooms,
-    this.motelId = 'motel-eclipse',
-    this.motelName = 'Motel Eclipse',
+    this.motelId = '1',
+    this.motelName = 'Motel Paraíso Élite',
   });
 
   final List<RoomVisualData>? rooms;
@@ -35,7 +35,6 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
     super.initState();
     _controller = RoomAdminController(
       motelId: widget.motelId,
-      motelName: widget.motelName,
       seedRooms: widget.rooms,
     );
   }

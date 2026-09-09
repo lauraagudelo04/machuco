@@ -3,6 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
 import '../../../controllers/motel/owner_controller/owner_motel_controller.dart'; 
 import 'owner_motel_form_page.dart';
+import '../../room/owner_view/room_owner_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -288,10 +289,13 @@ class _OwnerMotelCard extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 tooltip: 'Gestionar establecimiento',
                 onSelected: (String value) {
-                  // TODO: Aquí navegaremos a las vistas de CRUD específicas pasándole el motel.id
                   switch (value) {
                     case 'habitaciones':
-                      // Navigator.push(context, HabitacionesPage(motelId: motel.id));
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoomOwnerPage(motel: motel),
+                        ),
+                      );
                       break;
                     case 'servicios':
                       // Navigator.push(context, ServiciosAdicionalesPage(motelId: motel.id));

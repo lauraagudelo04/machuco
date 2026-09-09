@@ -6,20 +6,18 @@ import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/room/room_models.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
 
 class RoomClientPage extends StatefulWidget {
-  const RoomClientPage({
-    super.key,
-    this.rooms,
-    this.motelId = 'motel-eclipse',
-    this.motelName = 'Motel Eclipse',
-  });
+  const RoomClientPage({super.key, required this.motel, this.rooms});
 
+  final Motel motel;
   final List<RoomVisualData>? rooms;
-  final String motelId;
-  final String motelName;
+  String get motelId => motel.id;
+  String get motelName => motel.name;
 
   @override
   State<RoomClientPage> createState() => _RoomClientPageState();
@@ -40,7 +38,6 @@ class _RoomClientPageState extends State<RoomClientPage> {
     super.initState();
     _controller = RoomClientController(
       motelId: widget.motelId,
-      motelName: widget.motelName,
       seedRooms: widget.rooms,
     );
   }
@@ -130,7 +127,7 @@ class _RoomClientPageState extends State<RoomClientPage> {
                       end: _endDateTime,
                     )!,
                     onTap: () => _openDetail(room),
-                    onReserve: () => _openDetail(room),
+                    onReserve: () => _openBooking(room),
                   ),
                 ),
               ),
@@ -239,6 +236,12 @@ class _RoomClientPageState extends State<RoomClientPage> {
         ),
       ),
     );
+  }
+
+  void _openBooking(RoomVisualData room) {
+    Navigator.of(
+      context,
+    ).pushNamed(AppRoutes.clientCreateBooking, arguments: room);
   }
 }
 

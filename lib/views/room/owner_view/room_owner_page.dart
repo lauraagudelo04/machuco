@@ -7,20 +7,17 @@ import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
 
 class RoomOwnerPage extends StatefulWidget {
-  const RoomOwnerPage({
-    super.key,
-    this.rooms,
-    this.motelId = 'motel-eclipse',
-    this.motelName = 'Motel Eclipse',
-  });
+  const RoomOwnerPage({super.key, required this.motel, this.rooms});
 
+  final Motel motel;
   final List<RoomVisualData>? rooms;
-  final String motelId;
-  final String motelName;
+  String get motelId => motel.id;
+  String get motelName => motel.name;
 
   @override
   State<RoomOwnerPage> createState() => _RoomOwnerPageState();
@@ -37,7 +34,6 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     super.initState();
     _controller = RoomOwnerController(
       motelId: widget.motelId,
-      motelName: widget.motelName,
       seedRooms: widget.rooms,
     );
   }

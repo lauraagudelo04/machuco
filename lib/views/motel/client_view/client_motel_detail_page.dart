@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
-import './../../../routes/routes.dart';
+import '../../room/client_view/room_client_page.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
   // Ahora recibimos el objeto Motel completo en lugar de solo el nombre
@@ -73,7 +73,11 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium, 
                         expanded: false, 
                         onPressed: () {
-                          // TODO: Navegar a la lista de habitaciones pasando el motel.id
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RoomClientPage(motel: motel),
+                            ),
+                          );
                         },
                       ),
                     ],

@@ -17,8 +17,9 @@ import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/product/product.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/routes/routes.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/widgets/booking/availability_calendar.dart';
 import 'package:machuco/widgets/booking/priced_checkbox_tile.dart';
 import 'package:machuco/widgets/booking/quantity_stepper.dart';
@@ -58,7 +59,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     super.initState();
     _bookingController = ClientBookingController();
     _servicesController = AdditionalServiceClientController();
-    _productsController = ProductController();
+    _productsController = ProductController.instance;
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
     _externalBlocked = widget.room.reservations
         .map((r) => BlockedRange(r.startDateTime, r.endDateTime))
@@ -71,7 +72,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   void dispose() {
     _servicesController.removeListener(_refresh);
     _servicesController.dispose();
-    _productsController.dispose();
     _bookingController.dispose();
     super.dispose();
   }

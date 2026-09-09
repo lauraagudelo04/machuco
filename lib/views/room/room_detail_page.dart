@@ -8,6 +8,7 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/tokens/app_text_styles.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/models/room/room_models.dart';
+import 'package:machuco/routes/routes.dart';
 
 class RoomDetailPage extends StatelessWidget {
   const RoomDetailPage({
@@ -25,7 +26,8 @@ class RoomDetailPage extends StatelessWidget {
   final DateTime? selectedRangeEnd;
   final bool highlightOwnerCalendar;
 
-  bool get _hasClientRange => hasDateRange(selectedRangeStart, selectedRangeEnd);
+  bool get _hasClientRange =>
+      hasDateRange(selectedRangeStart, selectedRangeEnd);
 
   @override
   Widget build(BuildContext context) {
@@ -80,7 +82,9 @@ class RoomDetailPage extends StatelessWidget {
               role: role,
               hasClientRange: _hasClientRange,
               clientIsAvailable: isClientAvailable,
-              onReserve: () => _showStub(context, 'Reservar ${room.name}'),
+              onReserve: () => Navigator.of(
+                context,
+              ).pushNamed(AppRoutes.clientCreateBooking, arguments: room),
               onViewReviews: () => _showStub(context, 'Ver resenas'),
               onAddReview: () => _showStub(context, 'Agregar resena'),
             ),
@@ -133,10 +137,7 @@ class _DetailHeader extends StatelessWidget {
                 label: effective.status.label,
                 color: roomOperationalColor(effective.status),
               ),
-              _InfoPill(
-                icon: Icons.visibility_outlined,
-                label: roleLabel,
-              ),
+              _InfoPill(icon: Icons.visibility_outlined, label: roleLabel),
             ],
           ),
           const SizedBox(height: AppSpacing.s3),
@@ -145,8 +146,8 @@ class _DetailHeader extends StatelessWidget {
           Text(
             room.motelName,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
           Row(
@@ -172,10 +173,7 @@ class _DetailHeader extends StatelessWidget {
 }
 
 class _HeroMedia extends StatelessWidget {
-  const _HeroMedia({
-    required this.room,
-    required this.effective,
-  });
+  const _HeroMedia({required this.room, required this.effective});
 
   final RoomVisualData room;
   final RoomEffectiveState effective;
@@ -212,8 +210,8 @@ class _HeroMedia extends StatelessWidget {
               Text(
                 '${room.imageUrls.length} imagenes dummy',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -229,8 +227,8 @@ class _HeroMedia extends StatelessWidget {
                 ? 'Sin referencias visuales'
                 : room.imageUrls.join('  ·  '),
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -239,10 +237,7 @@ class _HeroMedia extends StatelessWidget {
 }
 
 class _GeneralInfoSection extends StatelessWidget {
-  const _GeneralInfoSection({
-    required this.room,
-    required this.effective,
-  });
+  const _GeneralInfoSection({required this.room, required this.effective});
 
   final RoomVisualData room;
   final RoomEffectiveState effective;
@@ -253,7 +248,11 @@ class _GeneralInfoSection extends StatelessWidget {
       ('Motel', room.motelName, Icons.apartment_outlined),
       ('Numero', room.roomNumber, Icons.pin_outlined),
       ('Capacidad', '${room.capacity} personas', Icons.people_outline),
-      ('Precio', formatPricePerHour(room.pricePerHour), Icons.payments_outlined),
+      (
+        'Precio',
+        formatPricePerHour(room.pricePerHour),
+        Icons.payments_outlined,
+      ),
       ('Estado vigente', effective.status.label, Icons.toggle_on_outlined),
       (
         'Catalogo cliente',
@@ -266,13 +265,16 @@ class _GeneralInfoSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Informacion general', style: Theme.of(context).textTheme.titleLarge),
+          Text(
+            'Informacion general',
+            style: Theme.of(context).textTheme.titleLarge,
+          ),
           const SizedBox(height: AppSpacing.s3),
           Text(
             room.description,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s4),
           for (final detail in details) ...[
@@ -280,7 +282,10 @@ class _GeneralInfoSection extends StatelessWidget {
             if (detail != details.last) const Divider(height: AppSpacing.s5),
           ],
           const SizedBox(height: AppSpacing.s4),
-          Text('Servicios incluidos', style: Theme.of(context).textTheme.titleMedium),
+          Text(
+            'Servicios incluidos',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
           const SizedBox(height: AppSpacing.s2),
           Wrap(
             spacing: AppSpacing.s2,
@@ -328,8 +333,8 @@ class _TimelineSection extends StatelessWidget {
           Text(
             summary,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s4),
           if (blocks.isEmpty)
@@ -373,10 +378,7 @@ class _TimelineSection extends StatelessWidget {
 }
 
 class _CompactSummary extends StatelessWidget {
-  const _CompactSummary({
-    required this.title,
-    required this.values,
-  });
+  const _CompactSummary({required this.title, required this.values});
 
   final String title;
   final List<String> values;
@@ -399,19 +401,21 @@ class _CompactSummary extends StatelessWidget {
             Text(
               'Sin registros proximos',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             )
           else
-            ...values.take(4).map(
-              (value) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.s1),
-                child: Text(
-                  value,
-                  style: Theme.of(context).textTheme.bodyMedium,
+            ...values
+                .take(4)
+                .map(
+                  (value) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s1),
+                    child: Text(
+                      value,
+                      style: Theme.of(context).textTheme.bodyMedium,
+                    ),
+                  ),
                 ),
-              ),
-            ),
         ],
       ),
     );
@@ -444,11 +448,11 @@ class _ClientAvailabilitySection extends StatelessWidget {
     final message = !hasRange
         ? 'Todavia no definiste un rango de reserva.'
         : rangeError ??
-            (isAvailable == true
-                ? 'Disponible para el rango solicitado.'
-                : !effective.isActive
-                    ? 'La habitacion no esta activa para reservar en este momento.'
-                    : 'El rango cruza con una reserva o bloqueo operativo.');
+              (isAvailable == true
+                  ? 'Disponible para el rango solicitado.'
+                  : !effective.isActive
+                  ? 'La habitacion no esta activa para reservar en este momento.'
+                  : 'El rango cruza con una reserva o bloqueo operativo.');
 
     return AppCard(
       child: Column(
@@ -467,8 +471,12 @@ class _ClientAvailabilitySection extends StatelessWidget {
               borderRadius: BorderRadius.circular(AppRadius.lg),
             ),
             child: Text(
-              hasRange ? formatDateRange(start!, end!) : 'Sin rango seleccionado',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(color: color),
+              hasRange
+                  ? formatDateRange(start!, end!)
+                  : 'Sin rango seleccionado',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(color: color),
             ),
           ),
           if (totalHours != null && totalPrice != null) ...[
@@ -490,8 +498,8 @@ class _ClientAvailabilitySection extends StatelessWidget {
           Text(
             message,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ],
       ),
@@ -513,13 +521,16 @@ class _ReviewPreviewSection extends StatelessWidget {
           Row(
             children: [
               Expanded(
-                child: Text('Resenas', style: Theme.of(context).textTheme.titleLarge),
+                child: Text(
+                  'Resenas',
+                  style: Theme.of(context).textTheme.titleLarge,
+                ),
               ),
               Text(
                 '${room.reviewCount} opiniones',
                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ],
           ),
@@ -533,7 +544,10 @@ class _ReviewPreviewSection extends StatelessWidget {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.star_rounded, color: Theme.of(context).colorScheme.primary),
+                Icon(
+                  Icons.star_rounded,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
                 const SizedBox(width: AppSpacing.s3),
                 Expanded(
                   child: Text(
@@ -574,8 +588,8 @@ class _ActionBar extends StatelessWidget {
         child: Text(
           'Vista de solo lectura para administracion. No hay acciones operativas en este rol.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.appColors.textSecondary,
-              ),
+            color: context.appColors.textSecondary,
+          ),
         ),
       );
     }
@@ -585,8 +599,8 @@ class _ActionBar extends StatelessWidget {
         child: Text(
           'El owner consulta aqui el cruce entre reservas, estados programados y ventanas libres.',
           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: context.appColors.textSecondary,
-              ),
+            color: context.appColors.textSecondary,
+          ),
         ),
       );
     }
@@ -596,7 +610,9 @@ class _ActionBar extends StatelessWidget {
         AppButton(
           label: 'Reservar',
           icon: Icons.event_available_outlined,
-          onPressed: hasClientRange && clientIsAvailable == true ? onReserve : null,
+          onPressed: hasClientRange && clientIsAvailable == true
+              ? onReserve
+              : null,
         ),
         const SizedBox(height: AppSpacing.s3),
         AppButton(
@@ -636,9 +652,9 @@ class _TimelineTile extends StatelessWidget {
         children: [
           Text(
             block.label,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  color: block.color,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(color: block.color),
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(block.rangeLabel, style: Theme.of(context).textTheme.bodyMedium),
@@ -647,8 +663,8 @@ class _TimelineTile extends StatelessWidget {
             Text(
               block.supportingText!,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             ),
           ],
         ],
@@ -658,11 +674,7 @@ class _TimelineTile extends StatelessWidget {
 }
 
 class _InfoPill extends StatelessWidget {
-  const _InfoPill({
-    required this.icon,
-    required this.label,
-    this.color,
-  });
+  const _InfoPill({required this.icon, required this.label, this.color});
 
   final IconData icon;
   final String label;
@@ -690,9 +702,9 @@ class _InfoPill extends StatelessWidget {
             const SizedBox(width: AppSpacing.s2),
             Text(
               label,
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: foreground,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.labelMedium?.copyWith(color: foreground),
             ),
           ],
         ),
@@ -745,8 +757,8 @@ class _DetailRow extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ),
         Text(value, style: Theme.of(context).textTheme.titleSmall),
