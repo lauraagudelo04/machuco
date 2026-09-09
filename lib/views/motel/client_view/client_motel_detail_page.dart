@@ -72,11 +72,11 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium,
                         expanded: false,
                         onPressed: () {
-                          Navigator.pushNamed(
-                            context,
-                            AppRoutes.clientRooms,
-                            arguments: motel, // Pasa el objeto Motel que ya recibe ClientMotelDetailPage
-                          );
+                          //Navigator.pushNamed(
+                            //context,
+                            //AppRoutes.clientRooms,
+                            //arguments: motel, // Pasa el objeto Motel que ya recibe ClientMotelDetailPage
+                          //);
                         },
                       )
                     ],
