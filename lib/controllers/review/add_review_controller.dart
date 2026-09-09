@@ -38,11 +38,17 @@ class ReviewsController extends ChangeNotifier {
     ),
   ];
 
-  List<Review> get reviews => List.unmodifiable(_reviews);
+  List<Review> getReviewsByType(ReviewType type) {
+    return _reviews.where((review) => review.type == type).toList();
+  }
 
-  double get average => _reviews.isEmpty
-      ? 0
-      : _reviews.map((r) => r.rating).reduce((a, b) => a + b) / _reviews.length;
+  double getAverageByType(ReviewType type) {
+    final filtered = getReviewsByType(type);
+    if (filtered.isEmpty) return 0.0;
+    
+    final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
+    return total / filtered.length;
+  }
 
   void addReview(Review review) {
     _reviews.insert(0, review);
