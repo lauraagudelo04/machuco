@@ -26,7 +26,7 @@ import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/views/room/room_view_models.dart';
 
-import 'package:machuco/temporal_home_page.dart';
+import 'package:machuco/views/home/temporal_home_page.dart';
 
 abstract final class  AppRoutes {
   static const home = '/';
@@ -63,7 +63,8 @@ abstract final class  AppRoutes {
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
-      home => TemporalHomePage(),
+      home => const TemporalHomePage(),
+      temporalHome => const TemporalHomePage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       ownerSubscription => const OwnerSubscriptionPage(),

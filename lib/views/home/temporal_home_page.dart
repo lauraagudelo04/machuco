@@ -18,13 +18,13 @@ class TemporalHomePage extends StatelessWidget {
         'Propietario',
         'Revisar reservas por hotel, cancelar y notificar.',
         Icons.storefront_outlined,
-        AppRoutes.clientMotels,
+        AppRoutes.ownerMotels,
       ),
       _ProfileData(
         'Administrador',
         'Comparar volumen, promedio, ocupación e ingresos.',
         Icons.admin_panel_settings_outlined,
-        AppRoutes.clientMotels,
+        AppRoutes.ownerManagement,
       ),
     ];
     return Scaffold(
