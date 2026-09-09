@@ -152,7 +152,9 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.adminNotifications);
+            },
           ),
         ),
         actions: [

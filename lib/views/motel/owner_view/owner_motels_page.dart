@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
 import '../../../controllers/motel/owner_controller/owner_motel_controller.dart'; 
+import '../../../routes/routes.dart';
 import 'owner_motel_form_page.dart';
-import './../../../routes/routes.dart';
 //import '../../booking/owner_view/owner_booking_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 
@@ -142,7 +142,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.ownerNotifications);
+            },
           ),
         ),
         actions: [

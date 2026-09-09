@@ -5,7 +5,9 @@ import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
 import 'package:machuco/service/auth/backend_registered_user_directory.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
-import 'package:machuco/routes/routes.dart';
+import 'package:machuco/views/motel/client_view/client_motels_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 
 enum AuthTab { login, register }
 
@@ -307,12 +309,16 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   void _goToMainMenu() {
-    // TODO: reemplazar por enrutamiento real por rol cuando exista
-    // (responsabilidad fuera de esta rama). Mientras tanto, lleva al
-    // selector temporal de perfiles.
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.temporalHome, (_) => false);
+    final Widget targetPage = switch (_selectedProfileType) {
+      UserProfileType.administrator => const AdminMotelsPage(),
+      UserProfileType.owner => const OwnerMotelsPage(),
+      UserProfileType.finalUser => const ClientMotelsPage(),
+    };
+
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute<void>(builder: (_) => targetPage),
+      (_) => false,
+    );
   }
 
   String? _validateEmail(String? value) {

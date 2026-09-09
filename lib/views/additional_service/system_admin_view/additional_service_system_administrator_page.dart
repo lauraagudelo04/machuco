@@ -2,8 +2,10 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
+import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 
 const _serviceIconExtent = 52.0;
@@ -92,7 +94,19 @@ class _AdditionalServiceSystemAdministratorPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Servicios adicionales')),
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.s4),
+          child: AppIconButton(
+            icon: Icons.notifications_active_outlined,
+            tooltip: 'Notificaciones Admin',
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.adminNotifications);
+            },
+          ),
+        ),
+        title: const Text('Servicios adicionales (Admin)'),
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

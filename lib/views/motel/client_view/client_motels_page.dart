@@ -80,7 +80,9 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.clientNotifications);
+            },
           ),
         ),
         actions: [

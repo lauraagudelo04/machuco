@@ -5,6 +5,7 @@ import '../../../core/design_system/theme/app_theme_extensions.dart';
 import '../../../core/design_system/tokens/app_colors.dart';
 import '../../../core/design_system/tokens/app_radius.dart';
 import '../../../core/design_system/tokens/app_spacing.dart';
+import '../../../routes/routes.dart';
 import '../../../widgets/notification/admin_notification_card.dart';
 import '../../../widgets/notification/create_notification_sheet.dart';
 
@@ -47,23 +48,29 @@ class _SystemAdminNotificationViewState
     );
   }
 
+  void _goBackToAdminHome() {
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    } else {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.adminMotels,
+        (route) => false,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final notifications = _controller.notifications;
 
     return Scaffold(
       appBar: AppBar(
-        leading: IconButton(
-          icon: const Icon(Icons.add_alert_rounded, color: AppColors.violet),
-          tooltip: 'Crear nueva notificación',
-          onPressed: () => _openCreateNotificationDialog(context),
-        ),
-        title: const Text('Administrador de Notificaciones'),
+        title: const Text('Notificaciones Admin'),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Crear Notificación',
-            onPressed: () => _openCreateNotificationDialog(context),
+            icon: const Icon(Icons.home_outlined),
+            tooltip: 'Volver al Inicio (Admin)',
+            onPressed: _goBackToAdminHome,
           ),
         ],
       ),
@@ -104,7 +111,7 @@ class _SystemAdminNotificationViewState
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Toca la campana arriba a la izquierda para enviar un anuncio o alerta masiva/individual.',
+                            'Toca el botón flotante abajo a la derecha para enviar un anuncio o alerta masiva/individual.',
                             style: Theme.of(context)
                                 .textTheme
                                 .bodySmall

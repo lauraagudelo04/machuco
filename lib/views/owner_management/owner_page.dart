@@ -8,6 +8,7 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/routes/routes.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
@@ -113,7 +114,19 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Propietarios')),
+      appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.only(left: AppSpacing.s4),
+          child: AppIconButton(
+            icon: Icons.notifications_active_outlined,
+            tooltip: 'Notificaciones Admin',
+            onPressed: () {
+              Navigator.pushNamed(context, AppRoutes.adminNotifications);
+            },
+          ),
+        ),
+        title: const Text('Propietarios'),
+      ),
       body: SafeArea(
         bottom: false,
         child: ListenableBuilder(

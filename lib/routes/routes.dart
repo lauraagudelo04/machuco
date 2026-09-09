@@ -9,6 +9,7 @@ import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -26,13 +27,12 @@ import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/views/room/room_view_models.dart';
 
+import 'package:machuco/views/notification/Notification.dart';
+
 import 'package:machuco/views/home/temporal_home_page.dart';
 
 abstract final class  AppRoutes {
   static const home = '/';
-
-  static const temporalHome = '/temporal';
-
   static const paymentConfirmation = '/payment/client/confirmation';
   static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
@@ -51,6 +51,7 @@ abstract final class  AppRoutes {
   static const clientMotelDetail = '/motels/client/detail';
   static const ownerMotels = '/motels/owner';
   static const ownerMotelDetail = '/motels/owner/detail';
+  static const adminMotels = '/motels/admin';
   static const ownerProducts = '/products/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
@@ -63,8 +64,7 @@ abstract final class  AppRoutes {
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
-      home => const TemporalHomePage(),
-      temporalHome => const TemporalHomePage(),
+      home => ClientMotelsPage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       ownerSubscription => const OwnerSubscriptionPage(),
@@ -108,6 +108,7 @@ abstract final class  AppRoutes {
             ? settings.arguments! as Motel
             : null,
       ),
+      adminMotels => const AdminMotelsPage(),
 
       clientReservations => const ClientReservationsPage(),
       clientCreateBooking => CreateBookingPage(
