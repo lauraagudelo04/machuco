@@ -1,16 +1,19 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 
 const _serviceIconExtent = 52.0;
 const _serviceIconSize = 26.0;
 
 class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
-  const AdditionalServiceSystemAdministratorPage({super.key, this.controller});
+  const AdditionalServiceSystemAdministratorPage({
+    super.key,
+    this.motelId,
+    this.controller,
+  });
+
+  final int? motelId;
 
   final AdditionalServiceSystemAdministratorController? controller;
 
@@ -25,9 +28,13 @@ class _AdditionalServiceSystemAdministratorPageState
 
   late final AdditionalServiceSystemAdministratorController _controller;
   bool _controllerInitialized = false;
+  String? _selectedCategory;
 
-  List<AdditionalService> get _filteredServices =>
-      _controller.search(_searchController.text);
+  List<AdditionalServiceData> get _filteredServices =>
+      _controller.filterAdditionalServices(
+        query: _searchController.text,
+        category: _selectedCategory,
+      );
 
   @override
   void didChangeDependencies() {
@@ -37,17 +44,22 @@ class _AdditionalServiceSystemAdministratorPageState
     _controller =
         widget.controller ??
         AdditionalServiceSystemAdministratorController(
-          motelId: routeArgument is String
-              ? routeArgument
-              : AdditionalServiceSystemAdministratorController.demoMotelId,
+          motelId: widget.motelId ?? (routeArgument is int ? routeArgument : 1),
         );
     _controllerInitialized = true;
     _controller.addListener(_refresh);
-    unawaited(_controller.loadServicesByMotelId());
   }
 
   void _refresh() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        if (!_controller
+            .getAdditionalServiceCategoriesByMotelId(_controller.motelId)
+            .contains(_selectedCategory)) {
+          _selectedCategory = null;
+        }
+      });
+    }
   }
 
   void _clearSearch() {
@@ -55,7 +67,7 @@ class _AdditionalServiceSystemAdministratorPageState
     setState(() {});
   }
 
-  Future<void> _confirmDelete(AdditionalService service) async {
+  Future<void> _confirmDelete(AdditionalServiceData service) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -79,12 +91,15 @@ class _AdditionalServiceSystemAdministratorPageState
       ),
     );
     if (!mounted || shouldDelete != true) return;
-    _controller.delete(service);
+    _controller.deleteAdditionalService(service.id);
   }
 
   @override
   void dispose() {
     if (_controllerInitialized) _controller.removeListener(_refresh);
+    if (widget.controller == null && _controllerInitialized) {
+      _controller.dispose();
+    }
     _searchController.dispose();
     super.dispose();
   }
@@ -105,31 +120,6 @@ class _AdditionalServiceSystemAdministratorPageState
   }
 
   Widget _buildBody(BuildContext context) {
-    if (_controller.isLoading) {
-      return ListView(
-        padding: const EdgeInsets.all(AppSpacing.screen),
-        children: const [
-          AppSkeleton(height: 32),
-          SizedBox(height: AppSpacing.s3),
-          AppSkeleton(height: 20),
-          SizedBox(height: AppSpacing.s5),
-          AppSkeleton(height: 96),
-          SizedBox(height: AppSpacing.s5),
-          AppSkeleton(height: 56),
-          SizedBox(height: AppSpacing.s6),
-          AppSkeleton(height: 148),
-        ],
-      );
-    }
-
-    final errorMessage = _controller.errorMessage;
-    if (errorMessage != null) {
-      return AppErrorState(
-        message: errorMessage,
-        onRetry: () => unawaited(_controller.loadServicesByMotelId()),
-      );
-    }
-
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.screen),
       children: [
@@ -171,6 +161,28 @@ class _AdditionalServiceSystemAdministratorPageState
             );
           },
         ),
+        const SizedBox(height: AppSpacing.s3),
+        Wrap(
+          spacing: AppSpacing.s2,
+          children: [
+            ChoiceChip(
+              label: const Text('Todas'),
+              selected: _selectedCategory == null,
+              onSelected: (_) => setState(() => _selectedCategory = null),
+            ),
+            for (final category
+                in _controller.getAdditionalServiceCategoriesByMotelId(
+                  _controller.motelId,
+                ))
+              ChoiceChip(
+                label: Text(category),
+                selected: _selectedCategory == category,
+                onSelected: (selected) => setState(
+                  () => _selectedCategory = selected ? category : null,
+                ),
+              ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.s6),
         Row(
           children: [
@@ -205,7 +217,8 @@ class _AdditionalServiceSystemAdministratorPageState
               final service = _filteredServices[index];
               return _AdminServiceCard(
                 service: service,
-                onToggleActive: () => _controller.toggleActive(service),
+                onToggleActive: () =>
+                    _controller.toggleAdditionalServiceActive(service.id),
                 onEdit: () => _openEditForm(service),
                 onDelete: () => _confirmDelete(service),
               );
@@ -224,12 +237,12 @@ class _AdditionalServiceSystemAdministratorPageState
     );
   }
 
-  void _openEditForm(AdditionalService service) {
+  void _openEditForm(AdditionalServiceData service) {
     Navigator.push(
       context,
       MaterialPageRoute<void>(
         builder: (_) => AdditionalServiceAdminFormPage(
-          service: service,
+          serviceId: service.id,
           controller: _controller,
         ),
       ),
@@ -361,7 +374,7 @@ class _AdminServiceCard extends StatelessWidget {
     required this.onDelete,
   });
 
-  final AdditionalService service;
+  final AdditionalServiceData service;
   final VoidCallback onToggleActive;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -384,7 +397,7 @@ class _AdminServiceCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 child: Icon(
-                  _iconFor(service.icon),
+                  Icons.miscellaneous_services_outlined,
                   color: Theme.of(context).colorScheme.primary,
                   size: _serviceIconSize,
                 ),
@@ -484,11 +497,3 @@ String _formatPrice(int value) {
   }
   return buffer.toString();
 }
-
-IconData _iconFor(AdditionalServiceIcon icon) => switch (icon) {
-  AdditionalServiceIcon.shield => Icons.shield_outlined,
-  AdditionalServiceIcon.cloud => Icons.cloud_outlined,
-  AdditionalServiceIcon.support => Icons.support_agent_outlined,
-  AdditionalServiceIcon.cleaning => Icons.cleaning_services_outlined,
-  AdditionalServiceIcon.miscellaneous => Icons.miscellaneous_services_outlined,
-};
