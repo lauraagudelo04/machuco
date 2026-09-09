@@ -58,7 +58,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     super.initState();
     _bookingController = ClientBookingController();
     _servicesController = AdditionalServiceClientController();
-    _productsController = ProductController();
+    _productsController = ProductController.instance;
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
     _externalBlocked = widget.room.reservations
         .map((r) => BlockedRange(r.startDateTime, r.endDateTime))
@@ -71,7 +71,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   void dispose() {
     _servicesController.removeListener(_refresh);
     _servicesController.dispose();
-    _productsController.dispose();
     _bookingController.dispose();
     super.dispose();
   }
