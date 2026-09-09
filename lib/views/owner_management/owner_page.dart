@@ -11,6 +11,8 @@ import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
+import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
 import 'owner_summary.dart';
@@ -81,6 +83,17 @@ class _OwnerPageState extends State<OwnerPage> {
     );
     if (wantsToEdit != true || !mounted) return;
     await _editOwner(owner);
+  }
+
+  void _viewOwnerMotels(Owner owner) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OwnerMotelsPage(
+          fixedOwnerId: owner.id,
+          fixedOwnerName: owner.fullName,
+        ),
+      ),
+    );
   }
 
   Future<void> _toggleActiveState(Owner owner) async {
@@ -192,6 +205,7 @@ class _OwnerPageState extends State<OwnerPage> {
                           onEdit: _editOwner,
                           onToggleActive: _toggleActiveState,
                           onDelete: _deleteOwner,
+                          onViewMotels: _viewOwnerMotels,
                         )
                       : AppEmptyState(
                           icon: Icons.search_off,
@@ -306,6 +320,7 @@ class _OwnerList extends StatelessWidget {
     required this.onEdit,
     required this.onToggleActive,
     required this.onDelete,
+    required this.onViewMotels,
   });
 
   final List<Owner> owners;
@@ -313,6 +328,7 @@ class _OwnerList extends StatelessWidget {
   final ValueChanged<Owner> onEdit;
   final ValueChanged<Owner> onToggleActive;
   final ValueChanged<Owner> onDelete;
+  final ValueChanged<Owner> onViewMotels;
 
   @override
   Widget build(BuildContext context) {
@@ -342,6 +358,7 @@ class _OwnerList extends StatelessWidget {
                   onEdit: () => onEdit(owner),
                   onToggleActive: () => onToggleActive(owner),
                   onDelete: () => onDelete(owner),
+                  onViewMotels: () => onViewMotels(owner),
                 );
               },
             ),
@@ -360,6 +377,7 @@ class _OwnerCard extends StatelessWidget {
     required this.onEdit,
     required this.onToggleActive,
     required this.onDelete,
+    required this.onViewMotels,
   });
 
   final Owner owner;
@@ -367,6 +385,7 @@ class _OwnerCard extends StatelessWidget {
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;
   final VoidCallback onDelete;
+  final VoidCallback onViewMotels;
 
   @override
   Widget build(BuildContext context) {
@@ -398,6 +417,12 @@ class _OwnerCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
+              AppIconButton(
+                icon: Icons.domain_outlined,
+                tooltip: 'Ver moteles de ${owner.fullName}',
+                onPressed: onViewMotels,
+              ),
+              const SizedBox(width: AppSpacing.s2),
               AppIconButton(
                 icon: Icons.visibility_outlined,
                 tooltip: 'Ver detalle de ${owner.fullName}',
