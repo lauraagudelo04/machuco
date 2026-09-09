@@ -1,12 +1,25 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
-import '../../../controllers/motel/owner_controller/owner_motel_controller.dart'; 
+import '../../../models/owner_management/owner.dart';
+import '../../../models/owner_management/document_type.dart';
+import '../../../controllers/motel/motel_controller.dart'; 
+import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
 import '../../payment/system_admin_view/admin_payment_page.dart';
+import './admin_motel_form_page.dart'; 
+
+// admin_motels_page.dart
 
 class AdminMotelsPage extends StatefulWidget {
-  const AdminMotelsPage({super.key});
+  final String? initialOwnerId;
+  final String? initialOwnerName;
+
+  const AdminMotelsPage({
+    super.key,
+    this.initialOwnerId,
+    this.initialOwnerName,
+  });
 
   @override
   State<AdminMotelsPage> createState() => _AdminMotelsPageState();
@@ -15,34 +28,38 @@ class AdminMotelsPage extends StatefulWidget {
 class _AdminMotelsPageState extends State<AdminMotelsPage> {
   int _selectedIndex = 0; 
   
-  final OwnerMotelController _motelController = OwnerMotelController();
+  final MotelController _motelController = MotelController();
+  final OwnerController _ownerController = OwnerController();
   
   List<Motel> _motels = [];
+  List<Owner> _owners = [];
   bool _isLoading = true;
 
-  // Filtro de búsqueda por texto
   String _searchQuery = '';
 
-  // Simulación de administradores o regiones a cargo
-  String _currentAdminId = 'admin-root-01';
-  final Map<String, String> _dummyAdmins = {
-    'admin-root-01': 'Carlos Admin Principal',
-    'admin-reg-02': 'Valeria Supervisor Regional',
-  };
+  late String _currentOwnerId;
 
   @override
   void initState() {
     super.initState();
-    _loadMotels();
+    _loadOwnersAndMotels();
   }
 
-  Future<void> _loadMotels() async {
+  Future<void> _loadOwnersAndMotels() async {
     setState(() => _isLoading = true);
     
-    // Como los datos base vienen del controlador de moteles, traemos todos o filtramos por el dueño simulado
-    final motelesObtenidos = await _motelController.getMotelsByOwnerId('owner-1020304050');
-    // Para el admin, podríamos cargar una lista más amplia o combinada si estuviera disponible. 
-    // Usamos temporalmente esta lista base para simular la gestión de la plataforma.
+    final ownersList = _ownerController.owners;
+    _owners = ownersList;
+    
+    if (widget.initialOwnerId != null && widget.initialOwnerId!.isNotEmpty) {
+      _currentOwnerId = widget.initialOwnerId!;
+    } else if (_owners.isNotEmpty) {
+      _currentOwnerId = _owners.first.id;
+    } else {
+      _currentOwnerId = 'owner-1020304050'; 
+    }
+
+    final motelesObtenidos = await _motelController.getMotelsByOwnerId(_currentOwnerId);
     
     setState(() {
       _motels = motelesObtenidos;
@@ -70,6 +87,42 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
         isAvailable: !current.isAvailable, 
       );
     });
+  }
+
+  Future<void> _showMotelFormModal({Motel? motelToEdit}) async {
+    final isEditing = motelToEdit != null;
+
+    final result = await Navigator.push<Motel>(
+      context,
+      MaterialPageRoute(
+        builder: (context) => OwnerMotelFormPage(
+          isEditing: isEditing,
+          motel: motelToEdit,
+          ownerId: _currentOwnerId, 
+        ),
+      ),
+    );
+
+    if (result != null) {
+      setState(() {
+        if (isEditing) {
+          final index = _motels.indexWhere((m) => m.id == result.id);
+          if (index != -1) {
+            _motels[index] = result;
+          }
+        } else {
+          if (result.ownerId == _currentOwnerId) {
+            _motels.insert(0, result);
+          }
+        }
+      });
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(isEditing ? 'Motel actualizado con éxito' : 'Motel creado y asignado con éxito')),
+        );
+      }
+    }
   }
 
   @override
@@ -110,7 +163,21 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   }
 
   Widget _buildMotelsContent() {
-    // Filtrado local de moteles según el buscador
+    final currentOwnerName = widget.initialOwnerName ??
+        _owners
+            .firstWhere(
+              (o) => o.id == _currentOwnerId,
+              orElse: () => Owner(
+                id: _currentOwnerId,
+                fullName: 'Propietario',
+                documentType: DocumentType.citizenshipCard,
+                documentNumber: '',
+                email: '',
+                phone: '',
+              ),
+            )
+            .fullName;
+
     final filteredMotels = _motels.where((motel) {
       final nameLower = motel.name.toLowerCase();
       final idLower = motel.id.toLowerCase();
@@ -121,40 +188,20 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _currentAdminId,
-            dropdownColor: Theme.of(context).cardColor,
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Colors.white, fontWeight: FontWeight.bold),
-            items: _dummyAdmins.entries.map((entry) {
-              return DropdownMenuItem<String>(
-                value: entry.key,
-                child: Text(
-                  entry.value, 
-                  style: TextStyle(color: Theme.of(context).textTheme.bodyLarge?.color),
-                ),
-              );
-            }).toList(),
-            onChanged: (String? newAdminId) {
-              if (newAdminId != null && newAdminId != _currentAdminId) {
-                setState(() {
-                  _currentAdminId = newAdminId;
-                });
-                _loadMotels();
-              }
-            },
-          ),
+        title: Text(
+          currentOwnerName,
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
         ),
         leadingWidth: 68,
+        // Reemplazo: botón de flecha atrás para regresar a owner_page.dart
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
           child: AppIconButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: 'Notificaciones',
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.adminNotifications);
-            },
+            icon: Icons.arrow_back,
+            tooltip: 'Volver a Propietarios',
+            onPressed: () => Navigator.pop(context),
           ),
         ),
         actions: [
@@ -189,11 +236,19 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: ${_dummyAdmins[_currentAdminId]}',
+                    'Vista de Propietario: $currentOwnerName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
               ),
+            ),
+            // Opción de notificaciones movida aquí
+            _MenuTile(
+              icon: Icons.notifications_outlined, 
+              title: 'Notificaciones', 
+              onTap: () {
+                Navigator.pop(context);
+              },
             ),
             _MenuTile(icon: Icons.security_outlined, title: 'Seguridad y Roles', onTap: () {}),
             _MenuTile(icon: Icons.analytics_outlined, title: 'Reportes Globales', onTap: () {}),
@@ -202,8 +257,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               title: 'PQRS de Usuarios', 
               onTap: () {
                 Navigator.pop(context); 
-                // Navigator.pushNamed(context, AppRoutes.adminPqrs);
-              }
+              },
             ),
           ],
         ),
@@ -219,16 +273,12 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               children: [
                 Text('Gestión de Establecimientos', style: Theme.of(context).textTheme.headlineSmall),
                 Chip(
-                  label: Text(
-                    'Admin Mod',
-                    style: const TextStyle(fontSize: 12),
-                  ),
+                  label: Text(currentOwnerName.split(' ').first, style: const TextStyle(fontSize: 12)),
                   backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.s3),
-            // Buscador funcional integrado con el estado
             AppSearchField(
               label: 'Buscar moteles por nombre o ID...',
               onChanged: (value) {
@@ -242,7 +292,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : filteredMotels.isEmpty
-                      ? const Center(child: Text('No se encontraron establecimientos registrados.'))
+                      ? const Center(child: Text('No se encontraron establecimientos registrados para este propietario.'))
                       : ListView.separated(
                           itemCount: filteredMotels.length,
                           separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
@@ -250,9 +300,10 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                             final motel = filteredMotels[index];
                             return _AdminMotelCard(
                               motel: motel,
+                              activeReservations: 3, 
                               onToggleStatus: () => _toggleMotelStatus(index),
+                              onEdit: () => _showMotelFormModal(motelToEdit: motel), 
                               onManage: () {
-                                // Navegación de administración profunda o hacia sus productos
                                 Navigator.pushNamed(
                                   context,
                                   AppRoutes.ownerProducts,
@@ -266,21 +317,28 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
           ],
         ),
       ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showMotelFormModal(),
+        icon: const Icon(Icons.add),
+        label: const Text('Agregar'),
+      ),
     );
   }
 }
 
-// --- Componentes Privados Auxiliares para Admin ---
-
 class _AdminMotelCard extends StatelessWidget {
   const _AdminMotelCard({
     required this.motel,
+    required this.activeReservations,
     required this.onToggleStatus,
+    required this.onEdit,
     required this.onManage,
   });
 
   final Motel motel;
+  final int activeReservations;
   final VoidCallback onToggleStatus;
+  final VoidCallback onEdit;
   final VoidCallback onManage;
 
   void _showConfirmDialog(BuildContext context) {
@@ -345,13 +403,13 @@ class _AdminMotelCard extends StatelessWidget {
                 Text(
                   motel.name,
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    decoration: isActive ? null : TextDecoration.lineThrough,
                     fontWeight: FontWeight.bold,
+                    decoration: isActive ? null : TextDecoration.lineThrough,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s1),
                 Text(
-                  'ID: ${motel.id} • NIT: ${motel.nit}',
+                  '$activeReservations reservas • Dueño ID: ${motel.ownerId.substring(0, 8)}...',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.appColors.textSecondary,
                   ),
@@ -359,38 +417,60 @@ class _AdminMotelCard extends StatelessWidget {
               ],
             ),
           ),
-          StatusBadge(status: isActive ? AppStatus.active : AppStatus.blocked),
-          const SizedBox(width: AppSpacing.s2),
-          PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert),
-            tooltip: 'Opciones de administración',
-            onSelected: (String value) {
-              if (value == 'gestion') {
-                onManage();
-              } else if (value == 'bloqueo') {
-                _showConfirmDialog(context);
-              }
-            },
-            itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
-              const PopupMenuItem<String>(
-                value: 'gestion',
-                child: Row(
-                  children: [
-                    Icon(Icons.inventory_2_outlined, size: 20),
-                    SizedBox(width: 8),
-                    Text('Gestionar Productos/Catálogo'),
-                  ],
-                ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              IconButton(
+                icon: const Icon(Icons.edit_outlined),
+                tooltip: 'Editar establecimiento',
+                onPressed: onEdit,
               ),
-              PopupMenuItem<String>(
-                value: 'bloqueo',
-                child: Row(
-                  children: [
-                    Icon(isActive ? Icons.block : Icons.check_circle_outline, size: 20, color: isActive ? Colors.redAccent : Colors.green),
-                    SizedBox(width: 8),
-                    Text(isActive ? 'Bloquear establecimiento' : 'Desbloquear establecimiento'),
-                  ],
-                ),
+              IconButton(
+                icon: Icon(isActive ? Icons.block : Icons.check_circle_outline),
+                tooltip: isActive ? 'Bloquear establecimiento' : 'Desbloquear establecimiento',
+                color: isActive ? Colors.redAccent : Colors.green,
+                onPressed: () => _showConfirmDialog(context), 
+              ),
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert),
+                tooltip: 'Opciones de administración',
+                onSelected: (String value) {
+                  if (value == 'gestion') {
+                    onManage();
+                  }
+                },
+                itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'habitaciones',
+                    child: Row(
+                      children: [
+                        Icon(Icons.bed_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Habitaciones'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'gestion',
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Productos'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'servicios',
+                    child: Row(
+                      children: [
+                        Icon(Icons.room_preferences_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Servicios adicionales'),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

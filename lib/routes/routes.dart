@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/models/additional_service/additional_service.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
@@ -10,8 +9,6 @@ import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
-import 'package:machuco/views/additional_service/client_view/add_additional_service_client_page.dart';
-import 'package:machuco/views/additional_service/client_view/additional_service_client_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
@@ -26,20 +23,23 @@ import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 
 import 'package:machuco/views/notification/Notification.dart';
-
 import 'package:machuco/views/home/temporal_home_page.dart';
 
-abstract final class  AppRoutes {
+abstract final class AppRoutes {
   static const home = '/';
+  static const temporalHome = '/temporal';
+  static const notifications = '/notifications';
+  static const clientNotifications = '/notifications/client';
+  static const ownerNotifications = '/notifications/owner';
+  static const adminNotifications = '/notifications/admin';
   static const paymentConfirmation = '/payment/client/confirmation';
   static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
   static const ownerSubscription = '/subscription/owner';
   static const adminPayments = '/payment/admin';
-  static const clientAdditionalServices = '/additional-service/client';
-  static const addClientAdditionalServices = '/additional-service/client/add';
   static const adminAdditionalServices = '/additional-service/admin';
   static const createAdminAdditionalService = '/additional-service/admin/new';
   static const ownerManagement = '/owner-management';
@@ -53,6 +53,7 @@ abstract final class  AppRoutes {
   static const ownerMotelDetail = '/motels/owner/detail';
   static const adminMotels = '/motels/admin';
   static const ownerProducts = '/products/owner';
+  static const ownerReviews = '/reviews/owner';
   static const adminReviews = '/reviews/admin';
   static const clientReservations = '/bookings/client';
   static const clientCreateBooking = '/bookings/client/new';
@@ -64,24 +65,27 @@ abstract final class  AppRoutes {
 
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
-      home => ClientMotelsPage(),
+      home => const TemporalHomePage(),
+      temporalHome => const TemporalHomePage(),
+      notifications => const NotificationPage(),
+      clientNotifications => const ClientNotificationView(),
+      ownerNotifications => const OwnerNotificationView(),
+      adminNotifications => const SystemAdminNotificationView(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
-      clientAdditionalServices => const AdditionalServiceClientPage(),
-      addClientAdditionalServices => const AddAdditionalServiceClientPage(),
-      adminAdditionalServices =>
-        const AdditionalServiceSystemAdministratorPage(),
+      adminAdditionalServices => AdditionalServiceSystemAdministratorPage(
+        motelId: settings.arguments is int ? settings.arguments! as int : 1,
+      ),
       createAdminAdditionalService => AdditionalServiceAdminFormPage(
-        service: settings.arguments is AdditionalService
-            ? settings.arguments! as AdditionalService
-            : null,
+        motelId: settings.arguments is int ? settings.arguments! as int : 1,
       ),
       ownerManagement => const OwnerPage(),
       pqrs => const PqrsPage(),
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
+      ownerReviews => const OwnerReviewPage(),
       adminPqrs => const SystemAdminPqrsPage(),
 
       ownerProducts => ProductListView(

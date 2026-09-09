@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
-import '../../../models/motel/motel_model.dart'; 
-import '../../../controllers/motel/owner_controller/owner_motel_controller.dart'; 
+import '../../../models/motel/motel_model.dart';
+import '../../../controllers/motel/motel_controller.dart';
 import '../../../routes/routes.dart';
 import 'owner_motel_form_page.dart';
-//import '../../booking/owner_view/owner_booking_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
@@ -17,7 +16,7 @@ class OwnerMotelsPage extends StatefulWidget {
 class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   int _selectedIndex = 0; 
   
-  final OwnerMotelController _motelController = OwnerMotelController();
+  final MotelController _motelController = MotelController();
   
   List<Motel> _motels = [];
   bool _isLoading = true;
@@ -100,7 +99,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           AppNavigationDestination(
             icon: Icons.payments_outlined,
             selectedIcon: Icons.payments,
-            label: 'Pagos',
+            label: 'Finanzas',
           ),
         ],
       ),
