@@ -165,12 +165,7 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
         const SizedBox(height: AppSpacing.s1),
         Text('Reseñas', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: AppSpacing.s2),
-        Text(
-          'Modera los comentarios de los clientes: oculta, responde o elimina reseñas.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
-        ),
+      
       ],
     );
   }
