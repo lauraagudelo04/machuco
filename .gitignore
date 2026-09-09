@@ -10,8 +10,12 @@
 .history
 .svn/
 .swiftpm/
+.agents/
+.docs/
 migrate_working_dir/
-**/main.dart
+test/
+openspec/
+docs/
 
 # IntelliJ related
 *.iml
@@ -33,7 +37,6 @@ migrate_working_dir/
 .pub/
 /build/
 /coverage/
-test/
 
 # Symbolication related
 app.*.symbols

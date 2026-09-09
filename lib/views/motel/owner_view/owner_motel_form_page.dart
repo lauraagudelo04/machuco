@@ -1,28 +1,57 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../models/motel/motel_model.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
-  // Si es true, estamos editando un motel existente. Si es false, estamos creando uno nuevo.
-  const OwnerMotelFormPage({super.key, this.isEditing = false});
+  const OwnerMotelFormPage({
+    super.key, 
+    this.isEditing = false, 
+    this.motel,
+    this.ownerId, // Recibimos el ID del propietario actual
+  });
 
   final bool isEditing;
+  final Motel? motel;
+  final String? ownerId;
 
   @override
   State<OwnerMotelFormPage> createState() => _OwnerMotelFormPageState();
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
-  // Controladores básicos para el ejemplo
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   final _roomsController = TextEditingController();
   final _nitController = TextEditingController();
   final _addressController = TextEditingController();
   final _phoneController = TextEditingController();
+  final _descriptionController = TextEditingController();
+  final _generalLocationController = TextEditingController();
 
-  // Estado para los chips de métodos de pago
-  final List<String> _selectedPaymentMethods = ['Efectivo'];
+  final List<String> _selectedPaymentMethods = [];
   final List<String> _availablePaymentMethods = ['Efectivo', 'Tarjeta Crédito/Débito', 'Transferencia', 'Nequi / Daviplata'];
+  
+  List<String> _imageUrls = [];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isEditing && widget.motel != null) {
+      _emailController.text = widget.motel!.email;
+      _nameController.text = widget.motel!.name;
+      _roomsController.text = widget.motel!.roomCount.toString();
+      _nitController.text = widget.motel!.nit;
+      _addressController.text = widget.motel!.address;
+      _phoneController.text = widget.motel!.phone;
+      // Solucionado el error de nulos usando el operador ?? ''
+      _descriptionController.text = widget.motel!.description ?? '';         
+      _generalLocationController.text = widget.motel!.generalLocation ?? '';   
+      _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
+      _imageUrls = List.from(widget.motel!.imageUrls);
+    } else {
+      _selectedPaymentMethods.add('Efectivo');
+    }
+  }
 
   @override
   void dispose() {
@@ -32,6 +61,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     _nitController.dispose();
     _addressController.dispose();
     _phoneController.dispose();
+    _descriptionController.dispose();
+    _generalLocationController.dispose();
     super.dispose();
   }
 
@@ -43,6 +74,29 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
         _selectedPaymentMethods.add(method);
       }
     });
+  }
+
+  void _onSave() {
+    final int roomCountParsed = int.tryParse(_roomsController.text.trim()) ?? 0;
+
+    final Motel motelToSave = Motel(
+      id: widget.isEditing && widget.motel != null ? widget.motel!.id : 'motel_${DateTime.now().millisecondsSinceEpoch}',
+      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner_1', // Incluido el ownerId requerido
+      name: _nameController.text.trim(),
+      email: _emailController.text.trim(),
+      roomCount: roomCountParsed,
+      nit: _nitController.text.trim(),
+      address: _addressController.text.trim(),
+      phone: _phoneController.text.trim(),
+      description: _descriptionController.text.trim(),
+      generalLocation: _generalLocationController.text.trim(),
+      paymentMethods: _selectedPaymentMethods,
+      imageUrls: _imageUrls.isEmpty ? ['https://via.placeholder.com/400'] : _imageUrls,
+      basePrice: widget.isEditing && widget.motel != null ? widget.motel!.basePrice : 50000.0,
+      isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
+    );
+
+    Navigator.pop(context, motelToSave);
   }
 
   @override
@@ -57,84 +111,64 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección superior derecha (Botones de Habitaciones y Reseñas)
-            Align(
-              alignment: Alignment.centerRight,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  TextButton.icon(
-                    onPressed: () {
-                      // TODO: Navegar a la vista de agregar/gestionar habitaciones
-                    },
-                    icon: const Icon(Icons.bed_outlined),
-                    label: const Text('Agregar habitaciones'),
-                    style: TextButton.styleFrom(
-                      visualDensity: VisualDensity.compact,
-                    ),
-                  ),
-                  // Solo mostramos "Ver reseña" si estamos en modo edición
-                  if (widget.isEditing)
-                    TextButton.icon(
-                      onPressed: () {
-                        // TODO: Navegar o abrir modal de reseñas
-                      },
-                      icon: const Icon(Icons.star_outline),
-                      label: const Text('Ver reseña'),
-                      style: TextButton.styleFrom(
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ),
-                ],
-              ),
-            ),
-            
             const SizedBox(height: AppSpacing.s2),
-
-            // Formulario de datos básicos
+            _buildTextField(
+              controller: _nameController,
+              label: 'Nombre del establecimiento',
+              keyboardType: TextInputType.name,
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            _buildTextField(
+              controller: _descriptionController,
+              label: 'Descripción',
+              keyboardType: TextInputType.multiline,
+              maxLines: 3, 
+            ),
+            const SizedBox(height: AppSpacing.s3),
             _buildTextField(
               controller: _emailController,
               label: 'Correo',
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: AppSpacing.s3),
-            
-            _buildTextField(
-              controller: _nameController,
-              label: 'Nombre',
-              keyboardType: TextInputType.name,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            
-            _buildTextField(
-              controller: _roomsController,
-              label: '# Habitaciones',
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            
-            _buildTextField(
-              controller: _nitController,
-              label: 'NIT',
-              keyboardType: TextInputType.number,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            
-            _buildTextField(
-              controller: _addressController,
-              label: 'Dirección',
-              keyboardType: TextInputType.streetAddress,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            
             _buildTextField(
               controller: _phoneController,
               label: 'Teléfono',
               keyboardType: TextInputType.phone,
             ),
+            const SizedBox(height: AppSpacing.s3),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildTextField(
+                    controller: _roomsController,
+                    label: '# Habitaciones',
+                    keyboardType: TextInputType.number,
+                  ),
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(
+                  child: _buildTextField(
+                    controller: _nitController,
+                    label: 'NIT',
+                    keyboardType: TextInputType.text,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            _buildTextField(
+              controller: _generalLocationController,
+              label: 'Ubicación general (Ej: Norte, Centro)',
+              keyboardType: TextInputType.text,
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            _buildTextField(
+              controller: _addressController,
+              label: 'Dirección exacta',
+              keyboardType: TextInputType.streetAddress,
+            ),
             const SizedBox(height: AppSpacing.s5),
-
-            // Sección de Métodos de Pago
             Text('Métodos de pago', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s2),
             Wrap(
@@ -152,23 +186,23 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
               }).toList(),
             ),
             const SizedBox(height: AppSpacing.s5),
-
-            // Sección de Imágenes
             Text('Imágenes', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: AppSpacing.s2),
             InkWell(
               onTap: () {
-                // TODO: Lógica para abrir selector de imágenes de la galería/cámara
+                setState(() {
+                  _imageUrls.add('https://images.unsplash.com/photo-1566073771259-6a8506099945');
+                });
               },
               borderRadius: BorderRadius.circular(12),
               child: Container(
                 height: 120,
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: context.appColors.mediaFallback ?? Colors.grey.shade200,
+                  color: context.appColors.mediaFallback,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: context.appColors.border ?? Colors.grey.shade400,
+                    color: context.appColors.border,
                     style: BorderStyle.solid,
                   ),
                 ),
@@ -178,7 +212,9 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                     Icon(Icons.add_photo_alternate_outlined, size: 40, color: context.appColors.textSecondary),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
-                      'Toca para agregar imágenes',
+                      _imageUrls.isNotEmpty 
+                          ? '${_imageUrls.length} imagen(es) cargada(s)' 
+                          : 'Toca para agregar imágenes',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.appColors.textSecondary,
                       ),
@@ -187,37 +223,35 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 ),
               ),
             ),
-            
             const SizedBox(height: AppSpacing.s6),
           ],
         ),
       ),
-      // Botón "Guardar" fijo en la parte inferior
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.s4),
           child: AppButton(
             label: 'Guardar',
-            onPressed: () {
-              // TODO: Validar formulario y guardar/actualizar datos en Supabase
-            },
+            onPressed: _onSave,
           ),
         ),
       ),
     );
   }
 
-  // Widget auxiliar para mantener el código limpio y estandarizar los campos de texto
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
     required TextInputType keyboardType,
+    int maxLines = 1,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      maxLines: maxLines,
       decoration: InputDecoration(
         labelText: label,
+        alignLabelWithHint: maxLines > 1,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8.0),
         ),
