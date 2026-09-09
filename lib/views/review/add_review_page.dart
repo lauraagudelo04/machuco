@@ -41,8 +41,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        final reviews = _controller.reviews;
-        final average = _controller.average;
+        final reviews = _controller.getReviewsByType(widget.reviewType);
+        final average = _controller.getAverageByType(widget.reviewType);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
