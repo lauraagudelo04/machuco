@@ -11,7 +11,7 @@ import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
-import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
@@ -86,13 +86,12 @@ class _OwnerPageState extends State<OwnerPage> {
   }
 
   void _viewOwnerMotels(Owner owner) {
+    // TODO(admin-motels): AdminMotelsPage aun no recibe el propietario, asi que
+    // por ahora abre la lista completa. Cuando el modulo de moteles exponga
+    // `fixedOwnerId` / `fixedOwnerName`, pasar `owner.id` y `owner.fullName`
+    // para que la vista llegue filtrada por este propietario.
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => OwnerMotelsPage(
-          fixedOwnerId: owner.id,
-          fixedOwnerName: owner.fullName,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => const AdminMotelsPage()),
     );
   }
 
