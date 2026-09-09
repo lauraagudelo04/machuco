@@ -143,6 +143,7 @@ class ReviewAdministrationController extends ChangeNotifier {
   List<AdminReviewEntry> _seedEntries() => [
     AdminReviewEntry(
       review: Review(
+        parentId: "M1",
         author: 'Carlos M.',
         title: 'Muy cómodo y tranquilo',
         body:
@@ -154,6 +155,7 @@ class ReviewAdministrationController extends ChangeNotifier {
     ),
     AdminReviewEntry(
       review: Review(
+        parentId: "M1",
         author: 'Roberto V.',
         title: 'Comentario inapropiado',
         body: 'Contiene lenguaje ofensivo y datos personales expuestos.',

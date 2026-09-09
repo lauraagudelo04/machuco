@@ -41,8 +41,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        final reviews = _controller.getReviewsByType(widget.reviewType);
-        final average = _controller.getAverageByType(widget.reviewType);
+        final reviews = _controller.getReviewsByType(widget.reviewType, widget.id);
+        final average = _controller.getAverageByType(widget.reviewType, widget.id);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,17 +82,18 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                         context,
                         reviewType: widget.reviewType,
                         onSave: (review) => _controller.addReview(review),
+                        parentId: widget.id
                       )
                   : null,
             ),
             const SizedBox(height: AppSpacing.s4),
 
-            Expanded(
-                child: ListView.builder(
-                padding: EdgeInsets.zero,
-                itemCount: reviews.length,
-                itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
-              ),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              padding: EdgeInsets.zero,
+              itemCount: reviews.length,
+              itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
             )
           ],
         );
