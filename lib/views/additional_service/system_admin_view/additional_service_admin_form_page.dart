@@ -7,12 +7,12 @@ class AdditionalServiceAdminFormPage extends StatefulWidget {
     super.key,
     this.serviceId,
     this.controller,
-    this.motelId = 1,
+    this.motelId = '1',
   });
 
-  final int? serviceId;
+  final String? serviceId;
   final AdditionalServiceSystemAdministratorController? controller;
-  final int motelId;
+  final String motelId;
 
   @override
   State<AdditionalServiceAdminFormPage> createState() =>

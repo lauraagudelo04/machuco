@@ -69,10 +69,14 @@ abstract final class AppRoutes {
       ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
       adminAdditionalServices => AdditionalServiceSystemAdministratorPage(
-        motelId: settings.arguments is int ? settings.arguments! as int : 1,
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : '1',
       ),
       createAdminAdditionalService => AdditionalServiceAdminFormPage(
-        motelId: settings.arguments is int ? settings.arguments! as int : 1,
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : '1',
       ),
       ownerManagement => const OwnerPage(),
       pqrs => const PqrsPage(),
