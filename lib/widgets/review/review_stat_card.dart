@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 
 /// Tarjeta simple de icono + título + valor. No sabe de dónde viene el
-/// dato: solo lo recibe y lo pinta.
-class ReviewAdminStatCard extends StatelessWidget {
-  const ReviewAdminStatCard({
+/// dato: solo lo recibe y lo pinta. Reutilizada en admin y propietario.
+class ReviewStatCard extends StatelessWidget {
+  const ReviewStatCard({
     super.key,
     required this.icon,
     required this.title,
