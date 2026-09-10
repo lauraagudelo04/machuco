@@ -388,9 +388,12 @@ class _OwnerMotelCard extends StatelessWidget {
                           builder: (_) => RoomOwnerPage(motel: motel),
                         ),
                       );
-                    // TODO: Implementar navegación a habitaciones cuando esté lista
                   } else if (value == 'servicios') {
-                    // TODO: Implementar navegación a servicios adicionales cuando esté lista
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminAdditionalServices,
+                      arguments: motel.id,
+                    );
                   } else if (value == 'finanzas') {
                     Navigator.push(
                       context,
