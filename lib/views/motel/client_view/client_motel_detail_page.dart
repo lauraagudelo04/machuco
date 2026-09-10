@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
-import './../../../routes/routes.dart';
+import '../../room/client_view/room_client_page.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
   const ClientMotelDetailPage({super.key, required this.motel});
@@ -72,11 +72,11 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium,
                         expanded: false,
                         onPressed: () {
-                          //Navigator.pushNamed(
-                            //context,
-                            //AppRoutes.clientRooms,
-                            //arguments: motel, // Pasa el objeto Motel que ya recibe ClientMotelDetailPage
-                          //);
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RoomClientPage(motel: motel),
+                            ),
+                          );
                         },
                       )
                     ],
