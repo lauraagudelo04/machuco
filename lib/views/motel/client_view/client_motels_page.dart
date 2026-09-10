@@ -5,6 +5,7 @@ import '../../../controllers/motel/motel_controller.dart';
 import './../../../routes/routes.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
+import '../../notification/client_view/client_notification_view.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -80,7 +81,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ClientNotificationView(),
+                ),
+              );
+            },
           ),
         ),
         actions: [
