@@ -84,7 +84,6 @@ abstract final class AppRoutes {
       pqrs => const PqrsPage(),
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
-      ownerPqrs => const OwnerPqrsPage(),
       ownerReviews => const OwnerReviewPage(),
       adminPqrs => const SystemAdminPqrsPage(),
 
