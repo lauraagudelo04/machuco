@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/models/review/review_type.dart';
 
 /// Estado de moderación asignado por el administrador a una reseña.
 enum ReviewModerationStatus { visible, hidden, reported }
@@ -142,21 +143,25 @@ class ReviewAdministrationController extends ChangeNotifier {
   List<AdminReviewEntry> _seedEntries() => [
     AdminReviewEntry(
       review: Review(
+        parentId: "M1",
         author: 'Carlos M.',
         title: 'Muy cómodo y tranquilo',
         body:
             'Las habitaciones estaban limpias y el personal fue muy amable.',
         rating: 5,
         date: DateTime(2026, 7, 20),
+        type: ReviewType.motel,
       ),
     ),
     AdminReviewEntry(
       review: Review(
+        parentId: "M1",
         author: 'Roberto V.',
         title: 'Comentario inapropiado',
         body: 'Contiene lenguaje ofensivo y datos personales expuestos.',
         rating: 1,
         date: DateTime(2026, 8, 2),
+        type: ReviewType.motel,
       ),
       status: ReviewModerationStatus.reported,
       reportReason: 'Lenguaje inapropiado y datos personales expuestos',

@@ -3,11 +3,15 @@ import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_feedback.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
+import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/models/owner_management/owner_status_filter.dart';
+
+import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
@@ -29,11 +33,23 @@ class OwnerPage extends StatefulWidget {
 
 class _OwnerPageState extends State<OwnerPage> {
   final OwnerController _controller = OwnerController();
+  final TextEditingController _searchController = TextEditingController();
 
   @override
   void dispose() {
+    _searchController.dispose();
     _controller.dispose();
     super.dispose();
+  }
+
+  void _clearSearch() {
+    _searchController.clear();
+    _controller.search('');
+  }
+
+  void _clearFilters() {
+    _searchController.clear();
+    _controller.clearFilters();
   }
 
   void _showMessage(String message) {
@@ -69,6 +85,17 @@ class _OwnerPageState extends State<OwnerPage> {
     await _editOwner(owner);
   }
 
+  void _viewOwnerMotels(Owner owner) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => AdminMotelsPage(
+          initialOwnerId: owner.id,
+          initialOwnerName: owner.fullName,
+        ),
+      ),
+    );
+  }
+
   Future<void> _toggleActiveState(Owner owner) async {
     // Inactivar deja al propietario sin operación, así que se confirma; volver
     // a activarlo es inocuo y no necesita confirmación.
@@ -84,6 +111,38 @@ class _OwnerPageState extends State<OwnerPage> {
           ? '${updated.fullName} quedó activo.'
           : '${updated.fullName} quedó inactivo.',
     );
+  }
+
+  Future<void> _deleteOwner(Owner owner) async {
+    if (!await _confirmDeletion(owner)) return;
+    if (!mounted) return;
+    final deleted = _controller.deleteOwner(owner.id);
+    if (deleted == null) return;
+    _showMessage('${deleted.fullName} fue eliminado.');
+  }
+
+  Future<bool> _confirmDeletion(Owner owner) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar propietario'),
+        content: Text(
+          '${owner.fullName} se eliminará de forma permanente y no podrás '
+          'recuperarlo. Si solo quieres suspender su operación, usa Inactivar.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    return confirmed ?? false;
   }
 
   Future<bool> _confirmDeactivation(Owner owner) async {
@@ -129,11 +188,35 @@ class _OwnerPageState extends State<OwnerPage> {
                 onAction: _createOwner,
               );
             }
-            return _OwnerList(
-              owners: _controller.owners,
-              onDetail: _openDetail,
-              onEdit: _editOwner,
-              onToggleActive: _toggleActiveState,
+            return Column(
+              children: [
+                _OwnerFilterBar(
+                  searchController: _searchController,
+                  selectedFilter: _controller.statusFilter,
+                  onSearchChanged: _controller.search,
+                  onClearSearch: _clearSearch,
+                  onFilterSelected: _controller.filterByStatus,
+                ),
+                Expanded(
+                  child: _controller.hasVisibleOwners
+                      ? _OwnerList(
+                          owners: _controller.visibleOwners,
+                          onDetail: _openDetail,
+                          onEdit: _editOwner,
+                          onToggleActive: _toggleActiveState,
+                          onDelete: _deleteOwner,
+                          onViewMotels: _viewOwnerMotels,
+                        )
+                      : AppEmptyState(
+                          icon: Icons.search_off,
+                          title: 'Sin resultados',
+                          message:
+                              'Ningún propietario coincide con tu búsqueda o filtro.',
+                          actionLabel: 'Limpiar filtros',
+                          onAction: _clearFilters,
+                        ),
+                ),
+              ],
             );
           },
         ),
@@ -147,6 +230,88 @@ class _OwnerPageState extends State<OwnerPage> {
   }
 }
 
+/// Barra fija con la búsqueda y el filtro por estado del listado.
+///
+/// Queda fuera del área desplazable para que los criterios sigan visibles
+/// mientras se recorren los propietarios.
+class _OwnerFilterBar extends StatelessWidget {
+  const _OwnerFilterBar({
+    required this.searchController,
+    required this.selectedFilter,
+    required this.onSearchChanged,
+    required this.onClearSearch,
+    required this.onFilterSelected,
+  });
+
+  final TextEditingController searchController;
+  final OwnerStatusFilter selectedFilter;
+  final ValueChanged<String> onSearchChanged;
+  final VoidCallback onClearSearch;
+  final ValueChanged<OwnerStatusFilter> onFilterSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final hasQuery = searchController.text.isNotEmpty;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.appColors.canvas,
+        border: Border(bottom: BorderSide(color: context.appColors.border)),
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final horizontalPadding =
+              constraints.maxWidth < _compactWidthBreakpoint
+              ? AppSpacing.screenCompact
+              : AppSpacing.screen;
+          return Center(
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: _listMaxWidth),
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  horizontalPadding,
+                  AppSpacing.s4,
+                  horizontalPadding,
+                  AppSpacing.s3,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    AppSearchField(
+                      label: 'Buscar por nombre, documento o correo',
+                      controller: searchController,
+                      onChanged: onSearchChanged,
+                      onClear: hasQuery ? onClearSearch : null,
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                    SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: Row(
+                        children: [
+                          for (final filter in OwnerStatusFilter.values)
+                            Padding(
+                              padding: const EdgeInsets.only(
+                                right: AppSpacing.s2,
+                              ),
+                              child: ChoiceChip(
+                                label: Text(filter.label),
+                                selected: filter == selectedFilter,
+                                onSelected: (_) => onFilterSelected(filter),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
 /// Listado desplazable de propietarios, centrado y con ancho acotado.
 class _OwnerList extends StatelessWidget {
   const _OwnerList({
@@ -154,12 +319,16 @@ class _OwnerList extends StatelessWidget {
     required this.onDetail,
     required this.onEdit,
     required this.onToggleActive,
+    required this.onDelete,
+    required this.onViewMotels,
   });
 
   final List<Owner> owners;
   final ValueChanged<Owner> onDetail;
   final ValueChanged<Owner> onEdit;
   final ValueChanged<Owner> onToggleActive;
+  final ValueChanged<Owner> onDelete;
+  final ValueChanged<Owner> onViewMotels;
 
   @override
   Widget build(BuildContext context) {
@@ -188,6 +357,8 @@ class _OwnerList extends StatelessWidget {
                   onDetail: () => onDetail(owner),
                   onEdit: () => onEdit(owner),
                   onToggleActive: () => onToggleActive(owner),
+                  onDelete: () => onDelete(owner),
+                  onViewMotels: () => onViewMotels(owner),
                 );
               },
             ),
@@ -205,12 +376,16 @@ class _OwnerCard extends StatelessWidget {
     required this.onDetail,
     required this.onEdit,
     required this.onToggleActive,
+    required this.onDelete,
+    required this.onViewMotels,
   });
 
   final Owner owner;
   final VoidCallback onDetail;
   final VoidCallback onEdit;
   final VoidCallback onToggleActive;
+  final VoidCallback onDelete;
+  final VoidCallback onViewMotels;
 
   @override
   Widget build(BuildContext context) {
@@ -243,6 +418,12 @@ class _OwnerCard extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
               AppIconButton(
+                icon: Icons.domain_outlined,
+                tooltip: 'Ver moteles de ${owner.fullName}',
+                onPressed: onViewMotels,
+              ),
+              const SizedBox(width: AppSpacing.s2),
+              AppIconButton(
                 icon: Icons.visibility_outlined,
                 tooltip: 'Ver detalle de ${owner.fullName}',
                 onPressed: onDetail,
@@ -265,6 +446,13 @@ class _OwnerCard extends StatelessWidget {
                     ? AppIconButtonVariant.destructive
                     : AppIconButtonVariant.standard,
                 onPressed: onToggleActive,
+              ),
+              const SizedBox(width: AppSpacing.s2),
+              AppIconButton(
+                icon: Icons.delete_outline,
+                tooltip: 'Eliminar a ${owner.fullName}',
+                variant: AppIconButtonVariant.destructive,
+                onPressed: onDelete,
               ),
             ],
           ),

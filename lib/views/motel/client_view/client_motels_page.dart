@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
-import './../../../controllers/motel/client_controller/client_motel_controller.dart';
+import '../../../controllers/motel/motel_controller.dart';
 import './../../../routes/routes.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
+import '../../notification/client_view/client_notification_view.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -17,7 +18,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedIndex = 0;
 
-  final ClientMotelController _motelController = ClientMotelController();
+  final MotelController _motelController = MotelController();
   late Future<List<Motel>> _motelsFuture;
 
   @override
@@ -80,7 +81,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ClientNotificationView(),
+                ),
+              );
+            },
           ),
         ),
         actions: [
@@ -89,7 +97,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
             child: AppIconButton(
               icon: Icons.person_outline,
               tooltip: 'Perfil',
-              onPressed: () {},
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.clientProfile),
             ),
           ),
         ],

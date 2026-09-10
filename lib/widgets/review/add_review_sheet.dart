@@ -1,15 +1,20 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/models/review/review_type.dart';
 import '../../core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
 import 'star_rating_selector.dart';
 
 class AddReviewSheet extends StatefulWidget {
+  final ReviewType reviewType;
+  final String parentId;
   final void Function(Review review) onSave;
 
-  const AddReviewSheet({super.key, required this.onSave});
+  const AddReviewSheet({super.key, required this.onSave, required this.reviewType, required this.parentId});
 
   static Future<void> show(
     BuildContext context, {
+    required ReviewType reviewType,
+    required String parentId,
     required void Function(Review review) onSave,
   }) {
     return showModalBottomSheet(
@@ -17,7 +22,7 @@ class AddReviewSheet extends StatefulWidget {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => AddReviewSheet(onSave: onSave),
+      builder: (_) => AddReviewSheet(onSave: onSave, reviewType: reviewType, parentId: parentId),
     );
   }
 
@@ -46,11 +51,13 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
     widget.onSave(
       Review(
+        parentId: widget.parentId,
         author: 'Tú',
         title: title,
         body: body,
         rating: _rating,
         date: DateTime.now(),
+        type: widget.reviewType,
       ),
     );
 

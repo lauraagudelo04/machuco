@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/widgets/review/admin_review_card.dart';
-import 'package:machuco/widgets/review/review_admin_stat_card.dart';
+import 'package:machuco/widgets/review/review_stat_card.dart';
 import 'package:machuco/widgets/review/review_reply_sheet.dart';
 
 /// Panel de administración de reseñas. No contiene datos quemados ni
@@ -180,17 +180,17 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
       builder: (context, constraints) {
         final compact = constraints.maxWidth < 600;
         final cards = [
-          ReviewAdminStatCard(
+          ReviewStatCard(
             icon: Icons.reviews_outlined,
             title: 'Total',
             value: '${_controller.totalCount}',
           ),
-          ReviewAdminStatCard(
+          ReviewStatCard(
             icon: Icons.star_rounded,
             title: 'Promedio',
             value: _controller.averageRating.toStringAsFixed(1),
           ),
-          ReviewAdminStatCard(
+          ReviewStatCard(
             icon: Icons.flag_outlined,
             title: 'Reportadas',
             value: '${_controller.reportedCount}',

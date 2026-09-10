@@ -2,12 +2,27 @@ import 'package:flutter/foundation.dart';
 
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
 const _minimumFullNameLength = 3;
 
 final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
 final _phonePattern = RegExp(r'^\+?\d{7,15}$');
 final _phoneSeparatorsPattern = RegExp(r'[\s\-()]');
+
+// Se comparan las cadenas sin tildes para que "gomez" encuentre a "Gómez".
+const _accentedCharacters = 'áàäâãéèëêíìïîóòöôõúùüûñç';
+const _plainCharacters = 'aaaaaeeeeiiiiooooouuuunc';
+
+String _normalize(String value) {
+  final buffer = StringBuffer();
+  for (final rune in value.toLowerCase().runes) {
+    final character = String.fromCharCode(rune);
+    final index = _accentedCharacters.indexOf(character);
+    buffer.write(index == -1 ? character : _plainCharacters[index]);
+  }
+  return buffer.toString();
+}
 
 /// Coordina la gestión de propietarios de moteles.
 ///
@@ -47,11 +62,67 @@ class OwnerController extends ChangeNotifier {
     ),
   ];
 
+  String _searchQuery = '';
+  OwnerStatusFilter _statusFilter = OwnerStatusFilter.all;
+
   /// Propietarios registrados. La lista es de solo lectura: para modificarla
   /// se usan las acciones del controlador.
   List<Owner> get owners => List.unmodifiable(_owners);
 
+  /// Propietarios que sobreviven a la búsqueda y al filtro por estado.
+  ///
+  /// Es lo que debe pintar el listado; [owners] sigue siendo el total.
+  List<Owner> get visibleOwners {
+    final query = _normalize(_searchQuery.trim());
+    return List.unmodifiable(
+      _owners.where(
+        (owner) => _statusFilter.matches(owner) && _matchesQuery(owner, query),
+      ),
+    );
+  }
+
+  String get searchQuery => _searchQuery;
+
+  OwnerStatusFilter get statusFilter => _statusFilter;
+
   bool get hasOwners => _owners.isNotEmpty;
+
+  /// Indica si queda algo por mostrar con los criterios actuales.
+  ///
+  /// Se distingue de [hasOwners] para separar el listado aún vacío de una
+  /// búsqueda sin resultados: cada caso merece su propio mensaje.
+  bool get hasVisibleOwners => visibleOwners.isNotEmpty;
+
+  bool get hasActiveFilters =>
+      _searchQuery.trim().isNotEmpty || _statusFilter != OwnerStatusFilter.all;
+
+  /// Filtra el listado por nombre, número de documento o correo.
+  void search(String query) {
+    if (_searchQuery == query) return;
+    _searchQuery = query;
+    notifyListeners();
+  }
+
+  void filterByStatus(OwnerStatusFilter filter) {
+    if (_statusFilter == filter) return;
+    _statusFilter = filter;
+    notifyListeners();
+  }
+
+  /// Devuelve el listado a su estado completo.
+  void clearFilters() {
+    if (!hasActiveFilters) return;
+    _searchQuery = '';
+    _statusFilter = OwnerStatusFilter.all;
+    notifyListeners();
+  }
+
+  bool _matchesQuery(Owner owner, String normalizedQuery) {
+    if (normalizedQuery.isEmpty) return true;
+    return _normalize(owner.fullName).contains(normalizedQuery) ||
+        _normalize(owner.documentNumber).contains(normalizedQuery) ||
+        _normalize(owner.email).contains(normalizedQuery);
+  }
 
   /// Registra un propietario y devuelve el resultado ya identificado.
   Owner createOwner({
@@ -95,6 +166,18 @@ class OwnerController extends ChangeNotifier {
       ownerId,
       (owner) => owner.copyWith(isActive: isActive),
     );
+  }
+
+  /// Elimina un propietario de forma permanente y devuelve el que se quitó.
+  ///
+  /// A diferencia de [setActiveState], la operación no se puede deshacer.
+  /// Devuelve `null` si el propietario ya no existe.
+  Owner? deleteOwner(String ownerId) {
+    final index = _owners.indexWhere((owner) => owner.id == ownerId);
+    if (index == -1) return null;
+    final removedOwner = _owners.removeAt(index);
+    notifyListeners();
+    return removedOwner;
   }
 
   Owner? _replaceOwner(String ownerId, Owner Function(Owner owner) update) {
