@@ -23,6 +23,7 @@ import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
+import 'package:machuco/views/client/client_view/client_profile_page.dart';
 
 
 
@@ -56,6 +57,7 @@ abstract final class AppRoutes {
   static const clientCreateBooking = '/bookings/client/new';
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
+  static const clientProfile = '/client/profile';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -133,6 +135,8 @@ abstract final class AppRoutes {
                 'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
               ),
       ),
+
+      clientProfile => const ClientProfilePage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
