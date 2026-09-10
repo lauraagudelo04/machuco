@@ -78,7 +78,8 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         children: [
           _buildMotelsContent(),
           //const OwnerBookingPage(),
-          const OwnerPaymentsPage(),
+          const Center(child: Text('Panel de Reservas')),
+          const Center(child: Text('Panel de Clientes')),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(
@@ -98,9 +99,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
             label: 'Reservas',
           ),
           AppNavigationDestination(
-            icon: Icons.payments_outlined,
-            selectedIcon: Icons.payments,
-            label: 'Finanzas',
+            icon: Icons.people_outline,
+            selectedIcon: Icons.people,
+            label: 'Clientes',
           ),
         ],
       ),
@@ -375,7 +376,6 @@ class _OwnerMotelCard extends StatelessWidget {
                 tooltip: 'Gestionar establecimiento',
                 onSelected: (String value) {
                   if (value == 'productos') {
-                    // Navegamos a la vista de productos enviando el id del motel como argumento
                     Navigator.pushNamed(
                       context,
                       AppRoutes.ownerProducts,
@@ -385,6 +385,13 @@ class _OwnerMotelCard extends StatelessWidget {
                     // TODO: Implementar navegación a habitaciones cuando esté lista
                   } else if (value == 'servicios') {
                     // TODO: Implementar navegación a servicios adicionales cuando esté lista
+                  } else if (value == 'finanzas') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OwnerPaymentsPage(),
+                      ),
+                    );
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
@@ -415,6 +422,16 @@ class _OwnerMotelCard extends StatelessWidget {
                         Icon(Icons.room_preferences_outlined, size: 20),
                         SizedBox(width: 8),
                         Text('Servicios adicionales'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'finanzas',
+                    child: Row(
+                      children: [
+                        Icon(Icons.payments_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Finanzas'),
                       ],
                     ),
                   ),
