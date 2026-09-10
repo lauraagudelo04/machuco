@@ -6,6 +6,7 @@ import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
 //import '../../booking/owner_view/owner_booking_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
+import '../../room/owner_view/room_owner_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -382,6 +383,11 @@ class _OwnerMotelCard extends StatelessWidget {
                       arguments: motel.id,
                     );
                   } else if (value == 'habitaciones') {
+                    Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoomOwnerPage(motel: motel),
+                        ),
+                      );
                     // TODO: Implementar navegación a habitaciones cuando esté lista
                   } else if (value == 'servicios') {
                     // TODO: Implementar navegación a servicios adicionales cuando esté lista
