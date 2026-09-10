@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
+import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
-import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
@@ -21,8 +21,9 @@ import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
+import 'package:machuco/views/client/client_view/client_profile_page.dart';
 
 
 
@@ -56,6 +57,7 @@ abstract final class AppRoutes {
   static const clientCreateBooking = '/bookings/client/new';
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
+  static const clientProfile = '/client/profile';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -134,6 +136,7 @@ abstract final class AppRoutes {
               ),
       ),
 
+      clientProfile => const ClientProfilePage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);

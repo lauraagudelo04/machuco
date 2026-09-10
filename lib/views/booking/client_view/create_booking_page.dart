@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
-import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/controllers/product/product_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
@@ -13,8 +12,9 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/product/product.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/routes/routes.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/widgets/booking/availability_calendar.dart';
 import 'package:machuco/widgets/booking/priced_checkbox_tile.dart';
 import 'package:machuco/widgets/booking/quantity_stepper.dart';
@@ -35,7 +35,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   late final AdditionalServiceSystemAdministratorController _servicesController;
   late final ProductController _productsController;
   late final String _requestId;
-  late final List<BlockedRange> _externalBlocked;
 
   StayMode _stayMode = StayMode.dateWithHourBlock;
   DateTime? _selectedDay;
@@ -56,16 +55,14 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     // TODO(servicios-adicionales): el motelId de esta rama (Room/Product/
     // Motel) es String (ej. 'motel-eclipse'), pero
     // AdditionalServiceSystemAdministratorController (rama de servicios
-    // adicionales) usa int. No se puede pasar widget.room.motelId aquí
+    // adicionales) usa un identificador de demostración. No se puede pasar
+    // widget.room.motelId aquí
     // hasta reconciliar el tipo entre features; ver _availableServices.
     _servicesController = AdditionalServiceSystemAdministratorController(
       motelId: '0',
     );
     _productsController = ProductController();
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
-    _externalBlocked = widget.room.reservations
-        .map((r) => BlockedRange(r.startDateTime, r.endDateTime))
-        .toList();
     _servicesController.addListener(_refresh);
   }
 
@@ -129,13 +126,11 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       widget.room.id,
       checkIn,
       checkOut,
-      externalBlocked: _externalBlocked,
     )) {
       return _bookingController.explainBlockedSlot(
         widget.room.id,
         checkIn,
         checkOut,
-        externalBlocked: _externalBlocked,
       );
     }
     return null;
@@ -231,7 +226,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     final result = await _bookingController.createReservation(
       requestId: _requestId,
       motelId: widget.room.motelId,
-      motelName: widget.room.motelName,
+      motelName: 'Motel ${widget.room.motelId}',
       roomId: widget.room.id,
       roomName: widget.room.name,
       roomNumber: widget.room.roomNumber,
@@ -242,7 +237,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       services: _selectedServiceItems,
       products: _selectedProductItems,
       roomTotal: _roomTotal,
-      externalBlocked: _externalBlocked,
       simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
       simulateConcurrentConflict: _simulateConflictNextAttempt,
     );
@@ -309,7 +303,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
             _ScheduleCard(
               room: widget.room,
               bookingController: _bookingController,
-              externalBlocked: _externalBlocked,
               stayMode: _stayMode,
               onStayModeChanged: (mode) => setState(() => _stayMode = mode),
               selectedDay: _selectedDay,
@@ -394,7 +387,7 @@ class _HeaderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            room.motelName,
+            'Motel ${room.motelId}',
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: context.appColors.textSecondary,
             ),
@@ -460,7 +453,6 @@ class _ScheduleCard extends StatelessWidget {
   const _ScheduleCard({
     required this.room,
     required this.bookingController,
-    required this.externalBlocked,
     required this.stayMode,
     required this.onStayModeChanged,
     required this.selectedDay,
@@ -476,7 +468,6 @@ class _ScheduleCard extends StatelessWidget {
 
   final RoomVisualData room;
   final ClientBookingController bookingController;
-  final List<BlockedRange> externalBlocked;
   final StayMode stayMode;
   final ValueChanged<StayMode> onStayModeChanged;
   final DateTime? selectedDay;
@@ -521,11 +512,8 @@ class _ScheduleCard extends StatelessWidget {
           AvailabilityCalendar(
             selectedDay: selectedDay,
             onDaySelected: onDaySelected,
-            isDayAvailable: (day) => bookingController.isDayAvailable(
-              room.id,
-              day,
-              externalBlocked: externalBlocked,
-            ),
+            isDayAvailable: (day) =>
+                bookingController.isDayAvailable(room.id, day),
           ),
           const SizedBox(height: AppSpacing.s4),
           _TimeField(
