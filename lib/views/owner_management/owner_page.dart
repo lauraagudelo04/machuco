@@ -8,10 +8,13 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
+import 'package:machuco/controllers/owner_management/platform_finance_summary.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
+import 'package:machuco/views/payment/payment_view_support.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
@@ -33,6 +36,7 @@ class OwnerPage extends StatefulWidget {
 
 class _OwnerPageState extends State<OwnerPage> {
   final OwnerController _controller = OwnerController();
+  final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -83,6 +87,10 @@ class _OwnerPageState extends State<OwnerPage> {
     );
     if (wantsToEdit != true || !mounted) return;
     await _editOwner(owner);
+  }
+
+  void _openPlatformFinances() {
+    Navigator.of(context).pushNamed(AppRoutes.adminPayments);
   }
 
   void _viewOwnerMotels(Owner owner) {
@@ -188,35 +196,67 @@ class _OwnerPageState extends State<OwnerPage> {
                 onAction: _createOwner,
               );
             }
-            return Column(
-              children: [
-                _OwnerFilterBar(
-                  searchController: _searchController,
-                  selectedFilter: _controller.statusFilter,
-                  onSearchChanged: _controller.search,
-                  onClearSearch: _clearSearch,
-                  onFilterSelected: _controller.filterByStatus,
-                ),
-                Expanded(
-                  child: _controller.hasVisibleOwners
-                      ? _OwnerList(
-                          owners: _controller.visibleOwners,
-                          onDetail: _openDetail,
-                          onEdit: _editOwner,
-                          onToggleActive: _toggleActiveState,
-                          onDelete: _deleteOwner,
-                          onViewMotels: _viewOwnerMotels,
-                        )
-                      : AppEmptyState(
-                          icon: Icons.search_off,
-                          title: 'Sin resultados',
-                          message:
-                              'Ningún propietario coincide con tu búsqueda o filtro.',
-                          actionLabel: 'Limpiar filtros',
-                          onAction: _clearFilters,
+            return LayoutBuilder(
+              builder: (context, constraints) {
+                final horizontalPadding =
+                    constraints.maxWidth < _compactWidthBreakpoint
+                    ? AppSpacing.screenCompact
+                    : AppSpacing.screen;
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: _listMaxWidth),
+                    child: CustomScrollView(
+                      slivers: [
+                        SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.fromLTRB(
+                              horizontalPadding,
+                              AppSpacing.s4,
+                              horizontalPadding,
+                              AppSpacing.s2,
+                            ),
+                            child: _PlatformFinanceBanner(
+                              totals: _financeSummary.totals,
+                              onTap: _openPlatformFinances,
+                            ),
+                          ),
                         ),
-                ),
-              ],
+                        SliverToBoxAdapter(
+                          child: _OwnerFilterBar(
+                            searchController: _searchController,
+                            selectedFilter: _controller.statusFilter,
+                            onSearchChanged: _controller.search,
+                            onClearSearch: _clearSearch,
+                            onFilterSelected: _controller.filterByStatus,
+                          ),
+                        ),
+                        if (_controller.hasVisibleOwners)
+                          _OwnerList(
+                            owners: _controller.visibleOwners,
+                            horizontalPadding: horizontalPadding,
+                            onDetail: _openDetail,
+                            onEdit: _editOwner,
+                            onToggleActive: _toggleActiveState,
+                            onDelete: _deleteOwner,
+                            onViewMotels: _viewOwnerMotels,
+                          )
+                        else
+                          SliverFillRemaining(
+                            hasScrollBody: false,
+                            child: AppEmptyState(
+                              icon: Icons.search_off,
+                              title: 'Sin resultados',
+                              message:
+                                  'Ningún propietario coincide con tu búsqueda o filtro.',
+                              actionLabel: 'Limpiar filtros',
+                              onAction: _clearFilters,
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                );
+              },
             );
           },
         ),
@@ -230,10 +270,10 @@ class _OwnerPageState extends State<OwnerPage> {
   }
 }
 
-/// Barra fija con la búsqueda y el filtro por estado del listado.
+/// Barra con la búsqueda y el filtro por estado del listado.
 ///
-/// Queda fuera del área desplazable para que los criterios sigan visibles
-/// mientras se recorren los propietarios.
+/// Se desplaza junto con el resto de la página: el resumen de finanzas, los
+/// filtros y las tarjetas forman un solo recorrido vertical.
 class _OwnerFilterBar extends StatelessWidget {
   const _OwnerFilterBar({
     required this.searchController,
@@ -316,6 +356,7 @@ class _OwnerFilterBar extends StatelessWidget {
 class _OwnerList extends StatelessWidget {
   const _OwnerList({
     required this.owners,
+    required this.horizontalPadding,
     required this.onDetail,
     required this.onEdit,
     required this.onToggleActive,
@@ -324,6 +365,7 @@ class _OwnerList extends StatelessWidget {
   });
 
   final List<Owner> owners;
+  final double horizontalPadding;
   final ValueChanged<Owner> onDetail;
   final ValueChanged<Owner> onEdit;
   final ValueChanged<Owner> onToggleActive;
@@ -332,39 +374,115 @@ class _OwnerList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final horizontalPadding = constraints.maxWidth < _compactWidthBreakpoint
-            ? AppSpacing.screenCompact
-            : AppSpacing.screen;
-        return Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: _listMaxWidth),
-            child: ListView.separated(
-              padding: EdgeInsets.fromLTRB(
-                horizontalPadding,
-                AppSpacing.s5,
-                horizontalPadding,
-                // Deja respirar la última tarjeta por encima del FAB.
-                AppSpacing.s12 + AppSpacing.s5,
+    return SliverPadding(
+      padding: EdgeInsets.fromLTRB(
+        horizontalPadding,
+        AppSpacing.s5,
+        horizontalPadding,
+        // Deja respirar la última tarjeta por encima del FAB.
+        AppSpacing.s12 + AppSpacing.s5,
+      ),
+      sliver: SliverList.separated(
+        itemCount: owners.length,
+        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
+        itemBuilder: (context, index) {
+          final owner = owners[index];
+          return _OwnerCard(
+            owner: owner,
+            onDetail: () => onDetail(owner),
+            onEdit: () => onEdit(owner),
+            onToggleActive: () => onToggleActive(owner),
+            onDelete: () => onDelete(owner),
+            onViewMotels: () => onViewMotels(owner),
+          );
+        },
+      ),
+    );
+  }
+}
+
+/// Bloque compacto con los totales de la plataforma.
+///
+/// Muestra solo las dos cifras principales; el detalle completo vive en la
+/// pantalla de finanzas globales, a la que se llega tocando la tarjeta.
+class _PlatformFinanceBanner extends StatelessWidget {
+  const _PlatformFinanceBanner({required this.totals, required this.onTap});
+
+  final PlatformFinanceTotals totals;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = context.appColors;
+    return AppCard(
+      onTap: onTap,
+      semanticLabel: 'Ver las finanzas globales de la plataforma',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.insights_outlined, color: colors.textSecondary),
+              const SizedBox(width: AppSpacing.s2),
+              Expanded(
+                child: Text(
+                  'Finanzas de la plataforma',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
               ),
-              itemCount: owners.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
-              itemBuilder: (context, index) {
-                final owner = owners[index];
-                return _OwnerCard(
-                  owner: owner,
-                  onDetail: () => onDetail(owner),
-                  onEdit: () => onEdit(owner),
-                  onToggleActive: () => onToggleActive(owner),
-                  onDelete: () => onDelete(owner),
-                  onViewMotels: () => onViewMotels(owner),
-                );
-              },
-            ),
+              Icon(Icons.chevron_right, color: colors.textSecondary),
+            ],
           ),
-        );
-      },
+          const SizedBox(height: AppSpacing.s3),
+          Row(
+            children: [
+              Expanded(
+                child: _FinanceMetric(
+                  label: 'Ingresos',
+                  value: formatPaymentMoney(totals.income),
+                ),
+              ),
+              const SizedBox(width: AppSpacing.s3),
+              Expanded(
+                child: _FinanceMetric(
+                  label: 'Por recaudar',
+                  value: formatPaymentMoney(totals.pendingAmount),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Etiqueta y cifra de una métrica dentro del bloque de finanzas.
+class _FinanceMetric extends StatelessWidget {
+  const _FinanceMetric({required this.label, required this.value});
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: textTheme.bodySmall?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s1),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(value, style: textTheme.titleLarge),
+        ),
+      ],
     );
   }
 }
