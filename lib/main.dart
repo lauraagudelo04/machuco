@@ -21,7 +21,7 @@ class MachucoApp extends StatelessWidget {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
       onGenerateRoute: AppRoutes.onGenerateRoute,
-      home: const ReservationDetailPage(reservationId: "reservation-seed-completed"),
+      home: const LoginPage(),
     );
   }
 }
