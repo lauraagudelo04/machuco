@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/controllers/room/room_mock_data.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/widgets/review/add_review_sheet.dart';
 import 'package:machuco/widgets/review/review_card.dart';
 import '../../core/design_system/design_system.dart';
@@ -16,7 +17,7 @@ class ReviewsSection extends StatefulWidget {
 
   final String id;
   final bool isComplete;
-  final String name; // p. ej. "Motel Eclipse"
+  final String name;
   final List<RoomVisualData>? rooms;
 
   @override
@@ -84,7 +85,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                         context,
                         parentId: widget.id,
                         name: widget.name,
-                        rooms: widget.rooms ?? buildMockRooms(), // pasa los cuartos mock si no se reciben
+                        rooms: widget.rooms ?? buildRoomMockData().where((room) => room.motelId == widget.id).toList(),
                         onSave: (review) => _controller.addReview(review),
                       )
                   : null,

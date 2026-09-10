@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/models/room/room_models.dart';
 import '../../core/design_system/design_system.dart';
 import 'star_rating_selector.dart';
 

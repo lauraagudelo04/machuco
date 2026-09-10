@@ -184,7 +184,7 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                         : null,
                   ),
                   const SizedBox(height: AppSpacing.s3),
-                  const ReviewsSection(id: "motel-eclipse", name: "Motel Eclipse", isComplete: true)
+                  const ReviewsSection(id: "1", name: "Motel Paraíso Élite", isComplete: true)
                 ],
               ),
       ),
