@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
+import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
-import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
@@ -21,7 +21,7 @@ import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 
 
@@ -133,7 +133,6 @@ abstract final class AppRoutes {
                 'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
               ),
       ),
-
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
