@@ -185,7 +185,14 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ],
               ),
             ),
-            _MenuTile(icon: Icons.star_outline, title: 'Suscripción', onTap: () {}),
+            _MenuTile(
+                  icon: Icons.star_outline,
+                  title: 'Suscripción',
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.pushNamed(context, AppRoutes.ownerSubscription);
+                  },
+                ),
             _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
             _MenuTile(
               icon: Icons.support_agent_outlined, 
