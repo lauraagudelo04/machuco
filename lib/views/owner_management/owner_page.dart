@@ -532,27 +532,28 @@ class _OwnerCard extends StatelessWidget {
           _OwnerDetailLine(icon: Icons.mail_outline, text: owner.email),
           _OwnerDetailLine(icon: Icons.phone_outlined, text: owner.phone),
           const SizedBox(height: AppSpacing.s2),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
+          // Wrap y no Row: en pantallas angostas las cinco acciones no caben
+          // en una linea y deben bajar a la siguiente en vez de desbordarse.
+          Wrap(
+            alignment: WrapAlignment.end,
+            spacing: AppSpacing.s2,
+            runSpacing: AppSpacing.s2,
             children: [
               AppIconButton(
                 icon: Icons.domain_outlined,
                 tooltip: 'Ver moteles de ${owner.fullName}',
                 onPressed: onViewMotels,
               ),
-              const SizedBox(width: AppSpacing.s2),
               AppIconButton(
                 icon: Icons.visibility_outlined,
                 tooltip: 'Ver detalle de ${owner.fullName}',
                 onPressed: onDetail,
               ),
-              const SizedBox(width: AppSpacing.s2),
               AppIconButton(
                 icon: Icons.edit_outlined,
                 tooltip: 'Editar a ${owner.fullName}',
                 onPressed: onEdit,
               ),
-              const SizedBox(width: AppSpacing.s2),
               AppIconButton(
                 icon: owner.isActive
                     ? Icons.block_outlined
@@ -565,7 +566,6 @@ class _OwnerCard extends StatelessWidget {
                     : AppIconButtonVariant.standard,
                 onPressed: onToggleActive,
               ),
-              const SizedBox(width: AppSpacing.s2),
               AppIconButton(
                 icon: Icons.delete_outline,
                 tooltip: 'Eliminar a ${owner.fullName}',
