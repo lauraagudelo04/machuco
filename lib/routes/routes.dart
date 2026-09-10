@@ -24,10 +24,8 @@ import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/client/client_view/client_profile_page.dart';
-
-
-
 import 'package:machuco/views/home/temporal_home_page.dart';
+import 'package:machuco/views/invoice/InvoicePage.dart';
 
 abstract final class AppRoutes {
   static const home = '/';
@@ -58,6 +56,7 @@ abstract final class AppRoutes {
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
   static const clientProfile = '/client/profile';
+  static const invoice = '/invoice';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -84,9 +83,9 @@ abstract final class AppRoutes {
       pqrs => const PqrsPage(),
       clientPqrs => const ClientPqrsPage(),
       ownerPqrs => const OwnerPqrsPage(),
-      ownerPqrs => const OwnerPqrsPage(),
       ownerReviews => const OwnerReviewPage(),
-      adminPqrs => const SystemAdminPqrsPage(),
+      adminPqrs => const SystemAdminPqrsPage(),                                           
+      invoice => const InvoicePage(),
 
       ownerProducts => ProductListView(
         motelId: settings.arguments is String
