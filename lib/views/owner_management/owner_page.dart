@@ -86,12 +86,13 @@ class _OwnerPageState extends State<OwnerPage> {
   }
 
   void _viewOwnerMotels(Owner owner) {
-    // TODO(admin-motels): AdminMotelsPage aun no recibe el propietario, asi que
-    // por ahora abre la lista completa. Cuando el modulo de moteles exponga
-    // `fixedOwnerId` / `fixedOwnerName`, pasar `owner.id` y `owner.fullName`
-    // para que la vista llegue filtrada por este propietario.
     Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AdminMotelsPage()),
+      MaterialPageRoute(
+        builder: (_) => AdminMotelsPage(
+          initialOwnerId: owner.id,
+          initialOwnerName: owner.fullName,
+        ),
+      ),
     );
   }
 
