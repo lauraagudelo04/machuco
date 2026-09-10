@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_type.dart';
 
 /// Reseña vista desde la perspectiva del propietario: envuelve un [Review]
 /// y lo asocia a un motel suyo. El modelo Review compartido todavía no
@@ -108,27 +107,27 @@ class OwnerReviewController extends ChangeNotifier {
     return [
       OwnerReviewEntry(
         review: Review(
-          parentId: "M1",
+          parentId: "motel-eclipse",
           author: 'Diana R.',
           title: 'Excelente atención',
           body:
               'El personal fue muy amable y la habitación estaba impecable.',
           rating: 5,
           date: DateTime(2026, 7, 10),
-          type: ReviewType.motel,
+          tag: "Motel Eclipse"
         ),
         motelId: first.id,
         motelName: first.name,
       ),
       OwnerReviewEntry(
         review: Review(
-          parentId: "M1",
+          parentId: "motel-eclipse",
           author: 'Felipe A.',
           title: 'El aire acondicionado no enfriaba',
           body: 'Todo bien excepto el aire, que casi no funcionaba.',
           rating: 3,
           date: DateTime(2026, 7, 28),
-          type: ReviewType.room,
+          tag: "Motel Eclipse"
         ),
         motelId: second.id,
         motelName: second.name,

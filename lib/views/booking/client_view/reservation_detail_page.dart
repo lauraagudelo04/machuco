@@ -9,8 +9,10 @@ import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/review/review_type.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
+import 'package:machuco/views/review/add_review_page.dart';
 import 'package:machuco/widgets/booking/reservation_card.dart';
 
 /// Detalle completo de una reserva del cliente: estado arriba, información
@@ -182,17 +184,7 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                         : null,
                   ),
                   const SizedBox(height: AppSpacing.s3),
-                  AppButton(
-                    label: 'Ver / Añadir reseña',
-                    icon: Icons.rate_review_outlined,
-                    variant: AppButtonVariant.secondary,
-                    // TODO: conectar con la feature de reseñas
-                    // (lib/views/review/add_review_page.dart) cuando esa
-                    // rama exponga una ruta e integración con reservas.
-                    onPressed: _reviewEnabled(reservation.status)
-                        ? () => _showStub('Ver / Añadir reseña')
-                        : null,
-                  ),
+                  const ReviewsSection(id: "motel-eclipse", name: "Motel Eclipse", isComplete: true)
                 ],
               ),
       ),

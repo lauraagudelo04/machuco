@@ -1,28 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/models/review/review_type.dart';
-import '../../core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/views/room/room_view_models.dart';
+import '../../core/design_system/design_system.dart';
 import 'star_rating_selector.dart';
 
 class AddReviewSheet extends StatefulWidget {
-  final ReviewType reviewType;
   final String parentId;
+  final String name;
   final void Function(Review review) onSave;
+  final List<RoomVisualData>? rooms;
 
-  const AddReviewSheet({super.key, required this.onSave, required this.reviewType, required this.parentId});
+  const AddReviewSheet({
+    super.key,
+    required this.onSave,
+    required this.parentId,
+    required this.rooms,
+    required this.name,
+  });
 
   static Future<void> show(
     BuildContext context, {
-    required ReviewType reviewType,
     required String parentId,
     required void Function(Review review) onSave,
+    required List<RoomVisualData>? rooms,
+    required String name,
   }) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (_) => AddReviewSheet(onSave: onSave, reviewType: reviewType, parentId: parentId),
+      builder: (_) => AddReviewSheet(
+        onSave: onSave,
+        parentId: parentId,
+        rooms: rooms,
+        name: name,
+      ),
     );
   }
 
@@ -33,8 +46,25 @@ class AddReviewSheet extends StatefulWidget {
 class _AddReviewSheetState extends State<AddReviewSheet> {
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
+  
+  late String _selectedTag;
   int _rating = 0;
   bool _submitted = false;
+
+  // Genera la lista de opciones: Nombre del motel + tipos de habitaciones
+  List<String> get _tagOptions {
+    final options = <String>[widget.name];
+    if (widget.rooms != null && widget.rooms!.isNotEmpty) {
+      options.addAll(widget.rooms!.map((room) => room.name));
+    }
+    return options;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTag = widget.name; // Por defecto selecciona el motel
+  }
 
   @override
   void dispose() {
@@ -57,7 +87,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
         body: body,
         rating: _rating,
         date: DateTime.now(),
-        type: widget.reviewType,
+        tag: _selectedTag,
       ),
     );
 
@@ -119,6 +149,31 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: AppSpacing.s4),
+
+              // 🔻 AQUÍ ESTÁ EL SELECCIONADOR 🔻
+              DropdownButtonFormField<String>(
+                value: _selectedTag,
+                decoration: const InputDecoration(
+                  labelText: '¿Qué deseas reseñar?',
+                  prefixIcon: Icon(Icons.sell_outlined),
+                ),
+                items: _tagOptions.map((tag) {
+                  return DropdownMenuItem<String>(
+                    value: tag,
+                    child: Text(
+                      tag,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }).toList(),
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() => _selectedTag = value);
+                  }
+                },
+              ),
+              const SizedBox(height: AppSpacing.s4),
+
               StarRatingSelector(
                 onChanged: (v) => setState(() => _rating = v),
               ),

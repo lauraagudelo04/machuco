@@ -59,7 +59,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     // adicionales) usa int. No se puede pasar widget.room.motelId aquí
     // hasta reconciliar el tipo entre features; ver _availableServices.
     _servicesController = AdditionalServiceSystemAdministratorController(
-      motelId: 0,
+      motelId: '0',
     );
     _productsController = ProductController();
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';

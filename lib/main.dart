@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/login/login_page.dart';
 
 
@@ -20,7 +21,7 @@ class MachucoApp extends StatelessWidget {
       darkTheme: AppTheme.dark,
       themeMode: ThemeMode.system,
       onGenerateRoute: AppRoutes.onGenerateRoute,
-      home: const LoginPage(),
+      home: const ReservationDetailPage(reservationId: "reservation-seed-completed"),
     );
   }
 }
