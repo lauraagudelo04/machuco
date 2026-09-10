@@ -97,7 +97,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
             child: AppIconButton(
               icon: Icons.person_outline,
               tooltip: 'Perfil',
-              onPressed: () {},
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.clientProfile),
             ),
           ),
         ],
