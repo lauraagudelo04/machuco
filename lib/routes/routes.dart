@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
@@ -15,6 +16,7 @@ import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
+import 'package:machuco/views/payment_method/payment_method_page.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
@@ -24,6 +26,9 @@ import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/client/client_view/client_profile_page.dart';
+
+
+
 import 'package:machuco/views/home/temporal_home_page.dart';
 import 'package:machuco/views/invoice/InvoicePage.dart';
 
@@ -32,6 +37,7 @@ abstract final class AppRoutes {
 
   static const temporalHome = '/temporal';
 
+  static const paymentMethod = '/payment/payment-method';
   static const paymentConfirmation = '/payment/client/confirmation';
   static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
@@ -65,6 +71,14 @@ abstract final class AppRoutes {
     final Widget page = switch (settings.name) {
       home => const TemporalHomePage(),
       temporalHome => const TemporalHomePage(),
+      paymentMethod => settings.arguments is Reservation
+          ? PaymentMethodPage(
+              amount: (settings.arguments! as Reservation).total,
+              concept:
+                  'Reserva ${(settings.arguments! as Reservation).roomName} - '
+                  '${(settings.arguments! as Reservation).motelName}',
+            )
+          : const PaymentMethodPage(),
       clientPayments => const ClientPaymentsPage(),
       ownerPayments => const OwnerPaymentsPage(),
       ownerSubscription => const OwnerSubscriptionPage(),
