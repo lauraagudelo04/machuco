@@ -129,9 +129,7 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
                     else
                       ...requests.map(
                         (request) => Padding(
-                          padding: const EdgeInsets.only(
-                            bottom: AppSpacing.s3,
-                          ),
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                           child: PqrsRequestCard(
                             request: request,
                             showClient: true,
