@@ -16,6 +16,7 @@ import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
 import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
+import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/views/payment_method/payment_method_page.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
@@ -27,9 +28,6 @@ import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/client/client_view/client_profile_page.dart';
 import 'package:machuco/views/client/client_view/client_edit_profile_page.dart';
-
-
-
 
 import 'package:machuco/views/home/temporal_home_page.dart';
 
@@ -72,16 +70,30 @@ abstract final class AppRoutes {
     final Widget page = switch (settings.name) {
       home => const TemporalHomePage(),
       temporalHome => const TemporalHomePage(),
-      paymentMethod => settings.arguments is Reservation
-          ? PaymentMethodPage(
-              amount: (settings.arguments! as Reservation).total,
-              concept:
-                  'Reserva ${(settings.arguments! as Reservation).roomName} - '
-                  '${(settings.arguments! as Reservation).motelName}',
-            )
-          : const PaymentMethodPage(),
-      clientPayments => const ClientPaymentsPage(),
-      ownerPayments => const OwnerPaymentsPage(),
+      paymentMethod =>
+        settings.arguments is Reservation
+            ? PaymentMethodPage(
+                amount: (settings.arguments! as Reservation).total,
+                concept:
+                    'Reserva ${(settings.arguments! as Reservation).roomName} - '
+                    '${(settings.arguments! as Reservation).motelName}',
+              )
+            : const PaymentMethodPage(),
+      clientPayments => ClientPaymentsPage(
+        clientId: settings.arguments is String
+            ? settings.arguments! as String
+            : PaymentStore.demoClientId,
+      ),
+      ownerPayments =>
+        settings.arguments is Motel
+            ? OwnerPaymentsPage(
+                motelId: (settings.arguments! as Motel).id,
+                motelName: (settings.arguments! as Motel).name,
+              )
+            : const OwnerPaymentsPage(
+                motelId: PaymentStore.demoOwnerMotelId,
+                motelName: 'Motel Paraíso Élite',
+              ),
       ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
       adminAdditionalServices => AdditionalServiceSystemAdministratorPage(

@@ -1,11 +1,10 @@
-import 'package:machuco/controllers/payment/payment_controller.dart';
+import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/models/payment/payment.dart';
 
 /// Totales agregados de todos los moteles de la plataforma.
 ///
 /// La vista de finanzas del administrador calcula estos mismos totales por su
-/// cuenta. Mientras `PaymentController` no exponga un getter propio, esta clase
-/// mantiene el cálculo fuera de la interfaz de la gestión de propietarios.
+/// cuenta. Mantiene el cálculo fuera de la interfaz de gestión de propietarios.
 class PlatformFinanceTotals {
   const PlatformFinanceTotals({
     required this.income,
@@ -43,14 +42,14 @@ class PlatformFinanceTotals {
 
 /// Expone los totales de la plataforma al listado de propietarios.
 ///
-/// Envuelve a `PaymentController` para que la vista no dependa directamente
+/// Envuelve al controlador financiero para que la vista no dependa directamente
 /// del módulo de pagos ni recorra sus registros.
 class PlatformFinanceSummary {
-  PlatformFinanceSummary({PaymentController? paymentController})
-    : _paymentController = paymentController ?? PaymentController();
+  PlatformFinanceSummary({PaymentStore? paymentStore})
+    : _paymentStore = paymentStore ?? PaymentStore.shared;
 
-  final PaymentController _paymentController;
+  final PaymentStore _paymentStore;
 
   PlatformFinanceTotals get totals =>
-      PlatformFinanceTotals.from(_paymentController.motelFinances);
+      PlatformFinanceTotals.from(_paymentStore.motelFinances);
 }

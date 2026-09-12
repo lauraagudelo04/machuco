@@ -1,18 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/payment/payment_controller.dart';
+import 'package:machuco/controllers/payment/owner_view/owner_payment_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
 
 class OwnerPaymentsPage extends StatefulWidget {
-  const OwnerPaymentsPage({super.key});
+  const OwnerPaymentsPage({
+    super.key,
+    required this.motelId,
+    required this.motelName,
+  });
+
+  final String motelId;
+  final String motelName;
 
   @override
   State<OwnerPaymentsPage> createState() => _OwnerPaymentsPageState();
 }
 
 class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
-  final PaymentController _controller = PaymentController();
+  late final OwnerPaymentController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = OwnerPaymentController(motelId: widget.motelId);
+  }
 
   @override
   void dispose() {
@@ -29,14 +42,9 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
   }
 
   Widget _buildPage(BuildContext context) {
-    final finance = _controller.ownerFinance;
-    final payments = _controller.ownerPayments;
-    final pending = payments
-        .where((payment) => payment.status == PaymentStatus.pending)
-        .toList();
-    final completed = payments
-        .where((payment) => payment.status != PaymentStatus.pending)
-        .toList();
+    final finance = _controller.finance;
+    final pending = _controller.pendingPayments;
+    final completed = _controller.completedPayments;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Finanzas de mi motel')),
@@ -48,7 +56,7 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
               padding: const EdgeInsets.all(AppSpacing.screen),
               children: [
                 Text(
-                  finance.name,
+                  finance?.name ?? widget.motelName,
                   style: Theme.of(context).textTheme.headlineMedium,
                 ),
                 const SizedBox(height: AppSpacing.s2),
@@ -73,30 +81,25 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                           width: width,
                           icon: Icons.trending_up_outlined,
                           label: 'Ingresos',
-                          value: formatPaymentMoney(finance.income),
+                          value: formatPaymentMoney(finance?.income ?? 0),
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.receipt_long_outlined,
                           label: 'Pagos recibidos',
-                          value: '${finance.paymentsReceived}',
+                          value: '${finance?.paymentsReceived ?? 0}',
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.schedule_outlined,
                           label: 'Por recaudar',
-                          value: formatPaymentMoney(
-                            pending.fold<int>(
-                              0,
-                              (sum, item) => sum + item.amount,
-                            ),
-                          ),
+                          value: formatPaymentMoney(_controller.pendingAmount),
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.percent_outlined,
                           label: 'Comisiones',
-                          value: formatPaymentMoney(finance.commissions),
+                          value: formatPaymentMoney(finance?.commissions ?? 0),
                         ),
                       ],
                     );
@@ -198,7 +201,8 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    _controller.registerCashPayment(payment);
+    final registered = _controller.registerCashPayment(payment.id);
+    if (!registered) return;
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
