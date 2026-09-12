@@ -184,7 +184,17 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                         : null,
                   ),
                   const SizedBox(height: AppSpacing.s3),
-                  const ReviewsSection(id: "1", name: "Motel Paraíso Élite", isComplete: true)
+                  AppButton(
+                    label: 'Ver / Añadir reseña',
+                    icon: Icons.rate_review_outlined,
+                    variant: AppButtonVariant.secondary,
+                    // TODO: conectar con la feature de reseñas
+                    // (lib/views/review/add_review_page.dart) cuando esa
+                    // rama exponga una ruta e integración con reservas.
+                    onPressed: _reviewEnabled(reservation.status)
+                        ? () => _showStub('Ver / Añadir reseña')
+                        : null,
+                  ),
                 ],
               ),
       ),
