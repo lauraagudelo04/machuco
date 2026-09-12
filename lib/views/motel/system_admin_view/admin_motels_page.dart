@@ -8,6 +8,9 @@ import '../../../controllers/owner_management/owner_controller.dart';
 import './../../../routes/routes.dart';
 import '../../payment/system_admin_view/admin_payment_page.dart';
 import './admin_motel_form_page.dart'; 
+// Nuevos imports para las vistas del menú desplegable
+import '../../room/owner_view/room_owner_page.dart';
+import '../../payment/owner_view/owner_payment_page.dart';
 
 // admin_motels_page.dart
 
@@ -83,7 +86,6 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
         generalLocation: current.generalLocation,   
         paymentMethods: current.paymentMethods,
         imageUrls: current.imageUrls,
-        basePrice: current.basePrice,
         isAvailable: !current.isAvailable, 
       );
     });
@@ -195,7 +197,6 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               ),
         ),
         leadingWidth: 68,
-        // Reemplazo: botón de flecha atrás para regresar a owner_page.dart
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
           child: AppIconButton(
@@ -242,7 +243,6 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 ],
               ),
             ),
-            // Opción de notificaciones movida aquí
             _MenuTile(
               icon: Icons.notifications_outlined, 
               title: 'Notificaciones', 
@@ -303,13 +303,6 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                               activeReservations: 3, 
                               onToggleStatus: () => _toggleMotelStatus(index),
                               onEdit: () => _showMotelFormModal(motelToEdit: motel), 
-                              onManage: () {
-                                Navigator.pushNamed(
-                                  context,
-                                  AppRoutes.ownerProducts,
-                                  arguments: motel.id,
-                                );
-                              },
                             );
                           },
                         ),
@@ -332,14 +325,12 @@ class _AdminMotelCard extends StatelessWidget {
     required this.activeReservations,
     required this.onToggleStatus,
     required this.onEdit,
-    required this.onManage,
   });
 
   final Motel motel;
   final int activeReservations;
   final VoidCallback onToggleStatus;
   final VoidCallback onEdit;
-  final VoidCallback onManage;
 
   void _showConfirmDialog(BuildContext context) {
     final isActive = motel.isAvailable;
@@ -435,11 +426,44 @@ class _AdminMotelCard extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 tooltip: 'Opciones de administración',
                 onSelected: (String value) {
-                  if (value == 'gestion') {
-                    onManage();
+                  if (value == 'productos') {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.ownerProducts,
+                      arguments: motel.id,
+                    );
+                  } else if (value == 'habitaciones') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => RoomOwnerPage(motel: motel),
+                      ),
+                    );
+                  } else if (value == 'servicios') {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminAdditionalServices,
+                      arguments: motel.id,
+                    );
+                  } else if (value == 'finanzas') {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const OwnerPaymentsPage(),
+                      ),
+                    );
                   }
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                  const PopupMenuItem<String>(
+                    value: 'productos',
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Productos'),
+                      ],
+                    ),
+                  ),
                   const PopupMenuItem<String>(
                     value: 'habitaciones',
                     child: Row(
@@ -451,22 +475,22 @@ class _AdminMotelCard extends StatelessWidget {
                     ),
                   ),
                   const PopupMenuItem<String>(
-                    value: 'gestion',
-                    child: Row(
-                      children: [
-                        Icon(Icons.inventory_2_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Productos'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem<String>(
                     value: 'servicios',
                     child: Row(
                       children: [
                         Icon(Icons.room_preferences_outlined, size: 20),
                         SizedBox(width: 8),
                         Text('Servicios adicionales'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'finanzas',
+                    child: Row(
+                      children: [
+                        Icon(Icons.attach_money_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Finanzas'),
                       ],
                     ),
                   ),

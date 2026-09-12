@@ -17,7 +17,6 @@ class MotelController {
       generalLocation: 'Rionegro - Zona Rosa',
       paymentMethods: ['Efectivo', 'Nequi', 'Tarjeta'],
       imageUrls: ['url_imagen_1.jpg'],
-      basePrice: 80000,
       isAvailable: true,
     ),
     Motel(
@@ -34,7 +33,6 @@ class MotelController {
       generalLocation: 'Llanogrande',
       paymentMethods: ['Efectivo', 'Transferencia'],
       imageUrls: ['url_imagen_2.jpg'],
-      basePrice: 95000,
       isAvailable: true,
     ),
     Motel(
@@ -51,7 +49,6 @@ class MotelController {
       generalLocation: 'Rionegro - Centro',
       paymentMethods: ['Efectivo'],
       imageUrls: [],
-      basePrice: 35000,
       isAvailable: true,
     ),
   ];
