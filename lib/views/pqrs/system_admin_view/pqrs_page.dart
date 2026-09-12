@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/widgets/pqrs/pqrs_request_card.dart';
 import 'package:machuco/widgets/pqrs/pqrs_stats_panel.dart';
@@ -22,8 +23,15 @@ class SystemAdminPqrsPage extends StatefulWidget {
 
 class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
   String? _motelId;
+  late Future<List<Motel>> _motelsFuture;
 
   PqrsController get _store => widget.store ?? PqrsController.instance;
+
+  @override
+  void initState() {
+    super.initState();
+    _motelsFuture = _store.loadMotelsWithRequests();
+  }
 
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(
@@ -41,10 +49,23 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('PQRS por motel')),
       body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _store,
-          builder: (context, _) {
-            final motels = _store.motels;
+        child: FutureBuilder<List<Motel>>(
+          future: _motelsFuture,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState != ConnectionState.done) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (snapshot.hasError) {
+              return const Center(
+                child: AppEmptyState(
+                  icon: Icons.error_outline,
+                  title: 'No se pudieron cargar los moteles',
+                  message: 'Ocurrió un error al consultar los moteles.',
+                ),
+              );
+            }
+
+            final motels = snapshot.data ?? const <Motel>[];
             if (motels.isEmpty) {
               return const Center(
                 child: AppEmptyState(
@@ -56,64 +77,71 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
               );
             }
 
-            final selectedId = _motelId ?? motels.first.id;
-            final requests = _store.byMotel(selectedId);
-            final stats = PqrsStats.from(requests);
+            return ListenableBuilder(
+              listenable: _store,
+              builder: (context, _) {
+                final selectedId = _motelId ?? motels.first.id;
+                final requests = _store.byMotel(selectedId);
+                final stats = PqrsStats.from(requests);
 
-            return ListView(
-              padding: const EdgeInsets.all(AppSpacing.screen),
-              children: [
-                Text(
-                  'Supervisión de PQRS',
-                  style: theme.textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.s2),
-                Text(
-                  'Consulta en solo lectura: revisas el detalle, el estado y el '
-                  'comportamiento estadístico de cada motel.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
-                ),
-                const SizedBox(height: AppSpacing.s5),
-                _MotelSelector(
-                  motels: motels,
-                  selectedId: selectedId,
-                  onChanged: (id) => setState(() => _motelId = id),
-                ),
-                const SizedBox(height: AppSpacing.s5),
-                PqrsStatsPanel(
-                  stats: stats,
-                  title: 'Comportamiento del motel',
-                  subtitle:
-                      'Porcentajes calculados sobre las PQRS del motel seleccionado.',
-                  highlightLabel: 'Solucionadas',
-                  highlightRate: stats.resolutionRate,
-                ),
-                const SizedBox(height: AppSpacing.s6),
-                Text(
-                  'Solicitudes del motel',
-                  style: theme.textTheme.headlineSmall,
-                ),
-                const SizedBox(height: AppSpacing.s3),
-                if (requests.isEmpty)
-                  const AppEmptyState(
-                    icon: Icons.inbox_outlined,
-                    title: 'Sin solicitudes',
-                    message: 'Este motel no tiene PQRS registradas.',
-                  )
-                else
-                  ...requests.map(
-                    (request) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                      child: PqrsRequestCard(
-                        request: request,
-                        showClient: true,
-                        onTap: () => _openDetail(request),
+                return ListView(
+                  padding: const EdgeInsets.all(AppSpacing.screen),
+                  children: [
+                    Text(
+                      'Supervisión de PQRS',
+                      style: theme.textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.s2),
+                    Text(
+                      'Consulta en solo lectura: revisas el detalle, el estado y el '
+                      'comportamiento estadístico de cada motel.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: context.appColors.textSecondary,
                       ),
                     ),
-                  ),
-              ],
+                    const SizedBox(height: AppSpacing.s5),
+                    _MotelSelector(
+                      motels: motels,
+                      selectedId: selectedId,
+                      onChanged: (id) => setState(() => _motelId = id),
+                    ),
+                    const SizedBox(height: AppSpacing.s5),
+                    PqrsStatsPanel(
+                      stats: stats,
+                      title: 'Comportamiento del motel',
+                      subtitle:
+                          'Porcentajes calculados sobre las PQRS del motel seleccionado.',
+                      highlightLabel: 'Solucionadas',
+                      highlightRate: stats.resolutionRate,
+                    ),
+                    const SizedBox(height: AppSpacing.s6),
+                    Text(
+                      'Solicitudes del motel',
+                      style: theme.textTheme.headlineSmall,
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                    if (requests.isEmpty)
+                      const AppEmptyState(
+                        icon: Icons.inbox_outlined,
+                        title: 'Sin solicitudes',
+                        message: 'Este motel no tiene PQRS registradas.',
+                      )
+                    else
+                      ...requests.map(
+                        (request) => Padding(
+                          padding: const EdgeInsets.only(
+                            bottom: AppSpacing.s3,
+                          ),
+                          child: PqrsRequestCard(
+                            request: request,
+                            showClient: true,
+                            onTap: () => _openDetail(request),
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
             );
           },
         ),
@@ -129,7 +157,7 @@ class _MotelSelector extends StatelessWidget {
     required this.onChanged,
   });
 
-  final List<({String id, String name})> motels;
+  final List<Motel> motels;
   final String selectedId;
   final ValueChanged<String> onChanged;
 
