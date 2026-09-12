@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/payment/payment_controller.dart';
+import 'package:machuco/controllers/payment/system_admin_view/system_admin_payment_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
@@ -12,7 +12,8 @@ class AdminFinancePage extends StatefulWidget {
 }
 
 class _AdminFinancePageState extends State<AdminFinancePage> {
-  final PaymentController _controller = PaymentController();
+  final SystemAdminPaymentController _controller =
+      SystemAdminPaymentController();
 
   @override
   void dispose() {
@@ -30,19 +31,6 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
 
   Widget _buildPage(BuildContext context) {
     final motels = _controller.motelFinances;
-    final income = motels.fold<int>(0, (sum, item) => sum + item.income);
-    final payments = motels.fold<int>(
-      0,
-      (sum, item) => sum + item.paymentsReceived,
-    );
-    final pending = motels.fold<int>(
-      0,
-      (sum, item) => sum + item.pendingAmount,
-    );
-    final commissions = motels.fold<int>(
-      0,
-      (sum, item) => sum + item.commissions,
-    );
 
     return Scaffold(
       appBar: AppBar(title: const Text('Finanzas globales')),
@@ -79,25 +67,29 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
                           width: width,
                           icon: Icons.trending_up_outlined,
                           label: 'Ingresos',
-                          value: formatPaymentMoney(income),
+                          value: formatPaymentMoney(_controller.totalIncome),
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.receipt_long_outlined,
                           label: 'Pagos recibidos',
-                          value: '$payments',
+                          value: '${_controller.totalPaymentsReceived}',
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.schedule_outlined,
                           label: 'Por recaudar',
-                          value: formatPaymentMoney(pending),
+                          value: formatPaymentMoney(
+                            _controller.totalPendingAmount,
+                          ),
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.percent_outlined,
                           label: 'Comisiones',
-                          value: formatPaymentMoney(commissions),
+                          value: formatPaymentMoney(
+                            _controller.totalCommissions,
+                          ),
                         ),
                       ],
                     );
