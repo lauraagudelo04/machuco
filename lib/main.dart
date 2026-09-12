@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/routes/routes.dart';
-import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/login/login_page.dart';
 
 

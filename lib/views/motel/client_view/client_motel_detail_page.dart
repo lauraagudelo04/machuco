@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/views/review/add_review_page.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../room/client_view/room_client_page.dart';

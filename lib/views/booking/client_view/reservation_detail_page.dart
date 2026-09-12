@@ -9,10 +9,8 @@ import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
-import 'package:machuco/models/review/review_type.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
-import 'package:machuco/views/review/add_review_page.dart';
 import 'package:machuco/widgets/booking/reservation_card.dart';
 
 /// Detalle completo de una reserva del cliente: estado arriba, información
