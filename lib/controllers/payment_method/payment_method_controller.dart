@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
-import 'package:machuco/models/paymentmethod/payment_method_model.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 
 class ExpiryDateInputFormatter extends TextInputFormatter {
   const ExpiryDateInputFormatter();
@@ -131,7 +131,7 @@ class PaymentMethodController extends ChangeNotifier {
 
     // Sandbox local: no se envían ni almacenan datos bancarios.
     _model.status = PaymentProcessStatus.approved;
-    _model.message = 'Pago de $formattedAmount aprobado correctamente.';
+    _model.message = 'Pago de $formattedAmount APROBADO correctamente.';
     notifyListeners();
   }
 

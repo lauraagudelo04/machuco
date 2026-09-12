@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/paymentmethod/payment_method_controller.dart';
+import 'package:machuco/controllers/payment_method/payment_method_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/paymentmethod/payment_method_model.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 
 class PaymentMethodPage extends StatefulWidget {
   const PaymentMethodPage({
