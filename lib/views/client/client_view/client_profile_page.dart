@@ -6,6 +6,7 @@ import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/models/client/client.dart';
+import 'package:machuco/routes/routes.dart';
 
 class ClientProfilePage extends StatelessWidget {
   const ClientProfilePage({super.key});
@@ -53,11 +54,7 @@ class ClientProfilePage extends StatelessWidget {
               icon: Icons.edit_outlined,
               variant: AppButtonVariant.secondary,
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Edición de perfil próximamente.'),
-                  ),
-                );
+                Navigator.pushNamed(context, AppRoutes.clientProfileEdit);
               },
             ),
           ],
