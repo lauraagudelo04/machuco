@@ -4,7 +4,7 @@ import 'package:machuco/models/review/review.dart';
 class ReviewsController extends ChangeNotifier {
   final List<Review> _reviews = [
     Review(
-      parentId: "1",
+      parentId: "3",
       author: 'Carlos M.',
       title: 'Muy cómodo y tranquilo',
       body: 'Las habitaciones estaban limpias y el personal fue muy amable. La cama súper cómoda.',
@@ -13,7 +13,7 @@ class ReviewsController extends ChangeNotifier {
       tag: "Motel Eclipse"
     ),
     Review(
-      parentId: "1",
+      parentId: "3",
       author: 'Luisa P.',
       title: 'Buena ubicación',
       body: 'Está bien ubicado, cerca de todo. El precio es justo para lo que ofrece.',
@@ -22,7 +22,7 @@ class ReviewsController extends ChangeNotifier {
       tag: "Motel Eclipse"
     ),
     Review(
-      parentId: "1",
+      parentId: "3",
       author: 'Roberto V.',
       title: 'Aceptable',
       body: 'Correcto para una noche. El wifi un poco lento pero el resto bien.',
@@ -31,13 +31,13 @@ class ReviewsController extends ChangeNotifier {
       tag: "Motel Eclipse"
     ),
     Review(
-      parentId: "1",
+      parentId: "2",
       author: 'Roberto V.',
       title: 'Aceptable',
       body: 'Un poco desorganizada pero el ambiente se sentia bien.',
       rating: 3,
       date: DateTime(2026, 5, 3),
-      tag: 'Suite Aurora'
+      tag: 'Suite Nova'
     ),
   ];
 

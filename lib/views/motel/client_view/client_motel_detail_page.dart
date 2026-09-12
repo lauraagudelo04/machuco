@@ -276,9 +276,10 @@ class _ReviewsSectionState extends State<ReviewsSection> {
               onPressed: widget.isComplete
                   ? () => AddReviewSheet.show(
                         context,
-                        reviewType: widget.reviewType,
                         onSave: (review) => _controller.addReview(review),
                         parentId: widget.id,
+                        name: '',
+                        rooms: []
                       )
                   : null,
             ),
