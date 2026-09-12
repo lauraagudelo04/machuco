@@ -67,6 +67,21 @@ abstract final class ClientController {
     return null;
   }
 
+  static void updateClient({
+    required String id,
+    required String name,
+    required String phone,
+    required String password,
+  }) {
+    final index = clients.indexWhere((c) => c.id == id);
+    if (index == -1) return;
+    clients[index] = clients[index].copyWith(
+      name: name,
+      phone: phone,
+      password: password,
+    );
+  }
+
   static void unlink(Client client) {
     clients.remove(client);
   }
