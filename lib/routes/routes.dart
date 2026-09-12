@@ -26,6 +26,7 @@ import 'package:machuco/views/review/review_administration_page.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/client/client_view/client_profile_page.dart';
+import 'package:machuco/views/client/client_view/client_edit_profile_page.dart';
 
 
 
@@ -62,6 +63,7 @@ abstract final class AppRoutes {
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
   static const clientProfile = '/client/profile';
+  static const clientProfileEdit = '/client/profile/edit';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -148,6 +150,7 @@ abstract final class AppRoutes {
       ),
 
       clientProfile => const ClientProfilePage(),
+      clientProfileEdit => const ClientEditProfilePage(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
