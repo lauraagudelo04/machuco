@@ -1,18 +1,26 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/payment/payment_controller.dart';
+import 'package:machuco/controllers/payment/client_view/client_payment_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
 
 class ClientPaymentsPage extends StatefulWidget {
-  const ClientPaymentsPage({super.key});
+  const ClientPaymentsPage({super.key, required this.clientId});
+
+  final String clientId;
 
   @override
   State<ClientPaymentsPage> createState() => _ClientPaymentsPageState();
 }
 
 class _ClientPaymentsPageState extends State<ClientPaymentsPage> {
-  final PaymentController _controller = PaymentController();
+  late final ClientPaymentController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ClientPaymentController(clientId: widget.clientId);
+  }
 
   @override
   void dispose() {
@@ -24,7 +32,7 @@ class _ClientPaymentsPageState extends State<ClientPaymentsPage> {
   Widget build(BuildContext context) => ListenableBuilder(
     listenable: _controller,
     builder: (context, _) {
-      final payments = _controller.clientPayments;
+      final payments = _controller.payments;
       return Scaffold(
         appBar: AppBar(title: const Text('Mis pagos')),
         body: SafeArea(

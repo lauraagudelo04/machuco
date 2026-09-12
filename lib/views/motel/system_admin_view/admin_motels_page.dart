@@ -448,7 +448,10 @@ class _AdminMotelCard extends StatelessWidget {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) => const OwnerPaymentsPage(),
+                        builder: (context) => OwnerPaymentsPage(
+                          motelId: motel.id,
+                          motelName: motel.name,
+                        ),
                       ),
                     );
                   }
