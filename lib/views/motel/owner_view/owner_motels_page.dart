@@ -8,7 +8,6 @@ import '../../login/logout_navigation.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import '../../room/owner_view/room_owner_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart'; 
-import './../../owner_subscription/owner_subscription_page.dart'; 
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
