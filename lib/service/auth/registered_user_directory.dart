@@ -26,7 +26,7 @@ final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
       fullName: 'Simón Restrepo Vélez',
       email: 'simon.restrepo@machuco.com',
       phoneNumber: '+57 311 987 6543',
-      role: RegisteredUserRole.finalUser,
+      role: RegisteredUserRole.client,
       createdAt: DateTime.utc(2026, 2, 15, 9, 45),
     ),
     RegisteredUser(
@@ -34,7 +34,7 @@ final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
       fullName: 'Inversiones Machuco S.A.S.',
       email: 'contacto@inversionesmachuco.com',
       phoneNumber: '+57 604 444 5566',
-      role: RegisteredUserRole.administrator,
+      role: RegisteredUserRole.admin,
       createdAt: DateTime.utc(2026, 3, 20, 16, 30),
     ),
   ];

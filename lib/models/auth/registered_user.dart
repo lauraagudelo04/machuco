@@ -1,18 +1,23 @@
-enum RegisteredUserRole { administrator, finalUser, owner }
+enum RegisteredUserRole { admin, client, owner }
 
 extension RegisteredUserRoleValue on RegisteredUserRole {
   String get metadataValue => switch (this) {
-    RegisteredUserRole.administrator => 'administrator',
-    RegisteredUserRole.finalUser => 'final_user',
+    RegisteredUserRole.admin => 'admin',
+    RegisteredUserRole.client => 'client',
     RegisteredUserRole.owner => 'owner',
   };
 }
 
 RegisteredUserRole roleFromMetadataValue(String value) {
-  return switch (value.trim().toLowerCase()) {
-    'administrator' => RegisteredUserRole.administrator,
+  final normalized = value.trim().toLowerCase();
+  return switch (normalized) {
+    'admin' || 'administrator' => RegisteredUserRole.admin,
     'owner' => RegisteredUserRole.owner,
-    _ => RegisteredUserRole.finalUser,
+    'client' ||
+    'final_user' ||
+    'finaluser' ||
+    'user' => RegisteredUserRole.client,
+    _ => RegisteredUserRole.client,
   };
 }
 
