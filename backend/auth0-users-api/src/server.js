@@ -47,13 +47,15 @@ async function getManagementToken() {
 
 function toRole(rawUser) {
   const metadataRole = String(
-    rawUser?.user_metadata?.profile_type ||
+    rawUser?.app_metadata?.role ||
+      rawUser?.user_metadata?.role ||
       rawUser?.app_metadata?.profile_type ||
+      rawUser?.user_metadata?.profile_type ||
       '',
   ).toLowerCase();
-  if (metadataRole === 'administrator') return 'administrator';
+  if (metadataRole === 'admin' || metadataRole === 'administrator') return 'admin';
   if (metadataRole === 'owner') return 'owner';
-  return 'final_user';
+  return 'client';
 }
 
 function toApiUser(rawUser) {

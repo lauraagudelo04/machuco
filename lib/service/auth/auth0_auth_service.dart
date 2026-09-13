@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:auth0_flutter/auth0_flutter.dart';
+import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
 
 enum AuthFailureType {
@@ -23,6 +26,7 @@ final class AuthSession {
     required this.userId,
     required this.name,
     required this.email,
+    required this.role,
     required this.accessToken,
     required this.idToken,
   });
@@ -30,11 +34,32 @@ final class AuthSession {
   final String userId;
   final String name;
   final String email;
+  final RegisteredUserRole role;
   final String accessToken;
   final String idToken;
 }
 
-final class Auth0AuthService {
+abstract interface class AuthService {
+  Future<AuthSession?> restoreSession();
+
+  Future<AuthSession> login({required String email, required String password});
+
+  Future<AuthSession> loginWithGoogle({bool preferSignup = false});
+
+  Future<void> register({
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String password,
+    required RegisteredUserRole role,
+  });
+
+  Future<void> requestPasswordReset({required String email});
+
+  Future<void> logout();
+}
+
+final class Auth0AuthService implements AuthService {
   Auth0AuthService._(this._auth0);
 
   final Auth0 _auth0;
@@ -46,6 +71,7 @@ final class Auth0AuthService {
     return Auth0AuthService._(Auth0(Auth0Config.domain, Auth0Config.clientId));
   }
 
+  @override
   Future<AuthSession?> restoreSession() async {
     final hasValid = await _auth0.credentialsManager.hasValidCredentials();
     if (!hasValid) {
@@ -55,6 +81,7 @@ final class Auth0AuthService {
     return _toSession(credentials);
   }
 
+  @override
   Future<AuthSession> login({
     required String email,
     required String password,
@@ -78,6 +105,7 @@ final class Auth0AuthService {
     }
   }
 
+  @override
   Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {
     try {
       final credentials = await _auth0.webAuthentication().login(
@@ -107,14 +135,16 @@ final class Auth0AuthService {
     }
   }
 
+  @override
   Future<void> register({
     required String fullName,
     required String email,
     required String phoneNumber,
     required String password,
-    required String profileType,
+    required RegisteredUserRole role,
   }) async {
     try {
+      final roleValue = role.metadataValue;
       await _auth0.api.signup(
         email: email.trim(),
         password: password,
@@ -122,7 +152,8 @@ final class Auth0AuthService {
         userMetadata: <String, String>{
           'full_name': fullName.trim(),
           'phone_number': phoneNumber.trim(),
-          'profile_type': profileType,
+          'profile_type': roleValue,
+          'role': roleValue,
         },
       );
     } on ApiException catch (e) {
@@ -135,6 +166,7 @@ final class Auth0AuthService {
     }
   }
 
+  @override
   Future<void> requestPasswordReset({required String email}) async {
     try {
       await _auth0.api.resetPassword(
@@ -151,11 +183,14 @@ final class Auth0AuthService {
     }
   }
 
+  @override
   Future<void> logout() async {
     await _auth0.credentialsManager.clearCredentials();
   }
 
   AuthSession _toSession(Credentials credentials) {
+    final payload = _decodeJwtPayload(credentials.idToken);
+    final role = _extractRole(payload);
     final profile = credentials.user;
     final name = profile.name?.trim();
     final email = profile.email?.trim();
@@ -163,9 +198,60 @@ final class Auth0AuthService {
       userId: profile.sub,
       name: name == null || name.isEmpty ? 'Usuario MACHUCO' : name,
       email: email == null || email.isEmpty ? 'sin-correo' : email,
+      role: role,
       accessToken: credentials.accessToken,
       idToken: credentials.idToken,
     );
+  }
+
+  RegisteredUserRole _extractRole(Map<String, dynamic> payload) {
+    final claimNamespace = Auth0Config.roleClaimNamespace.trim().replaceAll(
+      RegExp(r'/+$'),
+      '',
+    );
+    final claimName = Auth0Config.roleClaimName.trim();
+    final claimKey = '$claimNamespace/$claimName';
+
+    final roleCandidates = <String?>[
+      payload[claimKey]?.toString(),
+      payload['role']?.toString(),
+      payload['profile_type']?.toString(),
+      (payload['https://machuco.app/claims/role'])?.toString(),
+      (payload['https://machuco.app/role'])?.toString(),
+      (payload['user_metadata'] is Map<String, dynamic>)
+          ? (payload['user_metadata'] as Map<String, dynamic>)['profile_type']
+                ?.toString()
+          : null,
+      (payload['app_metadata'] is Map<String, dynamic>)
+          ? (payload['app_metadata'] as Map<String, dynamic>)['role']
+                ?.toString()
+          : null,
+    ];
+
+    for (final candidate in roleCandidates) {
+      if (candidate != null && candidate.trim().isNotEmpty) {
+        return roleFromMetadataValue(candidate);
+      }
+    }
+    return RegisteredUserRole.client;
+  }
+
+  Map<String, dynamic> _decodeJwtPayload(String token) {
+    final segments = token.split('.');
+    if (segments.length < 2) {
+      return const <String, dynamic>{};
+    }
+    try {
+      final normalized = base64Url.normalize(segments[1]);
+      final payload = utf8.decode(base64Url.decode(normalized));
+      final decoded = jsonDecode(payload);
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+    } catch (_) {
+      return const <String, dynamic>{};
+    }
+    return const <String, dynamic>{};
   }
 
   AuthFailure _mapApiException(ApiException exception) {
