@@ -1,13 +1,14 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
+import './../../../controllers/motel/motel_controller.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
   const OwnerMotelFormPage({
     super.key, 
     this.isEditing = false, 
     this.motel,
-    this.ownerId, // Recibimos el ID del propietario actual
+    this.ownerId,
   });
 
   final bool isEditing;
@@ -19,6 +20,9 @@ class OwnerMotelFormPage extends StatefulWidget {
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
+  final MotelController _motelController = MotelController();
+  bool _isSaving = false;
+
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   final _roomsController = TextEditingController();
@@ -43,7 +47,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       _nitController.text = widget.motel!.nit;
       _addressController.text = widget.motel!.address;
       _phoneController.text = widget.motel!.phone;
-      // Solucionado el error de nulos usando el operador ?? ''
       _descriptionController.text = widget.motel!.description ?? '';         
       _generalLocationController.text = widget.motel!.generalLocation ?? '';   
       _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
@@ -76,12 +79,18 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     });
   }
 
-  void _onSave() {
+  Future<void> _onSave() async {
+    if (_isSaving) return;
+
+    setState(() => _isSaving = true);
+
     final int roomCountParsed = int.tryParse(_roomsController.text.trim()) ?? 0;
 
     final Motel motelToSave = Motel(
-      id: widget.isEditing && widget.motel != null ? widget.motel!.id : 'motel_${DateTime.now().millisecondsSinceEpoch}',
-      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner_1', // Incluido el ownerId requerido
+      id: widget.isEditing && widget.motel != null 
+          ? widget.motel!.id 
+          : 'motel_${DateTime.now().millisecondsSinceEpoch}',
+      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner-1020304050',
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       roomCount: roomCountParsed,
@@ -95,7 +104,15 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
     );
 
-    Navigator.pop(context, motelToSave);
+    if (widget.isEditing) {
+      await _motelController.updateMotel(motelToSave);
+    } else {
+      await _motelController.addMotel(motelToSave);
+    }
+
+    if (mounted) {
+      Navigator.pop(context, true);
+    }
   }
 
   @override
@@ -230,8 +247,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.s4),
           child: AppButton(
-            label: 'Guardar',
-            onPressed: _onSave,
+            label: _isSaving ? 'Guardando...' : 'Guardar',
+            onPressed: _isSaving ? null : () => _onSave(),
           ),
         ),
       ),
