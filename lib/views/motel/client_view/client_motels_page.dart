@@ -3,6 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import './../../../routes/routes.dart';
+import '../../login/logout_navigation.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
@@ -70,6 +71,10 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
     );
   }
 
+  Future<void> _logout() async {
+    await logoutAndGoToLogin(context);
+  }
+
   Widget _buildMotelsContent() {
     return Scaffold(
       appBar: AppBar(
@@ -94,10 +99,21 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
-            child: AppIconButton(
-              icon: Icons.person_outline,
-              tooltip: 'Perfil',
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.clientProfile),
+            child: Row(
+              children: [
+                AppIconButton(
+                  icon: Icons.person_outline,
+                  tooltip: 'Perfil',
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.clientProfile),
+                ),
+                const SizedBox(width: AppSpacing.s2),
+                AppIconButton(
+                  icon: Icons.logout,
+                  tooltip: 'Cerrar sesión',
+                  onPressed: _logout,
+                ),
+              ],
             ),
           ),
         ],
@@ -135,10 +151,16 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error al cargar: ${snapshot.error}'));
+                    return Center(
+                      child: Text('Error al cargar: ${snapshot.error}'),
+                    );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No hay moteles disponibles en este momento.'));
+                    return const Center(
+                      child: Text(
+                        'No hay moteles disponibles en este momento.',
+                      ),
+                    );
                   }
 
                   // 1. Obtenemos todos los moteles
@@ -163,7 +185,8 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                   // 5. Renderizamos la lista ya filtrada
                   return ListView.separated(
                     itemCount: filteredMotels.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: AppSpacing.s4),
                     itemBuilder: (context, index) {
                       final motel = filteredMotels[index];
                       return _ClientMotelCard(
