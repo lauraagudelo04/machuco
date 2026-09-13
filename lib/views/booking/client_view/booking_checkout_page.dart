@@ -11,12 +11,13 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 
-/// Pantalla completa de resumen previo al pago. Fuera de alcance: el
-/// procesamiento real de pagos. El único CTA ("Ir a pagar") deja un stub
-/// visual hasta que la selección de método de pago esté disponible.
+/// Pantalla completa de resumen previo al pago. Al confirmar, navega a la
+/// selección de método de pago (`PaymentMethodPage`) pasando la reserva
+/// como argumento de la ruta.
 class BookingCheckoutPage extends StatefulWidget {
   const BookingCheckoutPage({super.key, required this.reservationId});
 
@@ -50,17 +51,10 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
     super.dispose();
   }
 
-  void _goToPayment() {
-    // TODO: navegar a la selección real de método de pago cuando esa
-    // funcionalidad esté disponible. Queda explícitamente fuera del
-    // alcance de "Reserva de habitación" / "Gestión de mis reservas".
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'La selección de método de pago estará disponible próximamente.',
-        ),
-      ),
-    );
+  void _goToPayment(Reservation reservation) {
+    Navigator.of(
+      context,
+    ).pushNamed(AppRoutes.paymentMethod, arguments: reservation);
   }
 
   @override
@@ -98,7 +92,7 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
             : _CheckoutContent(
                 reservation: reservation,
                 remaining: _controller.remainingPendingTime(reservation.id),
-                onGoToPayment: _goToPayment,
+                onGoToPayment: () => _goToPayment(reservation),
               ),
       ),
     );

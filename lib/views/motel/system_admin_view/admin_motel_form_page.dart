@@ -91,7 +91,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       generalLocation: _generalLocationController.text.trim(),
       paymentMethods: _selectedPaymentMethods,
       imageUrls: _imageUrls.isEmpty ? ['https://via.placeholder.com/400'] : _imageUrls,
-      basePrice: widget.isEditing && widget.motel != null ? widget.motel!.basePrice : 50000.0,
       isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
     );
 

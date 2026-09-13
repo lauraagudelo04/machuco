@@ -3,6 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import './../../../routes/routes.dart';
+import '../../login/logout_navigation.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
@@ -70,6 +71,10 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
     );
   }
 
+  Future<void> _logout() async {
+    await logoutAndGoToLogin(context);
+  }
+
   Widget _buildMotelsContent() {
     return Scaffold(
       appBar: AppBar(
@@ -94,10 +99,21 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
-            child: AppIconButton(
-              icon: Icons.person_outline,
-              tooltip: 'Perfil',
-              onPressed: () => Navigator.pushNamed(context, AppRoutes.clientProfile),
+            child: Row(
+              children: [
+                AppIconButton(
+                  icon: Icons.person_outline,
+                  tooltip: 'Perfil',
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.clientProfile),
+                ),
+                const SizedBox(width: AppSpacing.s2),
+                AppIconButton(
+                  icon: Icons.logout,
+                  tooltip: 'Cerrar sesión',
+                  onPressed: _logout,
+                ),
+              ],
             ),
           ),
         ],
@@ -109,11 +125,16 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           children: [
             const SizedBox(height: AppSpacing.s2),
             AppSearchField(
-              label: 'Buscar moteles, zonas o servicios...',
+              label: 'Buscar moteles o zonas...',
               controller: _searchController,
-              onChanged: (value) {},
+              onChanged: (value) {
+                // Actualiza el estado cada vez que el texto cambia para reconstruir el FutureBuilder
+                setState(() {}); 
+              },
               onClear: () {
                 _searchController.clear();
+                // Actualiza el estado al limpiar para mostrar la lista completa de nuevo
+                setState(() {}); 
               },
             ),
             const SizedBox(height: AppSpacing.s5),
@@ -130,22 +151,47 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error al cargar: ${snapshot.error}'));
+                    return Center(
+                      child: Text('Error al cargar: ${snapshot.error}'),
+                    );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No hay moteles disponibles en este momento.'));
+                    return const Center(
+                      child: Text(
+                        'No hay moteles disponibles en este momento.',
+                      ),
+                    );
                   }
 
-                  final motels = snapshot.data!;
+                  // 1. Obtenemos todos los moteles
+                  final allMotels = snapshot.data!;
+                  // 2. Obtenemos el texto de búsqueda en minúsculas
+                  final query = _searchController.text.toLowerCase();
+
+                  // 3. Filtramos la lista basándonos en el nombre o la dirección (location)
+                  final filteredMotels = allMotels.where((motel) {
+                    final matchName = motel.name.toLowerCase().contains(query);
+                    final matchLocation = motel.address.toLowerCase().contains(query);
+                    
+                    // Retorna true si coincide con el nombre o la dirección
+                    return matchName || matchLocation; 
+                  }).toList();
+
+                  // 4. Validamos si el filtro dejó la lista vacía
+                  if (filteredMotels.isEmpty) {
+                    return const Center(child: Text('No se encontraron resultados para tu búsqueda.'));
+                  }
+
+                  // 5. Renderizamos la lista ya filtrada
                   return ListView.separated(
-                    itemCount: motels.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
+                    itemCount: filteredMotels.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: AppSpacing.s4),
                     itemBuilder: (context, index) {
-                      final motel = motels[index];
+                      final motel = filteredMotels[index];
                       return _ClientMotelCard(
                         name: motel.name,
                         location: motel.address,
-                        price: '\$${motel.basePrice.toStringAsFixed(0)} / 4 horas',
                         isAvailable: motel.isAvailable,
                         onTap: () {
                           Navigator.pushNamed(
@@ -171,14 +217,12 @@ class _ClientMotelCard extends StatelessWidget {
   const _ClientMotelCard({
     required this.name,
     required this.location,
-    required this.price,
     required this.isAvailable,
     required this.onTap,
   });
 
   final String name;
   final String location;
-  final String price;
   final bool isAvailable;
   final VoidCallback onTap;
 
@@ -230,13 +274,6 @@ class _ClientMotelCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                price,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
               AppButton(
                 label: 'Ver más',
                 size: AppButtonSize.medium,

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
 
@@ -11,7 +12,7 @@ class LoginController extends ChangeNotifier {
   LoginController({this._authService, RegisteredUserDirectory? userDirectory})
     : _userDirectory = userDirectory ?? InMemoryRegisteredUserDirectory();
 
-  final Auth0AuthService? _authService;
+  final AuthService? _authService;
   final RegisteredUserDirectory _userDirectory;
 
   bool _isSubmitting = false;
@@ -30,13 +31,14 @@ class LoginController extends ChangeNotifier {
   List<RegisteredUser> get registeredUsers =>
       List.unmodifiable(_registeredUsers);
 
-  Future<void> restoreSession() async {
+  Future<AuthSession?> restoreSession() async {
     final authService = _authService;
     if (authService == null) {
-      return;
+      return null;
     }
     _session = await authService.restoreSession();
     notifyListeners();
+    return _session;
   }
 
   Future<AuthSession> login({
@@ -63,7 +65,7 @@ class LoginController extends ChangeNotifier {
     required String email,
     required String phoneNumber,
     required String password,
-    required String profileType,
+    required RegisteredUserRole role,
   }) async {
     final authService = _requireAuthService();
     _setSubmitting(true);
@@ -73,7 +75,7 @@ class LoginController extends ChangeNotifier {
         email: email,
         phoneNumber: phoneNumber,
         password: password,
-        profileType: profileType,
+        role: role,
       );
       await _userDirectory.upsertUser(
         RegisteredUser(
@@ -81,7 +83,7 @@ class LoginController extends ChangeNotifier {
           fullName: fullName.trim(),
           email: email.trim(),
           phoneNumber: phoneNumber.trim(),
-          role: roleFromMetadataValue(profileType),
+          role: role,
           createdAt: DateTime.now().toUtc(),
         ),
       );
@@ -137,7 +139,18 @@ class LoginController extends ChangeNotifier {
     }
   }
 
-  Auth0AuthService _requireAuthService() {
+  String resolveRouteByRole(RegisteredUserRole role) {
+    return switch (role) {
+      RegisteredUserRole.client => AppRoutes.clientMotels,
+      RegisteredUserRole.owner => AppRoutes.ownerMotels,
+      RegisteredUserRole.admin => AppRoutes.ownerManagement,
+    };
+  }
+
+  String resolvePostLoginRoute(AuthSession session) =>
+      resolveRouteByRole(session.role);
+
+  AuthService _requireAuthService() {
     final authService = _authService;
     if (authService != null) {
       return authService;
