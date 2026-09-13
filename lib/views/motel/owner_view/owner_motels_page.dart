@@ -8,6 +8,7 @@ import '../../login/logout_navigation.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import '../../room/owner_view/room_owner_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart'; 
+import '../../client/owner_view/client_list_page.dart'; 
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -86,7 +87,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           _buildMotelsContent(),
           //const OwnerBookingPage(),
           const Center(child: Text('Panel de Reservas')),
-          const Center(child: Text('Panel de Clientes')),
+          const ClientPage(embedded: true),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(
