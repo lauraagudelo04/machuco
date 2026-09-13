@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
+import '../../core/design_system/design_system.dart';
 
 class ReviewCard extends StatelessWidget {
   final Review review;
@@ -43,6 +43,41 @@ class ReviewCard extends StatelessWidget {
               ],
             ),
             const SizedBox(height: AppSpacing.s3),
+
+            // Tag Resaltado (Chip/Badge)
+            Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.s2,
+                vertical: 4,
+              ),
+              decoration: BoxDecoration(
+                color: AppColors.violet.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(AppRadius.sm),
+                border: Border.all(
+                  color: AppColors.violet.withOpacity(0.3),
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(
+                    Icons.label_outline_rounded,
+                    size: 14,
+                    color: AppColors.violet,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    review.tag,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: AppColors.violet,
+                          fontWeight: FontWeight.w700,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s2),
+
             Text(
               review.title,
               style: Theme.of(context).textTheme.bodyLarge?.copyWith(

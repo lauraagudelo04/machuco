@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/client/client_controller.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
@@ -27,6 +29,8 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
   PqrsType? _selectedType;
   bool _validationAttempted = false;
   bool _sending = false;
+
+  final _motelController = MotelController();
 
   PqrsController get _store => widget.store ?? PqrsController.instance;
 
@@ -74,13 +78,14 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
     setState(() => _sending = true);
     // Simulated latency: there is no network layer in the project yet.
     await Future<void>.delayed(const Duration(milliseconds: 600));
+    final motel = await _motelController.getMotelById(pqrsCurrentMotelId);
     if (!mounted) return;
 
     _store.createRequest(
       motelId: pqrsCurrentMotelId,
-      motelName: 'Motel Aurora',
+      motelName: motel?.name ?? 'Motel',
       clientId: pqrsCurrentClientId,
-      clientName: 'Ana Pérez',
+      clientName: ClientController.currentClient.name,
       type: _selectedType!,
       subject: _subjectController.text.trim(),
       description: _descriptionController.text.trim(),

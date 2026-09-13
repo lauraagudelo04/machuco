@@ -1,10 +1,28 @@
+import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 
 /// Client the client view acts as while there is no session layer.
-const pqrsCurrentClientId = 'c-ana';
+///
+/// Points at a real [ClientController] id until a session layer decides how
+/// the active client is tracked.
+const pqrsCurrentClientId = '1';
 
 /// Motel the owner view acts as while there is no session layer.
-const pqrsCurrentMotelId = 'm-aurora';
+///
+/// Points at a real motel id (see `MotelController`) until a session layer
+/// decides how the active motel is tracked.
+const pqrsCurrentMotelId = '1';
+
+/// Looks up a client's display name by id in [ClientController.clients].
+///
+/// Falls back to a placeholder when the id is not found, so a stale or
+/// invalid seed never crashes the store.
+String _resolveClientName(String clientId) {
+  for (final client in ClientController.clients) {
+    if (client.id == clientId) return client.name;
+  }
+  return 'Cliente desconocido';
+}
 
 /// In-memory PQRS repository shared by the client, owner and system
 /// administrator views.
@@ -32,9 +50,9 @@ class PqrsStore {
       PqrsRequest(
         id: 'pqrs-001',
         motelId: pqrsCurrentMotelId,
-        motelName: 'Motel Aurora',
+        motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
-        clientName: 'Ana Pérez',
+        clientName: _resolveClientName(pqrsCurrentClientId),
         type: PqrsType.queja,
         subject: 'Ruido en la habitación 204',
         description:
@@ -85,9 +103,9 @@ class PqrsStore {
       PqrsRequest(
         id: 'pqrs-002',
         motelId: pqrsCurrentMotelId,
-        motelName: 'Motel Aurora',
+        motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
-        clientName: 'Ana Pérez',
+        clientName: _resolveClientName(pqrsCurrentClientId),
         type: PqrsType.reclamo,
         subject: 'Cobro duplicado del servicio adicional',
         description:
@@ -123,9 +141,9 @@ class PqrsStore {
       PqrsRequest(
         id: 'pqrs-003',
         motelId: pqrsCurrentMotelId,
-        motelName: 'Motel Aurora',
-        clientId: 'c-luis',
-        clientName: 'Luis Gómez',
+        motelName: 'Motel Paraíso Élite',
+        clientId: '2',
+        clientName: _resolveClientName('2'),
         type: PqrsType.peticion,
         subject: 'Solicitud de factura electrónica',
         description:
@@ -136,9 +154,9 @@ class PqrsStore {
       PqrsRequest(
         id: 'pqrs-004',
         motelId: pqrsCurrentMotelId,
-        motelName: 'Motel Aurora',
+        motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
-        clientName: 'Ana Pérez',
+        clientName: _resolveClientName(pqrsCurrentClientId),
         type: PqrsType.sugerencia,
         subject: 'Ampliar el horario de recepción',
         description: 'Sería útil contar con recepción disponible las 24 horas.',
@@ -172,10 +190,10 @@ class PqrsStore {
       ),
       PqrsRequest(
         id: 'pqrs-005',
-        motelId: 'm-eclipse',
+        motelId: '3',
         motelName: 'Motel Eclipse',
-        clientId: 'c-marta',
-        clientName: 'Marta Ruiz',
+        clientId: '3',
+        clientName: _resolveClientName('3'),
         type: PqrsType.queja,
         subject: 'Aire acondicionado sin funcionar',
         description:
@@ -195,10 +213,10 @@ class PqrsStore {
       ),
       PqrsRequest(
         id: 'pqrs-006',
-        motelId: 'm-eclipse',
+        motelId: '3',
         motelName: 'Motel Eclipse',
-        clientId: 'c-jorge',
-        clientName: 'Jorge Salas',
+        clientId: '4',
+        clientName: _resolveClientName('4'),
         type: PqrsType.reclamo,
         subject: 'Demora en el check-in',
         description:
@@ -218,10 +236,10 @@ class PqrsStore {
       ),
       PqrsRequest(
         id: 'pqrs-007',
-        motelId: 'm-eclipse',
+        motelId: '3',
         motelName: 'Motel Eclipse',
-        clientId: 'c-marta',
-        clientName: 'Marta Ruiz',
+        clientId: '3',
+        clientName: _resolveClientName('3'),
         type: PqrsType.sugerencia,
         subject: 'Incluir opción de pago con QR',
         description: 'Facilitaría el pago al momento del check-out.',

@@ -1,5 +1,3 @@
-import 'package:machuco/models/review/review_type.dart';
-
 class Review {
   final String parentId;
   final String author;
@@ -7,7 +5,7 @@ class Review {
   final String body;
   final int rating;
   final DateTime date;
-  final ReviewType type;
+  final String tag;
 
   const Review({
     required this.parentId,
@@ -16,6 +14,6 @@ class Review {
     required this.body,
     required this.rating,
     required this.date,
-    required this.type,
+    required this.tag,
   });
 }
