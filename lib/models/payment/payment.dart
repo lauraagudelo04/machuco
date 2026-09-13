@@ -5,9 +5,13 @@ enum PaymentMethod { online, cash }
 class PaymentRecord {
   const PaymentRecord({
     required this.id,
+    required this.bookingId,
     required this.bookingReference,
+    required this.clientId,
     required this.client,
+    required this.motelId,
     required this.motel,
+    required this.roomId,
     required this.room,
     required this.reservationDate,
     required this.amount,
@@ -18,9 +22,13 @@ class PaymentRecord {
   });
 
   final String id;
+  final String bookingId;
   final String bookingReference;
+  final String clientId;
   final String client;
+  final String motelId;
   final String motel;
+  final String roomId;
   final String room;
   final DateTime reservationDate;
   final int amount;
@@ -36,9 +44,13 @@ class PaymentRecord {
     String? receiptNumber,
   }) => PaymentRecord(
     id: id,
+    bookingId: bookingId,
     bookingReference: bookingReference,
+    clientId: clientId,
     client: client,
+    motelId: motelId,
     motel: motel,
+    roomId: roomId,
     room: room,
     reservationDate: reservationDate,
     amount: amount,
@@ -51,12 +63,16 @@ class PaymentRecord {
 
 class FrequentClient {
   const FrequentClient({
+    required this.clientId,
+    required this.motelId,
     required this.name,
     required this.initials,
     required this.reservations,
     required this.totalPaid,
   });
 
+  final String clientId;
+  final String motelId;
   final String name;
   final String initials;
   final int reservations;
@@ -65,6 +81,7 @@ class FrequentClient {
 
 class MotelFinance {
   const MotelFinance({
+    required this.motelId,
     required this.name,
     required this.rooms,
     required this.income,
@@ -73,6 +90,7 @@ class MotelFinance {
     required this.commissions,
   });
 
+  final String motelId;
   final String name;
   final int rooms;
   final int income;
