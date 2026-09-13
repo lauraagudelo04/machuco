@@ -6,8 +6,8 @@ import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import '../../room/owner_view/room_owner_page.dart';
-import './../../notification/system_admin_view/system_admin_notification_view.dart'; 
-import './../../owner_subscription/owner_subscription_page.dart'; 
+import './../../notification/system_admin_view/system_admin_notification_view.dart';
+import './../../review/owner_view/owner_review_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -212,18 +212,17 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ],
               ),
             ),
-            _MenuTile(
-              icon: Icons.star_outline,
-              title: 'Suscripción',
+            _MenuTile(icon: Icons.star_outline,
+              title: 'Reseñas',
               onTap: () {
                 Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const OwnerSubscriptionPage(),
+                    builder: (context) => const OwnerReviewPage(),
                   ),
                 );
-              },
+              }
             ),
             _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
             _MenuTile(

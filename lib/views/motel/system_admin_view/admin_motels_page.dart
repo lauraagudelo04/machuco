@@ -11,6 +11,7 @@ import '../../room/owner_view/room_owner_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import './../../pqrs/system_admin_view/pqrs_page.dart';
+import './../../review/owner_view/owner_review_page.dart';
 
 class AdminMotelsPage extends StatefulWidget {
   final String? initialOwnerId;
@@ -242,12 +243,23 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 ],
               ),
             ),
-            _MenuTile(icon: Icons.security_outlined, title: 'Reseñas', onTap: () {}),
+            _MenuTile(icon: Icons.star_outline,
+              title: 'Reseñas',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const OwnerReviewPage(),
+                  ),
+                );
+              }
+            ),
             _MenuTile(
               icon: Icons.support_agent_outlined, 
               title: 'PQRS', 
               onTap: () {
-                Navigator.pop(context); // Cierra el drawer
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
