@@ -1,4 +1,6 @@
 import 'package:flutter/foundation.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/models/pqrs/pqrs_store.dart';
 
@@ -12,16 +14,20 @@ export 'package:machuco/models/pqrs/pqrs_store.dart'
 /// with `ListenableBuilder` and rebuilds whenever a request changes. The data
 /// itself lives in [PqrsStore].
 class PqrsController extends ChangeNotifier {
-  PqrsController({PqrsStore? store}) : _store = store ?? PqrsStore.instance;
+  PqrsController({PqrsStore? store, MotelController? motelController})
+    : _store = store ?? PqrsStore.instance,
+      _motelController = motelController ?? MotelController();
 
   /// Builds a controller over a store seeded with [requests].
   PqrsController.seeded(List<PqrsRequest> requests)
-    : _store = PqrsStore(requests: requests);
+    : _store = PqrsStore(requests: requests),
+      _motelController = MotelController();
 
   /// Shared instance used by the views while there is no dependency injection.
   static final PqrsController instance = PqrsController();
 
   final PqrsStore _store;
+  final MotelController _motelController;
 
   List<PqrsRequest> get _requests => _store.requests;
 
@@ -38,14 +44,13 @@ class PqrsController extends ChangeNotifier {
       _requests.firstWhere((request) => request.id == requestId);
 
   /// Distinct motels present in the data, for the administrator selector.
-  List<({String id, String name})> get motels {
-    final seen = <String, String>{};
-    for (final request in _requests) {
-      seen[request.motelId] = request.motelName;
-    }
-    return [
-      for (final entry in seen.entries) (id: entry.key, name: entry.value),
-    ];
+  ///
+  /// Loads the real catalog from [MotelController] and keeps only the
+  /// motels that actually have PQRS requests.
+  Future<List<Motel>> loadMotelsWithRequests() async {
+    final motelIds = {for (final request in _requests) request.motelId};
+    final allMotels = await _motelController.getAllMotels();
+    return allMotels.where((motel) => motelIds.contains(motel.id)).toList();
   }
 
   /// Registers a new request opened by a client.
