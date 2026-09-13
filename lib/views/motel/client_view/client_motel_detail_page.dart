@@ -3,8 +3,6 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../room/client_view/room_client_page.dart';
 import './../../../controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
-
-// Imports de Reseñas
 import 'package:machuco/models/review/review_type.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
 import 'package:machuco/widgets/review/review_card.dart';
@@ -33,7 +31,6 @@ class ClientMotelDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección de imagen (Hero)
             Container(
               height: 300,
               width: double.infinity,
@@ -49,7 +46,6 @@ class ClientMotelDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título y Disponibilidad
                   Row(
                     children: [
                       Expanded(
@@ -74,7 +70,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Descripción y Botón "Ver habitaciones"
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -106,7 +101,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Información y Contacto
                   Text('Información y Contacto',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -141,7 +135,6 @@ class ClientMotelDetailPage extends StatelessWidget {
 
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Métodos de Pago
                   Text('Métodos de Pago',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -154,7 +147,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Servicios Adicionales
                   Text('Servicios Adicionales',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -183,7 +175,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: AppSpacing.s4),
 
-                  // WIDGET REAL DE RESEÑAS CONECTADO
                   ReviewsSection(
                     id: motel.id,
                     reviewType: ReviewType.motel,
@@ -200,7 +191,6 @@ class ClientMotelDetailPage extends StatelessWidget {
   }
 }
 
-// Componente Widget de Reseñas
 class ReviewsSection extends StatefulWidget {
   const ReviewsSection({
     super.key,
@@ -299,7 +289,6 @@ class _ReviewsSectionState extends State<ReviewsSection> {
   }
 }
 
-// Componentes Auxiliares Privados
 class _InfoRow extends StatelessWidget {
   const _InfoRow(
       {required this.icon, required this.label, required this.value});

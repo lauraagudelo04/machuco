@@ -112,13 +112,11 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
               label: 'Buscar moteles o zonas...',
               controller: _searchController,
               onChanged: (value) {
-                // Actualiza el estado cada vez que el texto cambia para reconstruir el FutureBuilder
-                setState(() {}); 
+                setState(() {});
               },
               onClear: () {
                 _searchController.clear();
-                // Actualiza el estado al limpiar para mostrar la lista completa de nuevo
-                setState(() {}); 
+                setState(() {});
               },
             ),
             const SizedBox(height: AppSpacing.s5),
@@ -141,26 +139,20 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                     return const Center(child: Text('No hay moteles disponibles en este momento.'));
                   }
 
-                  // 1. Obtenemos todos los moteles
                   final allMotels = snapshot.data!;
-                  // 2. Obtenemos el texto de búsqueda en minúsculas
                   final query = _searchController.text.toLowerCase();
 
-                  // 3. Filtramos la lista basándonos en el nombre o la dirección (location)
                   final filteredMotels = allMotels.where((motel) {
                     final matchName = motel.name.toLowerCase().contains(query);
                     final matchLocation = motel.address.toLowerCase().contains(query);
                     
-                    // Retorna true si coincide con el nombre o la dirección
                     return matchName || matchLocation; 
                   }).toList();
 
-                  // 4. Validamos si el filtro dejó la lista vacía
                   if (filteredMotels.isEmpty) {
                     return const Center(child: Text('No se encontraron resultados para tu búsqueda.'));
                   }
 
-                  // 5. Renderizamos la lista ya filtrada
                   return ListView.separated(
                     itemCount: filteredMotels.length,
                     separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),

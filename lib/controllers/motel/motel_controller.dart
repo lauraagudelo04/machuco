@@ -1,8 +1,6 @@
 import '../../models/motel/motel_model.dart';
 
 class MotelController {
-  // ¡EL CAMBIO CLAVE!: Agregamos 'static' para que esta lista sea compartida 
-  // en toda la memoria de la aplicación, sin importar cuántas veces llames al controlador.
   static final List<Motel> _mockDatabase = [
     Motel(
       id: '1',
@@ -54,10 +52,6 @@ class MotelController {
     ),
   ];
 
-  // ==========================================
-  // MÉTODOS DE CONSULTA (GET) - Ya los tenías
-  // ==========================================
-  
   Future<List<Motel>> getMyMotels() async {
     await Future.delayed(const Duration(seconds: 1));
     const currentLoggedInUserId = 'owner-1020304050';
@@ -89,17 +83,11 @@ class MotelController {
         );
   }
 
-  // ==========================================
-  // NUEVOS MÉTODOS DE MUTACIÓN (POST/PUT/PATCH simulados)
-  // ==========================================
-
-  /// Agrega un nuevo motel a la base de datos simulada
   Future<void> addMotel(Motel newMotel) async {
     await Future.delayed(const Duration(milliseconds: 400));
     _mockDatabase.add(newMotel);
   }
 
-  /// Actualiza la información de un motel existente
   Future<void> updateMotel(Motel updatedMotel) async {
     await Future.delayed(const Duration(milliseconds: 400));
     final index = _mockDatabase.indexWhere((m) => m.id == updatedMotel.id);
@@ -108,13 +96,11 @@ class MotelController {
     }
   }
 
-  /// Cambia el estado (isAvailable) de un motel específico
   Future<void> toggleMotelStatus(String motelId) async {
     await Future.delayed(const Duration(milliseconds: 300));
     final index = _mockDatabase.indexWhere((m) => m.id == motelId);
     if (index != -1) {
       final current = _mockDatabase[index];
-      // Reemplazamos el motel con una copia invirtiendo el estado isAvailable
       _mockDatabase[index] = Motel(
         id: current.id,
         ownerId: current.ownerId,
