@@ -23,8 +23,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   List<Motel> _motels = [];
   bool _isLoading = true;
+  
+  String _searchQuery = '';
 
-  // Sincronizado con los IDs reales definidos por tu compañero en OwnerController
   String _currentOwnerId = 'owner-1020304050';
   final Map<String, String> _dummyOwners = {
     'owner-1020304050': 'Laura Gómez (Propietaria)',
@@ -41,7 +42,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   Future<void> _loadMotels() async {
     setState(() => _isLoading = true);
 
-    // Llamamos al método correcto del controlador pasándole el ID del propietario seleccionado
     final motelesObtenidos = await _motelController.getMotelsByOwnerId(
       _currentOwnerId,
     );
@@ -52,24 +52,27 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     });
   }
 
-  void _toggleMotelStatus(int index) {
+  void _toggleMotelStatus(String motelId) {
     setState(() {
-      final current = _motels[index];
-      _motels[index] = Motel(
-        id: current.id,
-        ownerId: current.ownerId,
-        name: current.name,
-        email: current.email,
-        roomCount: current.roomCount,
-        nit: current.nit,
-        address: current.address,
-        phone: current.phone,
-        description: current.description,
-        generalLocation: current.generalLocation,
-        paymentMethods: current.paymentMethods,
-        imageUrls: current.imageUrls,
-        isAvailable: !current.isAvailable, 
-      );
+      final index = _motels.indexWhere((m) => m.id == motelId);
+      if (index != -1) {
+        final current = _motels[index];
+        _motels[index] = Motel(
+          id: current.id,
+          ownerId: current.ownerId,
+          name: current.name,
+          email: current.email,
+          roomCount: current.roomCount,
+          nit: current.nit,
+          address: current.address,
+          phone: current.phone,
+          description: current.description,
+          generalLocation: current.generalLocation,
+          paymentMethods: current.paymentMethods,
+          imageUrls: current.imageUrls,
+          isAvailable: !current.isAvailable, 
+        );
+      }
     });
   }
 
@@ -80,7 +83,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          //const OwnerBookingPage(),
           const Center(child: Text('Panel de Reservas')),
           const Center(child: Text('Panel de Clientes')),
         ],
@@ -112,6 +114,12 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   }
 
   Widget _buildMotelsContent() {
+    final filteredMotels = _motels.where((motel) {
+      final nameLower = motel.name.toLowerCase();
+      final queryLower = _searchQuery.toLowerCase();
+      return nameLower.contains(queryLower);
+    }).toList();
+
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
@@ -139,8 +147,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               if (newOwnerId != null && newOwnerId != _currentOwnerId) {
                 setState(() {
                   _currentOwnerId = newOwnerId;
+                  _searchQuery = '';
                 });
-                _loadMotels(); // Recarga los moteles dinámicamente según el propietario elegido
+                _loadMotels();
               }
             },
           ),
@@ -207,8 +216,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               icon: Icons.star_outline,
               title: 'Suscripción',
               onTap: () {
-                Navigator.pop(context); // Cierra el Drawer (Menú lateral)
-                // NUEVO: Navegamos a OwnerSubscriptionPage usando MaterialPageRoute
+                Navigator.pop(context);
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -218,19 +226,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               },
             ),
             _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
-            _MenuTile(
-              icon: Icons.support_agent_outlined, 
-              title: 'PQRS', 
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, AppRoutes.ownerSubscription);
-              },
-            ),
-            _MenuTile(
-              icon: Icons.person_outline,
-              title: 'Perfil',
-              onTap: () {},
-            ),
             _MenuTile(
               icon: Icons.support_agent_outlined,
               title: 'PQRS',
@@ -242,7 +237,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           ],
         ),
       ),
-      // ... (El resto del código del Scaffold (body y FAB) y las clases privadas (_OwnerMotelCard, _MenuTile) sigue exactamente igual) ...
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
         child: Column(
@@ -268,6 +262,17 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               ],
             ),
             const SizedBox(height: AppSpacing.s3),
+            
+            AppSearchField(
+              label: 'Buscar moteles por nombre...',
+              onChanged: (value) {
+                setState(() {
+                  _searchQuery = value;
+                });
+              },
+            ),
+            const SizedBox(height: AppSpacing.s3),
+
             Expanded(
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
@@ -277,16 +282,22 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                         'Aún no tienes establecimientos registrados.',
                       ),
                     )
+                  : filteredMotels.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No se encontraron resultados para tu búsqueda.',
+                      ),
+                    )
                   : ListView.separated(
-                      itemCount: _motels.length,
+                      itemCount: filteredMotels.length,
                       separatorBuilder: (_, __) =>
                           const SizedBox(height: AppSpacing.s3),
                       itemBuilder: (context, index) {
-                        final motel = _motels[index];
+                        final motel = filteredMotels[index];
                         return _OwnerMotelCard(
                           motel: motel,
                           activeReservations: 3,
-                          onToggleStatus: () => _toggleMotelStatus(index),
+                          onToggleStatus: () => _toggleMotelStatus(motel.id),
                         );
                       },
                     ),
@@ -302,12 +313,12 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               builder: (context) => OwnerMotelFormPage(
                 isEditing: false,
                 ownerId:
-                    _currentOwnerId, // Envía correctamente el ID del propietario activo
+                    _currentOwnerId,
               ),
             ),
           ).then(
             (_) => _loadMotels(),
-          ); // Recarga automáticamente al volver si se registró uno nuevo
+          );
         },
         backgroundColor: Theme.of(context).colorScheme.primary,
         icon: const Icon(Icons.add, color: Colors.white),
@@ -316,8 +327,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     );
   }
 }
-
-// --- Componentes Privados Auxiliares ---
 
 class _OwnerMotelCard extends StatelessWidget {
   const _OwnerMotelCard({

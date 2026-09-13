@@ -6,13 +6,11 @@ import '../../../models/owner_management/document_type.dart';
 import '../../../controllers/motel/motel_controller.dart'; 
 import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
-import '../../payment/system_admin_view/admin_payment_page.dart';
 import './admin_motel_form_page.dart'; 
-// Nuevos imports para las vistas del menú desplegable
 import '../../room/owner_view/room_owner_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
-
-// admin_motels_page.dart
+import './../../notification/system_admin_view/system_admin_notification_view.dart';
+import './../../pqrs/system_admin_view/pqrs_page.dart';
 
 class AdminMotelsPage extends StatefulWidget {
   final String? initialOwnerId;
@@ -135,7 +133,8 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
         children: [
           _buildMotelsContent(),
           const Center(child: Text('Panel de Auditoría de Reservas (Admin)')),
-          const AdminFinancePage(),
+          // Vista real de notificaciones conectada correctamente
+          const SystemAdminNotificationView(),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(
@@ -155,9 +154,9 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
             label: 'Reservas',
           ),
           AppNavigationDestination(
-            icon: Icons.payments_outlined,
-            selectedIcon: Icons.payments,
-            label: 'Pagos',
+            icon: Icons.notifications_outlined,
+            selectedIcon: Icons.notifications,
+            label: 'Notificaciones',
           ),
         ],
       ),
@@ -243,20 +242,18 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 ],
               ),
             ),
-            _MenuTile(
-              icon: Icons.notifications_outlined, 
-              title: 'Notificaciones', 
-              onTap: () {
-                Navigator.pop(context);
-              },
-            ),
-            _MenuTile(icon: Icons.security_outlined, title: 'Seguridad y Roles', onTap: () {}),
-            _MenuTile(icon: Icons.analytics_outlined, title: 'Reportes Globales', onTap: () {}),
+            _MenuTile(icon: Icons.security_outlined, title: 'Reseñas', onTap: () {}),
             _MenuTile(
               icon: Icons.support_agent_outlined, 
-              title: 'PQRS de Usuarios', 
+              title: 'PQRS', 
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context); // Cierra el drawer
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SystemAdminPqrsPage(),
+                  ),
+                );
               },
             ),
           ],
