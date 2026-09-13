@@ -237,8 +237,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        final reviews = _controller.getReviewsByType(widget.reviewType, widget.id);
-        final average = _controller.getAverageByType(widget.reviewType, widget.id);
+        final reviews = _controller.getReviewsById(widget.id);
+        final average = _controller.getAverageById(widget.id);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -276,9 +276,10 @@ class _ReviewsSectionState extends State<ReviewsSection> {
               onPressed: widget.isComplete
                   ? () => AddReviewSheet.show(
                         context,
-                        reviewType: widget.reviewType,
                         onSave: (review) => _controller.addReview(review),
                         parentId: widget.id,
+                        name: '',
+                        rooms: []
                       )
                   : null,
             ),
