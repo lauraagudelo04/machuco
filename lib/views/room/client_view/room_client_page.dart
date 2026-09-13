@@ -108,9 +108,8 @@ class _RoomClientPageState extends State<RoomClientPage> {
                     },
                     child: Row(
                       children: [
-                        Icon(
-                          Icons.bedroom_parent_outlined,
-                          color: Theme.of(context).colorScheme.primary,
+                        _TypePreview(
+                          imageUrl: _controller.previewImageForType(type.id),
                         ),
                         const SizedBox(width: AppSpacing.s3),
                         Expanded(
@@ -131,6 +130,40 @@ class _RoomClientPageState extends State<RoomClientPage> {
               ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _TypePreview extends StatelessWidget {
+  const _TypePreview({this.imageUrl});
+
+  final String? imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = DecoratedBox(
+      decoration: BoxDecoration(
+        color: context.appColors.mediaFallback,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+      ),
+      child: Icon(
+        Icons.bedroom_parent_outlined,
+        color: Theme.of(context).colorScheme.primary,
+      ),
+    );
+    return SizedBox(
+      width: 88,
+      height: 72,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: imageUrl == null
+            ? fallback
+            : Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, _, _) => fallback,
+              ),
       ),
     );
   }

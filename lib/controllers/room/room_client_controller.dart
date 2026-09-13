@@ -41,4 +41,27 @@ class RoomClientController {
           ..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
     return rooms.firstOrNull;
   }
+
+  /// Imagen representativa del tipo. Busca la primera referencia no vacía
+  /// entre sus habitaciones activas para no depender de una habitación exacta.
+  String? previewImageForType(String typeId) {
+    final rooms =
+        _rooms
+            .where(
+              (room) =>
+                  room.motelId == motelId &&
+                  room.idType == typeId &&
+                  room.isActive,
+            )
+            .toList()
+          ..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
+
+    for (final room in rooms) {
+      for (final imageUrl in room.imageUrls) {
+        final normalizedUrl = imageUrl.trim();
+        if (normalizedUrl.isNotEmpty) return normalizedUrl;
+      }
+    }
+    return null;
+  }
 }

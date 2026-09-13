@@ -24,7 +24,7 @@ class RoomOwnerPage extends StatefulWidget {
 class _RoomOwnerPageState extends State<RoomOwnerPage> {
   final _searchController = TextEditingController();
   late final RoomOwnerController _controller;
-  String? _selectedTypeId;
+  final Set<String> _expandedTypeIds = <String>{};
 
   @override
   void initState() {
@@ -45,12 +45,6 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   @override
   Widget build(BuildContext context) {
     final types = _controller.roomTypes;
-    final selected = types
-        .where((type) => type.id == _selectedTypeId)
-        .firstOrNull;
-    final rooms = selected == null
-        ? const <RoomVisualData>[]
-        : _controller.roomsForType(selected.id, _searchController.text);
     return Scaffold(
       appBar: AppBar(title: const Text('Habitaciones')),
       body: SafeArea(
@@ -108,27 +102,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                 const _EmptyState(
                   message: 'Crea un tipo antes de agregar habitaciones.',
                 )
-              else
-                ...types.map(
-                  (type) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                    child: _OwnerTypeCard(
-                      type: type,
-                      selected: type.id == _selectedTypeId,
-                      onTap: () => setState(() => _selectedTypeId = type.id),
-                      onEdit: () => _editType(type),
-                      onDelete: () => _deleteType(type),
-                    ),
-                  ),
-                ),
-              if (selected != null) ...[
-                const SizedBox(height: AppSpacing.s5),
-                _ResponsiveSectionHeader(
-                  title: 'Habitaciones de ${selected.name}',
-                  actionLabel: 'Agregar habitación',
-                  onAction: () => _openRoomForm(type: selected),
-                ),
-                const SizedBox(height: AppSpacing.s3),
+              else ...[
                 AppTextField(
                   label: 'Buscar habitación',
                   controller: _searchController,
@@ -137,30 +111,39 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                   onChanged: (_) => setState(() {}),
                 ),
                 const SizedBox(height: AppSpacing.s4),
-                if (rooms.isEmpty)
-                  const _EmptyState(
-                    message: 'No hay habitaciones para este tipo.',
-                  )
-                else
-                  ...rooms.map(
-                    (room) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                      child: _OwnerRoomCard(
-                        room: room,
-                        typeName: selected.name,
-                        onEdit: () => _openRoomForm(room: room, type: selected),
-                        onTap: () => Navigator.of(context).push(
-                          MaterialPageRoute(
-                            builder: (_) => RoomDetailPage(
-                              room: room,
-                              role: RoomPageRole.owner,
-                              typeName: selected.name,
-                            ),
+                ...types.map((type) {
+                  final rooms = _controller.roomsForType(
+                    type.id,
+                    _searchController.text,
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _OwnerTypeCard(
+                      type: type,
+                      expanded: _expandedTypeIds.contains(type.id),
+                      rooms: rooms,
+                      onToggle: () => setState(() {
+                        if (!_expandedTypeIds.add(type.id)) {
+                          _expandedTypeIds.remove(type.id);
+                        }
+                      }),
+                      onAddRoom: () => _openRoomForm(type: type),
+                      onEdit: () => _editType(type),
+                      onDelete: () => _deleteType(type),
+                      onRoomEdit: (room) =>
+                          _openRoomForm(room: room, type: type),
+                      onRoomTap: (room) => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoomDetailPage(
+                            room: room,
+                            role: RoomPageRole.owner,
+                            typeName: type.name,
                           ),
                         ),
                       ),
                     ),
-                  ),
+                  );
+                }),
               ],
             ],
           ),
@@ -179,7 +162,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
         name: name,
       );
       _controller.addType(type);
-      _selectedTypeId = type.id;
+      _expandedTypeIds.add(type.id);
     });
   }
 
@@ -263,7 +246,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     if (confirmed == true) {
       setState(() {
         _controller.deleteType(type.id);
-        _selectedTypeId = null;
+        _expandedTypeIds.remove(type.id);
       });
     }
   }
@@ -487,6 +470,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
         } else {
           _controller.updateRoom(room.id, saved);
         }
+        _expandedTypeIds.add(saved.idType);
       });
     }
   }
@@ -537,22 +521,30 @@ class _ResponsiveSectionHeader extends StatelessWidget {
 class _OwnerTypeCard extends StatelessWidget {
   const _OwnerTypeCard({
     required this.type,
-    required this.selected,
-    required this.onTap,
+    required this.expanded,
+    required this.rooms,
+    required this.onToggle,
+    required this.onAddRoom,
     required this.onEdit,
     required this.onDelete,
+    required this.onRoomEdit,
+    required this.onRoomTap,
   });
 
   final RoomTypeData type;
-  final bool selected;
-  final VoidCallback onTap;
+  final bool expanded;
+  final List<RoomVisualData> rooms;
+  final VoidCallback onToggle;
+  final VoidCallback onAddRoom;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final ValueChanged<RoomVisualData> onRoomEdit;
+  final ValueChanged<RoomVisualData> onRoomTap;
 
   @override
   Widget build(BuildContext context) => AppCard(
-    selected: selected,
-    onTap: onTap,
+    selected: expanded,
+    onTap: onToggle,
     child: LayoutBuilder(
       builder: (context, constraints) {
         final details = Row(
@@ -569,8 +561,10 @@ class _OwnerTypeCard extends StatelessWidget {
               ),
             ),
             Icon(
-              Icons.arrow_forward_ios_rounded,
-              size: 16,
+              expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 24,
               color: context.appColors.textSecondary,
             ),
           ],
@@ -590,20 +584,53 @@ class _OwnerTypeCard extends StatelessWidget {
             ),
           ],
         );
-        if (constraints.maxWidth < 420) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              details,
-              const SizedBox(height: AppSpacing.s2),
-              actions,
-            ],
-          );
-        }
-        return Row(
+        final header = constraints.maxWidth < 420
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  details,
+                  const SizedBox(height: AppSpacing.s2),
+                  actions,
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(child: details),
+                  actions,
+                ],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Expanded(child: details),
-            actions,
+            header,
+            if (expanded) ...[
+              const SizedBox(height: AppSpacing.s3),
+              const Divider(),
+              const SizedBox(height: AppSpacing.s3),
+              AppButton(
+                label: 'Agregar habitación',
+                icon: Icons.add,
+                expanded: true,
+                onPressed: onAddRoom,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              if (rooms.isEmpty)
+                const _EmptyState(
+                  message: 'No hay habitaciones para este tipo.',
+                )
+              else
+                ...rooms.map(
+                  (room) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _OwnerRoomCard(
+                      room: room,
+                      typeName: type.name,
+                      onEdit: () => onRoomEdit(room),
+                      onTap: () => onRoomTap(room),
+                    ),
+                  ),
+                ),
+            ],
           ],
         );
       },
