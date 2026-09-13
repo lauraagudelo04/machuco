@@ -4,9 +4,10 @@ import '../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
-//import '../../booking/owner_view/owner_booking_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import '../../room/owner_view/room_owner_page.dart';
+import './../../notification/system_admin_view/system_admin_notification_view.dart'; 
+import './../../owner_subscription/owner_subscription_page.dart'; 
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -67,8 +68,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         generalLocation: current.generalLocation,
         paymentMethods: current.paymentMethods,
         imageUrls: current.imageUrls,
-        basePrice: current.basePrice,
-        isAvailable: !current.isAvailable,
+        isAvailable: !current.isAvailable, 
       );
     });
   }
@@ -151,7 +151,14 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           child: AppIconButton(
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const SystemAdminNotificationView(),
+                ),
+              );
+            },
           ),
         ),
         actions: [
@@ -200,6 +207,21 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               icon: Icons.star_outline,
               title: 'Suscripción',
               onTap: () {
+                Navigator.pop(context); // Cierra el Drawer (Menú lateral)
+                // NUEVO: Navegamos a OwnerSubscriptionPage usando MaterialPageRoute
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const OwnerSubscriptionPage(),
+                  ),
+                );
+              },
+            ),
+            _MenuTile(icon: Icons.person_outline, title: 'Perfil', onTap: () {}),
+            _MenuTile(
+              icon: Icons.support_agent_outlined, 
+              title: 'PQRS', 
+              onTap: () {
                 Navigator.pop(context);
                 Navigator.pushNamed(context, AppRoutes.ownerSubscription);
               },
@@ -220,6 +242,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           ],
         ),
       ),
+      // ... (El resto del código del Scaffold (body y FAB) y las clases privadas (_OwnerMotelCard, _MenuTile) sigue exactamente igual) ...
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
         child: Column(
@@ -423,13 +446,16 @@ class _OwnerMotelCard extends StatelessWidget {
                     );
                   } else if (value == 'habitaciones') {
                     Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomOwnerPage(motel: motel),
-                      ),
-                    );
-                    // TODO: Implementar navegación a habitaciones cuando esté lista
+                        MaterialPageRoute(
+                          builder: (_) => RoomOwnerPage(motel: motel),
+                        ),
+                      );
                   } else if (value == 'servicios') {
-                    // TODO: Implementar navegación a servicios adicionales cuando esté lista
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminAdditionalServices,
+                      arguments: motel.id,
+                    );
                   } else if (value == 'finanzas') {
                     Navigator.push(
                       context,
