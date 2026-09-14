@@ -5,6 +5,7 @@ import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/motel/motel_model.dart';
@@ -170,48 +171,72 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   }
 
   Future<void> _editType(RoomTypeData type) async {
-    final name = await _openTypeForm(initialName: type.name);
+    final name = await _openTypeForm(
+      initialName: type.name,
+      excludingTypeId: type.id,
+    );
     if (name != null) {
       setState(() => _controller.updateType(type.id, name));
     }
   }
 
-  Future<String?> _openTypeForm({String initialName = ''}) {
+  Future<String?> _openTypeForm({
+    String initialName = '',
+    String? excludingTypeId,
+  }) {
     final controller = TextEditingController(text: initialName);
+    String? feedbackMessage;
     return showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       showDragHandle: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          left: AppSpacing.s5,
-          right: AppSpacing.s5,
-          top: AppSpacing.s3,
-          bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.s5,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              initialName.isEmpty ? 'Agregar tipo' : 'Editar tipo',
-              style: Theme.of(context).textTheme.headlineSmall,
-            ),
-            const SizedBox(height: AppSpacing.s4),
-            AppTextField(
-              label: 'Nombre',
-              controller: controller,
-              hint: 'Suite',
-            ),
-            const SizedBox(height: AppSpacing.s4),
-            AppButton(
-              label: 'Guardar',
-              onPressed: () {
-                final name = controller.text.trim();
-                if (name.isNotEmpty) Navigator.of(context).pop(name);
-              },
-            ),
-          ],
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: AppSpacing.s5,
+            right: AppSpacing.s5,
+            top: AppSpacing.s3,
+            bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.s5,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                initialName.isEmpty ? 'Agregar tipo' : 'Editar tipo',
+                style: Theme.of(context).textTheme.headlineSmall,
+              ),
+              if (feedbackMessage != null) ...[
+                const SizedBox(height: AppSpacing.s3),
+                _FormFeedback(message: feedbackMessage!),
+              ],
+              const SizedBox(height: AppSpacing.s4),
+              AppTextField(
+                label: 'Nombre',
+                controller: controller,
+                hint: 'Suite',
+              ),
+              const SizedBox(height: AppSpacing.s4),
+              AppButton(
+                label: 'Guardar',
+                onPressed: () {
+                  final name = controller.text.trim();
+                  if (name.isEmpty) return;
+                  if (_controller.isTypeNameDuplicate(
+                    name,
+                    excludingTypeId: excludingTypeId,
+                  )) {
+                    setModalState(
+                      () => feedbackMessage =
+                          'Ya existe un tipo de habitación con este nombre.',
+                    );
+                    return;
+                  }
+                  Navigator.of(context).pop(name);
+                },
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -222,8 +247,11 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     if (count > 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            'No puedes eliminar ${type.name}: tiene $count habitaciones asociadas.',
+          backgroundColor: AppColors.rose,
+          content: _SnackBarMessage(
+            icon: Icons.block_outlined,
+            message:
+                'No puedes eliminar ${type.name}: tiene $count habitaciones asociadas.',
           ),
         ),
       );
@@ -273,6 +301,8 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     var selectedTypeId = room?.idType ?? type.id;
     var isActive = room?.isActive ?? true;
     var services = List<String>.of(room?.includedServices ?? const []);
+    String? feedbackMessage;
+    var feedbackIsError = false;
     final saved = await showModalBottomSheet<RoomVisualData>(
       context: context,
       isScrollControlled: true,
@@ -293,6 +323,13 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                   room == null ? 'Agregar habitación' : 'Editar habitación',
                   style: Theme.of(context).textTheme.headlineSmall,
                 ),
+                if (feedbackMessage != null) ...[
+                  const SizedBox(height: AppSpacing.s3),
+                  _FormFeedback(
+                    message: feedbackMessage!,
+                    isError: feedbackIsError,
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.s4),
                 AppTextField(
                   label: 'Nombre',
@@ -432,13 +469,22 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                         number.text.trim().isEmpty ||
                         parsedPrice <= 0 ||
                         parsedCapacity <= 0) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text(
-                            'Completa todos los campos principales.',
-                          ),
-                        ),
-                      );
+                      setModalState(() {
+                        feedbackIsError = true;
+                        feedbackMessage =
+                            'Completa todos los campos principales.';
+                      });
+                      return;
+                    }
+                    if (_controller.isRoomNumberDuplicate(
+                      number.text,
+                      excludingRoomId: room?.id,
+                    )) {
+                      setModalState(() {
+                        feedbackIsError = false;
+                        feedbackMessage =
+                            'Ya existe una habitación con este número.';
+                      });
                       return;
                     }
                     Navigator.of(context).pop(
@@ -477,6 +523,61 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       });
     }
   }
+}
+
+class _FormFeedback extends StatelessWidget {
+  const _FormFeedback({required this.message, this.isError = false});
+
+  final String message;
+  final bool isError;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = isError ? AppColors.rose : AppColors.maintenance;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .25),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: color),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(AppSpacing.s3),
+        child: Row(
+          children: [
+            Icon(
+              isError ? Icons.error_outline : Icons.warning_amber_rounded,
+              color: Colors.black87,
+            ),
+            const SizedBox(width: AppSpacing.s2),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.black87),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _SnackBarMessage extends StatelessWidget {
+  const _SnackBarMessage({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, color: Colors.white),
+      const SizedBox(width: AppSpacing.s2),
+      Expanded(child: Text(message)),
+    ],
+  );
 }
 
 class _ResponsiveSectionHeader extends StatelessWidget {
