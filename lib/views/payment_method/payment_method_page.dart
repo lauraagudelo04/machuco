@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/payment_method/payment_method_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 
 class PaymentMethodPage extends StatefulWidget {
   const PaymentMethodPage({
     super.key,
+    this.reservation,
     this.amount = 120000,
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
     this.onContinue,
   });
 
+  final Reservation? reservation;
   final int amount;
   final String concept;
-  final VoidCallback? onContinue;
+  final ValueChanged<PaymentMethodModel>? onContinue;
 
   @override
   State<PaymentMethodPage> createState() => _PaymentMethodPageState();
@@ -189,7 +192,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                     onPressed: _controller.isProcessing
                         ? null
                         : _controller.isApproved
-                        ? () => widget.onContinue?.call()
+                        ? () => widget.onContinue?.call(_controller.model)
                         : _controller.processPayment,
                   ),
                 ],

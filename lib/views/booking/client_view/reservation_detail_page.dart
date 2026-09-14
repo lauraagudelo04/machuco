@@ -14,6 +14,7 @@ import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 import 'package:machuco/widgets/booking/cancellation_reason_sheet.dart';
 import 'package:machuco/widgets/booking/reservation_card.dart';
+import 'package:machuco/routes/routes.dart';
 
 /// Detalle completo de una reserva del cliente: estado arriba, información
 /// en formato de lista (sin timeline) y dos acciones al final.
@@ -227,11 +228,12 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                     label: 'Descargar factura',
                     icon: Icons.receipt_long_outlined,
                     variant: AppButtonVariant.secondary,
-                    // La descarga real depende de un servicio de generación
-                    // de facturas todavía no definido para el proyecto; se
-                    // deja como acción visual (stub) mientras tanto.
                     onPressed: _invoiceEnabled(reservation.status)
-                        ? () => _showStub('Descargar factura')
+                        ? () => Navigator.pushNamed(
+                              context,
+                              AppRoutes.invoice,
+                              arguments: reservation,
+                            )
                         : null,
                   ),
                   const SizedBox(height: AppSpacing.s3),

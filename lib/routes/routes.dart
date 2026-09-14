@@ -23,6 +23,8 @@ import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
 import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
+import 'package:machuco/views/invoice/invoice_page.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
@@ -72,6 +74,7 @@ abstract final class AppRoutes {
   static const adminMotelReservationDashboard = '/bookings/admin/dashboard';
   static const clientProfile = '/client/profile';
   static const clientProfileEdit = '/client/profile/edit';
+  static const invoice = '/invoice';
 
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
@@ -83,10 +86,7 @@ abstract final class AppRoutes {
       paymentMethod =>
         settings.arguments is Reservation
             ? PaymentMethodSelectionPage(
-                amount: (settings.arguments! as Reservation).total,
-                concept:
-                    'Reserva ${(settings.arguments! as Reservation).roomName} - '
-                    '${(settings.arguments! as Reservation).motelName}',
+                reservation: settings.arguments! as Reservation,
               )
             : const PaymentMethodSelectionPage(),
       clientPayments => ClientPaymentsPage(
@@ -204,6 +204,16 @@ abstract final class AppRoutes {
 
       clientProfile => const ClientProfilePage(),
       clientProfileEdit => const ClientEditProfilePage(),
+      invoice => () {
+        final args = settings.arguments;
+        if (args is Reservation) return InvoicePage(reservation: args);
+        if (args is Map) {
+          final res = args['reservation'] is Reservation ? args['reservation'] as Reservation : null;
+          final pm = args['paymentMethod'] is PaymentMethodModel ? args['paymentMethod'] as PaymentMethodModel : null;
+          if (res != null) return InvoicePage(reservation: res, paymentMethod: pm);
+        }
+        throw Exception('Se requiere un objeto Reservation para abrir la factura.');
+      }(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);

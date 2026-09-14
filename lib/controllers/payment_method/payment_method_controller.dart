@@ -53,6 +53,7 @@ class PaymentMethodController extends ChangeNotifier {
   bool _isCvvHidden = true;
   bool _isDisposed = false;
 
+  PaymentMethodModel get model => _model;
   int get amount => _model.amount;
   String get concept => _model.concept;
   String get cardHolder => _model.cardHolder;
