@@ -15,6 +15,7 @@ import 'package:machuco/models/owner_management/owner_status_filter.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
+import 'package:machuco/views/login/logout_navigation.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
@@ -104,6 +105,10 @@ class _OwnerPageState extends State<OwnerPage> {
     );
   }
 
+  Future<void> _logout() async {
+    await logoutAndGoToLogin(context);
+  }
+
   Future<void> _toggleActiveState(Owner owner) async {
     // Inactivar deja al propietario sin operación, así que se confirma; volver
     // a activarlo es inocuo y no necesita confirmación.
@@ -180,7 +185,19 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Propietarios')),
+      appBar: AppBar(
+        title: const Text('Propietarios'),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.s4),
+            child: AppIconButton(
+              icon: Icons.logout,
+              tooltip: 'Cerrar sesión',
+              onPressed: _logout,
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
         bottom: false,
         child: ListenableBuilder(

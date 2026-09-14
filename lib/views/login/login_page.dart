@@ -1,25 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
 import 'package:machuco/service/auth/backend_registered_user_directory.dart';
+import 'package:machuco/service/auth/hardcoded_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
-import 'package:machuco/routes/routes.dart';
 
 enum AuthTab { login, register }
 
-enum UserProfileType { administrator, finalUser, owner }
-
 const _registerPasswordMinLength = 15;
-
-extension on UserProfileType {
-  String get metadataValue => switch (this) {
-    UserProfileType.administrator => 'administrator',
-    UserProfileType.finalUser => 'final_user',
-    UserProfileType.owner => 'owner',
-  };
-}
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -30,7 +21,7 @@ class LoginPage extends StatefulWidget {
   });
 
   final AuthTab initialTab;
-  final Auth0AuthService? authService;
+  final AuthService? authService;
   final LoginController? controller;
 
   @override
@@ -49,7 +40,7 @@ class _LoginPageState extends State<LoginPage> {
   final _confirmPasswordController = TextEditingController();
 
   late AuthTab _selectedTab;
-  UserProfileType _selectedProfileType = UserProfileType.finalUser;
+  RegisteredUserRole _selectedProfileType = RegisteredUserRole.client;
   bool _loginPasswordVisible = false;
   bool _registerPasswordVisible = false;
   bool _registerConfirmVisible = false;
@@ -68,8 +59,7 @@ class _LoginPageState extends State<LoginPage> {
       _controller = providedController;
       _ownsController = false;
     } else {
-      final authService =
-          widget.authService ?? Auth0AuthService.fromEnvironment();
+      final authService = widget.authService ?? _resolveAuthService();
       final RegisteredUserDirectory userDirectory;
       if (Auth0Config.useBackendUsers && Auth0Config.hasUsersApiConfigured) {
         userDirectory = BackendRegisteredUserDirectory(
@@ -112,17 +102,28 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {});
   }
 
+  AuthService? _resolveAuthService() {
+    if (Auth0Config.useHardcodedAuthUsers) {
+      return HardcodedAuthService();
+    }
+    return Auth0AuthService.fromEnvironment();
+  }
+
   Future<void> _bootstrap() async {
     await _refreshRegisteredUsers();
     if (!_controller.isAuthConfigured) {
       return;
     }
     try {
-      await _controller.restoreSession();
+      final restoredSession = await _controller.restoreSession();
       if (!mounted) {
         return;
       }
       await _refreshRegisteredUsers(showError: false);
+      if (!mounted || restoredSession == null) {
+        return;
+      }
+      _goToRoleHome(restoredSession);
     } catch (_) {
       if (!mounted) {
         return;
@@ -154,7 +155,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
-      _goToMainMenu();
+      _goToRoleHome(session);
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
@@ -182,7 +183,7 @@ class _LoginPageState extends State<LoginPage> {
         email: _registerEmailController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         password: _registerPasswordController.text,
-        profileType: _selectedProfileType.metadataValue,
+        role: _selectedProfileType,
       );
       if (!mounted) {
         return;
@@ -221,7 +222,7 @@ class _LoginPageState extends State<LoginPage> {
       await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
       setState(() => _selectedTab = AuthTab.login);
-      _goToMainMenu();
+      _goToRoleHome(session);
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
@@ -247,16 +248,16 @@ class _LoginPageState extends State<LoginPage> {
       await _controller.listRegisteredUsers();
     } on AuthFailure catch (failure) {
       if (!mounted || !showError) {
-      return;
+        return;
       }
       _showSnack(message: failure.message, isError: true);
     } on Exception {
       if (!mounted || !showError) {
-      return;
+        return;
       }
       _showSnack(
-      message: 'No fue posible actualizar el listado de usuarios.',
-      isError: true,
+        message: 'No fue posible actualizar el listado de usuarios.',
+        isError: true,
       );
     }
   }
@@ -306,13 +307,9 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  void _goToMainMenu() {
-    // TODO: reemplazar por enrutamiento real por rol cuando exista
-    // (responsabilidad fuera de esta rama). Mientras tanto, lleva al
-    // selector temporal de perfiles.
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.temporalHome, (_) => false);
+  void _goToRoleHome(AuthSession session) {
+    final targetRoute = _controller.resolvePostLoginRoute(session);
+    Navigator.of(context).pushNamedAndRemoveUntil(targetRoute, (_) => false);
   }
 
   String? _validateEmail(String? value) {
@@ -376,6 +373,10 @@ class _LoginPageState extends State<LoginPage> {
                         title: 'Machuco',
                         subtitle: 'Inicia sesión o crea tu cuenta',
                       ),
+                      if (Auth0Config.useHardcodedAuthUsers) ...[
+                        const SizedBox(height: AppSpacing.s4),
+                        _HardcodedUsersAlert(users: hardcodedAuthUsers),
+                      ],
                       if (!_controller.isAuthConfigured) ...[
                         const SizedBox(height: AppSpacing.s4),
                         _Auth0SetupAlert(
@@ -440,7 +441,7 @@ class _LoginPageState extends State<LoginPage> {
                                   passwordVisible: _registerPasswordVisible,
                                   confirmVisible: _registerConfirmVisible,
                                   submitting: _isSubmitting,
-                                  onProfileSelected: (profile) => setState(
+                                  onRoleSelected: (profile) => setState(
                                     () => _selectedProfileType = profile,
                                   ),
                                   onTogglePassword: () => setState(
@@ -506,6 +507,39 @@ class _Auth0SetupAlert extends StatelessWidget {
               message,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: context.appColors.textSecondary,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HardcodedUsersAlert extends StatelessWidget {
+  const _HardcodedUsersAlert({required this.users});
+
+  final List<HardcodedAuthUser> users;
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Modo pruebas activo (usuarios quemados)',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: AppSpacing.s2),
+          ...users.map(
+            (user) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.s1),
+              child: Text(
+                '${user.role.metadataValue}: ${user.email} / ${user.password}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
           ),
@@ -794,7 +828,7 @@ class _RegisterForm extends StatelessWidget {
     required this.passwordVisible,
     required this.confirmVisible,
     required this.submitting,
-    required this.onProfileSelected,
+    required this.onRoleSelected,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
@@ -809,11 +843,11 @@ class _RegisterForm extends StatelessWidget {
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
-  final UserProfileType selectedProfileType;
+  final RegisteredUserRole selectedProfileType;
   final bool passwordVisible;
   final bool confirmVisible;
   final bool submitting;
-  final ValueChanged<UserProfileType> onProfileSelected;
+  final ValueChanged<RegisteredUserRole> onRoleSelected;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -915,7 +949,7 @@ class _RegisterForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.s2),
           _ProfileTypeSelector(
             selectedType: selectedProfileType,
-            onSelected: onProfileSelected,
+            onSelected: onRoleSelected,
             compact: compact,
           ),
           const SizedBox(height: AppSpacing.s4),
@@ -1022,30 +1056,35 @@ class _ProfileTypeSelector extends StatelessWidget {
     required this.compact,
   });
 
-  final UserProfileType selectedType;
-  final ValueChanged<UserProfileType> onSelected;
+  final RegisteredUserRole selectedType;
+  final ValueChanged<RegisteredUserRole> onSelected;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final profiles =
         <
-          ({UserProfileType type, IconData icon, String title, String subtitle})
+          ({
+            RegisteredUserRole type,
+            IconData icon,
+            String title,
+            String subtitle,
+          })
         >[
           (
-            type: UserProfileType.administrator,
+            type: RegisteredUserRole.admin,
             icon: Icons.security_rounded,
             title: 'Administrador',
             subtitle: 'Gestión total del sistema',
           ),
           (
-            type: UserProfileType.finalUser,
+            type: RegisteredUserRole.client,
             icon: Icons.person_rounded,
-            title: 'Usuario final',
+            title: 'Cliente',
             subtitle: 'Realiza y consulta reservas',
           ),
           (
-            type: UserProfileType.owner,
+            type: RegisteredUserRole.owner,
             icon: Icons.home_work_rounded,
             title: 'Propietario',
             subtitle: 'Gestiona sus propiedades',

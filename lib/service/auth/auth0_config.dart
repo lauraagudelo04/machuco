@@ -17,6 +17,18 @@ abstract final class Auth0Config {
     'AUTH_USE_BACKEND_USERS',
     defaultValue: false,
   );
+  static const useHardcodedAuthUsers = bool.fromEnvironment(
+    'AUTH_USE_HARDCODED_AUTH_USERS',
+    defaultValue: false,
+  );
+  static const roleClaimNamespace = String.fromEnvironment(
+    'AUTH0_ROLE_CLAIM_NAMESPACE',
+    defaultValue: 'https://machuco.app/claims',
+  );
+  static const roleClaimName = String.fromEnvironment(
+    'AUTH0_ROLE_CLAIM_NAME',
+    defaultValue: 'role',
+  );
 
   static bool get isConfigured =>
       domain.isNotEmpty && clientId.isNotEmpty && connection.isNotEmpty;
