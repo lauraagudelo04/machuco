@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 
@@ -43,6 +44,20 @@ class InvoicePage extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Factura'),
         centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded),
+          onPressed: () {
+            if (Navigator.of(context).canPop()) {
+              Navigator.of(context).pop();
+              return;
+            }
+
+            Navigator.of(context).pushNamedAndRemoveUntil(
+              AppRoutes.clientMotels,
+              (_) => false,
+            );
+          },
+        ),
       ),
       body: SafeArea(
         child: SingleChildScrollView(
