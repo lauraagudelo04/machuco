@@ -31,17 +31,47 @@ class RoomOwnerController {
     }).toList()..sort((a, b) => a.roomNumber.compareTo(b.roomNumber));
   }
 
+  /// Indica si [name] ya está en uso por otro tipo de este motel.
+  ///
+  /// Los espacios externos y las mayúsculas no distinguen dos nombres para
+  /// evitar catálogos visualmente duplicados (por ejemplo, ` Suite ` y
+  /// `suite`).
+  bool isTypeNameDuplicate(String name, {String? excludingTypeId}) {
+    final normalizedName = _normalize(name);
+    return _types.any(
+      (type) =>
+          type.motelId == motelId &&
+          type.id != excludingTypeId &&
+          _normalize(type.name) == normalizedName,
+    );
+  }
+
+  /// Indica si [roomNumber] ya está en uso por otra habitación de este motel.
+  bool isRoomNumberDuplicate(String roomNumber, {String? excludingRoomId}) {
+    final normalizedNumber = _normalize(roomNumber);
+    return _rooms.any(
+      (room) =>
+          room.motelId == motelId &&
+          room.id != excludingRoomId &&
+          _normalize(room.roomNumber) == normalizedNumber,
+    );
+  }
+
   void addRoom(RoomVisualData room) => _rooms.add(room);
 
   void updateRoom(String roomId, RoomVisualData updatedRoom) {
-    final index = _rooms.indexWhere((room) => room.id == roomId);
+    final index = _rooms.indexWhere(
+      (room) => room.id == roomId && room.motelId == motelId,
+    );
     if (index != -1) _rooms[index] = updatedRoom;
   }
 
   void addType(RoomTypeData type) => _types.add(type);
 
   void updateType(String typeId, String name) {
-    final index = _types.indexWhere((type) => type.id == typeId);
+    final index = _types.indexWhere(
+      (type) => type.id == typeId && type.motelId == motelId,
+    );
     if (index != -1) _types[index] = _types[index].copyWith(name: name);
   }
 
@@ -51,7 +81,9 @@ class RoomOwnerController {
 
   bool deleteType(String typeId) {
     if (roomCountForType(typeId) > 0) return false;
-    _types.removeWhere((type) => type.id == typeId);
+    _types.removeWhere((type) => type.id == typeId && type.motelId == motelId);
     return true;
   }
+
+  String _normalize(String value) => value.trim().toLowerCase();
 }
