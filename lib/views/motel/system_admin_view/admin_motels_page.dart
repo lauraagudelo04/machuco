@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/views/review/review_administration_page.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
 import '../../../models/owner_management/owner.dart';
@@ -11,7 +12,7 @@ import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import './../../pqrs/system_admin_view/pqrs_page.dart';
-import './../../review/owner_view/owner_review_page.dart';
+
 
 class AdminMotelsPage extends StatefulWidget {
   final String? initialOwnerId;
@@ -250,7 +251,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const OwnerReviewPage(),
+                    builder: (context) => const ReviewAdministrationPage(),
                   ),
                 );
               }
