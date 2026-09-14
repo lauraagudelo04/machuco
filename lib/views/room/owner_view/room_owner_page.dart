@@ -10,6 +10,7 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
+import 'package:machuco/views/room/room_status_badge.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
 class RoomOwnerPage extends StatefulWidget {
@@ -122,6 +123,8 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                       type: type,
                       expanded: _expandedTypeIds.contains(type.id),
                       rooms: rooms,
+                      totalRoomCount: _controller.roomCountForType(type.id),
+                      hasSearchQuery: _searchController.text.trim().isNotEmpty,
                       onToggle: () => setState(() {
                         if (!_expandedTypeIds.add(type.id)) {
                           _expandedTypeIds.remove(type.id);
@@ -523,6 +526,8 @@ class _OwnerTypeCard extends StatelessWidget {
     required this.type,
     required this.expanded,
     required this.rooms,
+    required this.totalRoomCount,
+    required this.hasSearchQuery,
     required this.onToggle,
     required this.onAddRoom,
     required this.onEdit,
@@ -534,6 +539,8 @@ class _OwnerTypeCard extends StatelessWidget {
   final RoomTypeData type;
   final bool expanded;
   final List<RoomVisualData> rooms;
+  final int totalRoomCount;
+  final bool hasSearchQuery;
   final VoidCallback onToggle;
   final VoidCallback onAddRoom;
   final VoidCallback onEdit;
@@ -543,7 +550,6 @@ class _OwnerTypeCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => AppCard(
-    selected: expanded,
     onTap: onToggle,
     child: LayoutBuilder(
       builder: (context, constraints) {
@@ -555,9 +561,21 @@ class _OwnerTypeCard extends StatelessWidget {
             ),
             const SizedBox(width: AppSpacing.s3),
             Expanded(
-              child: Text(
-                type.name,
-                style: Theme.of(context).textTheme.titleLarge,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    type.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    '$totalRoomCount ${totalRoomCount == 1 ? 'habitación' : 'habitaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
             Icon(
@@ -607,6 +625,18 @@ class _OwnerTypeCard extends StatelessWidget {
               const SizedBox(height: AppSpacing.s3),
               const Divider(),
               const SizedBox(height: AppSpacing.s3),
+              Text(
+                'Habitaciones de ${type.name}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.s1),
+              Text(
+                'Toca una habitación para ver el detalle o usa Editar para modificarla.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s3),
               AppButton(
                 label: 'Agregar habitación',
                 icon: Icons.add,
@@ -615,8 +645,10 @@ class _OwnerTypeCard extends StatelessWidget {
               ),
               const SizedBox(height: AppSpacing.s3),
               if (rooms.isEmpty)
-                const _EmptyState(
-                  message: 'No hay habitaciones para este tipo.',
+                _EmptyState(
+                  message: hasSearchQuery
+                      ? 'No hay habitaciones que coincidan con la búsqueda.'
+                      : 'No hay habitaciones para este tipo.',
                 )
               else
                 ...rooms.map(
@@ -663,14 +695,7 @@ class _OwnerRoomCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            Text(
-              roomAdministrativeLabel(room.isActive),
-              style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                color: room.isActive
-                    ? Theme.of(context).colorScheme.primary
-                    : context.appColors.textSecondary,
-              ),
-            ),
+            RoomStatusBadge(isActive: room.isActive),
           ],
         ),
         const SizedBox(height: AppSpacing.s1),
