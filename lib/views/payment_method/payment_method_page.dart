@@ -8,10 +8,12 @@ class PaymentMethodPage extends StatefulWidget {
     super.key,
     this.amount = 120000,
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
+    this.onContinue,
   });
 
   final int amount;
   final String concept;
+  final VoidCallback? onContinue;
 
   @override
   State<PaymentMethodPage> createState() => _PaymentMethodPageState();
@@ -111,6 +113,7 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                     keyboardType: TextInputType.number,
                     textInputAction: TextInputAction.next,
                     prefixIcon: const Icon(Icons.credit_card_outlined),
+                    inputFormatters: [_controller.cardNumberFormatter],
                     onChanged: _controller.updateCardNumber,
                   ),
                   const SizedBox(height: AppSpacing.s3),
@@ -169,21 +172,6 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                         .toList(),
                     onChanged: _controller.changeInstallments,
                   ),
-                  const SizedBox(height: AppSpacing.s5),
-                  AppCard(
-                    child: Row(
-                      children: [
-                        const Icon(Icons.lock_outline, color: AppColors.violet),
-                        const SizedBox(width: AppSpacing.s3),
-                        Expanded(
-                          child: Text(
-                            'Tus datos de pago están protegidos durante la transacción.',
-                            style: TextStyle(color: colors.textSecondary),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
                   if (_controller.message case final message?) ...[
                     const SizedBox(height: AppSpacing.s4),
                     _PaymentResult(
@@ -195,12 +183,13 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                   const SizedBox(height: AppSpacing.s5),
                   AppButton(
                     label: _controller.isApproved
-                        ? 'Pago aprobado'
+                        ? 'Continuar'
                         : 'Pagar ${_controller.formattedAmount}',
                     loading: _controller.isProcessing,
-                    onPressed:
-                        _controller.isProcessing || _controller.isApproved
+                    onPressed: _controller.isProcessing
                         ? null
+                        : _controller.isApproved
+                        ? () => widget.onContinue?.call()
                         : _controller.processPayment,
                   ),
                 ],
@@ -289,13 +278,14 @@ class _PaymentResult extends StatelessWidget {
   @override
   Widget build(BuildContext context) => AppCard(
     child: Row(
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Icon(
           approved ? Icons.check_circle_outline : Icons.error_outline,
           color: approved ? AppColors.available : AppColors.rose,
         ),
         const SizedBox(width: AppSpacing.s3),
-        Expanded(child: Text(message)),
+        Flexible(child: Text(message, textAlign: TextAlign.center)),
       ],
     ),
   );
