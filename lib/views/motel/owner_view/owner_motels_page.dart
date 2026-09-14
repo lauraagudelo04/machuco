@@ -7,8 +7,9 @@ import './../../../routes/routes.dart';
 import '../../login/logout_navigation.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import '../../room/owner_view/room_owner_page.dart';
-import './../../notification/system_admin_view/system_admin_notification_view.dart'; 
-import '../../client/owner_view/client_list_page.dart'; 
+import './../../notification/system_admin_view/system_admin_notification_view.dart';
+import '../../client/owner_view/client_list_page.dart';
+import '../../booking/owner_view/owner_reservations_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -88,7 +89,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          const Center(child: Text('Panel de Reservas')),
+          const OwnerReservationsPage(),
           const ClientPage(embedded: true),
         ],
       ),
@@ -216,6 +217,14 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                 ],
               ),
+            ),
+            _MenuTile(
+              icon: Icons.card_membership_outlined,
+              title: 'Suscripción',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.pushNamed(context, AppRoutes.ownerSubscription);
+              },
             ),
             _MenuTile(icon: Icons.star_outline,
               title: 'Reseñas',

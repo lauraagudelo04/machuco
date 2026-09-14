@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/product/product_controller.dart';
+import 'package:machuco/controllers/room/room_mock_data.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
@@ -10,12 +12,13 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/utils/currency_formatter.dart';
+import 'package:machuco/utils/date_formatter.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/product/product.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
-import 'package:machuco/widgets/booking/availability_calendar.dart';
 import 'package:machuco/widgets/booking/priced_checkbox_tile.dart';
 import 'package:machuco/widgets/booking/quantity_stepper.dart';
 
@@ -34,13 +37,15 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   late final ClientBookingController _bookingController;
   late final AdditionalServiceSystemAdministratorController _servicesController;
   late final ProductController _productsController;
+  final MotelController _motelController = MotelController();
   late final String _requestId;
+  late final String _roomTypeName;
 
-  StayMode _stayMode = StayMode.dateWithHourBlock;
-  DateTime? _selectedDay;
+  Motel? _motel;
+  DateTime? _checkInDate;
+  DateTime? _checkOutDate;
   TimeOfDay? _checkInTime;
   TimeOfDay? _checkOutTime;
-  int _hourBlock = 2;
   int _guestCount = 1;
   final Set<String> _selectedServiceIds = {};
   final Set<String> _selectedProductIds = {};
@@ -52,18 +57,23 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   void initState() {
     super.initState();
     _bookingController = ClientBookingController();
-    // TODO(servicios-adicionales): el motelId de esta rama (Room/Product/
-    // Motel) es String (ej. 'motel-eclipse'), pero
-    // AdditionalServiceSystemAdministratorController (rama de servicios
-    // adicionales) usa un identificador de demostración. No se puede pasar
-    // widget.room.motelId aquí
-    // hasta reconciliar el tipo entre features; ver _availableServices.
     _servicesController = AdditionalServiceSystemAdministratorController(
-      motelId: '0',
+      motelId: widget.room.motelId,
     );
     _productsController = ProductController();
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
+    _roomTypeName = buildRoomTypeMockData()
+        .firstWhere(
+          (type) => type.id == widget.room.idType,
+          orElse: () => RoomTypeData(
+            id: widget.room.idType,
+            motelId: widget.room.motelId,
+            name: 'Habitación',
+          ),
+        )
+        .name;
     _servicesController.addListener(_refresh);
+    _loadMotel();
   }
 
   @override
@@ -78,37 +88,31 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _loadMotel() async {
+    final motel = await _motelController.getMotelById(widget.room.motelId);
+    if (mounted) setState(() => _motel = motel);
+  }
+
   DateTime? get _checkIn {
-    if (_selectedDay == null || _checkInTime == null) return null;
+    if (_checkInDate == null || _checkInTime == null) return null;
     return DateTime(
-      _selectedDay!.year,
-      _selectedDay!.month,
-      _selectedDay!.day,
+      _checkInDate!.year,
+      _checkInDate!.month,
+      _checkInDate!.day,
       _checkInTime!.hour,
       _checkInTime!.minute,
     );
   }
 
   DateTime? get _checkOut {
-    final checkIn = _checkIn;
-    if (checkIn == null) return null;
-    if (_stayMode == StayMode.dateWithHourBlock) {
-      return checkIn.add(Duration(hours: _hourBlock));
-    }
-    if (_checkOutTime == null) return null;
-    var checkOut = DateTime(
-      _selectedDay!.year,
-      _selectedDay!.month,
-      _selectedDay!.day,
+    if (_checkOutDate == null || _checkOutTime == null) return null;
+    return DateTime(
+      _checkOutDate!.year,
+      _checkOutDate!.month,
+      _checkOutDate!.day,
       _checkOutTime!.hour,
       _checkOutTime!.minute,
     );
-    if (!checkOut.isAfter(checkIn)) {
-      // La salida es antes que la hora de entrada: se asume que corresponde
-      // al día siguiente (estancia nocturna).
-      checkOut = checkOut.add(const Duration(days: 1));
-    }
-    return checkOut;
   }
 
   String? get _rangeError {
@@ -118,8 +122,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     if (checkIn.isBefore(DateTime.now())) {
       return 'La hora de entrada debe ser posterior al momento actual.';
     }
-    if (_stayMode == StayMode.dateTimeRange &&
-        checkOut.difference(checkIn) > const Duration(hours: 24)) {
+    if (!checkOut.isAfter(checkIn)) {
+      return 'La hora de salida debe ser posterior a la hora de entrada.';
+    }
+    if (checkOut.difference(checkIn) > const Duration(hours: 24)) {
       return 'La estancia no puede superar 24 horas continuas.';
     }
     if (!_bookingController.isSlotAvailable(
@@ -136,13 +142,11 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     return null;
   }
 
-  bool get _hasCompleteSchedule {
-    if (_selectedDay == null || _checkInTime == null) return false;
-    if (_stayMode == StayMode.dateTimeRange && _checkOutTime == null) {
-      return false;
-    }
-    return true;
-  }
+  bool get _hasCompleteSchedule =>
+      _checkInDate != null &&
+      _checkInTime != null &&
+      _checkOutDate != null &&
+      _checkOutTime != null;
 
   bool get _isGuestCountValid =>
       _guestCount >= 1 && _guestCount <= widget.room.capacity;
@@ -150,10 +154,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   bool get _isFormValid =>
       _hasCompleteSchedule && _rangeError == null && _isGuestCountValid;
 
-  // Bloqueado por el desajuste de tipos de motelId entre features (ver
-  // TODO en initState): mientras no se reconcilie, no se consulta el
-  // catálogo real y el formulario no ofrece servicios adicionales.
-  List<AdditionalServiceData> get _availableServices => const [];
+  List<AdditionalServiceData> get _availableServices =>
+      _servicesController.getActiveAdditionalServicesByMotelId(
+        widget.room.motelId,
+      );
 
   List<Product> get _availableProducts => _productsController
       .getProductsByMotel(widget.room.motelId)
@@ -200,6 +204,35 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
 
   int get _grandTotal => _roomTotal + _servicesTotal + _productsTotal;
 
+  Future<void> _pickCheckInDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _checkInDate ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _checkInDate = picked;
+      if (_checkOutDate != null && _checkOutDate!.isBefore(picked)) {
+        _checkOutDate = null;
+      }
+    });
+  }
+
+  Future<void> _pickCheckOutDate() async {
+    final base = _checkInDate ?? DateTime.now();
+    final firstDate = DateTime(base.year, base.month, base.day);
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _checkOutDate ?? firstDate,
+      firstDate: firstDate,
+      lastDate: firstDate.add(const Duration(days: 365)),
+    );
+    if (picked != null) setState(() => _checkOutDate = picked);
+  }
+
   Future<void> _pickCheckInTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -232,7 +265,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       roomNumber: widget.room.roomNumber,
       checkIn: checkIn,
       checkOut: checkOut,
-      stayMode: _stayMode,
+      stayMode: StayMode.dateTimeRange,
       guestCount: _guestCount,
       services: _selectedServiceItems,
       products: _selectedProductItems,
@@ -298,19 +331,20 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screen),
           children: [
-            _HeaderCard(room: widget.room),
+            _HeaderCard(
+              motelName: _motel?.name ?? 'Cargando motel...',
+              roomTypeName: _roomTypeName,
+              capacity: widget.room.capacity,
+              pricePerHour: widget.room.pricePerHour,
+            ),
             const SizedBox(height: AppSpacing.s4),
             _ScheduleCard(
-              room: widget.room,
-              bookingController: _bookingController,
-              stayMode: _stayMode,
-              onStayModeChanged: (mode) => setState(() => _stayMode = mode),
-              selectedDay: _selectedDay,
-              onDaySelected: (day) => setState(() => _selectedDay = day),
+              checkInDate: _checkInDate,
+              onPickCheckInDate: _pickCheckInDate,
+              checkOutDate: _checkOutDate,
+              onPickCheckOutDate: _pickCheckOutDate,
               checkInTime: _checkInTime,
               checkOutTime: _checkOutTime,
-              hourBlock: _hourBlock,
-              onHourBlockChanged: (hours) => setState(() => _hourBlock = hours),
               onPickCheckInTime: _pickCheckInTime,
               onPickCheckOutTime: _pickCheckOutTime,
               rangeError: _rangeError,
@@ -376,9 +410,17 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
 }
 
 class _HeaderCard extends StatelessWidget {
-  const _HeaderCard({required this.room});
+  const _HeaderCard({
+    required this.motelName,
+    required this.roomTypeName,
+    required this.capacity,
+    required this.pricePerHour,
+  });
 
-  final RoomVisualData room;
+  final String motelName;
+  final String roomTypeName;
+  final int capacity;
+  final int pricePerHour;
 
   @override
   Widget build(BuildContext context) {
@@ -387,29 +429,28 @@ class _HeaderCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Motel ${room.motelId}',
+            motelName,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
               color: context.appColors.textSecondary,
             ),
           ),
           const SizedBox(height: AppSpacing.s1),
-          Text(room.name, style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            roomTypeName,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const SizedBox(height: AppSpacing.s2),
           Wrap(
             spacing: AppSpacing.s2,
             runSpacing: AppSpacing.s2,
             children: [
               _Pill(
-                icon: Icons.door_sliding_outlined,
-                label: 'Habitación ${room.roomNumber}',
-              ),
-              _Pill(
                 icon: Icons.people_alt_outlined,
-                label: 'Máx. ${room.capacity} personas',
+                label: 'Máx. $capacity personas',
               ),
               _Pill(
                 icon: Icons.payments_outlined,
-                label: formatPricePerHour(room.pricePerHour),
+                label: formatPricePerHour(pricePerHour),
               ),
             ],
           ),
@@ -451,31 +492,23 @@ class _Pill extends StatelessWidget {
 
 class _ScheduleCard extends StatelessWidget {
   const _ScheduleCard({
-    required this.room,
-    required this.bookingController,
-    required this.stayMode,
-    required this.onStayModeChanged,
-    required this.selectedDay,
-    required this.onDaySelected,
+    required this.checkInDate,
+    required this.onPickCheckInDate,
+    required this.checkOutDate,
+    required this.onPickCheckOutDate,
     required this.checkInTime,
     required this.checkOutTime,
-    required this.hourBlock,
-    required this.onHourBlockChanged,
     required this.onPickCheckInTime,
     required this.onPickCheckOutTime,
     required this.rangeError,
   });
 
-  final RoomVisualData room;
-  final ClientBookingController bookingController;
-  final StayMode stayMode;
-  final ValueChanged<StayMode> onStayModeChanged;
-  final DateTime? selectedDay;
-  final ValueChanged<DateTime> onDaySelected;
+  final DateTime? checkInDate;
+  final VoidCallback onPickCheckInDate;
+  final DateTime? checkOutDate;
+  final VoidCallback onPickCheckOutDate;
   final TimeOfDay? checkInTime;
   final TimeOfDay? checkOutTime;
-  final int hourBlock;
-  final ValueChanged<int> onHourBlockChanged;
   final VoidCallback onPickCheckInTime;
   final VoidCallback onPickCheckOutTime;
   final String? rangeError;
@@ -491,68 +524,95 @@ class _ScheduleCard extends StatelessWidget {
             style: Theme.of(context).textTheme.titleLarge,
           ),
           const SizedBox(height: AppSpacing.s3),
-          SegmentedButton<StayMode>(
-            segments: const [
-              ButtonSegment(
-                value: StayMode.dateWithHourBlock,
-                label: Text('Bloque de horas'),
-                icon: Icon(Icons.hourglass_bottom_outlined),
-              ),
-              ButtonSegment(
-                value: StayMode.dateTimeRange,
-                label: Text('Entrada y salida'),
-                icon: Icon(Icons.schedule_outlined),
-              ),
-            ],
-            selected: {stayMode},
-            onSelectionChanged: (selection) =>
-                onStayModeChanged(selection.first),
+          _DateField(
+            label: 'Fecha de entrada',
+            value: checkInDate,
+            onTap: onPickCheckInDate,
           ),
-          const SizedBox(height: AppSpacing.s4),
-          AvailabilityCalendar(
-            selectedDay: selectedDay,
-            onDaySelected: onDaySelected,
-            isDayAvailable: (day) =>
-                bookingController.isDayAvailable(room.id, day),
-          ),
-          const SizedBox(height: AppSpacing.s4),
+          const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de entrada',
             value: checkInTime,
             onTap: onPickCheckInTime,
           ),
-          if (stayMode == StayMode.dateTimeRange) ...[
-            const SizedBox(height: AppSpacing.s3),
-            _TimeField(
-              label: 'Hora de salida',
-              value: checkOutTime,
-              onTap: onPickCheckOutTime,
-            ),
-          ] else ...[
-            const SizedBox(height: AppSpacing.s3),
-            Text(
-              'Duración (máx. $maxStayHourBlock horas)',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-            const SizedBox(height: AppSpacing.s2),
-            Wrap(
-              spacing: AppSpacing.s2,
-              runSpacing: AppSpacing.s2,
-              children: [
-                for (var hours = 1; hours <= maxStayHourBlock; hours++)
-                  ChoiceChip(
-                    label: Text('$hours h'),
-                    selected: hourBlock == hours,
-                    onSelected: (_) => onHourBlockChanged(hours),
-                  ),
-              ],
-            ),
-          ],
+          const SizedBox(height: AppSpacing.s3),
+          _DateField(
+            label: 'Fecha de salida',
+            value: checkOutDate,
+            onTap: onPickCheckOutDate,
+          ),
+          const SizedBox(height: AppSpacing.s3),
+          _TimeField(
+            label: 'Hora de salida',
+            value: checkOutTime,
+            onTap: onPickCheckOutTime,
+          ),
           if (rangeError != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNotice(message: rangeError!),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: value == null
+          ? '$label, sin definir'
+          : '$label, ${formatDayMonthLabel(value!)}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s3,
+              vertical: AppSpacing.s2,
+            ),
+            decoration: BoxDecoration(
+              color: context.appColors.elevated,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  color: context.appColors.textSecondary,
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+                Text(
+                  value == null ? 'Elegir fecha' : formatDayMonthLabel(value!),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
