@@ -5,6 +5,7 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/room/room_models.dart';
+import 'package:machuco/views/room/room_status_badge.dart';
 
 /// Detalle de datos maestros. Disponibilidad y reseñas viven en sus módulos.
 class RoomDetailPage extends StatelessWidget {
@@ -123,30 +124,9 @@ class RoomDetailPage extends StatelessWidget {
 class _ActiveBadge extends StatelessWidget {
   const _ActiveBadge({required this.isActive});
   final bool isActive;
+
   @override
-  Widget build(BuildContext context) {
-    final color = isActive
-        ? Theme.of(context).colorScheme.primary
-        : context.appColors.textSecondary;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .14),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s3,
-          vertical: AppSpacing.s2,
-        ),
-        child: Text(
-          roomAdministrativeLabel(isActive),
-          style: Theme.of(
-            context,
-          ).textTheme.labelMedium?.copyWith(color: color),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => RoomStatusBadge(isActive: isActive);
 }
 
 class _InfoRow extends StatelessWidget {

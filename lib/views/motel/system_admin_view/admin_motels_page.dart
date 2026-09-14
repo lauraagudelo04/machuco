@@ -7,7 +7,7 @@ import '../../../controllers/motel/motel_controller.dart';
 import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
 import './admin_motel_form_page.dart'; 
-import '../../room/owner_view/room_owner_page.dart';
+import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import './../../pqrs/system_admin_view/pqrs_page.dart';
@@ -435,17 +435,20 @@ class _AdminMotelCard extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 tooltip: 'Opciones de administración',
                 onSelected: (String value) {
-                  if (value == 'productos') {
+                  if (value == 'habitaciones') {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => RoomAdminPage(
+                          motelId: motel.id,
+                          motelName: motel.name,
+                        ),
+                      ),
+                    );
+                  } else if (value == 'productos') {
                     Navigator.pushNamed(
                       context,
                       AppRoutes.ownerProducts,
                       arguments: motel.id,
-                    );
-                  } else if (value == 'habitaciones') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomOwnerPage(motel: motel),
-                      ),
                     );
                   } else if (value == 'servicios') {
                     Navigator.pushNamed(
@@ -467,22 +470,22 @@ class _AdminMotelCard extends StatelessWidget {
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                   const PopupMenuItem<String>(
-                    value: 'productos',
-                    child: Row(
-                      children: [
-                        Icon(Icons.inventory_2_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Productos'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem<String>(
                     value: 'habitaciones',
                     child: Row(
                       children: [
                         Icon(Icons.bed_outlined, size: 20),
                         SizedBox(width: 8),
                         Text('Habitaciones'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'productos',
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Productos'),
                       ],
                     ),
                   ),

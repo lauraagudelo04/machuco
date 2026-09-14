@@ -8,7 +8,10 @@ import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
+import 'package:machuco/views/room/room_status_badge.dart';
 
+/// Consulta de habitaciones para el administrador del sistema.
+/// Los tipos se expanden como en la vista de propietario, sin acciones de edición.
 class RoomAdminPage extends StatefulWidget {
   const RoomAdminPage({
     super.key,
@@ -28,8 +31,8 @@ class RoomAdminPage extends StatefulWidget {
 
 class _RoomAdminPageState extends State<RoomAdminPage> {
   final _searchController = TextEditingController();
+  final Set<String> _expandedTypeIds = <String>{};
   late final RoomAdminController _controller;
-  String? _selectedTypeId;
 
   @override
   void initState() {
@@ -50,12 +53,6 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
   @override
   Widget build(BuildContext context) {
     final types = _controller.roomTypes;
-    final selected = types
-        .where((type) => type.id == _selectedTypeId)
-        .firstOrNull;
-    final rooms = selected == null
-        ? const <RoomVisualData>[]
-        : _controller.roomsForType(selected.id, query: _searchController.text);
     return Scaffold(
       appBar: AppBar(title: const Text('Habitaciones')),
       body: SafeArea(
@@ -79,7 +76,7 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
                   ),
                   const SizedBox(height: AppSpacing.s2),
                   Text(
-                    'Consulta en solo lectura los tipos del motel y todas sus habitaciones.',
+                    'Consulta los tipos del motel y despliega sus habitaciones. Esta vista es solo de lectura.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                       color: context.appColors.textSecondary,
                     ),
@@ -111,23 +108,7 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
               const _AdminEmptyState(
                 message: 'No hay tipos registrados para este motel.',
               )
-            else
-              Wrap(
-                spacing: AppSpacing.s2,
-                runSpacing: AppSpacing.s2,
-                children: types
-                    .map(
-                      (type) => ChoiceChip(
-                        label: Text(type.name),
-                        selected: type.id == _selectedTypeId,
-                        onSelected: (_) =>
-                            setState(() => _selectedTypeId = type.id),
-                      ),
-                    )
-                    .toList(),
-              ),
-            if (selected != null) ...[
-              const SizedBox(height: AppSpacing.s5),
+            else ...[
               AppTextField(
                 label: 'Buscar habitación',
                 controller: _searchController,
@@ -136,40 +117,137 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
                 onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: AppSpacing.s4),
-              Text(
-                'Habitaciones de ${selected.name}',
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: AppSpacing.s3),
-              if (rooms.isEmpty)
-                const _AdminEmptyState(
-                  message: 'No hay habitaciones para este tipo.',
-                )
-              else
-                ...rooms.map(
-                  (room) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                    child: _AdminRoomCard(
-                      room: room,
-                      typeName: selected.name,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => RoomDetailPage(
-                            room: room,
-                            role: RoomPageRole.admin,
-                            typeName: selected.name,
-                          ),
+              ...types.map(
+                (type) => Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                  child: _AdminTypeCard(
+                    type: type,
+                    expanded: _expandedTypeIds.contains(type.id),
+                    rooms: _controller.roomsForType(
+                      type.id,
+                      query: _searchController.text,
+                    ),
+                    totalRoomCount: _controller.roomsForType(type.id).length,
+                    hasSearchQuery: _searchController.text.trim().isNotEmpty,
+                    onToggle: () => setState(() {
+                      if (!_expandedTypeIds.add(type.id)) {
+                        _expandedTypeIds.remove(type.id);
+                      }
+                    }),
+                    onRoomTap: (room) => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => RoomDetailPage(
+                          room: room,
+                          role: RoomPageRole.admin,
+                          typeName: type.name,
                         ),
                       ),
                     ),
                   ),
                 ),
+              ),
             ],
           ],
         ),
       ),
     );
   }
+}
+
+class _AdminTypeCard extends StatelessWidget {
+  const _AdminTypeCard({
+    required this.type,
+    required this.expanded,
+    required this.rooms,
+    required this.totalRoomCount,
+    required this.hasSearchQuery,
+    required this.onToggle,
+    required this.onRoomTap,
+  });
+  final RoomTypeData type;
+  final bool expanded;
+  final List<RoomVisualData> rooms;
+  final int totalRoomCount;
+  final bool hasSearchQuery;
+  final VoidCallback onToggle;
+  final ValueChanged<RoomVisualData> onRoomTap;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    onTap: onToggle,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.bedroom_parent_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: AppSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    type.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    '$totalRoomCount ${totalRoomCount == 1 ? 'habitación' : 'habitaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              color: context.appColors.textSecondary,
+            ),
+          ],
+        ),
+        if (expanded) ...[
+          const SizedBox(height: AppSpacing.s3),
+          const Divider(),
+          const SizedBox(height: AppSpacing.s3),
+          Text(
+            'Habitaciones de ${type.name}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: AppSpacing.s1),
+          Text(
+            'Toca una habitación para consultar su detalle.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s3),
+          if (rooms.isEmpty)
+            _AdminEmptyState(
+              message: hasSearchQuery
+                  ? 'No hay habitaciones que coincidan con la búsqueda.'
+                  : 'No hay habitaciones para este tipo.',
+            )
+          else
+            ...rooms.map(
+              (room) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                child: _AdminRoomCard(
+                  room: room,
+                  typeName: type.name,
+                  onTap: () => onRoomTap(room),
+                ),
+              ),
+            ),
+        ],
+      ],
+    ),
+  );
 }
 
 class _AdminRoomCard extends StatelessWidget {
@@ -181,6 +259,7 @@ class _AdminRoomCard extends StatelessWidget {
   final RoomVisualData room;
   final String typeName;
   final VoidCallback onTap;
+
   @override
   Widget build(BuildContext context) => AppCard(
     onTap: onTap,
@@ -195,7 +274,7 @@ class _AdminRoomCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            _Status(isActive: room.isActive),
+            RoomStatusBadge(isActive: room.isActive),
           ],
         ),
         const SizedBox(height: AppSpacing.s1),
@@ -213,20 +292,6 @@ class _AdminRoomCard extends StatelessWidget {
           style: Theme.of(context).textTheme.labelMedium,
         ),
       ],
-    ),
-  );
-}
-
-class _Status extends StatelessWidget {
-  const _Status({required this.isActive});
-  final bool isActive;
-  @override
-  Widget build(BuildContext context) => Text(
-    roomAdministrativeLabel(isActive),
-    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-      color: isActive
-          ? Theme.of(context).colorScheme.primary
-          : context.appColors.textSecondary,
     ),
   );
 }
