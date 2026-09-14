@@ -9,7 +9,7 @@ import './../../../routes/routes.dart';
 import '../../payment/system_admin_view/admin_payment_page.dart';
 import './admin_motel_form_page.dart'; 
 // Nuevos imports para las vistas del menú desplegable
-import '../../room/owner_view/room_owner_page.dart';
+import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 
 // admin_motels_page.dart
@@ -435,7 +435,10 @@ class _AdminMotelCard extends StatelessWidget {
                   } else if (value == 'habitaciones') {
                     Navigator.of(context).push(
                       MaterialPageRoute(
-                        builder: (_) => RoomOwnerPage(motel: motel),
+                        builder: (_) => RoomAdminPage(
+                          motelId: motel.id,
+                          motelName: motel.name,
+                        ),
                       ),
                     );
                   } else if (value == 'servicios') {
