@@ -22,10 +22,22 @@ AppStatus reservationStatusToAppStatus(ReservationStatus status) =>
 /// Tarjeta de una reserva para listados ("Mis reservas"): motel, número de
 /// habitación, precio total, fechas y estado.
 class ReservationCard extends StatelessWidget {
-  const ReservationCard({super.key, required this.reservation, this.onTap});
+  const ReservationCard({
+    super.key,
+    required this.reservation,
+    this.onTap,
+    this.guestName,
+  });
 
   final Reservation reservation;
   final VoidCallback? onTap;
+
+  /// Nombre del huésped a mostrar en la tarjeta, usado por Propietario (y,
+  /// más adelante, Administrador) para identificar a quién pertenece la
+  /// reserva. `null` (el valor por defecto) mantiene el comportamiento
+  /// actual de Cliente, que no necesita mostrar este dato porque siempre es
+  /// el propio usuario autenticado.
+  final String? guestName;
 
   @override
   Widget build(BuildContext context) {
@@ -61,6 +73,27 @@ class ReservationCard extends StatelessWidget {
               color: context.appColors.textSecondary,
             ),
           ),
+          if (guestName case final name? when name.isNotEmpty) ...[
+            const SizedBox(height: AppSpacing.s1),
+            Row(
+              children: [
+                Icon(
+                  Icons.person_outline,
+                  size: 16,
+                  color: context.appColors.textSecondary,
+                ),
+                const SizedBox(width: AppSpacing.s1),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: Theme.of(context).textTheme.bodyMedium,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: AppSpacing.s2),
           Row(
             children: [

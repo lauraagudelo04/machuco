@@ -5,6 +5,11 @@ import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_cash_payment_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_reservation_detail_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
+import 'package:machuco/views/booking/system_admin_view/admin_motel_reservation_dashboard_page.dart';
+import 'package:machuco/views/booking/system_admin_view/admin_motel_reservations_list_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
@@ -60,6 +65,11 @@ abstract final class AppRoutes {
   static const clientCreateBooking = '/bookings/client/new';
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
+  static const ownerReservations = '/bookings/owner';
+  static const ownerReservationDetail = '/bookings/owner/detail';
+  static const ownerCashPayment = '/bookings/owner/cash-payment';
+  static const adminMotelReservationsList = '/bookings/admin/motels';
+  static const adminMotelReservationDashboard = '/bookings/admin/dashboard';
   static const clientProfile = '/client/profile';
   static const clientProfileEdit = '/client/profile/edit';
 
@@ -158,6 +168,37 @@ abstract final class AppRoutes {
             ? settings.arguments! as String
             : throw Exception(
                 'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+
+      ownerReservations => const OwnerReservationsPage(),
+      ownerReservationDetail => OwnerReservationDetailPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+      ownerCashPayment => OwnerCashPaymentPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+
+      adminMotelReservationsList => AdminMotelReservationsListPage(
+        ownerId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id del propietario como argumento a esta ruta.',
+              ),
+      ),
+      adminMotelReservationDashboard => AdminMotelReservationDashboardPage(
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id del motel como argumento a esta ruta.',
               ),
       ),
 

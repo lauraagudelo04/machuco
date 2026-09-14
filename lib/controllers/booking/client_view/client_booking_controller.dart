@@ -1,7 +1,10 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/date_formatter.dart';
+
+export 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 
 /// Franja bloqueada que no vive en el mock de este controlador, por ejemplo
 /// reservas de otras funcionalidades ya mockeadas en `RoomVisualData`
@@ -204,32 +207,6 @@ class ClientBookingController extends ChangeNotifier {
     return !overlapsExternal;
   }
 
-  /// Un día se resalta como "con disponibilidad" si existe al menos una
-  /// hora libre dentro de él.
-  bool isDayAvailable(
-    String roomId,
-    DateTime day, {
-    List<BlockedRange> externalBlocked = const [],
-  }) {
-    final dayStart = DateTime(day.year, day.month, day.day);
-    final dayEnd = dayStart.add(const Duration(days: 1));
-    for (
-      var hour = dayStart;
-      hour.isBefore(dayEnd);
-      hour = hour.add(const Duration(hours: 1))
-    ) {
-      if (isSlotAvailable(
-        roomId,
-        hour,
-        hour.add(const Duration(hours: 1)),
-        externalBlocked: externalBlocked,
-      )) {
-        return true;
-      }
-    }
-    return false;
-  }
-
   /// Explica por qué una franja específica está bloqueada, para mostrarlo
   /// cuando el usuario fuerza un horario no disponible.
   String explainBlockedSlot(
@@ -378,6 +355,45 @@ class ClientBookingController extends ChangeNotifier {
     _reservations[index] = reservation.copyWith(status: nextStatus);
     notifyListeners();
     return true;
+  }
+
+  /// Cancela una reserva del cliente desde el detalle. Solo permitido si el
+  /// estado actual es `pending` o `upcoming`; en cualquier otro caso (o si
+  /// el motivo viene vacío, o si el id no existe) lanza
+  /// [ReservationCancellationException], mismo contrato que usa Propietario,
+  /// para que la UI pueda mostrar un mensaje preciso.
+  Future<void> cancelReservation(String id, String reason) async {
+    if (reason.trim().isEmpty) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.reasonRequired,
+      );
+    }
+
+    _expirePendingReservations();
+    final index = _reservations.indexWhere((r) => r.id == id);
+    if (index == -1) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.notFound,
+      );
+    }
+
+    final reservation = _reservations[index];
+    final cancellable =
+        reservation.status == ReservationStatus.pending ||
+        reservation.status == ReservationStatus.upcoming;
+    if (!cancellable) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.invalidStatus,
+      );
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    _reservations[index] = reservation.copyWith(
+      status: ReservationStatus.cancelled,
+      cancellationReason: reason.trim(),
+    );
+    notifyListeners();
   }
 
   /// Minutos restantes antes de que una reserva `pending` se cancele

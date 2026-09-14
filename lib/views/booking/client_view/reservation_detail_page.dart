@@ -9,8 +9,10 @@ import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
+import 'package:machuco/widgets/booking/cancellation_reason_sheet.dart';
 import 'package:machuco/widgets/booking/reservation_card.dart';
 
 /// Detalle completo de una reserva del cliente: estado arriba, información
@@ -43,6 +45,30 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('$action disponible como acción visual.')),
     );
+  }
+
+  void _goToPaymentMethod(Reservation reservation) {
+    Navigator.of(
+      context,
+    ).pushNamed(AppRoutes.paymentMethod, arguments: reservation);
+  }
+
+  Future<void> _cancelReservation(Reservation reservation) async {
+    final cancelled = await showCancellationReasonSheet(
+      context,
+      onConfirm: (reason) async {
+        try {
+          await _controller.cancelReservation(reservation.id, reason);
+        } on ReservationCancellationException catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(
+              context,
+            ).showSnackBar(SnackBar(content: Text(e.message)));
+          }
+        }
+      },
+    );
+    if (cancelled && mounted) setState(() {});
   }
 
   @override
@@ -169,7 +195,34 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                       ),
                     ),
                   ],
+                  if (reservation.cancellationReason != null) ...[
+                    const SizedBox(height: AppSpacing.s4),
+                    AppCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Motivo de cancelación',
+                            style: Theme.of(context).textTheme.titleLarge,
+                          ),
+                          const SizedBox(height: AppSpacing.s2),
+                          Text(
+                            reservation.cancellationReason!,
+                            style: Theme.of(context).textTheme.bodyMedium,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.s5),
+                  if (_completePaymentEnabled(reservation.status)) ...[
+                    AppButton(
+                      label: 'Completar pago',
+                      icon: Icons.payments_outlined,
+                      onPressed: () => _goToPaymentMethod(reservation),
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                  ],
                   AppButton(
                     label: 'Descargar factura',
                     icon: Icons.receipt_long_outlined,
@@ -193,18 +246,29 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                         ? () => _showStub('Ver / Añadir reseña')
                         : null,
                   ),
+                  if (_cancelEnabled(reservation.status)) ...[
+                    const SizedBox(height: AppSpacing.s3),
+                    AppButton(
+                      label: 'Cancelar reserva',
+                      icon: Icons.block_outlined,
+                      variant: AppButtonVariant.destructive,
+                      onPressed: () => _cancelReservation(reservation),
+                    ),
+                  ],
                 ],
               ),
       ),
     );
   }
 
+  bool _completePaymentEnabled(ReservationStatus status) =>
+      status == ReservationStatus.pending;
+
   bool _invoiceEnabled(ReservationStatus status) => switch (status) {
     ReservationStatus.active ||
     ReservationStatus.upcoming ||
-    ReservationStatus.completed ||
-    ReservationStatus.cancelled => true,
-    ReservationStatus.pending => false,
+    ReservationStatus.completed => true,
+    ReservationStatus.pending || ReservationStatus.cancelled => false,
   };
 
   bool _reviewEnabled(ReservationStatus status) => switch (status) {
@@ -213,6 +277,10 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     ReservationStatus.active ||
     ReservationStatus.upcoming => false,
   };
+
+  bool _cancelEnabled(ReservationStatus status) =>
+      status == ReservationStatus.pending ||
+      status == ReservationStatus.upcoming;
 }
 
 class _InfoRow extends StatelessWidget {

@@ -10,12 +10,12 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/utils/currency_formatter.dart';
+import 'package:machuco/utils/date_formatter.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/product/product.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
-import 'package:machuco/widgets/booking/availability_calendar.dart';
 import 'package:machuco/widgets/booking/priced_checkbox_tile.dart';
 import 'package:machuco/widgets/booking/quantity_stepper.dart';
 
@@ -200,6 +200,17 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
 
   int get _grandTotal => _roomTotal + _servicesTotal + _productsTotal;
 
+  Future<void> _pickDay() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay ?? now,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+    );
+    if (picked != null) setState(() => _selectedDay = picked);
+  }
+
   Future<void> _pickCheckInTime() async {
     final picked = await showTimePicker(
       context: context,
@@ -301,12 +312,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
             _HeaderCard(room: widget.room),
             const SizedBox(height: AppSpacing.s4),
             _ScheduleCard(
-              room: widget.room,
-              bookingController: _bookingController,
               stayMode: _stayMode,
               onStayModeChanged: (mode) => setState(() => _stayMode = mode),
               selectedDay: _selectedDay,
-              onDaySelected: (day) => setState(() => _selectedDay = day),
+              onPickDay: _pickDay,
               checkInTime: _checkInTime,
               checkOutTime: _checkOutTime,
               hourBlock: _hourBlock,
@@ -451,12 +460,10 @@ class _Pill extends StatelessWidget {
 
 class _ScheduleCard extends StatelessWidget {
   const _ScheduleCard({
-    required this.room,
-    required this.bookingController,
     required this.stayMode,
     required this.onStayModeChanged,
     required this.selectedDay,
-    required this.onDaySelected,
+    required this.onPickDay,
     required this.checkInTime,
     required this.checkOutTime,
     required this.hourBlock,
@@ -466,12 +473,10 @@ class _ScheduleCard extends StatelessWidget {
     required this.rangeError,
   });
 
-  final RoomVisualData room;
-  final ClientBookingController bookingController;
   final StayMode stayMode;
   final ValueChanged<StayMode> onStayModeChanged;
   final DateTime? selectedDay;
-  final ValueChanged<DateTime> onDaySelected;
+  final VoidCallback onPickDay;
   final TimeOfDay? checkInTime;
   final TimeOfDay? checkOutTime;
   final int hourBlock;
@@ -509,13 +514,12 @@ class _ScheduleCard extends StatelessWidget {
                 onStayModeChanged(selection.first),
           ),
           const SizedBox(height: AppSpacing.s4),
-          AvailabilityCalendar(
-            selectedDay: selectedDay,
-            onDaySelected: onDaySelected,
-            isDayAvailable: (day) =>
-                bookingController.isDayAvailable(room.id, day),
+          _DateField(
+            label: 'Fecha de la estancia',
+            value: selectedDay,
+            onTap: onPickDay,
           ),
-          const SizedBox(height: AppSpacing.s4),
+          const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de entrada',
             value: checkInTime,
@@ -553,6 +557,67 @@ class _ScheduleCard extends StatelessWidget {
             _InlineNotice(message: rangeError!),
           ],
         ],
+      ),
+    );
+  }
+}
+
+class _DateField extends StatelessWidget {
+  const _DateField({
+    required this.label,
+    required this.value,
+    required this.onTap,
+  });
+
+  final String label;
+  final DateTime? value;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: value == null
+          ? '$label, sin definir'
+          : '$label, ${formatDayMonthLabel(value!)}',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 48),
+          child: Container(
+            padding: const EdgeInsets.symmetric(
+              horizontal: AppSpacing.s3,
+              vertical: AppSpacing.s2,
+            ),
+            decoration: BoxDecoration(
+              color: context.appColors.elevated,
+              borderRadius: BorderRadius.circular(AppRadius.md),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  Icons.calendar_today_outlined,
+                  color: context.appColors.textSecondary,
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: Theme.of(context).textTheme.bodyLarge,
+                  ),
+                ),
+                Text(
+                  value == null ? 'Elegir fecha' : formatDayMonthLabel(value!),
+                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
