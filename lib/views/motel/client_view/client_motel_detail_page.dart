@@ -3,12 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../room/client_view/room_client_page.dart';
 import './../../../controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
-
-// Imports de Reseñas
-import 'package:machuco/models/review/review_type.dart';
-import 'package:machuco/controllers/review/add_review_controller.dart';
-import 'package:machuco/widgets/review/review_card.dart';
-import 'package:machuco/widgets/review/add_review_sheet.dart';
+import './../../review/add_review_page.dart'; 
 
 class ClientMotelDetailPage extends StatelessWidget {
   const ClientMotelDetailPage({super.key, required this.motel});
@@ -33,7 +28,6 @@ class ClientMotelDetailPage extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Sección de imagen (Hero)
             Container(
               height: 300,
               width: double.infinity,
@@ -49,7 +43,6 @@ class ClientMotelDetailPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Título y Disponibilidad
                   Row(
                     children: [
                       Expanded(
@@ -74,7 +67,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Descripción y Botón "Ver habitaciones"
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
@@ -106,7 +98,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Información y Contacto
                   Text('Información y Contacto',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -141,7 +132,6 @@ class ClientMotelDetailPage extends StatelessWidget {
 
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Métodos de Pago
                   Text('Métodos de Pago',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -154,7 +144,6 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  // Servicios Adicionales
                   Text('Servicios Adicionales',
                       style: Theme.of(context).textTheme.headlineSmall),
                   const SizedBox(height: AppSpacing.s3),
@@ -183,12 +172,12 @@ class ClientMotelDetailPage extends StatelessWidget {
                   const Divider(),
                   const SizedBox(height: AppSpacing.s4),
 
-                  // WIDGET REAL DE RESEÑAS CONECTADO
+                  // Aquí implementamos tu nuevo componente de reseñas
                   ReviewsSection(
-                    id: motel.id,
-                    reviewType: ReviewType.motel,
+                    motel: motel,
                     isComplete: true,
                   ),
+                  
                   const SizedBox(height: AppSpacing.s4),
                 ],
               ),
@@ -200,106 +189,6 @@ class ClientMotelDetailPage extends StatelessWidget {
   }
 }
 
-// Componente Widget de Reseñas
-class ReviewsSection extends StatefulWidget {
-  const ReviewsSection({
-    super.key,
-    required this.id,
-    required this.reviewType,
-    required this.isComplete,
-  });
-
-  final String id;
-  final ReviewType reviewType;
-  final bool isComplete;
-
-  @override
-  State<ReviewsSection> createState() => _ReviewsSectionState();
-}
-
-class _ReviewsSectionState extends State<ReviewsSection> {
-  late final ReviewsController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = ReviewsController();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: _controller,
-      builder: (context, _) {
-        final reviews = _controller.getReviewsById(widget.id);
-        final average = _controller.getAverageById(widget.id);
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                Text(
-                  'Reseñas',
-                  style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                const SizedBox(width: AppSpacing.s2),
-                const Icon(Icons.star_rounded, color: Color(0xFFFFB300), size: 20),
-                const SizedBox(width: AppSpacing.s1),
-                Text(
-                  average.toStringAsFixed(1),
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                ),
-                Text(
-                  ' (${reviews.length})',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: context.appColors.textMuted,
-                      ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s3),
-
-            AppButton(
-              label: 'Añadir reseña',
-              icon: Icons.rate_review_outlined,
-              onPressed: widget.isComplete
-                  ? () => AddReviewSheet.show(
-                        context,
-                        onSave: (review) => _controller.addReview(review),
-                        parentId: widget.id,
-                        name: '',
-                        rooms: []
-                      )
-                  : null,
-            ),
-            const SizedBox(height: AppSpacing.s4),
-
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              padding: EdgeInsets.zero,
-              itemCount: reviews.length,
-              itemBuilder: (_, i) => ReviewCard(review: reviews[i]),
-            )
-          ],
-        );
-      },
-    );
-  }
-}
-
-// Componentes Auxiliares Privados
 class _InfoRow extends StatelessWidget {
   const _InfoRow(
       {required this.icon, required this.label, required this.value});
