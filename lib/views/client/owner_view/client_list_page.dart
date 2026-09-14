@@ -12,7 +12,9 @@ import 'package:machuco/models/client/client.dart';
 import 'client_detail_page.dart';
 
 class ClientPage extends StatefulWidget {
-  const ClientPage({super.key});
+  const ClientPage({super.key, this.embedded = false});
+
+  final bool embedded;
 
   @override
   State<ClientPage> createState() => _ClientPageState();
@@ -53,55 +55,59 @@ class _ClientPageState extends State<ClientPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Clientes')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: AppSpacing.s5),
-            AppTextField(
-              label: 'Buscar clientes',
-              controller: _searchController,
-              hint: 'Nombre o correo',
-              prefixIcon: const Icon(Icons.search),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: AppSpacing.s6),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Clientes asociados',
-                    style: Theme.of(context).textTheme.headlineSmall,
-                  ),
-                ),
-                Text(
-                  '${_filteredClients.length} de ${ClientController.clients.length}',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            if (_filteredClients.isEmpty)
-              _buildEmptyState(context)
-            else
-              ..._filteredClients.map(
-                (client) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: _ClientCard(
-                    client: client,
-                    onTap: () => _openClientDetail(client),
-                    onUnlink: () => _showUnlinkDialog(client),
-                  ),
+    final content = SafeArea(
+      child: ListView(
+        padding: const EdgeInsets.all(AppSpacing.screen),
+        children: [
+          _buildHeader(context),
+          const SizedBox(height: AppSpacing.s5),
+          AppTextField(
+            label: 'Buscar clientes',
+            controller: _searchController,
+            hint: 'Nombre o correo',
+            prefixIcon: const Icon(Icons.search),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: AppSpacing.s6),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  'Clientes asociados',
+                  style: Theme.of(context).textTheme.headlineSmall,
                 ),
               ),
-          ],
-        ),
+              Text(
+                '${_filteredClients.length} de ${ClientController.clients.length}',
+                style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s3),
+          if (_filteredClients.isEmpty)
+            _buildEmptyState(context)
+          else
+            ..._filteredClients.map(
+              (client) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                child: _ClientCard(
+                  client: client,
+                  onTap: () => _openClientDetail(client),
+                  onUnlink: () => _showUnlinkDialog(client),
+                ),
+              ),
+            ),
+        ],
       ),
+    );
+    if (widget.embedded) {
+      return content;
+    }
+    return Scaffold(
+      appBar: AppBar(title: const Text('Clientes')),
+      body: content,
     );
   }
 
