@@ -12,6 +12,7 @@ import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import './../../pqrs/system_admin_view/pqrs_page.dart';
+import '../../booking/system_admin_view/admin_motel_reservations_list_page.dart';
 
 
 class AdminMotelsPage extends StatefulWidget {
@@ -134,7 +135,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          const Center(child: Text('Panel de Auditoría de Reservas (Admin)')),
+          AdminMotelReservationsListPage(ownerId: _currentOwnerId),
           // Vista real de notificaciones conectada correctamente
           const SystemAdminNotificationView(),
         ],
