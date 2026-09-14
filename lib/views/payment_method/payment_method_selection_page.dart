@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/views/payment_method/payment_method_page.dart';
@@ -7,14 +9,16 @@ import 'package:machuco/views/payment_method/payment_method_page.dart';
 class PaymentMethodSelectionPage extends StatefulWidget {
   const PaymentMethodSelectionPage({
     super.key,
+    this.reservation,
     this.amount = 120000,
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
     this.onContinue,
   });
 
+  final Reservation? reservation;
   final int amount;
   final String concept;
-  final VoidCallback? onContinue;
+  final ValueChanged<PaymentMethodModel>? onContinue;
 
   @override
   State<PaymentMethodSelectionPage> createState() =>
@@ -25,10 +29,42 @@ class _PaymentMethodSelectionPageState
     extends State<PaymentMethodSelectionPage> {
   bool _isCashSelected = false;
 
-  String get _formattedAmount => '${formatCurrencyAmount(widget.amount)} COP';
+  Reservation? get _reservation => widget.reservation;
+
+  int get _effectiveAmount => _reservation?.total ?? widget.amount;
+
+  String get _effectiveConcept => _reservation != null
+      ? 'Reserva ${_reservation!.roomName} - ${_reservation!.motelName}'
+      : widget.concept;
+
+  String get _formattedAmount => '${formatCurrencyAmount(_effectiveAmount)} COP';
 
   void _selectCash() {
     setState(() => _isCashSelected = true);
+  }
+
+  void _goToInvoice([PaymentMethodModel? paymentMethod]) {
+    final reservation = _reservation;
+    if (reservation == null) {
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        AppRoutes.clientMotels,
+        (_) => false,
+      );
+      return;
+    }
+
+    Navigator.of(context).pushNamedAndRemoveUntil(
+      AppRoutes.invoice,
+      (_) => false,
+      arguments: {
+        'reservation': reservation,
+        'paymentMethod': paymentMethod ??
+            PaymentMethodModel(
+              amount: _effectiveAmount,
+              concept: _effectiveConcept,
+            ),
+      },
+    );
   }
 
   void _openCardPayment() {
@@ -36,18 +72,17 @@ class _PaymentMethodSelectionPageState
     Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => PaymentMethodPage(
-          amount: widget.amount,
-          concept: widget.concept,
-          onContinue: widget.onContinue,
+          amount: _effectiveAmount,
+          concept: _effectiveConcept,
+          reservation: _reservation,
+          onContinue: widget.onContinue ?? _goToInvoice,
         ),
       ),
     );
   }
 
   void _finishCashPayment() {
-    Navigator.of(
-      context,
-    ).pushNamedAndRemoveUntil(AppRoutes.clientMotels, (_) => false);
+    _goToInvoice();
   }
 
   @override
@@ -80,7 +115,7 @@ class _PaymentMethodSelectionPageState
                     ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
-                      widget.concept,
+                      _effectiveConcept,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(color: colors.textSecondary),
