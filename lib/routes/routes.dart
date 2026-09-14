@@ -17,7 +17,7 @@ import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
 import 'package:machuco/controllers/payment/payment_store.dart';
-import 'package:machuco/views/payment_method/payment_method_page.dart';
+import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
@@ -72,13 +72,13 @@ abstract final class AppRoutes {
       temporalHome => const TemporalHomePage(),
       paymentMethod =>
         settings.arguments is Reservation
-            ? PaymentMethodPage(
+            ? PaymentMethodSelectionPage(
                 amount: (settings.arguments! as Reservation).total,
                 concept:
                     'Reserva ${(settings.arguments! as Reservation).roomName} - '
                     '${(settings.arguments! as Reservation).motelName}',
               )
-            : const PaymentMethodPage(),
+            : const PaymentMethodSelectionPage(),
       clientPayments => ClientPaymentsPage(
         clientId: settings.arguments is String
             ? settings.arguments! as String
