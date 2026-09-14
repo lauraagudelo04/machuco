@@ -14,7 +14,6 @@ import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 import 'package:machuco/widgets/booking/cancellation_reason_sheet.dart';
 import 'package:machuco/widgets/booking/reservation_card.dart';
-import 'package:machuco/routes/routes.dart';
 
 /// Detalle completo de una reserva del cliente: estado arriba, información
 /// en formato de lista (sin timeline) y dos acciones al final.
