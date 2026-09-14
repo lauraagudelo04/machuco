@@ -168,7 +168,7 @@ class PaymentStore extends ChangeNotifier {
     ),
     MotelFinance(
       motelId: '2',
-      name: 'Hotel Mar y Sol',
+      name: 'Motel El Edén',
       rooms: 18,
       income: 3150000,
       paymentsReceived: 29,
