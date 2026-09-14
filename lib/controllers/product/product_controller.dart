@@ -24,7 +24,7 @@ class ProductController {
       isAvailable: true,
     ),
     const Product(
-      id: 'product-002',
+      id: 'product-007',
       motelId: '1',
       name: 'Anillo Vibrador',
       description: 'Accesorio elástico con motor vibrador para estimulación de la pareja durante la relación.',

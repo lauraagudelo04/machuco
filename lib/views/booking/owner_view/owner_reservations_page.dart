@@ -16,7 +16,12 @@ import 'package:machuco/widgets/layout/responsive_content.dart';
 /// todos los moteles administrados por el propietario, ordenada por
 /// defecto de más reciente a más antigua.
 class OwnerReservationsPage extends StatefulWidget {
-  const OwnerReservationsPage({super.key});
+  const OwnerReservationsPage({super.key, this.clientId, this.clientName});
+
+  /// Cuando se recibe, la vista queda acotada al historial de reservas de
+  /// este cliente (usado desde el listado de Clientes del Propietario).
+  final String? clientId;
+  final String? clientName;
 
   @override
   State<OwnerReservationsPage> createState() => _OwnerReservationsPageState();
@@ -68,6 +73,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       motelId: _motelFilter,
       roomId: _roomFilter,
       status: _statusFilter,
+      clientId: widget.clientId,
     );
     if (!mounted) return;
     setState(() => _visibleReservations = result);
@@ -86,7 +92,11 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reservas de mis hoteles'),
+        title: Text(
+          widget.clientName != null
+              ? 'Reservas de ${widget.clientName}'
+              : 'Reservas de mis hoteles',
+        ),
         actions: [
           PopupMenuButton<String>(
             tooltip: 'Herramientas de depuración (mock)',
@@ -243,6 +253,8 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                     : 'Todavía no hay reservas',
                 message: hasAnyReservation
                     ? 'No hay reservas que coincidan con estos filtros.'
+                    : widget.clientName != null
+                    ? 'Este cliente todavía no tiene reservas registradas.'
                     : 'Cuando tus clientes reserven, las verás aquí.',
                 actionLabel: hasAnyReservation ? 'Limpiar filtros' : null,
                 onAction: hasAnyReservation ? _clearFilters : null,
