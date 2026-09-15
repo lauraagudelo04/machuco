@@ -1,11 +1,25 @@
 import 'package:machuco/models/auth/registered_user.dart';
 
+/// Contract for listing and creating/updating MACHUCO application users,
+/// independent of where that data actually lives.
+///
+/// This is the seam the app uses to defer the backend/database decision
+/// noted as pending in README.md#estado-y-decisiones-pendientes: today it
+/// is satisfied either by [InMemoryRegisteredUserDirectory] (seed/demo
+/// data) or by `BackendRegisteredUserDirectory` (a real HTTP users API),
+/// selected via [Auth0Config.useBackendUsers].
 abstract interface class RegisteredUserDirectory {
   Future<List<RegisteredUser>> listUsers({String? accessToken});
 
   Future<void> upsertUser(RegisteredUser user);
 }
 
+/// [RegisteredUserDirectory] implementation that keeps users only in
+/// process memory, seeded with example accounts.
+///
+/// Data does not persist across app restarts and is not shared between
+/// devices; it exists to support development and demos before a real
+/// backend/database is agreed on.
 final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
   InMemoryRegisteredUserDirectory({List<RegisteredUser>? initialUsers})
     : _users = List<RegisteredUser>.from(initialUsers ?? _seededUsers);
