@@ -9,7 +9,14 @@ import '../../../models/notification/notification_model.dart';
 import '../../../widgets/notification/notification_card.dart';
 
 class ClientNotificationView extends StatefulWidget {
-  const ClientNotificationView({super.key});
+  const ClientNotificationView({
+    super.key,
+    this.recipientUser = NotificationController.demoClientUser,
+    this.title = 'Notificaciones',
+  });
+
+  final String recipientUser;
+  final String title;
 
   @override
   State<ClientNotificationView> createState() => _ClientNotificationViewState();
@@ -39,17 +46,21 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleNotifications = _controller.getFilteredNotifications(_filter);
-    final unreadCount = _controller.unreadCount;
+    final visibleNotifications = _controller.getReceivedNotifications(
+      recipientUser: widget.recipientUser,
+      filter: _filter,
+    );
+    final unreadCount = _controller.receivedUnreadCount(widget.recipientUser);
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones Cliente'),
+        title: Text(widget.title),
         actions: [
           if (unreadCount > 0)
             IconButton(
               tooltip: 'Marcar todas como leídas',
-              onPressed: () => _controller.markAllRead(),
+              onPressed: () =>
+                  _controller.markReceivedAsRead(widget.recipientUser),
               icon: const Icon(Icons.done_all),
             ),
         ],
@@ -108,8 +119,8 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
               child: Text(
                 'Aquí verás las novedades de tus reservas, pagos y más.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ),
             if (unreadCount > 0) ...[
@@ -125,10 +136,9 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
                 ),
                 child: Text(
                   '$unreadCount sin leer',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(color: AppColors.violet),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: AppColors.violet),
                 ),
               ),
             ],

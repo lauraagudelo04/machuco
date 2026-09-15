@@ -54,18 +54,11 @@ class _SystemAdminNotificationViewState
     return Scaffold(
       appBar: AppBar(
         leading: IconButton(
-          icon: const Icon(Icons.add_alert_rounded, color: AppColors.violet),
-          tooltip: 'Crear nueva notificación',
-          onPressed: () => _openCreateNotificationDialog(context),
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Volver',
+          onPressed: () => Navigator.of(context).pop(),
         ),
         title: const Text('Administrador de Notificaciones'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.add),
-            tooltip: 'Crear Notificación',
-            onPressed: () => _openCreateNotificationDialog(context),
-          ),
-        ],
       ),
       body: SafeArea(
         child: Column(
@@ -97,17 +90,13 @@ class _SystemAdminNotificationViewState
                         children: [
                           Text(
                             'Panel de Emisión (System Admin)',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
+                            style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Toca la campana arriba a la izquierda para enviar un anuncio o alerta masiva/individual.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            'Usa el botón inferior para enviar un anuncio o alerta masiva/individual.',
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: context.appColors.textSecondary,
                                 ),
@@ -129,9 +118,9 @@ class _SystemAdminNotificationViewState
                   Text(
                     'Historial de Notificaciones Emitidas',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: context.appColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: context.appColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Chip(
                     label: Text('${notifications.length} enviadas'),

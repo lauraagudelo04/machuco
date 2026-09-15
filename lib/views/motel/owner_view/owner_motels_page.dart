@@ -6,7 +6,7 @@ import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
 import '../../login/logout_navigation.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
-import './../../notification/system_admin_view/system_admin_notification_view.dart';
+import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
 
@@ -24,7 +24,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   List<Motel> _motels = [];
   bool _isLoading = true;
-  
+
   String _searchQuery = '';
 
   String _currentOwnerId = 'owner-1020304050';
@@ -71,7 +71,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
           generalLocation: current.generalLocation,
           paymentMethods: current.paymentMethods,
           imageUrls: current.imageUrls,
-          isAvailable: !current.isAvailable, 
+          isAvailable: !current.isAvailable,
         );
       }
     });
@@ -169,7 +169,10 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const SystemAdminNotificationView(),
+                  builder: (context) => ClientNotificationView(
+                    recipientUser: _currentOwnerId,
+                    title: 'Notificaciones Propietario',
+                  ),
                 ),
               );
             },
@@ -225,7 +228,8 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 Navigator.pushNamed(context, AppRoutes.ownerSubscription);
               },
             ),
-            _MenuTile(icon: Icons.star_outline,
+            _MenuTile(
+              icon: Icons.star_outline,
               title: 'Reseñas',
               onTap: () {
                 Navigator.pop(context);
@@ -271,12 +275,12 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   backgroundColor: Theme.of(
                     context,
-                  ).colorScheme.primary.withOpacity(0.1),
+                  ).colorScheme.primary.withValues(alpha: 0.1),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.s3),
-            
+
             AppSearchField(
               label: 'Buscar moteles por nombre...',
               onChanged: (value) {
@@ -304,7 +308,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                     )
                   : ListView.separated(
                       itemCount: filteredMotels.length,
-                      separatorBuilder: (_, __) =>
+                      separatorBuilder: (_, _) =>
                           const SizedBox(height: AppSpacing.s3),
                       itemBuilder: (context, index) {
                         final motel = filteredMotels[index];
@@ -326,13 +330,10 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
             MaterialPageRoute(
               builder: (context) => OwnerMotelFormPage(
                 isEditing: false,
-                ownerId:
-                    _currentOwnerId,
+                ownerId: _currentOwnerId,
               ),
             ),
-          ).then(
-            (_) => _loadMotels(),
-          );
+          ).then((_) => _loadMotels());
         },
         backgroundColor: Theme.of(context).colorScheme.primary,
         icon: const Icon(Icons.add, color: Colors.white),
