@@ -35,6 +35,9 @@ import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/client/client_view/client_profile_page.dart';
 import 'package:machuco/views/client/client_view/client_edit_profile_page.dart';
+import 'package:machuco/views/room/client_view/room_client_page.dart';
+import 'package:machuco/views/room/owner_view/room_owner_page.dart';
+import 'package:machuco/views/room/system_admin_view/room_admin_page.dart';
 
 import 'package:machuco/views/home/temporal_home_page.dart';
 
@@ -60,6 +63,9 @@ abstract final class AppRoutes {
   static const clientMotelDetail = '/motels/client/detail';
   static const ownerMotels = '/motels/owner';
   static const ownerMotelDetail = '/motels/owner/detail';
+  static const clientRooms = '/rooms/client';
+  static const ownerRooms = '/rooms/owner';
+  static const adminRooms = '/rooms/admin';
   static const ownerProducts = '/products/owner';
   static const ownerReviews = '/reviews/owner';
   static const adminReviews = '/reviews/admin';
@@ -146,6 +152,27 @@ abstract final class AppRoutes {
         motel: settings.arguments is Motel
             ? settings.arguments! as Motel
             : null,
+      ),
+      clientRooms => RoomClientPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : throw Exception(
+                'Error: Se requiere pasar un objeto Motel para consultar las habitaciones.',
+              ),
+      ),
+      ownerRooms => RoomOwnerPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : throw Exception(
+                'Error: Se requiere pasar un objeto Motel para administrar las habitaciones.',
+              ),
+      ),
+      adminRooms => RoomAdminPage(
+        motel: settings.arguments is Motel
+            ? settings.arguments! as Motel
+            : throw Exception(
+                'Error: Se requiere pasar un objeto Motel para consultar las habitaciones.',
+              ),
       ),
 
       clientReservations => const ClientReservationsPage(),

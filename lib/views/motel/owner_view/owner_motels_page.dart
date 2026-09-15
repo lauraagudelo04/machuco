@@ -6,7 +6,6 @@ import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
 import '../../login/logout_navigation.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
-import '../../room/owner_view/room_owner_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
@@ -469,10 +468,10 @@ class _OwnerMotelCard extends StatelessWidget {
                       arguments: motel.id,
                     );
                   } else if (value == 'habitaciones') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomOwnerPage(motel: motel),
-                      ),
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.ownerRooms,
+                      arguments: motel,
                     );
                   } else if (value == 'servicios') {
                     Navigator.pushNamed(
