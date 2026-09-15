@@ -8,7 +8,6 @@ import '../../../controllers/motel/motel_controller.dart';
 import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
 import './admin_motel_form_page.dart'; 
-import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
 import './../../notification/system_admin_view/system_admin_notification_view.dart';
 import './../../pqrs/system_admin_view/pqrs_page.dart';
@@ -438,13 +437,10 @@ class _AdminMotelCard extends StatelessWidget {
                 tooltip: 'Opciones de administración',
                 onSelected: (String value) {
                   if (value == 'habitaciones') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomAdminPage(
-                          motelId: motel.id,
-                          motelName: motel.name,
-                        ),
-                      ),
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminRooms,
+                      arguments: motel,
                     );
                   } else if (value == 'productos') {
                     Navigator.pushNamed(

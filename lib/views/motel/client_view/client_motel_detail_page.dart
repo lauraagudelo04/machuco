@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
-import '../../room/client_view/room_client_page.dart';
+import './../../../routes/routes.dart';
 import './../../../controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import './../../review/add_review_page.dart'; 
 
@@ -78,10 +78,10 @@ class ClientMotelDetailPage extends StatelessWidget {
                         size: AppButtonSize.medium,
                         expanded: false,
                         onPressed: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => RoomClientPage(motel: motel),
-                            ),
+                          Navigator.pushNamed(
+                            context,
+                            AppRoutes.clientRooms,
+                            arguments: motel,
                           );
                         },
                       )
