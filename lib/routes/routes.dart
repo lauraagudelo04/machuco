@@ -41,6 +41,14 @@ import 'package:machuco/views/room/system_admin_view/room_admin_page.dart';
 
 import 'package:machuco/views/home/temporal_home_page.dart';
 
+/// Central registry of named routes for the app.
+///
+/// Every screen reachable via [Navigator.pushNamed] must have its path
+/// declared here and resolved in [onGenerateRoute]; this is the single
+/// source of truth for navigation described in
+/// GUIA_MACHUCO.md#estructura-provisional-del-proyecto. The app currently
+/// navigates with `Navigator` and named routes rather than a routing
+/// package such as `go_router`.
 abstract final class AppRoutes {
   static const home = '/';
 
@@ -85,6 +93,14 @@ abstract final class AppRoutes {
   /// Alias conservado para los enlaces existentes desde las reservas.
   static const payment = clientPayments;
 
+  /// Resolves a [RouteSettings.name] to its screen and wraps it in a
+  /// [MaterialPageRoute].
+  ///
+  /// Several routes require a specific argument type (e.g. a `Motel`, a
+  /// reservation id) and throw an [Exception] immediately when the
+  /// argument is missing or of the wrong type, instead of rendering a
+  /// broken screen. An unrecognized route name falls back to
+  /// `_UnknownRoutePage`.
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
       home => const TemporalHomePage(),

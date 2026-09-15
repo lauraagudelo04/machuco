@@ -311,8 +311,8 @@ aquí.
 
 - **Directorios de trabajo** (los tres roles viven en esta rama):
   - Cliente — **ya implementado**: `lib/views/booking/client_view/`, `lib/controllers/booking/client_view/client_booking_controller.dart`.
-  - Propietario — **pendiente** (archivo actualmente vacío, a reconstruir): `lib/views/booking/owner_view/`, `lib/controllers/booking/owner_view/owner_booking_controller.dart`.
-  - Administrador — **pendiente** (archivo actualmente vacío, a reconstruir): `lib/views/booking/system_admin_view/`, `lib/controllers/booking/system_admin_view/system_admin_booking_controller.dart`.
+  - Propietario — **ya implementado**: `lib/views/booking/owner_view/`, `lib/controllers/booking/owner_view/owner_booking_controller.dart`.
+  - Administrador — **ya implementado**: `lib/views/booking/system_admin_view/`, `lib/controllers/booking/system_admin_view/system_admin_booking_controller.dart`.
   - Compartido entre los tres roles: `lib/models/booking/` (dominio `Reservation`/`ReservationStatus`), `lib/widgets/booking/`, `lib/utils/booking/`.
 - **Widgets de Layout**: usar estrictamente `lib/widgets/layout` y el sistema de diseño existente. Los widgets de `lib/widgets/booking/` deben poder servir a más de un rol cuando el caso de uso coincide (p. ej. una tarjeta de reserva reutilizable entre Cliente y Propietario) — no duplicar un widget por rol si ya existe uno genérico que resuelve el caso.
 - **Dependencias de entrada**:

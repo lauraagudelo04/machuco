@@ -106,24 +106,30 @@ Este alcance describe el producto; todavía no determina la implementación téc
 - Dart.
 - Android Studio.
 - Git.
+- `auth0_flutter`, integrado para el flujo de autenticación (ver [Configuración de Auth0](#configuración-de-auth0-para-login-y-registro)).
+- `http`, usado puntualmente para consultar un API externo de usuarios (ver nota abajo).
 
-Aún no están definidos el backend, la base de datos, el proveedor de autenticación, la pasarela de pagos, el almacenamiento de imágenes, la administración de estado, la navegación definitiva ni la plataforma de despliegue. Las decisiones aprobadas deberán registrarse en la documentación correspondiente.
+El proyecto ya incluye un sistema de diseño propio construido sobre Material 3 (`lib/core/design_system`, con tokens, tema y componentes `App*`), conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md). Las pantallas navegan con `Navigator` y rutas nombradas centralizadas en `lib/routes/routes.dart`. Los controladores existentes manejan su estado con `ChangeNotifier` nativo de Flutter.
+
+Aún no están definidos de forma acordada por el equipo: el backend y la base de datos definitivos, la pasarela de pagos, el almacenamiento de imágenes, la administración de estado (más allá del uso puntual de `ChangeNotifier`), la navegación definitiva (más allá del `Navigator` actual, sin `go_router` u otro paquete) ni la plataforma de despliegue. El código ya tomó algunas decisiones parciales en estas áreas (por ejemplo, un directorio de usuarios que puede consultar un API HTTP externo); estos hallazgos están registrados en [docs/decisions_log.md](docs/decisions_log.md) para que el equipo los confirme o los corrija. Las decisiones aprobadas deberán registrarse en la documentación correspondiente.
 
 ## Estructura actual
 
 ```text
 lib/
+├── core/
+│   └── design_system/
 ├── widgets/
 ├── views/
 ├── models/
 ├── controllers/
 ├── routes/
 ├── service/
-├── data/
-├── repository/
 ├── utils/
 └── main.dart
 ```
+
+Esta es la estructura real de `lib/` hoy. Los directorios `data/` y `repository/` descritos en [GUIA_MACHUCO.md](GUIA_MACHUCO.md#estructura-provisional-del-proyecto) todavía no existen: por ahora los controladores acceden a datos de ejemplo directamente (por ejemplo `controllers/room/room_mock_data.dart`) o a servicios concretos en `service/`, sin una capa de repositorio intermedia. Este desajuste se detalla en [docs/architecture.md](docs/architecture.md) y debe resolverse como parte de la arquitectura definitiva, no corregirse de forma unilateral en una rama.
 
 La estructura es provisional hasta que el equipo defina la arquitectura definitiva. La responsabilidad y las reglas de cada directorio se detallan en [GUIA_MACHUCO.md](GUIA_MACHUCO.md#estructura-provisional-del-proyecto).
 
@@ -131,12 +137,12 @@ La estructura es provisional hasta que el equipo defina la arquitectura definiti
 
 Machuco se encuentra en desarrollo. Antes de modificar significativamente su estructura se deben definir y documentar:
 
-- Arquitectura y administración de estado.
-- Backend, base de datos y contratos de API.
-- Autenticación, autorización por roles y sesiones.
+- Arquitectura y administración de estado (el código ya usa `ChangeNotifier` nativo en varios controladores, sin un paquete de estado acordado; ver [docs/decisions_log.md](docs/decisions_log.md)).
+- Backend, base de datos y contratos de API (existe una integración parcial vía HTTP para el directorio de usuarios; ver [docs/decisions_log.md](docs/decisions_log.md)).
+- Autenticación, autorización por roles y sesiones (el proveedor de autenticación de cliente ya es Auth0, ver [Configuración de Auth0](#configuración-de-auth0-para-login-y-registro); la autorización por rol en backend sigue pendiente de confirmar).
 - Pasarela de pagos y sistema de suscripciones.
 - Almacenamiento de imágenes y persistencia local.
-- Navegación, enlaces profundos y notificaciones.
+- Navegación, enlaces profundos y notificaciones (hoy se usa `Navigator` con rutas nombradas centralizadas en `lib/routes/routes.dart`, no la navegación definitiva).
 - Gestión de secretos y entornos.
 - Analítica, monitoreo, CI/CD y alcance de las pruebas automatizadas.
 - Términos de privacidad y tratamiento de datos.
@@ -167,6 +173,7 @@ Parámetros opcionales:
 
 - `AUTH0_AUDIENCE` para solicitar access token de una API concreta.
 - `AUTH0_CONNECTION` si usa una conexión de base de datos distinta en Auth0.
+- `AUTH_USE_BACKEND_USERS=true` junto con `AUTH_USERS_API_BASE_URL` (y opcionalmente `AUTH_USERS_API_PATH`, por defecto `/users`) para que el directorio de usuarios de la app consulte un API HTTP externo en vez de los datos de ejemplo en memoria. Esta integración es parcial y no reemplaza una decisión de backend acordada por el equipo; ver [docs/decisions_log.md](docs/decisions_log.md).
 
 ### Inicio de sesión con Google
 
@@ -176,3 +183,7 @@ En Auth0, habilite:
 
 - La conexión social de Google en `Authentication > Social`.
 - La aplicación `Machuco Mobile` dentro de la pestaña `Applications` de esa conexión.
+
+### Modo de usuarios de prueba (sin Auth0)
+
+Definiendo `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=true` la app autentica contra un conjunto fijo de cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), en vez de contra Auth0. Está pensado únicamente para desarrollo local y QA sin un tenant de Auth0 configurado; no debe activarse en builds distribuidos. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.
