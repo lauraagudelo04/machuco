@@ -89,7 +89,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         children: [
           _buildMotelsContent(),
           const OwnerReservationsPage(),
-          const ClientPage(embedded: true),
+          const ClientListPage(),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(

@@ -18,7 +18,7 @@ const pqrsCurrentMotelId = '1';
 /// Falls back to a placeholder when the id is not found, so a stale or
 /// invalid seed never crashes the store.
 String _resolveClientName(String clientId) {
-  for (final client in ClientController.clients) {
+  for (final client in ClientController.instance.allClients) {
     if (client.id == clientId) return client.name;
   }
   return 'Cliente desconocido';

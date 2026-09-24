@@ -1,7 +1,137 @@
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:machuco/models/client/client.dart';
 
-abstract final class ClientController {
-  static final List<Client> clients = [
+class ClientController extends ChangeNotifier {
+  ClientController._() {
+    _allClients = List.of(_initialMockClients);
+    loadCurrentClient();
+  }
+  static final ClientController instance = ClientController._();
+
+  static const _clientKey = 'current_client_data';
+  
+  late List<Client> _allClients;
+  Client? _currentClient;
+  bool _isLoading = true;
+  String? _errorMessage;
+
+  Client? get currentClient => _currentClient;
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+  List<Client> get allClients => List.unmodifiable(_allClients);
+
+  Future<void> loadCurrentClient() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final clientJson = prefs.getString(_clientKey);
+      
+      if (clientJson != null) {
+        final data = jsonDecode(clientJson) as Map<String, dynamic>;
+        _currentClient = Client(
+          id: data['id'] as String,
+          name: data['name'] as String,
+          phone: data['phone'] as String,
+          email: data['email'] as String,
+          password: data['password'] as String,
+        );
+        // Sincronizamos el directorio del propietario con los datos locales guardados
+        _syncToDirectory(_currentClient!);
+      } else {
+        // Mock por defecto si no hay nada guardado
+        _currentClient = _allClients.first;
+      }
+    } catch (e) {
+      _errorMessage = 'No pudimos cargar la información de tu perfil.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateCurrentClient({
+    required String name,
+    required String phone,
+    required String password,
+  }) async {
+    if (_currentClient == null) return false;
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 600)); // Simula red
+
+      final updatedClient = _currentClient!.copyWith(
+        name: name,
+        phone: phone,
+        password: password,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      final success = await prefs.setString(_clientKey, jsonEncode({
+        'id': updatedClient.id,
+        'name': updatedClient.name,
+        'phone': updatedClient.phone,
+        'email': updatedClient.email,
+        'password': updatedClient.password,
+      }));
+
+      if (success) {
+        _currentClient = updatedClient;
+        // Actualizamos la lista global para que el Propietario vea el cambio instantáneamente
+        _syncToDirectory(updatedClient);
+        return true;
+      } else {
+        throw Exception('Error persistiendo los datos');
+      }
+    } catch (e) {
+      _errorMessage = 'No fue posible actualizar el perfil. Intenta de nuevo.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  void _syncToDirectory(Client updatedClient) {
+    final index = _allClients.indexWhere((c) => c.id == updatedClient.id);
+    if (index != -1) {
+      _allClients[index] = updatedClient;
+    } else {
+      _allClients.insert(0, updatedClient);
+    }
+  }
+
+  List<Client> search(String query) {
+    if (query.isEmpty) return List.unmodifiable(_allClients);
+    final lower = query.toLowerCase();
+    return _allClients
+        .where((c) =>
+            c.name.toLowerCase().contains(lower) ||
+            c.email.toLowerCase().contains(lower))
+        .toList();
+  }
+
+  Client? getById(String id) {
+    for (final client in _allClients) {
+      if (client.id == id) return client;
+    }
+    return null;
+  }
+
+  void unlink(Client client) {
+    _allClients.removeWhere((c) => c.id == client.id);
+    notifyListeners();
+  }
+
+  static final List<Client> _initialMockClients = [
     const Client(
       id: '1',
       name: 'Valentina Gómez',
@@ -45,44 +175,4 @@ abstract final class ClientController {
       password: 'Jul987',
     ),
   ];
-
-  static Client get currentClient => clients.first;
-
-  static List<Client> search(String query) {
-    if (query.isEmpty) return clients;
-    final lower = query.toLowerCase();
-    return clients
-        .where(
-          (c) =>
-              c.name.toLowerCase().contains(lower) ||
-              c.email.toLowerCase().contains(lower),
-        )
-        .toList();
-  }
-
-  static Client? getById(String id) {
-    for (final client in clients) {
-      if (client.id == id) return client;
-    }
-    return null;
-  }
-
-  static void updateClient({
-    required String id,
-    required String name,
-    required String phone,
-    required String password,
-  }) {
-    final index = clients.indexWhere((c) => c.id == id);
-    if (index == -1) return;
-    clients[index] = clients[index].copyWith(
-      name: name,
-      phone: phone,
-      password: password,
-    );
-  }
-
-  static void unlink(Client client) {
-    clients.remove(client);
-  }
 }
