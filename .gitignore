@@ -13,9 +13,7 @@
 .agents/
 .docs/
 migrate_working_dir/
-test/
 openspec/
-docs/
 
 # IntelliJ related
 *.iml
