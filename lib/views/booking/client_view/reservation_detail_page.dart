@@ -81,7 +81,7 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     }
     return ReviewsSection(
       motel: motel,
-      isComplete: reservation.status == ReservationStatus.completed,
+      isComplete: _reviewEnabled(reservation.status),
     );
   }
 

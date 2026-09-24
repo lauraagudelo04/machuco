@@ -108,6 +108,7 @@ Este alcance describe el producto; todavía no determina la implementación téc
 - Git.
 - `auth0_flutter`, integrado para el flujo de autenticación (ver [Configuración de Auth0](#configuración-de-auth0-para-login-y-registro)).
 - `http`, usado puntualmente para consultar un API externo de usuarios (ver nota abajo).
+- `shared_preferences`, adoptado por el equipo para persistencia local de preferencias de UI no sensibles (no reemplaza la decisión pendiente de backend/base de datos ni de almacenamiento de imágenes). Ver [docs/shared_preferences.md](docs/shared_preferences.md) y [docs/decisions_log.md](docs/decisions_log.md).
 
 El proyecto ya incluye un sistema de diseño propio construido sobre Material 3 (`lib/core/design_system`, con tokens, tema y componentes `App*`), conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md). Las pantallas navegan con `Navigator` y rutas nombradas centralizadas en `lib/routes/routes.dart`. Los controladores existentes manejan su estado con `ChangeNotifier` nativo de Flutter.
 
@@ -141,7 +142,7 @@ Machuco se encuentra en desarrollo. Antes de modificar significativamente su est
 - Backend, base de datos y contratos de API (existe una integración parcial vía HTTP para el directorio de usuarios; ver [docs/decisions_log.md](docs/decisions_log.md)).
 - Autenticación, autorización por roles y sesiones (el proveedor de autenticación de cliente ya es Auth0, ver [Configuración de Auth0](#configuración-de-auth0-para-login-y-registro); la autorización por rol en backend sigue pendiente de confirmar).
 - Pasarela de pagos y sistema de suscripciones.
-- Almacenamiento de imágenes y persistencia local.
+- Almacenamiento de imágenes (aún pendiente). La persistencia local de preferencias de UI ya está resuelta con `shared_preferences` (ver [Tecnologías](#tecnologías) y [docs/shared_preferences.md](docs/shared_preferences.md)); esto no cubre la persistencia de datos de dominio (reservas, moteles, etc.), que sigue dependiendo de la decisión de backend/base de datos.
 - Navegación, enlaces profundos y notificaciones (hoy se usa `Navigator` con rutas nombradas centralizadas en `lib/routes/routes.dart`, no la navegación definitiva).
 - Gestión de secretos y entornos.
 - Analítica, monitoreo, CI/CD y alcance de las pruebas automatizadas.
