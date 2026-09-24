@@ -211,3 +211,30 @@ local" de forma distinta. Se refleja como decisión cerrada en
 sensible para todo el proyecto. Esto no cubre almacenamiento de imágenes ni
 persistencia de datos de dominio, que siguen dependiendo de la decisión de
 backend/base de datos, todavía pendiente.
+
+## 2026-09-23 — Cambio: `shared_preferences` pasa a la API clásica y el servicio se vuelve genérico
+
+**Cambio:** se reemplaza `SharedPreferencesAsync` por la **API clásica
+`SharedPreferences.getInstance()`**. No se usan `SharedPreferencesAsync` ni
+`SharedPreferencesWithCache` en ninguna parte del proyecto. Se elimina la
+dev-dependency `shared_preferences_platform_interface`, que solo existía para
+probar la API async; las pruebas usan ahora
+`SharedPreferences.setMockInitialValues`.
+
+Además, `LocalPreferencesService` deja de tener métodos propios de Bookings
+(`getLastFilterMotelId`, etc.) y pasa a ser un contrato clave-valor genérico
+(`getString`/`setString`, `getBool`/`setBool`, `getInt`/`setInt`,
+`getDouble`/`setDouble`, `getStringList`/`setStringList`, `containsKey`,
+`remove`, `clear`). Cada módulo crea su instancia con un namespace de
+funcionalidad: `SharedPreferencesLocalService(namespace: 'bookings')`.
+
+**Por qué importa:** las ramas están asociadas a personas, no a
+funcionalidades, y en la segunda etapa cada persona cambia de funcionalidad.
+Un servicio genérico con namespace por funcionalidad permite que cualquier
+rama lo use sin editar un archivo compartido y sin que las claves queden
+atadas a quien las creó. Detalle en
+[`shared_preferences.md`](shared_preferences.md).
+
+**Estado:** cerrado. Reemplaza el punto "API `SharedPreferencesAsync`" de la
+entrada anterior; el resto de esa decisión (paquete y ubicación en
+`lib/service/storage/`) sigue vigente.

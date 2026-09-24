@@ -84,10 +84,12 @@ El paquete tuvo un rediseño de API a partir de la versión `2.3.0`:
   (`SharedPreferencesWithCache`), evitando el problema de cargar todas las
   claves de la app en memoria innecesariamente.
 
-**Recomendación para MACHUCO si se aprueba el paquete:** usar
-`SharedPreferencesAsync` (o `SharedPreferencesWithCache` si se necesita
-lectura síncrona post-carga inicial) en vez de `getInstance()`, para no
-adoptar de entrada una API que el propio mantenedor considera reemplazada.
+**Decisión para MACHUCO (2026-09-23, reemplaza la recomendación inicial):**
+se usa **la API clásica `SharedPreferences.getInstance()`**. No se usan
+`SharedPreferencesAsync` ni `SharedPreferencesWithCache` en ninguna parte del
+proyecto. La API clásica es la que el equipo conoce y la que documentan los
+materiales del curso; el costo de cargar todas las claves en memoria es
+irrelevante para el volumen de preferencias de la app.
 
 ## 4. Cómo aportaría valor a este proyecto
 
@@ -112,45 +114,65 @@ Ninguno de estos casos es dominio de negocio (no reemplaza `Reservation` ni
 el futuro backend); son mejoras de continuidad de experiencia de usuario que
 no requieren red ni backend.
 
-## 5. Forma de uso (API nueva recomendada)
+## 5. Forma de uso dentro de MACHUCO (API clásica, envuelta)
+
+Nadie usa el plugin directamente. Cada módulo crea su propia instancia de
+`SharedPreferencesLocalService` con un **namespace de funcionalidad** y
+depende del tipo `LocalPreferencesService`:
 
 ```dart
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:machuco/service/storage/local_preferences_service.dart';
+import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
-final prefs = SharedPreferencesAsync();
+class ClientBookingController extends ChangeNotifier {
+  ClientBookingController({LocalPreferencesService? preferences})
+    : _preferences =
+          preferences ?? SharedPreferencesLocalService(namespace: 'bookings');
 
-// Escribir
-await prefs.setString('bookings.lastFilterMotelId', motel.id);
-await prefs.setBool('bookings.onboardingSeen', true);
+  final LocalPreferencesService _preferences;
 
-// Leer (todos los getters devuelven Future<T?>, sin valor por defecto implícito)
-final lastMotelId = await prefs.getString('bookings.lastFilterMotelId');
-final onboardingSeen = await prefs.getBool('bookings.onboardingSeen') ?? false;
+  // Claves del módulo, definidas en el propio módulo (no en un archivo
+  // compartido): se guardan como 'bookings.lastFilterMotelId'.
+  static const _lastFilterMotelIdKey = 'lastFilterMotelId';
 
-// Eliminar una clave puntual
-await prefs.remove('bookings.lastFilterMotelId');
+  Future<void> loadPreferences() async {
+    final lastMotelId = await _preferences.getString(_lastFilterMotelIdKey);
+    // ... aplicar y notifyListeners()
+  }
+
+  Future<void> selectMotel(String motelId) =>
+      _preferences.setString(_lastFilterMotelIdKey, motelId);
+}
 ```
 
-Puntos clave de la API:
+Métodos disponibles: `getString`/`setString`, `getBool`/`setBool`,
+`getInt`/`setInt`, `getDouble`/`setDouble`,
+`getStringList`/`setStringList`, `containsKey`, `remove` y `clear` (este
+último borra **solo** las claves de su namespace).
 
-- Todo devuelve `Future`: nunca se puede leer una preferencia de forma
-  puramente síncrona con `SharedPreferencesAsync`.
+Puntos clave:
+
+- Internamente se usa `SharedPreferences.getInstance()` (singleton de la API
+  clásica). Se obtiene de forma perezosa en la primera lectura/escritura, así
+  que el servicio puede instanciarse en un constructor o en `initState` sin
+  tocar `main.dart`.
+- La interfaz expone todo como `Future` para que el contrato no dependa de
+  que el singleton ya esté cargado.
 - No hay valor por defecto automático: si la clave no existe, el getter
   devuelve `null`; el `??` para el valor por defecto lo decide quien llama.
-- Las claves son strings planos compartidos por toda la app en el mismo
-  espacio de nombres — de ahí la convención de prefijo por feature que se
-  propone abajo (`bookings.*`, `auth.*`, etc.) para evitar colisiones entre
-  las 17 ramas del proyecto.
+- Leer una clave con un tipo distinto al que se guardó lanza error (la API
+  clásica hace un *cast*): cada clave debe tener un único tipo.
 
 ## 6. Cómo implementarla — paso a paso de configuración
 
 1. **Acordar con el equipo** que se adopta este paquete para persistencia
    local de preferencias (ver advertencia de la sección 8 — esto no lo
    decide una sola rama).
-2. Agregar la dependencia en `pubspec.yaml`:
+2. Dependencia ya agregada en `pubspec.yaml` (no hace falta repetirlo en
+   ninguna rama):
    ```yaml
    dependencies:
-     shared_preferences: ^2.3.0
+     shared_preferences: ^2.5.5
    ```
 3. Ejecutar `flutter pub get`.
 4. No se requiere configuración nativa adicional (permisos, `Info.plist`,
@@ -161,19 +183,15 @@ Puntos clave de la API:
    controlador sin envolverlo.** Según las reglas no negociables del
    proyecto (`CLAUDE.md`), el acceso a datos debe quedar separado de la UI y
    de la lógica de presentación. Se propone:
-   - Crear una interfaz de servicio, por ejemplo
-     `lib/service/storage/local_preferences_service.dart`, con los métodos de
-     dominio que de verdad se necesitan (no exponer todo `SharedPreferences`
-     tal cual):
-     ```dart
-     abstract class LocalPreferencesService {
-       Future<String?> getLastFilterMotelId();
-       Future<void> setLastFilterMotelId(String motelId);
-       Future<void> clearLastFilterMotelId();
-     }
-     ```
-   - Crear la implementación concreta,
-     `SharedPreferencesLocalService`, que sea la única clase del proyecto que
+   - La interfaz `lib/service/storage/local_preferences_service.dart`
+     (`LocalPreferencesService`) es **genérica** (clave-valor con
+     namespace): no contiene métodos de ninguna funcionalidad concreta, para
+     que ninguna rama tenga que modificarla al agregar una preferencia y para
+     que siga sirviendo cuando las personas cambien de funcionalidad en la
+     segunda etapa.
+   - La implementación concreta,
+     `lib/service/storage/shared_preferences_local_service.dart`
+     (`SharedPreferencesLocalService`), es la única clase del proyecto que
      importa `package:shared_preferences/shared_preferences.dart`.
    - Los controladores (`ChangeNotifier`) dependen de la interfaz
      `LocalPreferencesService`, no de la implementación concreta, siguiendo
@@ -186,10 +204,20 @@ Puntos clave de la API:
 
 ## 7. Instrucciones de uso dentro de MACHUCO
 
-- **Convención de nombres de clave:** prefijo por feature en `lowerCamelCase`
-  con puntos, por ejemplo `bookings.lastFilterMotelId`,
+- **Convención de nombres de clave:** el namespace y la clave van en
+  `lowerCamelCase` y sin puntos (el servicio lo valida y lanza
+  `ArgumentError` si no se cumple); el servicio los une como
+  `<namespace>.<clave>`, por ejemplo `bookings.lastFilterMotelId`,
   `auth.onboardingSeen`. Evita colisiones entre las 17 ramas que comparten el
   mismo espacio de claves de `shared_preferences`.
+- **El namespace es la funcionalidad, nunca la persona ni la rama.** Usar el
+  nombre del módulo (`bookings`, `pqrs`, `payments`, `reviews`...), igual que
+  las carpetas de `lib/`. Nunca `juanPablo` o `featureX`: las ramas son por
+  persona y en la segunda etapa cada persona cambia de funcionalidad, así que
+  las claves deben sobrevivir a ese cambio de dueño.
+- **Las claves se definen dentro del módulo** que las usa (constantes
+  privadas del controlador o servicio), no en un archivo central compartido,
+  para no generar conflictos de merge entre ramas.
 - **Nunca guardar objetos de dominio completos como JSON "por comodidad"**
   sin evaluar antes si ese dato en realidad pertenece a una base de datos
   local o al backend. `shared_preferences` es para preferencias, no para
@@ -226,14 +254,15 @@ Puntos clave de la API:
 - **No sincroniza entre dispositivos** ni sobrevive a una desinstalación de
   la app (ni, en iOS, a una restauración de backup sin el flag adecuado en
   `NSUserDefaults`, que este plugin no configura por defecto).
-- **Testing:** en pruebas de widgets/controladores hay que inicializar
-  valores simulados antes de usar la API legada
-  (`SharedPreferences.setMockInitialValues({...})`); con la API nueva
-  (`SharedPreferencesAsync`) se debe inyectar un
-  `SharedPreferencesAsyncPlatform` de prueba o, preferiblemente, mockear la
-  interfaz propia del proyecto (`LocalPreferencesService`) en vez del plugin
-  directamente — otra razón para no acoplar controladores al plugin.
-- **Costo de no envolverlo:** si `SharedPreferences`/`SharedPreferencesAsync`
+- **Testing:** en pruebas de widgets/controladores que usen
+  `SharedPreferencesLocalService` real, llamar
+  `SharedPreferences.setMockInitialValues({})` en `setUp` (con los valores
+  iniciales que se necesiten, usando la clave completa
+  `'<namespace>.<clave>'`). Alternativamente, inyectar un fake de la
+  interfaz `LocalPreferencesService` en el controlador — otra razón para no
+  acoplar controladores al plugin. Ver
+  `test/service/storage/shared_preferences_local_service_test.dart`.
+- **Costo de no envolverlo:** si `SharedPreferences`
   se importa directamente en una vista o en un controlador sin pasar por una
   interfaz propia, cualquier cambio futuro de estrategia de almacenamiento
   local (por ejemplo migrar a `Hive` o a una base de datos local) obliga a
@@ -244,8 +273,9 @@ Puntos clave de la API:
 | Pregunta | Decisión | Alcance |
 |---|---|---|
 | ¿Se adopta `shared_preferences` para preferencias locales no sensibles? | **Sí.** | Cerrado para todo el proyecto. |
-| ¿Qué API se usa? | **`SharedPreferencesAsync`** (no la API legada `getInstance()`). | Convención acordada para todo el proyecto. |
-| ¿Dónde vive la capa de acceso? | **`lib/service/storage/`**, con la interfaz `LocalPreferencesService` y la implementación `SharedPreferencesLocalService`, siguiendo el patrón de `service/auth/`. | Convención acordada para todo el proyecto. |
+| ¿Qué API se usa? | **API clásica `SharedPreferences.getInstance()`**. No se usan `SharedPreferencesAsync` ni `SharedPreferencesWithCache`. (Reemplaza la elección inicial de `SharedPreferencesAsync`.) | Convención acordada para todo el proyecto. |
+| ¿Dónde vive la capa de acceso? | **`lib/service/storage/`**, con la interfaz genérica `LocalPreferencesService` y la implementación `SharedPreferencesLocalService`, siguiendo el patrón de `service/auth/`. | Convención acordada para todo el proyecto. |
+| ¿Cómo se separan las preferencias de cada módulo? | Por **namespace de funcionalidad** (`SharedPreferencesLocalService(namespace: 'bookings')`), nunca por persona o rama. | Convención acordada para todo el proyecto. |
 | ¿Alcance inicial? | Nació en la rama `feature-juan_pablo` (módulo Bookings) y quedó ratificada por el equipo como convención transversal para las 17 ramas, en vez de que cada una resuelva "almacenamiento" por su cuenta. | Cerrado. |
 
 **Importante:** esta decisión ya cuenta con el acuerdo formal del equipo
