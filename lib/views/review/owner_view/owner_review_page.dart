@@ -132,12 +132,6 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
         const SizedBox(height: AppSpacing.s1),
         Text('Reseñas', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: AppSpacing.s2),
-        Text(
-          'Consulta y responde las reseñas que han dejado tus clientes.',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
-        ),
       ],
     );
   }

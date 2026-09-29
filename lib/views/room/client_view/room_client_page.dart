@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/room/room_client_controller.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/motel/motel_model.dart';
@@ -99,12 +100,33 @@ class _RoomClientPageState extends State<RoomClientPage> {
                   child: AppCard(
                     onTap: () {
                       final room = _controller.firstActiveRoomForType(type.id);
-                      if (room != null) {
-                        Navigator.of(context).pushNamed(
-                          AppRoutes.clientCreateBooking,
-                          arguments: room,
+                      if (room == null) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            backgroundColor: AppColors.maintenance,
+                            content: Row(
+                              children: [
+                                Icon(
+                                  Icons.warning_amber_rounded,
+                                  color: Colors.black87,
+                                ),
+                                SizedBox(width: AppSpacing.s2),
+                                Expanded(
+                                  child: Text(
+                                    'Este tipo ya no tiene habitaciones disponibles. Actualiza la lista.',
+                                    style: TextStyle(color: Colors.black87),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         );
+                        return;
                       }
+                      Navigator.of(context).pushNamed(
+                        AppRoutes.clientCreateBooking,
+                        arguments: room,
+                      );
                     },
                     child: Row(
                       children: [

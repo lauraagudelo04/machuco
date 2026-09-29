@@ -4,6 +4,9 @@ import 'package:auth0_flutter/auth0_flutter.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/service/auth/auth0_config.dart';
 
+/// Categorizes why an [AuthService] operation failed, so views can choose
+/// an appropriate message or recovery action without parsing raw Auth0
+/// error strings.
 enum AuthFailureType {
   invalidCredentials,
   emailAlreadyExists,
@@ -14,6 +17,10 @@ enum AuthFailureType {
   unknown,
 }
 
+/// An error thrown by any [AuthService] implementation.
+///
+/// [message] is already a user-safe, Spanish-language message suitable for
+/// display; it must not leak raw provider error details.
 final class AuthFailure implements Exception {
   const AuthFailure(this.type, this.message);
 
@@ -21,6 +28,9 @@ final class AuthFailure implements Exception {
   final String message;
 }
 
+/// The authenticated session data the app keeps after a successful
+/// [AuthService.login], [AuthService.loginWithGoogle] or
+/// [AuthService.restoreSession].
 final class AuthSession {
   const AuthSession({
     required this.userId,
@@ -39,6 +49,12 @@ final class AuthSession {
   final String idToken;
 }
 
+/// Contract for authenticating a user and managing their session,
+/// independent of the concrete provider.
+///
+/// Implemented today by [Auth0AuthService] (production) and
+/// `HardcodedAuthService` (local/QA test accounts, gated by
+/// [Auth0Config.useHardcodedAuthUsers]).
 abstract interface class AuthService {
   Future<AuthSession?> restoreSession();
 
@@ -59,11 +75,20 @@ abstract interface class AuthService {
   Future<void> logout();
 }
 
+/// [AuthService] implementation backed by Auth0 via `auth0_flutter`.
+///
+/// Wraps the Auth0 database connection and Google social login, persists
+/// credentials through Auth0's credentials manager, and derives the
+/// [RegisteredUserRole] for a session from the ID token claims (see
+/// [_extractRole]).
 final class Auth0AuthService implements AuthService {
   Auth0AuthService._(this._auth0);
 
   final Auth0 _auth0;
 
+  /// Builds an [Auth0AuthService] from `--dart-define` configuration, or
+  /// returns `null` when [Auth0Config.isConfigured] is `false` so callers
+  /// can fall back to another [AuthService].
   static Auth0AuthService? fromEnvironment() {
     if (!Auth0Config.isConfigured) {
       return null;

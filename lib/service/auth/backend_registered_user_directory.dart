@@ -5,6 +5,14 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
 
+/// [RegisteredUserDirectory] implementation that reads users from an
+/// external HTTP API instead of in-memory seed data.
+///
+/// Enabled via [Auth0Config.useBackendUsers]; the base URL and users path
+/// must be supplied per environment (see [Auth0Config.usersApiBaseUrl]) and
+/// are never hardcoded here. [upsertUser] intentionally does not write to
+/// this API: user creation/updates are expected to flow through Auth0
+/// instead, so this directory is currently read-only in practice.
 final class BackendRegisteredUserDirectory implements RegisteredUserDirectory {
   BackendRegisteredUserDirectory({
     required String baseUrl,
@@ -24,6 +32,12 @@ final class BackendRegisteredUserDirectory implements RegisteredUserDirectory {
     return '$trimmedBase$normalizedPath';
   }
 
+  /// Fetches users from the configured API.
+  ///
+  /// Accepts either a bare JSON array or an object with a `users` list.
+  /// Throws an [AuthFailure] of type [AuthFailureType.network] on a
+  /// connection error or a non-200 response; entries that are not JSON
+  /// objects are silently skipped rather than failing the whole request.
   @override
   Future<List<RegisteredUser>> listUsers({String? accessToken}) async {
     final headers = <String, String>{'Accept': 'application/json'};

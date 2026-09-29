@@ -16,7 +16,7 @@ import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 
 /// Pantalla completa de resumen previo al pago. Al confirmar, navega a la
-/// selección de método de pago (`PaymentMethodPage`) pasando la reserva
+/// selección de método de pago (`PaymentMethodSelectionPage`) pasando la reserva
 /// como argumento de la ruta.
 class BookingCheckoutPage extends StatefulWidget {
   const BookingCheckoutPage({super.key, required this.reservationId});

@@ -30,13 +30,27 @@ class ProductListView extends StatelessWidget {
   }
 
   // ---------------------------------------------------------
+  // CREAR
+  // ---------------------------------------------------------
+
+  void _openCreateView(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProductFormView(
+          motelId: motelId,
+        ),
+      ),
+    );
+  }
+
+  // ---------------------------------------------------------
   // VER DETALLE
   // ---------------------------------------------------------
 
   void _openDetailView(
-    BuildContext context,
-    Product product,
-  ) {
+      BuildContext context,
+      Product product,
+      ) {
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => ProductDetailView(
@@ -51,9 +65,9 @@ class ProductListView extends StatelessWidget {
   // ---------------------------------------------------------
 
   Future<void> _openEditView(
-    BuildContext context,
-    Product product,
-  ) async {
+      BuildContext context,
+      Product product,
+      ) async {
     await Navigator.of(context).push<Product>(
       MaterialPageRoute(
         builder: (_) => ProductFormView(
@@ -69,9 +83,9 @@ class ProductListView extends StatelessWidget {
   // ---------------------------------------------------------
 
   Future<void> _confirmDelete(
-    BuildContext context,
-    Product product,
-  ) async {
+      BuildContext context,
+      Product product,
+      ) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -124,6 +138,16 @@ class ProductListView extends StatelessWidget {
         title: const Text('Productos'),
       ),
 
+      // ---------------------------------------------------------
+      // BOTÓN CREAR PRODUCTO
+      // ---------------------------------------------------------
+
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _openCreateView(context),
+        icon: const Icon(Icons.add),
+        label: const Text('Crear producto'),
+      ),
+
       body: SafeArea(
         child: LayoutBuilder(
           builder: (context, constraints) {
@@ -136,7 +160,7 @@ class ProductListView extends StatelessWidget {
                 icon: Icons.inventory_2_outlined,
                 title: 'No hay productos',
                 message:
-                    'Este motel no tiene productos registrados.',
+                'Este motel no tiene productos registrados.',
               );
             }
 
@@ -282,10 +306,10 @@ class _ProductCard extends StatelessWidget {
                           .textTheme
                           .bodySmall
                           ?.copyWith(
-                            color: context
-                                .appColors
-                                .textSecondary,
-                          ),
+                        color: context
+                            .appColors
+                            .textSecondary,
+                      ),
                     ),
                   ],
 
@@ -304,8 +328,8 @@ class _ProductCard extends StatelessWidget {
                             .textTheme
                             .titleSmall
                             ?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
 
                       Text(
@@ -314,10 +338,10 @@ class _ProductCard extends StatelessWidget {
                             .textTheme
                             .bodySmall
                             ?.copyWith(
-                              color: context
-                                  .appColors
-                                  .textMuted,
-                            ),
+                          color: context
+                              .appColors
+                              .textMuted,
+                        ),
                       ),
                     ],
                   ),
@@ -332,12 +356,12 @@ class _ProductCard extends StatelessWidget {
 
                   Row(
                     mainAxisAlignment:
-                        MainAxisAlignment.end,
+                    MainAxisAlignment.end,
                     children: [
                       AppIconButton(
                         icon: Icons.edit_outlined,
                         tooltip:
-                            'Editar ${product.name}',
+                        'Editar ${product.name}',
                         onPressed: onEdit,
                       ),
 
@@ -348,9 +372,9 @@ class _ProductCard extends StatelessWidget {
                       AppIconButton(
                         icon: Icons.delete_outline,
                         tooltip:
-                            'Eliminar ${product.name}',
+                        'Eliminar ${product.name}',
                         variant:
-                            AppIconButtonVariant.destructive,
+                        AppIconButtonVariant.destructive,
                         onPressed: onDelete,
                       ),
                     ],
@@ -364,4 +388,3 @@ class _ProductCard extends StatelessWidget {
     );
   }
 }
-

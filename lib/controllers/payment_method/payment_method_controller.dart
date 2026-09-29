@@ -2,6 +2,28 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 
+class CardNumberInputFormatter extends TextInputFormatter {
+  const CardNumberInputFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 19) digits = digits.substring(0, 19);
+
+    final formatted = digits.replaceAllMapped(RegExp(r'.{1,4}'), (match) {
+      final suffix = match.end < digits.length ? ' ' : '';
+      return '${match.group(0)}$suffix';
+    });
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+}
+
 class ExpiryDateInputFormatter extends TextInputFormatter {
   const ExpiryDateInputFormatter();
 
@@ -31,6 +53,7 @@ class PaymentMethodController extends ChangeNotifier {
   bool _isCvvHidden = true;
   bool _isDisposed = false;
 
+  PaymentMethodModel get model => _model;
   int get amount => _model.amount;
   String get concept => _model.concept;
   String get cardHolder => _model.cardHolder;
@@ -48,6 +71,8 @@ class PaymentMethodController extends ChangeNotifier {
   bool get isApproved => status == PaymentProcessStatus.approved;
   TextInputFormatter get expiryDateFormatter =>
       const ExpiryDateInputFormatter();
+  TextInputFormatter get cardNumberFormatter =>
+      const CardNumberInputFormatter();
 
   String get formattedAmount {
     final value = amount.toString();

@@ -6,6 +6,7 @@ import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
 import 'package:machuco/views/room/room_status_badge.dart';
@@ -15,15 +16,13 @@ import 'package:machuco/views/room/room_status_badge.dart';
 class RoomAdminPage extends StatefulWidget {
   const RoomAdminPage({
     super.key,
+    required this.motel,
     this.rooms,
     this.types,
-    this.motelId = '1',
-    this.motelName = 'Motel Paraíso Élite',
   });
+  final Motel motel;
   final List<RoomVisualData>? rooms;
   final List<RoomTypeData>? types;
-  final String motelId;
-  final String motelName;
 
   @override
   State<RoomAdminPage> createState() => _RoomAdminPageState();
@@ -38,7 +37,7 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
   void initState() {
     super.initState();
     _controller = RoomAdminController(
-      motelId: widget.motelId,
+      motelId: widget.motel.id,
       seedRooms: widget.rooms,
       seedTypes: widget.types,
     );
@@ -92,7 +91,7 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
                         horizontal: AppSpacing.s3,
                         vertical: AppSpacing.s2,
                       ),
-                      child: Text(widget.motelName),
+                      child: Text(widget.motel.name),
                     ),
                   ),
                 ],

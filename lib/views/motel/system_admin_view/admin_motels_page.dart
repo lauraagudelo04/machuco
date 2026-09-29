@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/views/review/review_administration_page.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
 import '../../../models/owner_management/owner.dart';
@@ -6,13 +7,12 @@ import '../../../models/owner_management/document_type.dart';
 import '../../../controllers/motel/motel_controller.dart'; 
 import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
-import '../../payment/system_admin_view/admin_payment_page.dart';
 import './admin_motel_form_page.dart'; 
-// Nuevos imports para las vistas del menú desplegable
-import '../../room/system_admin_view/room_admin_page.dart';
 import '../../payment/owner_view/owner_payment_page.dart';
+import './../../notification/system_admin_view/system_admin_notification_view.dart';
+import './../../pqrs/system_admin_view/pqrs_page.dart';
+import '../../booking/system_admin_view/admin_motel_reservations_list_page.dart';
 
-// admin_motels_page.dart
 
 class AdminMotelsPage extends StatefulWidget {
   final String? initialOwnerId;
@@ -134,8 +134,9 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          const Center(child: Text('Panel de Auditoría de Reservas (Admin)')),
-          const AdminFinancePage(),
+          AdminMotelReservationsListPage(ownerId: _currentOwnerId),
+          // Vista real de notificaciones conectada correctamente
+          const SystemAdminNotificationView(),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(
@@ -155,9 +156,9 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
             label: 'Reservas',
           ),
           AppNavigationDestination(
-            icon: Icons.payments_outlined,
-            selectedIcon: Icons.payments,
-            label: 'Pagos',
+            icon: Icons.notifications_outlined,
+            selectedIcon: Icons.notifications,
+            label: 'Notificaciones',
           ),
         ],
       ),
@@ -243,20 +244,29 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 ],
               ),
             ),
-            _MenuTile(
-              icon: Icons.notifications_outlined, 
-              title: 'Notificaciones', 
+            _MenuTile(icon: Icons.star_outline,
+              title: 'Reseñas',
               onTap: () {
                 Navigator.pop(context);
-              },
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ReviewAdministrationPage(),
+                  ),
+                );
+              }
             ),
-            _MenuTile(icon: Icons.security_outlined, title: 'Seguridad y Roles', onTap: () {}),
-            _MenuTile(icon: Icons.analytics_outlined, title: 'Reportes Globales', onTap: () {}),
             _MenuTile(
               icon: Icons.support_agent_outlined, 
-              title: 'PQRS de Usuarios', 
+              title: 'PQRS', 
               onTap: () {
-                Navigator.pop(context); 
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SystemAdminPqrsPage(),
+                  ),
+                );
               },
             ),
           ],
@@ -426,20 +436,17 @@ class _AdminMotelCard extends StatelessWidget {
                 icon: const Icon(Icons.more_vert),
                 tooltip: 'Opciones de administración',
                 onSelected: (String value) {
-                  if (value == 'productos') {
+                  if (value == 'habitaciones') {
+                    Navigator.pushNamed(
+                      context,
+                      AppRoutes.adminRooms,
+                      arguments: motel,
+                    );
+                  } else if (value == 'productos') {
                     Navigator.pushNamed(
                       context,
                       AppRoutes.ownerProducts,
                       arguments: motel.id,
-                    );
-                  } else if (value == 'habitaciones') {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomAdminPage(
-                          motelId: motel.id,
-                          motelName: motel.name,
-                        ),
-                      ),
                     );
                   } else if (value == 'servicios') {
                     Navigator.pushNamed(
@@ -461,22 +468,22 @@ class _AdminMotelCard extends StatelessWidget {
                 },
                 itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
                   const PopupMenuItem<String>(
-                    value: 'productos',
-                    child: Row(
-                      children: [
-                        Icon(Icons.inventory_2_outlined, size: 20),
-                        SizedBox(width: 8),
-                        Text('Productos'),
-                      ],
-                    ),
-                  ),
-                  const PopupMenuItem<String>(
                     value: 'habitaciones',
                     child: Row(
                       children: [
                         Icon(Icons.bed_outlined, size: 20),
                         SizedBox(width: 8),
                         Text('Habitaciones'),
+                      ],
+                    ),
+                  ),
+                  const PopupMenuItem<String>(
+                    value: 'productos',
+                    child: Row(
+                      children: [
+                        Icon(Icons.inventory_2_outlined, size: 20),
+                        SizedBox(width: 8),
+                        Text('Productos'),
                       ],
                     ),
                   ),

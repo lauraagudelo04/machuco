@@ -14,6 +14,7 @@ import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
+import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
 import 'package:machuco/views/login/logout_navigation.dart';
 
@@ -92,6 +93,12 @@ class _OwnerPageState extends State<OwnerPage> {
 
   void _openPlatformFinances() {
     Navigator.of(context).pushNamed(AppRoutes.adminPayments);
+  }
+
+  void _openNotifications() {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => const SystemAdminNotificationView()),
+    );
   }
 
   void _viewOwnerMotels(Owner owner) {
@@ -188,6 +195,14 @@ class _OwnerPageState extends State<OwnerPage> {
       appBar: AppBar(
         title: const Text('Propietarios'),
         actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.s2),
+            child: AppIconButton(
+              icon: Icons.notifications_outlined,
+              tooltip: 'Notificaciones',
+              onPressed: _openNotifications,
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
             child: AppIconButton(

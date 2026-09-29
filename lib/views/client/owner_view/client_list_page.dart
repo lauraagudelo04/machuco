@@ -9,6 +9,7 @@ import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/models/client/client.dart';
+import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
 import 'client_detail_page.dart';
 
 class ClientPage extends StatefulWidget {
@@ -36,6 +37,17 @@ class _ClientPageState extends State<ClientPage> {
     Navigator.of(
       context,
     ).push(MaterialPageRoute(builder: (_) => ClientDetailPage(client: client)));
+  }
+
+  void _openClientReservations(Client client) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OwnerReservationsPage(
+          clientId: client.id,
+          clientName: client.name,
+        ),
+      ),
+    );
   }
 
   Future<void> _showUnlinkDialog(Client client) async {
@@ -95,6 +107,7 @@ class _ClientPageState extends State<ClientPage> {
                 child: _ClientCard(
                   client: client,
                   onTap: () => _openClientDetail(client),
+                  onHistory: () => _openClientReservations(client),
                   onUnlink: () => _showUnlinkDialog(client),
                 ),
               ),
@@ -168,11 +181,13 @@ class _ClientCard extends StatelessWidget {
   const _ClientCard({
     required this.client,
     required this.onTap,
+    required this.onHistory,
     required this.onUnlink,
   });
 
   final Client client;
   final VoidCallback onTap;
+  final VoidCallback onHistory;
   final VoidCallback onUnlink;
 
   @override
@@ -219,6 +234,12 @@ class _ClientCard extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(width: AppSpacing.s2),
+          AppIconButton(
+            icon: Icons.event_note_outlined,
+            tooltip: 'Historial de reservas',
+            onPressed: onHistory,
           ),
           const SizedBox(width: AppSpacing.s2),
           AppIconButton(
