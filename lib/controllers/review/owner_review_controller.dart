@@ -2,35 +2,20 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/models/review/review_data.dart';
 
-/// Reseña vista desde la perspectiva del propietario: envuelve un [Review]
-/// y lo asocia a un motel suyo. El modelo Review compartido todavía no
-/// tiene una relación real con Motel, así que esa asociación vive aquí
-/// (composición), no en el modelo.
-class OwnerReviewEntry {
-  OwnerReviewEntry({
-    required this.review,
-    required this.motelId,
-    required this.motelName,
-    this.ownerReply,
-  });
-
-  final Review review;
-  final String motelId;
-  final String motelName;
-  String? ownerReply;
-}
-
+/// Controlador de reseñas desde la perspectiva del propietario.
+///
+/// Opera directamente sobre el modelo [Review]; la asociación con el motel
+/// se resuelve a través de [motelId] que ahora vive en el modelo.
 class OwnerReviewController extends ChangeNotifier {
   OwnerReviewController({MotelController? motelController})
     : _motelController = motelController ?? MotelController();
 
-  static final OwnerReviewController instance = OwnerReviewController();
-
   final MotelController _motelController;
 
   List<Motel> _myMotels = [];
-  List<OwnerReviewEntry> _entries = [];
+  List<Review> _reviews = [];
   String? _selectedMotelId; // null = todos mis moteles
   String _query = '';
   bool _isLoading = false;
@@ -42,16 +27,18 @@ class OwnerReviewController extends ChangeNotifier {
   String? get selectedMotelId => _selectedMotelId;
   String get query => _query;
 
-  /// TODO: reemplazar por la carga real de reseñas cuando Review incluya
-  /// una relación con el motel (motelId).
   Future<void> loadReviews() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
       _myMotels = await _motelController.getMyMotels();
-      if (_entries.isEmpty) {
-        _entries = _seedEntries(_myMotels);
+      if (_reviews.isEmpty) {
+        // Filtrar reseñas que pertenezcan a los moteles del propietario
+        final motelIds = _myMotels.map((m) => m.id).toSet();
+        _reviews = ReviewData.all()
+            .where((r) => motelIds.contains(r.motelId))
+            .toList();
       }
     } catch (_) {
       _errorMessage = 'No fue posible cargar las reseñas de tus moteles.';
@@ -61,26 +48,25 @@ class OwnerReviewController extends ChangeNotifier {
     }
   }
 
-  List<OwnerReviewEntry> get entries {
+  List<Review> get reviews {
     final normalizedQuery = _query.trim().toLowerCase();
-    return _entries.where((entry) {
-      if (_selectedMotelId != null && entry.motelId != _selectedMotelId) {
+    return _reviews.where((review) {
+      if (_selectedMotelId != null && review.motelId != _selectedMotelId) {
         return false;
       }
       if (normalizedQuery.isEmpty) return true;
-      return entry.review.author.toLowerCase().contains(normalizedQuery) ||
-          entry.review.title.toLowerCase().contains(normalizedQuery) ||
-          entry.review.body.toLowerCase().contains(normalizedQuery);
+      return review.authorName.toLowerCase().contains(normalizedQuery) ||
+          review.title.toLowerCase().contains(normalizedQuery) ||
+          review.body.toLowerCase().contains(normalizedQuery);
     }).toList(growable: false);
   }
 
-  int get totalCount => entries.length;
+  int get totalCount => reviews.length;
 
   double get averageRating {
-    final visible = entries;
-    if (visible.isEmpty) return 0;
-    return visible.map((e) => e.review.rating).reduce((a, b) => a + b) /
-        visible.length;
+    if (reviews.isEmpty) return 0;
+    return reviews.map((r) => r.rating).reduce((a, b) => a + b) /
+        reviews.length;
   }
 
   void selectMotel(String? motelId) {
@@ -93,45 +79,15 @@ class OwnerReviewController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void reply(OwnerReviewEntry entry, String message) {
+  void reply(String reviewId, String message) {
     final trimmed = message.trim();
     if (trimmed.isEmpty) return;
-    entry.ownerReply = trimmed;
+    final review = _reviews.firstWhere((r) => r.id == reviewId);
+    _reviews[_reviews.indexOf(review)] =
+        review.copyWith(ownerReply: trimmed);
     notifyListeners();
   }
 
-  List<OwnerReviewEntry> _seedEntries(List<Motel> myMotels) {
-    if (myMotels.isEmpty) return [];
-    final first = myMotels.first;
-    final second = myMotels.length > 1 ? myMotels[1] : myMotels.first;
-    return [
-      OwnerReviewEntry(
-        review: Review(
-          parentId: "motel-eclipse",
-          author: 'Diana R.',
-          title: 'Excelente atención',
-          body:
-              'El personal fue muy amable y la habitación estaba impecable.',
-          rating: 5,
-          date: DateTime(2026, 7, 10),
-          tag: "Motel Eclipse"
-        ),
-        motelId: first.id,
-        motelName: first.name,
-      ),
-      OwnerReviewEntry(
-        review: Review(
-          parentId: "motel-eclipse",
-          author: 'Felipe A.',
-          title: 'El aire acondicionado no enfriaba',
-          body: 'Todo bien excepto el aire, que casi no funcionaba.',
-          rating: 3,
-          date: DateTime(2026, 7, 28),
-          tag: "Motel Eclipse"
-        ),
-        motelId: second.id,
-        motelName: second.name,
-      ),
-    ];
-  }
+  String getMotelName(String motelId) =>
+      _myMotels.firstWhere((m) => m.id == motelId, orElse: () => _myMotels.first).name;
 }

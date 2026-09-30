@@ -5,25 +5,25 @@ import '../../core/design_system/design_system.dart';
 import 'star_rating_selector.dart';
 
 class AddReviewSheet extends StatefulWidget {
-  final String parentId;
-  final String name;
+  final String motelId;
+  final String motelName;
   final void Function(Review review) onSave;
   final List<RoomVisualData>? rooms;
 
   const AddReviewSheet({
     super.key,
     required this.onSave,
-    required this.parentId,
+    required this.motelId,
+    required this.motelName,
     required this.rooms,
-    required this.name,
   });
 
   static Future<void> show(
     BuildContext context, {
-    required String parentId,
+    required String motelId,
+    required String motelName,
     required void Function(Review review) onSave,
     required List<RoomVisualData>? rooms,
-    required String name,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -32,9 +32,9 @@ class AddReviewSheet extends StatefulWidget {
       showDragHandle: true,
       builder: (_) => AddReviewSheet(
         onSave: onSave,
-        parentId: parentId,
+        motelId: motelId,
+        motelName: motelName,
         rooms: rooms,
-        name: name,
       ),
     );
   }
@@ -46,25 +46,11 @@ class AddReviewSheet extends StatefulWidget {
 class _AddReviewSheetState extends State<AddReviewSheet> {
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
-  
-  late String _selectedTag;
+
+  String? _selectedRoomId;
+  ReviewType _reviewType = ReviewType.motel;
   int _rating = 0;
   bool _submitted = false;
-
-  // Genera la lista de opciones: Nombre del motel + tipos de habitaciones
-  List<String> get _tagOptions {
-    final options = <String>[widget.name];
-    if (widget.rooms != null && widget.rooms!.isNotEmpty) {
-      options.addAll(widget.rooms!.map((room) => room.name));
-    }
-    return options;
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTag = widget.name; // Por defecto selecciona el motel
-  }
 
   @override
   void dispose() {
@@ -81,13 +67,17 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
     widget.onSave(
       Review(
-        parentId: widget.parentId,
-        author: 'Tú',
+        id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
+        authorId: 'user-current',
+        authorName: 'Tú',
         title: title,
         body: body,
         rating: _rating,
         date: DateTime.now(),
-        tag: _selectedTag,
+        motelId: widget.motelId,
+        roomId: _selectedRoomId,
+        type: _reviewType,
+        status: ReviewModerationStatus.visible,
       ),
     );
 
@@ -150,29 +140,52 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ),
               const SizedBox(height: AppSpacing.s4),
 
-              // 🔻 AQUÍ ESTÁ EL SELECCIONADOR 🔻
-              DropdownButtonFormField<String>(
-                value: _selectedTag,
+              // Selector de tipo de reseña
+              DropdownButtonFormField<ReviewType>(
+                initialValue: _reviewType,
                 decoration: const InputDecoration(
                   labelText: '¿Qué deseas reseñar?',
                   prefixIcon: Icon(Icons.sell_outlined),
                 ),
-                items: _tagOptions.map((tag) {
-                  return DropdownMenuItem<String>(
-                    value: tag,
-                    child: Text(
-                      tag,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                items: ReviewType.values.map((type) {
+                  return DropdownMenuItem<ReviewType>(
+                    value: type,
+                    child: Text(type.label),
                   );
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _selectedTag = value);
+                    setState(() => _reviewType = value);
                   }
                 },
               ),
               const SizedBox(height: AppSpacing.s4),
+
+              // Selector de habitación (solo visible si se reseña la habitación)
+              if (_reviewType == ReviewType.room && (widget.rooms ?? []).isNotEmpty) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedRoomId,
+                  decoration: const InputDecoration(
+                    labelText: 'Seleccionar habitación',
+                    prefixIcon: Icon(Icons.kitchen_outlined),
+                  ),
+                  items: (widget.rooms ?? [])
+                      .map((room) => DropdownMenuItem<String>(
+                            value: room.id,
+                            child: Text(
+                              room.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedRoomId = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: AppSpacing.s4),
+              ],
 
               StarRatingSelector(
                 onChanged: (v) => setState(() => _rating = v),
