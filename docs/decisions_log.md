@@ -238,3 +238,19 @@ atadas a quien las creó. Detalle en
 **Estado:** cerrado. Reemplaza el punto "API `SharedPreferencesAsync`" de la
 entrada anterior; el resto de esa decisión (paquete y ubicación en
 `lib/service/storage/`) sigue vigente.
+
+## 2026-10-06 — Propuesta: SQLite local con `floor` + `sqflite` para datos de dominio
+
+**Propuesta:** adoptar SQLite como base de datos local, accedida con Floor
+sobre `sqflite`, tomando como referencia el ejemplo `EjemploSQLite` entregado
+en clase. Se agregan a `pubspec.yaml` `floor`, `sqflite` (dependencias) y
+`floor_generator`, `build_runner` (dev). Detalle, alcance, riesgos y
+alternativas en [`sqlite_floor.md`](sqlite_floor.md).
+
+**Por qué importa:** `README.md` y `CLAUDE.md` exigen decisión documentada
+antes de fijar base de datos o almacenamiento. `shared_preferences` no cubre
+datos de dominio, que hoy viven en listas `static` en memoria.
+
+**Estado:** **pendiente de aprobación del equipo.** Este PR solo agrega las
+dependencias y el documento; el código de persistencia se entrega en un PR
+posterior, una vez aprobada la decisión. No cubre backend ni sincronización.
