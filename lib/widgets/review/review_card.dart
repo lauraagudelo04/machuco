@@ -17,14 +17,14 @@ class ReviewCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                _AuthorAvatar(initial: review.author[0]),
+                _AuthorAvatar(initial: review.authorName.isNotEmpty ? review.authorName[0] : '?'),
                 const SizedBox(width: AppSpacing.s3),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        review.author,
+                        review.authorName,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                               fontWeight: FontWeight.w700,
                             ),
@@ -44,17 +44,17 @@ class ReviewCard extends StatelessWidget {
             ),
             const SizedBox(height: AppSpacing.s3),
 
-            // Tag Resaltado (Chip/Badge)
+            // Tipo de reseña (Chip/Badge)
             Container(
               padding: const EdgeInsets.symmetric(
                 horizontal: AppSpacing.s2,
                 vertical: 4,
               ),
               decoration: BoxDecoration(
-                color: AppColors.violet.withOpacity(0.12),
+                color: AppColors.violet.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(AppRadius.sm),
                 border: Border.all(
-                  color: AppColors.violet.withOpacity(0.3),
+                  color: AppColors.violet.withValues(alpha: 0.3),
                 ),
               ),
               child: Row(
@@ -67,7 +67,7 @@ class ReviewCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    review.tag,
+                    review.type.label,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
                           color: AppColors.violet,
                           fontWeight: FontWeight.w700,

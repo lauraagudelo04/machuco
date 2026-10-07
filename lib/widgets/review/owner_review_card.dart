@@ -1,20 +1,19 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 
 class OwnerReviewCard extends StatelessWidget {
   const OwnerReviewCard({
     super.key,
-    required this.entry,
+    required this.review,
     required this.onReply,
   });
 
-  final OwnerReviewEntry entry;
+  final Review review;
   final VoidCallback onReply;
 
   @override
   Widget build(BuildContext context) {
-    final review = entry.review;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,7 +22,7 @@ class OwnerReviewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _AuthorAvatar(
-                initial: review.author.isNotEmpty ? review.author[0] : '?',
+                initial: review.authorName.isNotEmpty ? review.authorName[0] : '?',
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
@@ -31,13 +30,13 @@ class OwnerReviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      review.author,
+                      review.authorName,
                       style: Theme.of(context).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${entry.motelName} · ${_formatDate(review.date)}',
+                      '${review.motelId} · ${_formatDate(review.date)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.appColors.textSecondary,
                       ),
@@ -62,13 +61,13 @@ class OwnerReviewCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
           ),
-          if (entry.ownerReply != null) ...[
+          if (review.ownerReply != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNote(
               icon: Icons.storefront_outlined,
               color: AppColors.violet,
               label: 'Tu respuesta',
-              text: entry.ownerReply!,
+              text: review.ownerReply!,
             ),
           ],
           const SizedBox(height: AppSpacing.s3),
@@ -78,7 +77,7 @@ class OwnerReviewCard extends StatelessWidget {
               onPressed: onReply,
               icon: const Icon(Icons.reply_outlined, size: 18),
               label: Text(
-                entry.ownerReply == null ? 'Responder' : 'Editar respuesta',
+                review.ownerReply == null ? 'Responder' : 'Editar respuesta',
               ),
             ),
           ),

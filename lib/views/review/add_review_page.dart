@@ -7,16 +7,24 @@ import 'package:machuco/widgets/review/add_review_sheet.dart';
 import 'package:machuco/widgets/review/review_card.dart';
 import '../../core/design_system/design_system.dart';
 
+/// Sección de reseñas que se puede incrustar en cualquier página.
+///
+/// Recibe un [ReviewsController] opcional: si no se proporciona, se crea uno
+/// local que se destruye al eliminar el widget (comportamiento actual).
+/// Cuando se pasa un controller desde el padre, la reseña se mantiene
+/// entre navegaciones.
 class ReviewsSection extends StatefulWidget {
   const ReviewsSection({
     super.key,
     required this.isComplete,
     required this.motel,
+    this.controller,
     this.rooms,
   });
 
   final bool isComplete;
   final Motel motel;
+  final ReviewsController? controller;
   final List<RoomVisualData>? rooms;
 
   @override
@@ -25,16 +33,23 @@ class ReviewsSection extends StatefulWidget {
 
 class _ReviewsSectionState extends State<ReviewsSection> {
   late final ReviewsController _controller;
+  bool _ownsController = false;
 
   @override
   void initState() {
     super.initState();
-    _controller = ReviewsController();
+    _ownsController = widget.controller == null;
+    _controller = widget.controller ?? ReviewsController();
+    if (_ownsController) {
+      _controller.seedReviews();
+    }
   }
 
   @override
   void dispose() {
-    _controller.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -43,8 +58,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
-        final reviews = _controller.getReviewsById(widget.motel.id);
-        final average = _controller.getAverageById(widget.motel.id);
+        final reviews = _controller.getReviewsByMotelId(widget.motel.id);
+        final average = _controller.getAverageByMotelId(widget.motel.id);
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -82,8 +97,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
               onPressed: widget.isComplete
                   ? () => AddReviewSheet.show(
                         context,
-                        parentId: widget.motel.id,
-                        name: widget.motel.name,
+                        motelId: widget.motel.id,
+                        motelName: widget.motel.name,
                         rooms: widget.rooms ?? buildRoomMockData().where((room) => room.motelId == widget.motel.id).toList(),
                         onSave: (review) => _controller.addReview(review),
                       )

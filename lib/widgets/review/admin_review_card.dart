@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 
 /// Tarjeta de una reseña dentro del panel de administración.
 /// Solo pinta lo que recibe; toda decisión (ocultar, eliminar, etc.) se
@@ -8,14 +8,14 @@ import 'package:machuco/core/design_system/design_system.dart';
 class AdminReviewCard extends StatelessWidget {
   const AdminReviewCard({
     super.key,
-    required this.entry,
+    required this.review,
     required this.onToggleVisibility,
     required this.onDismissReport,
     required this.onReply,
     required this.onDelete,
   });
 
-  final AdminReviewEntry entry;
+  final Review review;
   final VoidCallback onToggleVisibility;
   final VoidCallback onDismissReport;
   final VoidCallback onReply;
@@ -23,8 +23,7 @@ class AdminReviewCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final review = entry.review;
-    final isReported = entry.status == ReviewModerationStatus.reported;
+    final isReported = review.status == ReviewModerationStatus.reported;
 
     return AppCard(
       child: Column(
@@ -34,7 +33,7 @@ class AdminReviewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _AuthorAvatar(
-                initial: review.author.isNotEmpty ? review.author[0] : '?',
+                initial: review.authorName.isNotEmpty ? review.authorName[0] : '?',
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
@@ -42,7 +41,7 @@ class AdminReviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      review.author,
+                      review.authorName,
                       style: Theme.of(context).textTheme.titleMedium
                           ?.copyWith(fontWeight: FontWeight.w700),
                     ),
@@ -76,12 +75,12 @@ class AdminReviewCard extends StatelessWidget {
                     value: 'toggle',
                     child: ListTile(
                       leading: Icon(
-                        entry.status == ReviewModerationStatus.hidden
+                        review.status == ReviewModerationStatus.hidden
                             ? Icons.visibility_outlined
                             : Icons.visibility_off_outlined,
                       ),
                       title: Text(
-                        entry.status == ReviewModerationStatus.hidden
+                        review.status == ReviewModerationStatus.hidden
                             ? 'Mostrar'
                             : 'Ocultar',
                       ),
@@ -120,26 +119,26 @@ class AdminReviewCard extends StatelessWidget {
               context,
             ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
           ),
-          if (isReported && entry.reportReason != null) ...[
+          if (isReported && review.reportReason != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNote(
               icon: Icons.flag_outlined,
               color: AppColors.maintenance,
               label: 'Motivo del reporte',
-              text: entry.reportReason!,
+              text: review.reportReason!,
             ),
           ],
-          if (entry.adminReply != null) ...[
+          if (review.adminReply != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNote(
               icon: Icons.support_agent_outlined,
               color: AppColors.violet,
               label: 'Respuesta del administrador',
-              text: entry.adminReply!,
+              text: review.adminReply!,
             ),
           ],
           const SizedBox(height: AppSpacing.s3),
-          _StatusChip(status: entry.status),
+          _StatusChip(status: review.status),
         ],
       ),
     );

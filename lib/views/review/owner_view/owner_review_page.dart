@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 import 'package:machuco/widgets/review/owner_review_card.dart';
 import 'package:machuco/widgets/review/owner_review_reply_sheet.dart';
 import 'package:machuco/widgets/review/review_stat_card.dart';
@@ -20,58 +21,54 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
   final TextEditingController _searchController = TextEditingController();
 
   late final OwnerReviewController _controller;
-  bool _controllerInitialized = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_controllerInitialized) return;
-    _controller = widget.controller ?? OwnerReviewController.instance;
-    _controllerInitialized = true;
-    _controller.addListener(_refresh);
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? OwnerReviewController();
     unawaited(_controller.loadReviews());
   }
 
-  void _refresh() {
-    if (mounted) setState(() {});
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  void _openReplySheet(OwnerReviewEntry entry) {
+  void _openReplySheet(Review review) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
       builder: (context) => OwnerReviewReplySheet(
-        entry: entry,
-        onSubmit: (message) => _controller.reply(entry, message),
+        review: review,
+        onSubmit: (message) => _controller.reply(review.id, message),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.removeListener(_refresh);
-    _searchController.dispose();
-    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reseñas de mis moteles')),
-      body: SafeArea(
-        child: _controller.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _controller.errorMessage != null
-            ? _buildErrorState(context)
-            : _buildContent(context),
-      ),
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Reseñas de mis moteles')),
+          body: SafeArea(
+            child: _controller.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _controller.errorMessage != null
+                ? _buildErrorState(context)
+                : _buildContent(context),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildContent(BuildContext context) {
-    final entries = _controller.entries;
+    final reviews = _controller.reviews;
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.screen),
       children: [
@@ -98,7 +95,7 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
               ),
             ),
             Text(
-              '${entries.length} registros',
+              '${reviews.length} registros',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: context.appColors.textSecondary,
               ),
@@ -108,15 +105,15 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
         const SizedBox(height: AppSpacing.s3),
         if (_controller.myMotels.isEmpty)
           _buildNoMotelsState(context)
-        else if (entries.isEmpty)
+        else if (reviews.isEmpty)
           _buildEmptyState(context)
         else
-          ...entries.map(
-            (entry) => Padding(
+          ...reviews.map(
+            (review) => Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: OwnerReviewCard(
-                entry: entry,
-                onReply: () => _openReplySheet(entry),
+                review: review,
+                onReply: () => _openReplySheet(review),
               ),
             ),
           ),
