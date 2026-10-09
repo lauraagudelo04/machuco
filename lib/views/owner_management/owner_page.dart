@@ -12,6 +12,8 @@ import 'package:machuco/controllers/owner_management/platform_finance_summary.da
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
+import 'package:machuco/service/auth/session_preferences.dart';
+
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
@@ -40,6 +42,22 @@ class _OwnerPageState extends State<OwnerPage> {
   final OwnerController _controller = OwnerController();
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
+  final SessionPreferences _sessionPreferences = SessionPreferences();
+
+  String? _adminEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAdminEmail();
+  }
+
+  Future<void> _loadAdminEmail() async {
+    final email = await _sessionPreferences.readEmail();
+    if (mounted) {
+      setState(() => _adminEmail = email);
+    }
+  }
 
   @override
   void dispose() {
@@ -193,7 +211,7 @@ class _OwnerPageState extends State<OwnerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Propietarios'),
+        title: _AdminAppBarTitle(adminEmail: _adminEmail),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s2),
@@ -638,6 +656,38 @@ class _OwnerDetailLine extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Título de la AppBar con "Propietarios" y el correo del administrador debajo.
+class _AdminAppBarTitle extends StatelessWidget {
+  const _AdminAppBarTitle({required this.adminEmail});
+
+  final String? adminEmail;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final color = context.appColors.textSecondary;
+
+    if (adminEmail == null) {
+      return const Text('Propietarios');
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const Text('Propietarios'),
+        const SizedBox(height: 2),
+        Text(
+          adminEmail!,
+          style: textTheme.bodySmall?.copyWith(color: color),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ],
     );
   }
 }

@@ -6,8 +6,13 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/hardcoded_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+  });
+
   testWidgets('muestra la pantalla de inicio de sesión', (tester) async {
     await tester.pumpWidget(const MachucoApp());
     await tester.pump();

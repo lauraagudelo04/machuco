@@ -3,17 +3,23 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth0_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
+import 'package:machuco/service/auth/session_preferences.dart';
 
 /// Orquesta autenticación y registro de usuarios para la pantalla de login.
 ///
 /// Mantiene la sesión activa y también un directorio de usuarios registrados
 /// para pruebas de integración entre módulos.
 class LoginController extends ChangeNotifier {
-  LoginController({this._authService, RegisteredUserDirectory? userDirectory})
-    : _userDirectory = userDirectory ?? InMemoryRegisteredUserDirectory();
+  LoginController({
+    this._authService,
+    RegisteredUserDirectory? userDirectory,
+    SessionPreferences? sessionPreferences,
+  }) : _userDirectory = userDirectory ?? InMemoryRegisteredUserDirectory(),
+       _sessionPreferences = sessionPreferences ?? SessionPreferences();
 
   final AuthService? _authService;
   final RegisteredUserDirectory _userDirectory;
+  final SessionPreferences _sessionPreferences;
 
   bool _isSubmitting = false;
   bool _isListingUsers = false;
@@ -37,6 +43,9 @@ class LoginController extends ChangeNotifier {
       return null;
     }
     _session = await authService.restoreSession();
+    if (_session != null) {
+      await _sessionPreferences.saveEmail(_session!.email);
+    }
     notifyListeners();
     return _session;
   }
@@ -53,6 +62,7 @@ class LoginController extends ChangeNotifier {
         password: password,
       );
       _session = nextSession;
+      await _sessionPreferences.saveEmail(nextSession.email);
       notifyListeners();
       return nextSession;
     } finally {
@@ -104,6 +114,7 @@ class LoginController extends ChangeNotifier {
         preferSignup: preferSignup,
       );
       _session = nextSession;
+      await _sessionPreferences.saveEmail(nextSession.email);
       notifyListeners();
       return nextSession;
     } finally {
@@ -121,6 +132,7 @@ class LoginController extends ChangeNotifier {
     if (authService != null) {
       await authService.logout();
     }
+    await _sessionPreferences.forgetEmail();
     _session = null;
     notifyListeners();
   }
