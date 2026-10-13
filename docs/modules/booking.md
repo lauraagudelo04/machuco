@@ -83,8 +83,9 @@ repositorio:
 
 ## Qué falta o es provisional
 
-- No hay backend ni persistencia real: todo el estado vive en memoria y se
-  reinicia con la app.
+- No hay backend. Las reservas se persisten localmente en SQLite (Floor) al
+  correr la app (ver "Persistencia local"); en pruebas se usa el repositorio
+  en memoria.
 - El pago real de una reserva (`confirmPayment` en
   `ClientBookingController`) tiene un método listo para integrarse, pero
   ninguna pantalla en el alcance actual lo dispara; el procesamiento de
@@ -97,3 +98,26 @@ repositorio:
   sobre métricas adicionales para el dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación pendiente
   confirmada por el equipo.
+
+## Persistencia local de reservas (Floor)
+
+`BookingRepositoryProvider.useDatabase()` (llamado en `main.dart`) cambia el
+repositorio por defecto a `LazyBookingRepository` -> `FloorBookingRepository`.
+El modelo de dominio `Reservation` no tiene anotaciones de Floor.
+
+- Tablas (base `machuco.db`, version 2):
+  - `reservations`: una fila por reserva (`ReservationEntity`). Fechas como
+    epoch en milisegundos, enums como su `name`. Indices en `requestId` y
+    `motelId`.
+  - `reservation_line_items`: servicios y productos (`kind` =
+    `service`|`product`, `position` conserva el orden). `reservationId` es FK
+    a `reservations.id` con `ON DELETE CASCADE`.
+- `ReservationMapper` (`lib/repositories/booking/reservation_mapper.dart`)
+  convierte filas <-> `Reservation`; `ReservationDao` inserta/actualiza la
+  reserva y reemplaza sus lineas dentro de una `@transaction`.
+- Siembra: si `reservations` esta vacia, el repositorio inserta una vez la
+  semilla de `booking_seed_data.dart`.
+- Migracion v1 -> v2 (`AppDatabase.migration1to2`): crea ambas tablas e
+  indices para instalaciones que ya tenian la v1 (solo
+  `reservation_categories`). Debe mantenerse igual al SQL generado en
+  `app_database.g.dart`.

@@ -1,5 +1,10 @@
+import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_line_item_entity.dart';
 import 'package:machuco/repositories/booking/booking_seed_data.dart';
+import 'package:machuco/repositories/booking/reservation_dao.dart';
+import 'package:machuco/repositories/booking/reservation_mapper.dart';
 
 /// Storage access for reservations. Controllers and the booking service
 /// depend on this interface only, so a persistent implementation (for
@@ -69,10 +74,125 @@ class InMemoryBookingRepository implements BookingRepository {
   }
 }
 
+/// Floor/SQLite backed implementation. Seeds the shared demo reservations
+/// the first time it runs against an empty `reservations` table.
+class FloorBookingRepository implements BookingRepository {
+  FloorBookingRepository(this._dao, {DateTime Function()? now})
+    : _now = now ?? DateTime.now;
+
+  final ReservationDao _dao;
+  final DateTime Function() _now;
+  Future<void>? _seeding;
+
+  Future<void> _ensureSeeded() {
+    return _seeding ??= _seed();
+  }
+
+  Future<void> _seed() async {
+    final count = await _dao.countReservations() ?? 0;
+    if (count > 0) return;
+    for (final reservation in buildSeedReservations(_now())) {
+      await _dao.insertReservation(
+        ReservationMapper.toEntity(reservation),
+        ReservationMapper.toLineItemEntities(reservation),
+      );
+    }
+  }
+
+  @override
+  Future<List<Reservation>> getAll() async {
+    await _ensureSeeded();
+    final rows = await _dao.findAllReservations();
+    final items = await _dao.findAllLineItems();
+    final byReservation = <String, List<ReservationLineItemEntity>>{};
+    for (final item in items) {
+      (byReservation[item.reservationId] ??= []).add(item);
+    }
+    return List<Reservation>.unmodifiable([
+      for (final row in rows)
+        ReservationMapper.toDomain(row, byReservation[row.id] ?? const []),
+    ]);
+  }
+
+  Future<Reservation> _hydrate(ReservationEntity row) async =>
+      ReservationMapper.toDomain(row, await _dao.findLineItems(row.id));
+
+  @override
+  Future<Reservation?> getById(String id) async {
+    await _ensureSeeded();
+    final row = await _dao.findReservationById(id);
+    return row == null ? null : _hydrate(row);
+  }
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) async {
+    await _ensureSeeded();
+    final row = await _dao.findReservationByRequestId(requestId);
+    return row == null ? null : _hydrate(row);
+  }
+
+  @override
+  Future<void> add(Reservation reservation) async {
+    await _ensureSeeded();
+    await _dao.insertReservation(
+      ReservationMapper.toEntity(reservation),
+      ReservationMapper.toLineItemEntities(reservation),
+    );
+  }
+
+  @override
+  Future<void> update(Reservation reservation) async {
+    await _ensureSeeded();
+    if (await _dao.findReservationById(reservation.id) == null) return;
+    await _dao.replaceReservation(
+      ReservationMapper.toEntity(reservation),
+      ReservationMapper.toLineItemEntities(reservation),
+    );
+  }
+}
+
+/// Opens the database lazily on first use, so app startup stays instant.
+class LazyBookingRepository implements BookingRepository {
+  LazyBookingRepository();
+
+  Future<BookingRepository>? _delegate;
+
+  Future<BookingRepository> _resolve() {
+    return _delegate ??= AppDatabase.instance().then(
+      (db) => FloorBookingRepository(db.reservationDao),
+    );
+  }
+
+  @override
+  Future<List<Reservation>> getAll() async => (await _resolve()).getAll();
+
+  @override
+  Future<Reservation?> getById(String id) async =>
+      (await _resolve()).getById(id);
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) async =>
+      (await _resolve()).findByRequestId(requestId);
+
+  @override
+  Future<void> add(Reservation reservation) async =>
+      (await _resolve()).add(reservation);
+
+  @override
+  Future<void> update(Reservation reservation) async =>
+      (await _resolve()).update(reservation);
+}
+
 /// Holds the repository controllers use by default: one shared instance so
 /// every role sees the same reservations. Tests can replace [instance].
 class BookingRepositoryProvider {
   const BookingRepositoryProvider._();
 
   static BookingRepository instance = InMemoryBookingRepository();
+
+  /// Switches to the SQLite store. Called once from `main`; tests keep the
+  /// in-memory default.
+  static void useDatabase() {
+    instance = LazyBookingRepository();
+  }
 }
