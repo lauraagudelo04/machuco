@@ -124,7 +124,7 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
     }
 
     final motelNames = _controller.motelNames;
-    final roomLabels = _controller.roomLabelsFor;
+    final roomLabels = _controller.roomLabelsForMotel(_motelFilter);
     final reservations = _controller.filteredReservations(
       motelName: _motelFilter,
       roomLabel: _roomFilter,
@@ -145,7 +145,13 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
             roomFilter: _roomFilter,
             sortField: _sortField,
             descending: _descending,
-            onMotelChanged: (value) => setState(() => _motelFilter = value),
+            onMotelChanged: (value) => setState(() {
+              _motelFilter = value;
+              _roomFilter = _controller.reconcileRoomLabel(
+                _roomFilter,
+                motelName: value,
+              );
+            }),
             onRoomChanged: (value) => setState(() => _roomFilter = value),
             onSortFieldChanged: (value) => setState(() => _sortField = value),
             onToggleDirection: () => setState(() => _descending = !_descending),

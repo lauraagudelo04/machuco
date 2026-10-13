@@ -106,7 +106,12 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
         onConfirm: (reason) =>
             _controller.cancelReservation(reservation.id, reason),
       );
-      if (cancelled && mounted) setState(() {});
+      if (cancelled && mounted) {
+        setState(() {});
+        // Status changed: the reviews section may now be visible and needs
+        // its motel data.
+        _loadReviewMotel();
+      }
     } on ReservationCancellationException catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(

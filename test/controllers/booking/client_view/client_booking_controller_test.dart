@@ -860,6 +860,34 @@ void main() {
       },
     );
   });
+
+  group('ClientBookingController room filter options', () {
+    test(
+      'room labels are scoped by motel and reset when not belonging',
+      () async {
+        final controller = ClientBookingController();
+        await controller.refresh();
+
+        final motels = controller.motelNames;
+        expect(motels.length, greaterThan(1));
+        final all = controller.roomLabelsForMotel(null);
+        final first = controller.roomLabelsForMotel(motels.first);
+        expect(first, isNotEmpty);
+        expect(first.length, lessThan(all.length));
+        expect(all.toSet().containsAll(first), isTrue);
+
+        final outside = all.firstWhere((label) => !first.contains(label));
+        expect(
+          controller.reconcileRoomLabel(first.first, motelName: motels.first),
+          first.first,
+        );
+        expect(
+          controller.reconcileRoomLabel(outside, motelName: motels.first),
+          isNull,
+        );
+      },
+    );
+  });
 }
 
 class _FailingBookingRepository implements BookingRepository {

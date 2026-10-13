@@ -83,9 +83,13 @@ class OwnerBookingController extends ChangeNotifier {
 
   /// Opciones de habitación (id → etiqueta) derivadas de las reservas
   /// cacheadas, para alimentar un filtro por habitación.
-  List<ReservationRoomOption> get roomOptions {
+  List<ReservationRoomOption> get roomOptions => roomOptionsFor();
+
+  /// Opciones de habitación restringidas a [motelId] cuando hay un motel
+  /// seleccionado; sin motel, devuelve las de todos los moteles.
+  List<ReservationRoomOption> roomOptionsFor({String? motelId}) {
     final byId = <String, ReservationRoomOption>{};
-    for (final reservation in _ownedReservations) {
+    for (final reservation in _reservationsOfMotel(motelId)) {
       byId[reservation.roomId] = ReservationRoomOption(
         roomId: reservation.roomId,
         label: '${reservation.roomNumber} · ${reservation.roomName}',
@@ -96,23 +100,47 @@ class OwnerBookingController extends ChangeNotifier {
     return options;
   }
 
+  /// Returns [roomId] if it still belongs to [motelId]'s room options,
+  /// otherwise null so the caller resets the room selection.
+  String? reconcileRoomSelection(String? roomId, {String? motelId}) {
+    if (roomId == null) return null;
+    final belongs = roomOptionsFor(
+      motelId: motelId,
+    ).any((option) => option.roomId == roomId);
+    return belongs ? roomId : null;
+  }
+
   /// Clientes con reservas en los moteles del propietario (id → nombre),
   /// derivados de las reservas cacheadas, para alimentar un filtro por
-  /// cliente.
-  List<ReservationClientOption> get clientOptions {
+  /// cliente. Una sola entrada por `guestId`.
+  List<ReservationClientOption> get clientOptions => clientOptionsFor();
+
+  /// Same as [clientOptions], optionally limited to [motelId]. The name of
+  /// each client comes from its most recent reservation.
+  List<ReservationClientOption> clientOptionsFor({String? motelId}) {
     final byId = <String, ReservationClientOption>{};
-    for (final reservation in _ownedReservations) {
+    for (final reservation in _reservationsOfMotel(motelId)) {
       if (reservation.guestId.isEmpty) continue;
-      byId[reservation.guestId] = ReservationClientOption(
-        clientId: reservation.guestId,
-        name: reservation.guestName.isEmpty
-            ? reservation.guestId
-            : reservation.guestName,
+      byId.putIfAbsent(
+        reservation.guestId,
+        () => ReservationClientOption(
+          clientId: reservation.guestId,
+          name: reservation.guestName.isEmpty
+              ? reservation.guestId
+              : reservation.guestName,
+        ),
       );
     }
     final options = byId.values.toList()
       ..sort((a, b) => a.name.compareTo(b.name));
     return options;
+  }
+
+  /// Cached reservations (newest first), limited to [motelId] when set.
+  Iterable<Reservation> _reservationsOfMotel(String? motelId) {
+    final all = ownedReservations;
+    if (motelId == null || motelId.isEmpty) return all;
+    return all.where((reservation) => reservation.motelId == motelId);
   }
 
   /// Simula la carga inicial (o el refresco manual) de la vista de

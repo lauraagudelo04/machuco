@@ -214,7 +214,17 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                       ),
                   ],
                   onChanged: (value) {
-                    setState(() => _motelFilter = value);
+                    setState(() {
+                      _motelFilter = value;
+                      _roomFilter = _controller.reconcileRoomSelection(
+                        _roomFilter,
+                        motelId: value,
+                      );
+                      final stillListed = _controller
+                          .clientOptionsFor(motelId: value)
+                          .any((client) => client.clientId == _clientFilter);
+                      if (!stillListed) _clientFilter = null;
+                    });
                     unawaited(_applyFilters());
                   },
                 ),
@@ -243,7 +253,9 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                   label: 'Habitación',
                   selectedValue: _roomFilter,
                   options: [
-                    for (final room in _controller.roomOptions)
+                    for (final room in _controller.roomOptionsFor(
+                      motelId: _motelFilter,
+                    ))
                       ReservationFilterOption(
                         value: room.roomId,
                         label: room.label,
@@ -259,7 +271,9 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                     label: 'Cliente',
                     selectedValue: _clientFilter,
                     options: [
-                      for (final client in _controller.clientOptions)
+                      for (final client in _controller.clientOptionsFor(
+                        motelId: _motelFilter,
+                      ))
                         ReservationFilterOption(
                           value: client.clientId,
                           label: client.name,

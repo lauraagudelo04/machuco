@@ -35,8 +35,6 @@ void main() {
     await tester.pumpWidget(_wrap(const CreateBookingPage(room: _room)));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('Campo obligatorio'), findsNWidgets(4));
-
     final button = tester.widget<AppButton>(
       find.widgetWithText(AppButton, 'Reservar'),
     );
@@ -68,5 +66,19 @@ void main() {
       tester.widget<QuantityStepper>(find.byType(QuantityStepper)).value,
       3,
     );
+  });
+
+  testWidgets('los avisos de campo obligatorio no aparecen al abrir y se '
+      'muestran tras intentar reservar', (tester) async {
+    _useTallView(tester);
+    await tester.pumpWidget(_wrap(const CreateBookingPage(room: _room)));
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(find.text('Campo obligatorio'), findsNothing);
+
+    await tester.tap(find.text('Reservar'));
+    await tester.pump();
+
+    expect(find.text('Campo obligatorio'), findsNWidgets(4));
   });
 }

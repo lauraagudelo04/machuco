@@ -56,6 +56,8 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   final Set<String> _selectedServiceIds = {};
   final Set<String> _selectedProductIds = {};
   bool _isSubmitting = false;
+  // Required-field hints stay hidden until the user tries to submit.
+  bool _submitAttempted = false;
   bool _simulateNetworkFailureNextAttempt = false;
   bool _simulateConflictNextAttempt = false;
 
@@ -253,8 +255,16 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     if (picked != null) setState(() => _checkOutTime = picked);
   }
 
+  void _revealRequiredHints() {
+    if (!_submitAttempted) setState(() => _submitAttempted = true);
+  }
+
   Future<void> _submit() async {
-    if (!_isFormValid || _isSubmitting) return;
+    if (_isSubmitting) return;
+    if (!_isFormValid) {
+      _revealRequiredHints();
+      return;
+    }
     setState(() => _isSubmitting = true);
 
     final checkIn = _checkIn!;
@@ -367,6 +377,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
               onPickCheckInTime: _pickCheckInTime,
               onPickCheckOutTime: _pickCheckOutTime,
               rangeError: _rangeError,
+              showRequiredHints: _submitAttempted,
             ),
             const SizedBox(height: AppSpacing.s4),
             AppCard(
@@ -420,6 +431,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
               isFormValid: _isFormValid,
               isSubmitting: _isSubmitting,
               onSubmit: _submit,
+              onBlockedTap: _revealRequiredHints,
             ),
           ],
         ),
@@ -590,8 +602,10 @@ class _ScheduleCard extends StatelessWidget {
     required this.onPickCheckInTime,
     required this.onPickCheckOutTime,
     required this.rangeError,
+    required this.showRequiredHints,
   });
 
+  final bool showRequiredHints;
   final DateTime? checkInDate;
   final VoidCallback onPickCheckInDate;
   final DateTime? checkOutDate;
@@ -618,28 +632,28 @@ class _ScheduleCard extends StatelessWidget {
             value: checkInDate,
             onTap: onPickCheckInDate,
           ),
-          if (checkInDate == null) const _RequiredHint(),
+          if (showRequiredHints && checkInDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de entrada',
             value: checkInTime,
             onTap: onPickCheckInTime,
           ),
-          if (checkInTime == null) const _RequiredHint(),
+          if (showRequiredHints && checkInTime == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _DateField(
             label: 'Fecha de salida',
             value: checkOutDate,
             onTap: onPickCheckOutDate,
           ),
-          if (checkOutDate == null) const _RequiredHint(),
+          if (showRequiredHints && checkOutDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de salida',
             value: checkOutTime,
             onTap: onPickCheckOutTime,
           ),
-          if (checkOutTime == null) const _RequiredHint(),
+          if (showRequiredHints && checkOutTime == null) const _RequiredHint(),
           if (rangeError != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNotice(message: rangeError!),
@@ -981,6 +995,7 @@ class _SummaryCard extends StatelessWidget {
     required this.products,
     required this.total,
     required this.isFormValid,
+    required this.onBlockedTap,
     required this.isSubmitting,
     required this.onSubmit,
   });
@@ -992,6 +1007,7 @@ class _SummaryCard extends StatelessWidget {
   final List<ReservationLineItem> products;
   final int total;
   final bool isFormValid;
+  final VoidCallback onBlockedTap;
   final bool isSubmitting;
   final VoidCallback onSubmit;
 
@@ -1024,11 +1040,17 @@ class _SummaryCard extends StatelessWidget {
             emphasize: true,
           ),
           const SizedBox(height: AppSpacing.s4),
-          AppButton(
-            label: 'Reservar',
-            icon: Icons.event_available_outlined,
-            loading: isSubmitting,
-            onPressed: isFormValid && !isSubmitting ? onSubmit : null,
+          // A disabled button ignores taps, so the wrapper catches them and
+          // reveals the required-field hints instead.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: isFormValid || isSubmitting ? null : onBlockedTap,
+            child: AppButton(
+              label: 'Reservar',
+              icon: Icons.event_available_outlined,
+              loading: isSubmitting,
+              onPressed: isFormValid && !isSubmitting ? onSubmit : null,
+            ),
           ),
         ],
       ),

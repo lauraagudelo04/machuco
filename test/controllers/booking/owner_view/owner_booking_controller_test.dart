@@ -384,4 +384,44 @@ void _failureTests() {
       expect(controller.errorMessage, isNotNull);
     });
   });
+
+  group('OwnerBookingController filter options', () {
+    test(
+      'room options are scoped by motel and reset when not belonging',
+      () async {
+        final controller = OwnerBookingController();
+        await controller.loadReservations();
+
+        final all = controller.roomOptionsFor();
+        final motel1 = controller.roomOptionsFor(motelId: '1');
+        final motel2 = controller.roomOptionsFor(motelId: '2');
+        expect(motel1, isNotEmpty);
+        expect(motel2, isNotEmpty);
+        expect(motel1.length + motel2.length, all.length);
+
+        final room2 = motel2.first.roomId;
+        expect(controller.reconcileRoomSelection(room2, motelId: '2'), room2);
+        expect(controller.reconcileRoomSelection(room2, motelId: '1'), isNull);
+        expect(controller.reconcileRoomSelection(null, motelId: '1'), isNull);
+      },
+    );
+
+    test('client options have one entry per guestId', () async {
+      final controller = OwnerBookingController();
+      await controller.loadReservations();
+
+      final options = controller.clientOptionsFor();
+      final ids = options.map((o) => o.clientId).toList();
+      expect(ids.toSet().length, ids.length);
+      final expected = controller.ownedReservations
+          .map((r) => r.guestId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      expect(ids.toSet(), expected);
+
+      final scoped = controller.clientOptionsFor(motelId: '1');
+      final scopedIds = scoped.map((o) => o.clientId).toList();
+      expect(scopedIds.toSet().length, scopedIds.length);
+    });
+  });
 }

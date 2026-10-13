@@ -184,8 +184,25 @@ class ClientBookingController extends ChangeNotifier {
     return names.toList()..sort();
   }
 
-  List<String> get roomLabelsFor =>
-      reservations.map(_service.roomLabelOf).toSet().toList();
+  List<String> get roomLabelsFor => roomLabelsForMotel(null);
+
+  /// Room labels limited to [motelName] when a motel is selected.
+  List<String> roomLabelsForMotel(String? motelName) {
+    final hasMotel = motelName != null && motelName.isNotEmpty;
+    return reservations
+        .where((reservation) => !hasMotel || reservation.motelName == motelName)
+        .map(_service.roomLabelOf)
+        .toSet()
+        .toList()
+      ..sort();
+  }
+
+  /// Returns [roomLabel] if it still belongs to [motelName], otherwise null
+  /// so the caller resets the room selection.
+  String? reconcileRoomLabel(String? roomLabel, {String? motelName}) {
+    if (roomLabel == null) return null;
+    return roomLabelsForMotel(motelName).contains(roomLabel) ? roomLabel : null;
+  }
 
   /// Simulates the initial load (or manual refresh) of "Mis reservas".
   /// Exposes the `simulateError`/`simulateOffline` hooks to demonstrate the
