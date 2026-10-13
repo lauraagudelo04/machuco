@@ -2,32 +2,49 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:machuco/models/client/client.dart';
+import 'package:machuco/models/client/phone_country_code.dart';
+import 'package:machuco/repositories/client/client_repository.dart';
+import 'package:machuco/repositories/client/country_code_repository.dart';
 
 class ClientController extends ChangeNotifier {
-  ClientController._() {
-    _allClients = List.of(_initialMockClients);
-    loadCurrentClient();
-  }
+  ClientController._();
   static final ClientController instance = ClientController._();
 
   static const _clientKey = 'current_client_data';
-  
-  late List<Client> _allClients;
+
+  late ClientRepository _clientRepo;
+  late CountryCodeRepository _countryCodeRepo;
+
+  List<Client> _allClients = [];
   Client? _currentClient;
+  List<PhoneCountryCode> _countryCodes = [];
+  
   bool _isLoading = true;
   String? _errorMessage;
 
   Client? get currentClient => _currentClient;
+  List<Client> get allClients => List.unmodifiable(_allClients);
+  List<PhoneCountryCode> get countryCodes => List.unmodifiable(_countryCodes);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
-  List<Client> get allClients => List.unmodifiable(_allClients);
 
-  Future<void> loadCurrentClient() async {
+  // Inicializa los repositorios
+  void init(ClientRepository clientRepo, CountryCodeRepository countryCodeRepo) {
+    _clientRepo = clientRepo;
+    _countryCodeRepo = countryCodeRepo;
+    loadData();
+  }
+
+  Future<void> loadData() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
+      _countryCodes = await _countryCodeRepo.getActiveCountryCodes();
+
+      _allClients = await _clientRepo.getAllClients();
+
       final prefs = await SharedPreferences.getInstance();
       final clientJson = prefs.getString(_clientKey);
       
@@ -39,11 +56,11 @@ class ClientController extends ChangeNotifier {
           phone: data['phone'] as String,
           email: data['email'] as String,
           password: data['password'] as String,
+          countryCode: data['countryCode'] as String? ?? '+57',
         );
-        // Sincronizamos el directorio del propietario con los datos locales guardados
         _syncToDirectory(_currentClient!);
-      } else {
-        // Mock por defecto si no hay nada guardado
+      } else if (_allClients.isNotEmpty) {
+        // Fallback si hay clientes en Floor pero no hay sesión guardada
         _currentClient = _allClients.first;
       }
     } catch (e) {
@@ -58,6 +75,7 @@ class ClientController extends ChangeNotifier {
     required String name,
     required String phone,
     required String password,
+    required String countryCode,
   }) async {
     if (_currentClient == null) return false;
 
@@ -66,14 +84,14 @@ class ClientController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await Future.delayed(const Duration(milliseconds: 600)); // Simula red
-
       final updatedClient = _currentClient!.copyWith(
         name: name,
         phone: phone,
         password: password,
+        countryCode: countryCode,
       );
 
+      // 1. Guardar sesión activa en SharedPreferences
       final prefs = await SharedPreferences.getInstance();
       final success = await prefs.setString(_clientKey, jsonEncode({
         'id': updatedClient.id,
@@ -81,16 +99,19 @@ class ClientController extends ChangeNotifier {
         'phone': updatedClient.phone,
         'email': updatedClient.email,
         'password': updatedClient.password,
+        'countryCode': updatedClient.countryCode,
       }));
 
-      if (success) {
-        _currentClient = updatedClient;
-        // Actualizamos la lista global para que el Propietario vea el cambio instantáneamente
-        _syncToDirectory(updatedClient);
-        return true;
-      } else {
-        throw Exception('Error persistiendo los datos');
-      }
+      if (!success) throw Exception('Error guardando en SharedPreferences');
+
+      // 2. Actualizar registro en la base de datos local (Floor)
+      await _clientRepo.updateClient(updatedClient);
+
+      // 3. Actualizar estado en memoria
+      _currentClient = updatedClient;
+      _syncToDirectory(updatedClient);
+      
+      return true;
     } catch (e) {
       _errorMessage = 'No fue posible actualizar el perfil. Intenta de nuevo.';
       return false;
@@ -126,53 +147,20 @@ class ClientController extends ChangeNotifier {
     return null;
   }
 
-  void unlink(Client client) {
+  void unlink(Client client) async {
+    // Eliminar de memoria
     _allClients.removeWhere((c) => c.id == client.id);
+    
+    // Eliminar de Floor
+    await _clientRepo.removeClient(client);
+
+    // Si se elimina el usuario actual, limpiar SharedPreferences
+    if (_currentClient?.id == client.id) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_clientKey);
+      _currentClient = null;
+    }
+    
     notifyListeners();
   }
-
-  static final List<Client> _initialMockClients = [
-    const Client(
-      id: '1',
-      name: 'Valentina Gómez',
-      phone: '310 456 7890',
-      email: 'valentina.gomez@correo.com',
-      password: 'Val123',
-    ),
-    const Client(
-      id: '2',
-      name: 'Santiago Pérez',
-      phone: '320 123 4567',
-      email: 'santiago.perez@correo.com',
-      password: 'San456',
-    ),
-    const Client(
-      id: '3',
-      name: 'Mariana Torres',
-      phone: '301 987 6543',
-      email: 'mariana.torres@correo.com',
-      password: 'Mar789',
-    ),
-    const Client(
-      id: '4',
-      name: 'Andrés Ramírez',
-      phone: '315 654 3210',
-      email: 'andres.ramirez@correo.com',
-      password: 'And321',
-    ),
-    const Client(
-      id: '5',
-      name: 'Laura Restrepo',
-      phone: '300 111 2233',
-      email: 'laura.restrepo@correo.com',
-      password: 'Lau654',
-    ),
-    const Client(
-      id: '6',
-      name: 'Julián Castro',
-      phone: '317 888 9999',
-      email: 'julian.castro@correo.com',
-      password: 'Jul987',
-    ),
-  ];
 }

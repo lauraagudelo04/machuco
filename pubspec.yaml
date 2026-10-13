@@ -37,7 +37,6 @@ dependencies:
   auth0_flutter: ^2.6.0
   http: ^1.2.2
   shared_preferences: ^2.5.5
-  sqflite: ^2.4.4+1
   floor: ^1.5.0
 
 dev_dependencies:

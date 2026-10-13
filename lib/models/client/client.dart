@@ -8,6 +8,7 @@ class Client {
     required this.phone,
     required this.email,
     required this.password,
+    this.countryCode = '+57',
   });
 
   @PrimaryKey()
@@ -22,6 +23,9 @@ class Client {
   @ColumnInfo(name: 'email')
   final String email;
 
+  @ColumnInfo(name: 'country_code')
+  final String countryCode;
+
   @ColumnInfo(name: 'password')
   final String password;
 
@@ -35,6 +39,7 @@ class Client {
     String? phone,
     String? email,
     String? password,
+    String? countryCode,
   }) {
     return Client(
       id: id,
@@ -42,6 +47,7 @@ class Client {
       phone: phone ?? this.phone,
       email: email ?? this.email,
       password: password ?? this.password,
+      countryCode: countryCode ?? this.countryCode,
     );
   }
 }

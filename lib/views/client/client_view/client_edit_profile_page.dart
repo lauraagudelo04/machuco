@@ -21,6 +21,8 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   late final TextEditingController _passwordController;
   final _formKey = GlobalKey<FormState>();
 
+  late String _selectedCountryCode;
+
   @override
   void initState() {
     super.initState();
@@ -28,6 +30,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     _nameController = TextEditingController(text: client?.name ?? '');
     _phoneController = TextEditingController(text: client?.phone ?? '');
     _passwordController = TextEditingController(text: client?.password ?? '');
+    _selectedCountryCode = client?.countryCode ?? '+57';
   }
 
   @override
@@ -45,6 +48,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
       password: _passwordController.text,
+      countryCode: _selectedCountryCode,
     );
 
     if (!mounted) return;
@@ -77,6 +81,29 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
             if (client == null) return const SizedBox.shrink();
             
             final isSubmitting = ClientController.instance.isLoading;
+            final availableCodes = ClientController.instance.countryCodes;
+
+            List<DropdownMenuItem<String>> dropdownItems = [];
+            
+            if (availableCodes.isNotEmpty) {
+              if (!availableCodes.any((c) => c.callingCode == _selectedCountryCode)) {
+                _selectedCountryCode = availableCodes.first.callingCode;
+              }
+              
+              dropdownItems = availableCodes.map((code) {
+                return DropdownMenuItem(
+                  value: code.callingCode,
+                  child: Text('${code.countryCode} ${code.callingCode}'),
+                );
+              }).toList();
+            } else {
+              dropdownItems = [
+                DropdownMenuItem(
+                  value: _selectedCountryCode,
+                  child: Text(_selectedCountryCode),
+                )
+              ];
+            }
 
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.screen),
@@ -108,18 +135,50 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                         prefixIcon: const Icon(Icons.email_outlined),
                       ),
                       const SizedBox(height: AppSpacing.s4),
-                      AppTextField(
-                        label: 'Teléfono',
-                        controller: _phoneController,
-                        enabled: !isSubmitting,
-                        keyboardType: TextInputType.phone,
-                        prefixIcon: const Icon(Icons.phone_outlined),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'El teléfono es obligatorio';
-                          }
-                          return null;
-                        },
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedCountryCode,
+                              decoration: InputDecoration(
+                                labelText: 'Cód.',
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(AppRadius.md),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                              items: dropdownItems,
+                              onChanged: (isSubmitting || availableCodes.isEmpty)
+                                  ? null
+                                  : (val) {
+                                      if (val != null) {
+                                        setState(() => _selectedCountryCode = val);
+                                      }
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.s2),
+                          Expanded(
+                            flex: 6,
+                            child: AppTextField(
+                              label: 'Teléfono',
+                              controller: _phoneController,
+                              enabled: !isSubmitting,
+                              keyboardType: TextInputType.phone,
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'El teléfono es obligatorio';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
                       ),
                       const SizedBox(height: AppSpacing.s4),
                       AppTextField(
