@@ -3,9 +3,7 @@
 import 'dart:async';
 
 import 'package:floor/floor.dart';
-import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
-import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -18,20 +16,11 @@ part 'app_database.g.dart';
   SubscriptionStatusConverter,
   SubscriptionFeaturesConverter,
 ])
-@Database(
-  version: 6,
-  entities: [
-    SubscriptionDetails,
-    SubscriptionPayment,
-    NotificationEntry,
-    NotificationRead,
-  ],
-)
+@Database(version: 5, entities: [SubscriptionDetails, SubscriptionPayment])
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
 
   SubscriptionDao get subscriptionDao;
-  NotificationDao get notificationDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -54,7 +43,6 @@ class AppDatabaseProvider {
         migration2To3,
         migration3To4,
         migration4To5,
-        migration5To6,
       ])
       .addCallback(Callback(onCreate: _createRoomSchema))
       .build();
@@ -101,7 +89,6 @@ Future<void> _createRoomSchema(sqflite.Database database, int _) async {
   ''');
 }
 
-/// La migración 4 a 5 pertenece al módulo de habitaciones.
 final migration4To5 = Migration(
   4,
   5,
@@ -184,27 +171,5 @@ final migration3To4 = Migration(3, 4, (database) async {
   await database.execute(
     'CREATE INDEX index_subscription_payments_subscriptionId '
     'ON subscription_payments (subscriptionId)',
-  );
-});
-
-/// Agrega notificaciones y normaliza el esquema de habitaciones tras la
-/// colisión histórica de la versión 5 entre ambos módulos.
-final migration5To6 = Migration(5, 6, (database) async {
-  await _createRoomSchema(database, 6);
-  await database.execute(
-    'CREATE TABLE IF NOT EXISTS notifications ('
-    'id INTEGER PRIMARY KEY AUTOINCREMENT, typeId INTEGER NOT NULL, '
-    'title TEXT NOT NULL, message TEXT NOT NULL, sentAt INTEGER NOT NULL, '
-    'target TEXT NOT NULL, recipientUser TEXT)',
-  );
-  await database.execute(
-    'CREATE TABLE IF NOT EXISTS notification_reads ('
-    'id INTEGER PRIMARY KEY AUTOINCREMENT, notificationId INTEGER NOT NULL, '
-    'userId TEXT NOT NULL, readAt INTEGER NOT NULL, '
-    'FOREIGN KEY (notificationId) REFERENCES notifications (id))',
-  );
-  await database.execute(
-    'CREATE UNIQUE INDEX IF NOT EXISTS index_notification_reads_notificationId_userId '
-    'ON notification_reads (notificationId, userId)',
   );
 });
