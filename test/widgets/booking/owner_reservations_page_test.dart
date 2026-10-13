@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
 
 Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
@@ -16,6 +18,14 @@ Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
 Future<void> _settle(WidgetTester tester) async {
   await tester.pump(const Duration(seconds: 3));
   await tester.pumpAndSettle();
+}
+
+/// The filter bar scrolls horizontally and builds lazily: a wide surface keeps
+/// every filter group on screen.
+void _useWideView(WidgetTester tester) {
+  tester.view.physicalSize = const Size(2400, 1600);
+  tester.view.devicePixelRatio = 1;
+  addTearDown(tester.view.reset);
 }
 
 Future<void> _openDebugMenu(WidgetTester tester) async {
@@ -147,5 +157,105 @@ void main() {
     expect(find.text('Motel: Motel El Edén'), findsOneWidget);
     // Ninguna tarjeta de "Motel Paraíso Élite" debería seguir visible.
     expect(find.text('Motel Paraíso Élite'), findsNothing);
+  });
+
+  group('filtro por cliente', () {
+    late BookingRepository original;
+
+    Reservation reservation(
+      String id, {
+      required String guestId,
+      required String guestName,
+      required ReservationStatus status,
+    }) {
+      final created = DateTime.now();
+      return Reservation(
+        id: id,
+        requestId: 'req-$id',
+        motelId: '1',
+        motelName: 'Motel Paraíso Élite',
+        roomId: 'room-1-101',
+        roomName: 'Suite Élite',
+        roomNumber: '101',
+        checkIn: created.add(const Duration(days: 2)),
+        checkOut: created.add(const Duration(days: 2, hours: 3)),
+        stayMode: StayMode.dateTimeRange,
+        guestCount: 2,
+        services: const [],
+        products: const [],
+        roomTotal: 100000,
+        total: 100000,
+        status: status,
+        createdAt: created,
+        guestId: guestId,
+        guestName: guestName,
+      );
+    }
+
+    setUp(() {
+      original = BookingRepositoryProvider.instance;
+      BookingRepositoryProvider.instance = InMemoryBookingRepository(
+        initial: [
+          reservation(
+            'a',
+            guestId: 'c-ana',
+            guestName: 'Ana Prueba',
+            status: ReservationStatus.upcoming,
+          ),
+          reservation(
+            'b',
+            guestId: 'c-beto',
+            guestName: 'Beto Prueba',
+            status: ReservationStatus.completed,
+          ),
+        ],
+      );
+    });
+
+    tearDown(() => BookingRepositoryProvider.instance = original);
+
+    testWidgets('muestra solo el historial del cliente elegido', (
+      tester,
+    ) async {
+      _useWideView(tester);
+      await tester.pumpWidget(_wrap(const OwnerReservationsPage()));
+      await _settle(tester);
+
+      expect(find.text('Ana Prueba'), findsOneWidget);
+      expect(find.text('Beto Prueba'), findsOneWidget);
+
+      await tester.tap(find.text('Cliente: Todos'));
+      await tester.pumpAndSettle();
+      await _selectFilterOption(tester, 'Ana Prueba');
+
+      expect(find.text('Cliente: Ana Prueba'), findsOneWidget);
+      expect(find.text('Beto Prueba'), findsNothing);
+    });
+
+    testWidgets('sin coincidencias ofrece limpiar los filtros aplicados', (
+      tester,
+    ) async {
+      _useWideView(tester);
+      await tester.pumpWidget(_wrap(const OwnerReservationsPage()));
+      await _settle(tester);
+
+      await tester.tap(find.text('Cliente: Todos'));
+      await tester.pumpAndSettle();
+      await _selectFilterOption(tester, 'Ana Prueba');
+      await tester.tap(find.text('Estado: Todos'));
+      await tester.pumpAndSettle();
+      await _selectFilterOption(tester, 'Completada');
+
+      expect(find.text('Sin resultados'), findsOneWidget);
+      expect(find.text('Limpiar filtros'), findsOneWidget);
+
+      await tester.tap(find.text('Limpiar filtros'));
+      await _settle(tester);
+
+      expect(find.text('Sin resultados'), findsNothing);
+      expect(find.text('Cliente: Todos'), findsOneWidget);
+      expect(find.text('Ana Prueba'), findsOneWidget);
+      expect(find.text('Beto Prueba'), findsOneWidget);
+    });
   });
 }

@@ -33,6 +33,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
   String? _roomFilter;
   ReservationStatus? _statusFilter;
   int? _categoryFilter;
+  String? _clientFilter;
   bool _hasLoadedOnce = false;
   List<Reservation> _visibleReservations = const [];
 
@@ -75,7 +76,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       roomId: _roomFilter,
       status: _statusFilter,
       categoryId: _categoryFilter,
-      clientId: widget.clientId,
+      clientId: widget.clientId ?? _clientFilter,
     );
     if (!mounted) return;
     setState(() => _visibleReservations = result);
@@ -87,6 +88,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       _roomFilter = null;
       _statusFilter = null;
       _categoryFilter = null;
+      _clientFilter = null;
     });
     unawaited(_applyFilters());
   }
@@ -165,7 +167,12 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
     }
 
     final summary = _controller.operationalSummary(motelId: _motelFilter);
-    final hasAnyReservation = _controller.ownedReservations.isNotEmpty;
+    final hasActiveFilters =
+        _motelFilter != null ||
+        _roomFilter != null ||
+        _statusFilter != null ||
+        _categoryFilter != null ||
+        _clientFilter != null;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -245,6 +252,22 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                     unawaited(_applyFilters());
                   },
                 ),
+                if (widget.clientId == null)
+                  ReservationFilterGroup(
+                    label: 'Cliente',
+                    selectedValue: _clientFilter,
+                    options: [
+                      for (final client in _controller.clientOptions)
+                        ReservationFilterOption(
+                          value: client.clientId,
+                          label: client.name,
+                        ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _clientFilter = value);
+                      unawaited(_applyFilters());
+                    },
+                  ),
                 ReservationFilterGroup(
                   label: 'Categoría',
                   selectedValue: _categoryFilter?.toString(),
@@ -270,16 +293,16 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
             if (_visibleReservations.isEmpty)
               AppEmptyState(
                 icon: Icons.event_busy_outlined,
-                title: hasAnyReservation
+                title: hasActiveFilters
                     ? 'Sin resultados'
                     : 'Todavía no hay reservas',
-                message: hasAnyReservation
+                message: hasActiveFilters
                     ? 'No hay reservas que coincidan con estos filtros.'
                     : widget.clientName != null
                     ? 'Este cliente todavía no tiene reservas registradas.'
                     : 'Cuando tus clientes reserven, las verás aquí.',
-                actionLabel: hasAnyReservation ? 'Limpiar filtros' : null,
-                onAction: hasAnyReservation ? _clearFilters : null,
+                actionLabel: hasActiveFilters ? 'Limpiar filtros' : null,
+                onAction: hasActiveFilters ? _clearFilters : null,
               )
             else
               for (final reservation in _visibleReservations)

@@ -701,4 +701,183 @@ void main() {
       );
     });
   });
+  group('ClientBookingController.createReservationForType', () {
+    final clock = DateTime(2026, 3, 10, 12);
+    DateTime at(int day, int hour) => DateTime(2026, 3, day, hour);
+
+    const roomA = RoomCandidate(id: 'room-a', name: 'Suite', number: '1');
+    const roomOff = RoomCandidate(
+      id: 'room-off',
+      name: 'Suite',
+      number: '2',
+      isActive: false,
+    );
+
+    late InMemoryBookingRepository repository;
+    late ClientBookingController controller;
+
+    setUp(() {
+      repository = InMemoryBookingRepository(initial: const []);
+      controller = ClientBookingController(
+        bookingService: BookingService(
+          repository: repository,
+          now: () => clock,
+        ),
+      );
+    });
+
+    tearDown(() => controller.dispose());
+
+    Future<CreateReservationResult> reserve(
+      List<RoomCandidate> rooms, {
+      String requestId = 'req-1',
+      bool simulateNetworkFailure = false,
+    }) => controller.createReservationForType(
+      requestId: requestId,
+      motelId: 'm1',
+      motelName: 'Motel m1',
+      rooms: rooms,
+      checkIn: at(11, 14),
+      checkOut: at(11, 18),
+      stayMode: StayMode.dateTimeRange,
+      guestCount: 2,
+      services: const [],
+      products: const [],
+      roomTotal: 100000,
+      simulateNetworkFailure: simulateNetworkFailure,
+    );
+
+    test('asigna una habitación activa y crea la reserva pending', () async {
+      final result = await reserve([roomOff, roomA]);
+
+      expect(result.isSuccess, isTrue);
+      expect(result.reservation!.roomId, 'room-a');
+      expect(result.reservation!.status, ReservationStatus.pending);
+    });
+
+    test('sin unidades activas rechaza con un resultado propio', () async {
+      final result = await reserve([roomOff]);
+
+      expect(result.outcome, CreateReservationOutcome.noActiveUnits);
+      expect(result.message, BookingService.noActiveUnitsMessage);
+      expect(await repository.getAll(), isEmpty);
+    });
+
+    test('pierde la última habitación por concurrencia: conflicto con '
+        'mensaje que sugiere cambiar fechas o tipo', () async {
+      await reserve([roomA], requestId: 'req-winner');
+
+      final result = await reserve([roomA], requestId: 'req-loser');
+
+      expect(result.outcome, CreateReservationOutcome.conflict);
+      expect(result.message, contains('acaban de ser ocupados'));
+      expect(result.message, contains('tipo de habitación'));
+      expect((await repository.getAll()).length, 1);
+    });
+
+    test('un fallo de red se puede reintentar con el mismo requestId sin '
+        'duplicar la reserva', () async {
+      final first = await reserve(
+        [roomA],
+        requestId: 'req-net-type',
+        simulateNetworkFailure: true,
+      );
+      expect(first.outcome, CreateReservationOutcome.networkError);
+      expect(await repository.getAll(), isEmpty);
+
+      final retry = await reserve(
+        [roomA],
+        requestId: 'req-net-type',
+        simulateNetworkFailure: true,
+      );
+      final again = await reserve([roomA], requestId: 'req-net-type');
+
+      expect(retry.isSuccess, isTrue);
+      expect(again.reservation!.id, retry.reservation!.id);
+      expect((await repository.getAll()).length, 1);
+    });
+
+    test('un error inesperado del repositorio es recuperable', () async {
+      final failing = ClientBookingController(
+        bookingService: BookingService(
+          repository: _FailingBookingRepository(),
+          now: () => clock,
+        ),
+      );
+      addTearDown(failing.dispose);
+
+      final result = await failing.createReservationForType(
+        requestId: 'req-x',
+        motelId: 'm1',
+        motelName: 'Motel m1',
+        rooms: const [roomA],
+        checkIn: at(11, 14),
+        checkOut: at(11, 18),
+        stayMode: StayMode.dateTimeRange,
+        guestCount: 2,
+        services: const [],
+        products: const [],
+        roomTotal: 100000,
+      );
+
+      expect(result.outcome, CreateReservationOutcome.networkError);
+    });
+
+    test('typeScheduleError valida el tipo de habitación completo', () async {
+      await reserve([roomA], requestId: 'req-busy');
+      await controller.refresh();
+
+      expect(
+        controller.typeScheduleError([roomOff], at(12, 14), at(12, 18)),
+        BookingService.noActiveUnitsMessage,
+      );
+      expect(
+        controller.typeScheduleError([roomA], at(11, 14), at(11, 18)),
+        BookingService.slotTakenMessage,
+      );
+      expect(
+        controller.typeScheduleError([roomA], at(12, 14), at(12, 18)),
+        isNull,
+      );
+    });
+  });
+
+  group('ClientBookingController.loadReservations', () {
+    test(
+      'si el repositorio falla expone un error y no un listado vacío',
+      () async {
+        final controller = ClientBookingController(
+          bookingService: BookingService(
+            repository: _FailingBookingRepository(),
+          ),
+        );
+        addTearDown(controller.dispose);
+
+        await controller.loadReservations();
+
+        expect(controller.errorMessage, isNotNull);
+        expect(controller.isLoading, isFalse);
+      },
+    );
+  });
+}
+
+class _FailingBookingRepository implements BookingRepository {
+  @override
+  Future<List<Reservation>> getAll() => Future.error(StateError('offline'));
+
+  @override
+  Future<Reservation?> getById(String id) => Future.error(StateError('x'));
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) =>
+      Future.error(StateError('offline'));
+
+  @override
+  Future<void> add(Reservation reservation) =>
+      Future.error(StateError('offline'));
+
+  @override
+  Future<void> update(Reservation reservation) =>
+      Future.error(StateError('offline'));
 }

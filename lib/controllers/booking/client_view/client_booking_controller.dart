@@ -13,11 +13,11 @@ import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
 export 'package:machuco/service/booking/booking_service.dart'
-    show BlockedRange, PriceBreakdown, ReservationSortField;
+    show BlockedRange, PriceBreakdown, ReservationSortField, RoomCandidate;
 export 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 export 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
-enum CreateReservationOutcome { success, conflict, networkError }
+enum CreateReservationOutcome { success, conflict, noActiveUnits, networkError }
 
 class CreateReservationResult {
   const CreateReservationResult._(
@@ -31,6 +31,9 @@ class CreateReservationResult {
 
   const CreateReservationResult.conflict(String message)
     : this._(CreateReservationOutcome.conflict, message: message);
+
+  const CreateReservationResult.noActiveUnits(String message)
+    : this._(CreateReservationOutcome.noActiveUnits, message: message);
 
   const CreateReservationResult.networkError(String message)
     : this._(CreateReservationOutcome.networkError, message: message);
@@ -211,7 +214,12 @@ class ClientBookingController extends ChangeNotifier {
       return;
     }
 
-    _snapshot = await _service.getReservations();
+    try {
+      _snapshot = await _service.getReservations();
+    } catch (_) {
+      // A failed query must never look like "no reservations".
+      _errorMessage = 'No pudimos cargar tus reservas. Intenta de nuevo.';
+    }
     _isLoading = false;
     notifyListeners();
   }
@@ -305,6 +313,14 @@ class ClientBookingController extends ChangeNotifier {
     roomIsActive: roomIsActive,
   );
 
+  /// Same as [scheduleError] for a room type: `null` when at least one of
+  /// the active [rooms] can be assigned for the range.
+  String? typeScheduleError(
+    List<RoomCandidate> rooms,
+    DateTime checkIn,
+    DateTime checkOut,
+  ) => _service.validateTypeBooking(_snapshot, rooms, checkIn, checkOut);
+
   /// Price of the stay (room, services, products and grand total).
   PriceBreakdown priceBreakdown({
     required int pricePerHour,
@@ -344,34 +360,11 @@ class ClientBookingController extends ChangeNotifier {
     bool simulateNetworkFailure = false,
     bool simulateConcurrentConflict = false,
   }) async {
-    _errorMessage = null;
-    notifyListeners();
-    await Future<void>.delayed(const Duration(milliseconds: 500));
-
-    // Idempotency: a retry of a request that was actually stored returns the
-    // existing reservation instead of duplicating it.
-    final existing = await _service.findByRequestId(requestId);
-    if (existing != null) return CreateReservationResult.success(existing);
-
-    if (simulateNetworkFailure &&
-        _requestIdsWithSimulatedFailure.add(requestId)) {
-      const message =
-          'No fue posible conectar con el servidor. Puedes reintentar sin riesgo de duplicar tu reserva.';
-      _errorMessage = message;
-      notifyListeners();
-      return const CreateReservationResult.networkError(message);
-    }
-
-    const concurrentMessage =
-        'Ese horario acaba de ocuparse. Actualiza el calendario e intenta con otra franja.';
-    if (simulateConcurrentConflict) {
-      _errorMessage = concurrentMessage;
-      notifyListeners();
-      return const CreateReservationResult.conflict(concurrentMessage);
-    }
-
-    try {
-      final reservation = await _service.createReservation(
+    return _guardedCreate(
+      requestId: requestId,
+      simulateNetworkFailure: simulateNetworkFailure,
+      simulateConcurrentConflict: simulateConcurrentConflict,
+      create: () => _service.createReservation(
         requestId: requestId,
         motelId: motelId,
         motelName: motelName,
@@ -390,13 +383,106 @@ class ClientBookingController extends ChangeNotifier {
         guestName: 'Usuario demo',
         externalBlocked: externalBlocked,
         roomIsActive: roomIsActive,
-      );
+      ),
+    );
+  }
+
+  /// Creates a `pending` reservation for a room type: the service discards
+  /// the inactive [rooms], crosses the active ones against their reservations
+  /// and assigns one free room at random. Rejects with
+  /// [CreateReservationOutcome.noActiveUnits] when no room is active, and
+  /// with [CreateReservationOutcome.conflict] when the last free room was
+  /// just taken. Idempotent by `requestId`, like [createReservation].
+  Future<CreateReservationResult> createReservationForType({
+    required String requestId,
+    required String motelId,
+    required String motelName,
+    required List<RoomCandidate> rooms,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required StayMode stayMode,
+    required int guestCount,
+    required List<ReservationLineItem> services,
+    required List<ReservationLineItem> products,
+    required int roomTotal,
+    int? categoryId,
+    bool simulateNetworkFailure = false,
+    bool simulateConcurrentConflict = false,
+  }) {
+    return _guardedCreate(
+      requestId: requestId,
+      simulateNetworkFailure: simulateNetworkFailure,
+      simulateConcurrentConflict: simulateConcurrentConflict,
+      create: () => _service.createReservationForType(
+        requestId: requestId,
+        motelId: motelId,
+        motelName: motelName,
+        rooms: rooms,
+        checkIn: checkIn,
+        checkOut: checkOut,
+        stayMode: stayMode,
+        guestCount: guestCount,
+        services: services,
+        products: products,
+        roomTotal: roomTotal,
+        categoryId: categoryId,
+        guestId: userId,
+        guestName: 'Usuario demo',
+      ),
+    );
+  }
+
+  static const String _networkErrorMessage =
+      'No fue posible conectar con el servidor. Puedes reintentar sin riesgo de duplicar tu reserva.';
+
+  /// Shared creation flow: idempotency check, simulated failures (demo
+  /// hooks) and translation of service errors into a result. Any unexpected
+  /// failure is reported as a recoverable network error: the retry reuses the
+  /// same `requestId`, so it can never duplicate the reservation.
+  Future<CreateReservationResult> _guardedCreate({
+    required String requestId,
+    required bool simulateNetworkFailure,
+    required bool simulateConcurrentConflict,
+    required Future<Reservation> Function() create,
+  }) async {
+    _errorMessage = null;
+    notifyListeners();
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+
+    try {
+      // Idempotency: a retry of a request that was actually stored returns
+      // the existing reservation instead of duplicating it.
+      final existing = await _service.findByRequestId(requestId);
+      if (existing != null) return CreateReservationResult.success(existing);
+
+      if (simulateNetworkFailure &&
+          _requestIdsWithSimulatedFailure.add(requestId)) {
+        _errorMessage = _networkErrorMessage;
+        notifyListeners();
+        return const CreateReservationResult.networkError(_networkErrorMessage);
+      }
+
+      if (simulateConcurrentConflict) {
+        _errorMessage = BookingService.slotTakenMessage;
+        notifyListeners();
+        return const CreateReservationResult.conflict(
+          BookingService.slotTakenMessage,
+        );
+      }
+
+      final reservation = await create();
       await refresh();
       return CreateReservationResult.success(reservation);
     } on SlotUnavailableException catch (error) {
       _errorMessage = error.message;
       await refresh();
-      return CreateReservationResult.conflict(error.message);
+      return error.message == BookingService.noActiveUnitsMessage
+          ? CreateReservationResult.noActiveUnits(error.message)
+          : CreateReservationResult.conflict(error.message);
+    } catch (_) {
+      _errorMessage = _networkErrorMessage;
+      notifyListeners();
+      return const CreateReservationResult.networkError(_networkErrorMessage);
     }
   }
 

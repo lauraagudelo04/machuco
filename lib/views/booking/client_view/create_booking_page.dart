@@ -125,18 +125,34 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     );
   }
 
-  /// Booking rules (future check-in, ordering, max stay, availability) are
-  /// evaluated by `BookingService` through the controller.
+  /// Rooms of the selected type in this motel. One of the active ones that
+  /// is free for the chosen range is assigned when the reservation is made.
+  List<RoomCandidate> get _typeRooms {
+    final rooms = [
+      for (final room in buildRoomMockData())
+        if (room.motelId == widget.room.motelId &&
+            room.idType == widget.room.idType)
+          room,
+    ];
+    if (!rooms.any((room) => room.id == widget.room.id)) rooms.add(widget.room);
+    return [
+      for (final room in rooms)
+        RoomCandidate(
+          id: room.id,
+          name: room.name,
+          number: room.roomNumber,
+          isActive: room.isActive,
+        ),
+    ];
+  }
+
+  /// Booking rules (future check-in, ordering, max stay, availability of the
+  /// room type) are evaluated by `BookingService` through the controller.
   String? get _rangeError {
     final checkIn = _checkIn;
     final checkOut = _checkOut;
     if (checkIn == null || checkOut == null) return null;
-    return _bookingController.scheduleError(
-      widget.room.id,
-      checkIn,
-      checkOut,
-      roomIsActive: widget.room.isActive,
-    );
+    return _bookingController.typeScheduleError(_typeRooms, checkIn, checkOut);
   }
 
   bool get _hasCompleteSchedule =>
@@ -244,13 +260,11 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     final checkIn = _checkIn!;
     final checkOut = _checkOut!;
 
-    final result = await _bookingController.createReservation(
+    final result = await _bookingController.createReservationForType(
       requestId: _requestId,
       motelId: widget.room.motelId,
       motelName: _motel?.name ?? 'Motel ${widget.room.motelId}',
-      roomId: widget.room.id,
-      roomName: widget.room.name,
-      roomNumber: widget.room.roomNumber,
+      rooms: _typeRooms,
       checkIn: checkIn,
       checkOut: checkOut,
       stayMode: StayMode.dateTimeRange,
@@ -259,7 +273,6 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       products: _selectedProductItems,
       roomTotal: _price.roomTotal,
       categoryId: _bookingController.selectedCategoryId,
-      roomIsActive: widget.room.isActive,
       simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
       simulateConcurrentConflict: _simulateConflictNextAttempt,
     );
@@ -276,8 +289,15 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       case CreateReservationOutcome.conflict:
         _showRecoverableError(
           result.message!,
-          actionLabel: 'Actualizar calendario',
+          actionLabel: 'Actualizar',
           onAction: () => unawaited(_bookingController.refresh()),
+        );
+      case CreateReservationOutcome.noActiveUnits:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message!),
+            duration: AppMotion.feedback,
+          ),
         );
       case CreateReservationOutcome.networkError:
         _showRecoverableError(
@@ -598,24 +618,28 @@ class _ScheduleCard extends StatelessWidget {
             value: checkInDate,
             onTap: onPickCheckInDate,
           ),
+          if (checkInDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de entrada',
             value: checkInTime,
             onTap: onPickCheckInTime,
           ),
+          if (checkInTime == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _DateField(
             label: 'Fecha de salida',
             value: checkOutDate,
             onTap: onPickCheckOutDate,
           ),
+          if (checkOutDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de salida',
             value: checkOutTime,
             onTap: onPickCheckOutTime,
           ),
+          if (checkOutTime == null) const _RequiredHint(),
           if (rangeError != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNotice(message: rangeError!),
@@ -742,6 +766,24 @@ class _TimeField extends StatelessWidget {
               ],
             ),
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Caption shown next to an empty date/time selector.
+class _RequiredHint extends StatelessWidget {
+  const _RequiredHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.s3, top: AppSpacing.s1),
+      child: Text(
+        'Campo obligatorio',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.error,
         ),
       ),
     );

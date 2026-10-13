@@ -160,13 +160,15 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
               message: hasAnyReservation
                   ? 'No hay reservas que coincidan con el filtro seleccionado.'
                   : 'Cuando reserves una habitación, la verás aquí.',
-              actionLabel: hasAnyReservation ? 'Limpiar filtros' : null,
+              actionLabel: hasAnyReservation
+                  ? 'Limpiar filtros'
+                  : 'Explorar moteles',
               onAction: hasAnyReservation
                   ? () => setState(() {
                       _motelFilter = null;
                       _roomFilter = null;
                     })
-                  : null,
+                  : () => Navigator.pushNamed(context, AppRoutes.clientMotels),
             )
           else
             for (final reservation in reservations)

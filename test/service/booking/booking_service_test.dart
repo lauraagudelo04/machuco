@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/models/booking/booking.dart';
@@ -764,6 +766,151 @@ void main() {
       expect(breakdown.byMethod.first.method, 'Efectivo');
       expect(breakdown.byMethod.first.total, 200);
       expect(breakdown.byMethod.last.method, 'Sin registrar');
+    });
+  });
+  group('room type assignment', () {
+    const roomA = RoomCandidate(id: 'room-a', name: 'Suite', number: '1');
+    const roomB = RoomCandidate(id: 'room-b', name: 'Suite', number: '2');
+    const roomOff = RoomCandidate(
+      id: 'room-off',
+      name: 'Suite',
+      number: '3',
+      isActive: false,
+    );
+
+    Future<Reservation> createForType(
+      List<RoomCandidate> rooms, {
+      String requestId = 'req-type',
+      DateTime? checkIn,
+      DateTime? checkOut,
+    }) => service.createReservationForType(
+      requestId: requestId,
+      motelId: 'm1',
+      motelName: 'Motel m1',
+      rooms: rooms,
+      checkIn: checkIn ?? at(11, 14),
+      checkOut: checkOut ?? at(11, 18),
+      stayMode: StayMode.dateTimeRange,
+      guestCount: 2,
+      services: const [],
+      products: const [],
+      roomTotal: 100000,
+    );
+
+    test('never assigns inactive rooms nor rooms with an overlap', () async {
+      // room-a is busy at that time, room-off is inactive: only room-b fits.
+      seed([reservation(checkIn: at(11, 14), checkOut: at(11, 18))]);
+
+      final created = await createForType([roomA, roomB, roomOff]);
+
+      expect(created.roomId, 'room-b');
+      expect(created.status, ReservationStatus.pending);
+    });
+
+    test('assigns one of the free active rooms at random', () async {
+      final assigned = <String>{};
+      for (var i = 0; i < 40; i++) {
+        seed(const []);
+        service = BookingService(
+          repository: repository,
+          now: () => clock,
+          random: Random(i),
+        );
+        assigned.add((await createForType([roomA, roomB])).roomId);
+      }
+
+      expect(assigned, {'room-a', 'room-b'});
+    });
+
+    test('rejects when no room of the type is active, whatever the dates '
+        'or the stored reservations', () async {
+      await expectLater(
+        createForType([roomOff]),
+        throwsA(
+          isA<SlotUnavailableException>().having(
+            (e) => e.message,
+            'message',
+            BookingService.noActiveUnitsMessage,
+          ),
+        ),
+      );
+      // Same rejection even with an invalid range.
+      await expectLater(
+        createForType([roomOff], checkIn: at(11, 18), checkOut: at(11, 14)),
+        throwsA(
+          isA<SlotUnavailableException>().having(
+            (e) => e.message,
+            'message',
+            BookingService.noActiveUnitsMessage,
+          ),
+        ),
+      );
+      expect((await repository.getAll()), isEmpty);
+    });
+
+    test('rejects with the concurrency message when every active room '
+        'overlaps, suggesting other dates or another type', () async {
+      seed([
+        reservation(id: 'r1', checkIn: at(11, 14), checkOut: at(11, 18)),
+        reservation(
+          id: 'r2',
+          roomId: 'room-b',
+          checkIn: at(11, 15),
+          checkOut: at(11, 17),
+        ),
+      ]);
+
+      await expectLater(
+        createForType([roomA, roomB, roomOff]),
+        throwsA(
+          isA<SlotUnavailableException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('acaban de ser ocupados'), contains('tipo')),
+          ),
+        ),
+      );
+      expect((await repository.getAll()).length, 2);
+    });
+
+    test('a retry with the same requestId does not duplicate', () async {
+      final first = await createForType([roomA, roomB]);
+      final second = await createForType([roomA, roomB]);
+
+      expect(second.id, first.id);
+      expect((await repository.getAll()).length, 1);
+    });
+
+    test('validateTypeBooking mirrors the creation rules', () async {
+      seed([reservation(checkIn: at(11, 14), checkOut: at(11, 18))]);
+      final stored = await repository.getAll();
+
+      expect(
+        service.validateTypeBooking(stored, [roomOff], at(11, 14), at(11, 18)),
+        BookingService.noActiveUnitsMessage,
+      );
+      expect(
+        service.validateTypeBooking(stored, [roomA], at(11, 14), at(11, 18)),
+        BookingService.slotTakenMessage,
+      );
+      expect(
+        service.validateTypeBooking(
+          stored,
+          [roomA, roomB],
+          at(11, 14),
+          at(11, 18),
+        ),
+        isNull,
+      );
+      expect(
+        service.validateTypeBooking(
+          stored,
+          [roomA, roomB],
+          at(11, 18),
+          at(11, 14),
+        ),
+        contains('posterior'),
+      );
     });
   });
 }

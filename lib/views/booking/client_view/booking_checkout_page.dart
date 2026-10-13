@@ -182,40 +182,51 @@ class _CheckoutContent extends StatelessWidget {
             ],
           ),
         ),
-        if (reservation.services.isNotEmpty ||
-            reservation.products.isNotEmpty) ...[
-          const SizedBox(height: AppSpacing.s4),
-          AppCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Servicios y productos',
-                  style: Theme.of(context).textTheme.titleLarge,
-                ),
-                const SizedBox(height: AppSpacing.s3),
-                for (final item in [
-                  ...reservation.services,
-                  ...reservation.products,
-                ])
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.s2),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            item.name,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        Text(formatCurrencyAmount(item.subtotal)),
-                      ],
+        const SizedBox(height: AppSpacing.s4),
+        AppCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Desglose de costos',
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s2),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Habitación',
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
                     ),
+                    Text(formatCurrencyAmount(reservation.roomTotal)),
+                  ],
+                ),
+              ),
+              for (final item in [
+                ...reservation.services,
+                ...reservation.products,
+              ])
+                Padding(
+                  padding: const EdgeInsets.only(bottom: AppSpacing.s2),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          item.name,
+                          style: Theme.of(context).textTheme.bodyMedium,
+                        ),
+                      ),
+                      Text(formatCurrencyAmount(item.subtotal)),
+                    ],
                   ),
-              ],
-            ),
+                ),
+            ],
           ),
-        ],
+        ),
         const SizedBox(height: AppSpacing.s4),
         AppCard(
           child: Column(

@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
@@ -43,6 +45,24 @@ class SlotUnavailableException implements Exception {
 
   @override
   String toString() => message;
+}
+
+/// A specific room that can be assigned when booking a room type.
+class RoomCandidate {
+  const RoomCandidate({
+    required this.id,
+    required this.name,
+    required this.number,
+    this.isActive = true,
+  });
+
+  final String id;
+  final String name;
+  final String number;
+
+  /// Whether the room can be offered for booking at all. Unrelated to the
+  /// state of any reservation.
+  final bool isActive;
 }
 
 /// KPI figures of one motel, derived from its reservations.
@@ -108,9 +128,22 @@ class PaymentBreakdown {
 /// [BookingRepository] and the current time comes from the injected clock, so
 /// every rule can be tested deterministically.
 class BookingService {
-  BookingService({BookingRepository? repository, DateTime Function()? now})
-    : _repository = repository ?? BookingRepositoryProvider.instance,
-      _now = now ?? DateTime.now;
+  BookingService({
+    BookingRepository? repository,
+    DateTime Function()? now,
+    Random? random,
+  }) : _repository = repository ?? BookingRepositoryProvider.instance,
+       _now = now ?? DateTime.now,
+       _random = random ?? Random();
+
+  /// Message shown when no room of the requested type is active.
+  static const String noActiveUnitsMessage =
+      'No hay unidades disponibles de este tipo de habitación.';
+
+  /// Message shown when the last free room was taken by someone else.
+  static const String slotTakenMessage =
+      'Esos horarios acaban de ser ocupados. Modifica las fechas y horas o '
+      'elige otro tipo de habitación e inténtalo de nuevo.';
 
   /// Mandatory preparation time blocked after each reservation (if a
   /// reservation ends at 18:00, the next available start is 19:00).
@@ -135,6 +168,7 @@ class BookingService {
 
   final BookingRepository _repository;
   final DateTime Function() _now;
+  final Random _random;
 
   DateTime get now => _now();
 
@@ -450,10 +484,7 @@ class BookingService {
       externalBlocked: externalBlocked,
       roomIsActive: roomIsActive,
     )) {
-      throw const SlotUnavailableException(
-        'Ese horario acaba de ocuparse. Actualiza el calendario e intenta '
-        'con otra franja.',
-      );
+      throw const SlotUnavailableException(slotTakenMessage);
     }
 
     final price = calculatePrice(
@@ -486,6 +517,99 @@ class BookingService {
     );
     await _repository.add(reservation);
     return reservation;
+  }
+
+  /// Active rooms of [rooms] that have no overlapping `pending`, `upcoming`
+  /// or `active` reservation (buffer included) in `[start, end)`.
+  List<RoomCandidate> freeRooms(
+    Iterable<Reservation> reservations,
+    Iterable<RoomCandidate> rooms,
+    DateTime start,
+    DateTime end,
+  ) {
+    final list = reservations.toList();
+    return [
+      for (final room in rooms)
+        if (room.isActive && isSlotAvailable(list, room.id, start, end)) room,
+    ];
+  }
+
+  /// Booking rules of a stay for a room type: schedule rules, then
+  /// "no active unit" and "every active unit is taken". `null` means that at
+  /// least one active room can be assigned.
+  String? validateTypeBooking(
+    Iterable<Reservation> reservations,
+    Iterable<RoomCandidate> rooms,
+    DateTime checkIn,
+    DateTime checkOut,
+  ) {
+    if (!rooms.any((room) => room.isActive)) return noActiveUnitsMessage;
+    final ruleError = validateSchedule(checkIn, checkOut);
+    if (ruleError != null) return ruleError;
+    if (freeRooms(reservations, rooms, checkIn, checkOut).isEmpty) {
+      return slotTakenMessage;
+    }
+    return null;
+  }
+
+  /// Creates a `pending` reservation for a room type: discards inactive
+  /// rooms, crosses the remaining ones against their reservations and
+  /// assigns one free room at random. Idempotent by [requestId].
+  ///
+  /// Throws [SlotUnavailableException] when no room of the type is active
+  /// ([noActiveUnitsMessage], whatever the dates) or when every active room
+  /// overlaps the requested range ([slotTakenMessage]).
+  Future<Reservation> createReservationForType({
+    required String requestId,
+    required String motelId,
+    required String motelName,
+    required List<RoomCandidate> rooms,
+    required DateTime checkIn,
+    required DateTime checkOut,
+    required StayMode stayMode,
+    required int guestCount,
+    required List<ReservationLineItem> services,
+    required List<ReservationLineItem> products,
+    required int roomTotal,
+    int? categoryId,
+    String guestId = '',
+    String guestName = '',
+  }) async {
+    final existing = await _repository.findByRequestId(requestId);
+    if (existing != null) return existing;
+
+    if (!rooms.any((room) => room.isActive)) {
+      throw const SlotUnavailableException(noActiveUnitsMessage);
+    }
+    final ruleError = validateSchedule(
+      checkIn,
+      checkOut,
+      requireFutureCheckIn: false,
+    );
+    if (ruleError != null) throw SlotUnavailableException(ruleError);
+
+    final free = freeRooms(await syncStatuses(), rooms, checkIn, checkOut);
+    if (free.isEmpty) throw const SlotUnavailableException(slotTakenMessage);
+    final room = free[_random.nextInt(free.length)];
+
+    return createReservation(
+      requestId: requestId,
+      motelId: motelId,
+      motelName: motelName,
+      roomId: room.id,
+      roomName: room.name,
+      roomNumber: room.number,
+      checkIn: checkIn,
+      checkOut: checkOut,
+      stayMode: stayMode,
+      guestCount: guestCount,
+      services: services,
+      products: products,
+      roomTotal: roomTotal,
+      categoryId: categoryId,
+      guestId: guestId,
+      guestName: guestName,
+    );
   }
 
   Future<Reservation> _requireReservation(String id) async {

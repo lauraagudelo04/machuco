@@ -96,6 +96,25 @@ class OwnerBookingController extends ChangeNotifier {
     return options;
   }
 
+  /// Clientes con reservas en los moteles del propietario (id → nombre),
+  /// derivados de las reservas cacheadas, para alimentar un filtro por
+  /// cliente.
+  List<ReservationClientOption> get clientOptions {
+    final byId = <String, ReservationClientOption>{};
+    for (final reservation in _ownedReservations) {
+      if (reservation.guestId.isEmpty) continue;
+      byId[reservation.guestId] = ReservationClientOption(
+        clientId: reservation.guestId,
+        name: reservation.guestName.isEmpty
+            ? reservation.guestId
+            : reservation.guestName,
+      );
+    }
+    final options = byId.values.toList()
+      ..sort((a, b) => a.name.compareTo(b.name));
+    return options;
+  }
+
   /// Simula la carga inicial (o el refresco manual) de la vista de
   /// reservas del propietario. Igual patrón que `ClientBookingController`:
   /// expone `simulateError`/`simulateOffline` para poder demostrar de
@@ -163,13 +182,16 @@ class OwnerBookingController extends ChangeNotifier {
     ReservationStatus? status,
     int? categoryId,
   }) async {
-    final owned = await reservationsForOwner(ownerId);
+    // The client filter reuses the method the Clients module consumes, so
+    // both always agree on a client's history.
+    final owned = clientId == null || clientId.isEmpty
+        ? await reservationsForOwner(ownerId)
+        : await reservationsForClient(ownerId, clientId);
     return List.unmodifiable(
       _service.filterReservations(
         owned,
         motelId: motelId,
         roomId: roomId,
-        clientId: clientId,
         status: status,
         categoryId: categoryId,
       ),
@@ -261,4 +283,12 @@ class ReservationRoomOption {
 
   final String roomId;
   final String label;
+}
+
+/// Opción de cliente para un filtro (id + nombre legible).
+class ReservationClientOption {
+  const ReservationClientOption({required this.clientId, required this.name});
+
+  final String clientId;
+  final String name;
 }

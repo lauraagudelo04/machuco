@@ -127,6 +127,42 @@ void main() {
     );
   });
 
+  group('OwnerBookingController.clientOptions', () {
+    test('lista los clientes con reservas en los moteles del propietario y '
+        'filtrar por uno devuelve solo su historial', () async {
+      final controller = OwnerBookingController();
+      await controller.loadReservations();
+
+      final options = controller.clientOptions;
+      expect(options, isNotEmpty);
+      expect(options.map((o) => o.clientId).toSet().length, options.length);
+
+      final first = options.first;
+      final filtered = await controller.filteredReservations(
+        clientId: first.clientId,
+      );
+      expect(filtered, isNotEmpty);
+      expect(filtered.every((r) => r.guestId == first.clientId), isTrue);
+      expect(
+        filtered,
+        await controller.reservationsForClient(
+          controller.ownerId,
+          first.clientId,
+        ),
+      );
+    });
+
+    test('un cliente ajeno a los moteles del propietario no devuelve '
+        'reservas', () async {
+      final controller = OwnerBookingController();
+
+      expect(
+        await controller.filteredReservations(clientId: 'cliente-ajeno'),
+        isEmpty,
+      );
+    });
+  });
+
   group('OwnerBookingController.cancelReservation', () {
     test(
       'rechaza un motivo vacío y no cambia el estado de la reserva',
