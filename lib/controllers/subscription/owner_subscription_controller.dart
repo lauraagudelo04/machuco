@@ -58,9 +58,6 @@ class OwnerSubscriptionController extends ChangeNotifier {
     }
   }
 
-  Future<List<SubscriptionPaymentMethod>> loadPaymentMethods() =>
-      _repository.findPaymentMethods();
-
   Future<void> addPayment({
     required int amount,
     required String paymentMethod,

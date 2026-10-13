@@ -88,25 +88,6 @@ class SubscriptionPlan {
 }
 
 // Floor necesita convertir estos tipos a INTEGER y TEXT para guardarlos.
-class SubscriptionPaymentMethod {
-  const SubscriptionPaymentMethod({required this.id, required this.name});
-
-  final int id;
-  final String name;
-
-  factory SubscriptionPaymentMethod.fromJson(Map<String, dynamic> json) {
-    if (json['id'] is! int ||
-        json['nombre'] is! String ||
-        (json['nombre'] as String).trim().isEmpty) {
-      throw const FormatException('Método de pago inválido en el catálogo');
-    }
-    return SubscriptionPaymentMethod(
-      id: json['id'] as int,
-      name: json['nombre'] as String,
-    );
-  }
-}
-
 class SubscriptionDateConverter extends TypeConverter<DateTime, int> {
   @override
   DateTime decode(int value) => DateTime.fromMicrosecondsSinceEpoch(value);
