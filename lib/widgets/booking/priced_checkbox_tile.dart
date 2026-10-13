@@ -34,7 +34,7 @@ class PricedCheckboxTile extends StatelessWidget {
       enabled: enabled,
       label: '$title, $priceLabel',
       child: Material(
-        color: Colors.transparent,
+        type: MaterialType.transparency,
         child: InkWell(
           onTap: enabled ? () => onChanged(!value) : null,
           child: ConstrainedBox(

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
@@ -37,7 +38,8 @@ class _PaymentMethodSelectionPageState
       ? 'Reserva ${_reservation!.roomName} - ${_reservation!.motelName}'
       : widget.concept;
 
-  String get _formattedAmount => '${formatCurrencyAmount(_effectiveAmount)} COP';
+  String get _formattedAmount =>
+      '${formatCurrencyAmount(_effectiveAmount)} COP';
 
   void _selectCash() {
     setState(() => _isCashSelected = true);
@@ -46,10 +48,9 @@ class _PaymentMethodSelectionPageState
   void _goToInvoice([PaymentMethodModel? paymentMethod]) {
     final reservation = _reservation;
     if (reservation == null) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.clientMotels,
-        (_) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(AppRoutes.clientMotels, (_) => false);
       return;
     }
 
@@ -58,13 +59,42 @@ class _PaymentMethodSelectionPageState
       (_) => false,
       arguments: {
         'reservation': reservation,
-        'paymentMethod': paymentMethod ??
+        'paymentMethod':
+            paymentMethod ??
             PaymentMethodModel(
               amount: _effectiveAmount,
               concept: _effectiveConcept,
             ),
       },
     );
+  }
+
+  /// Card payment succeeded: confirms the reservation (pending -> upcoming or
+  /// active) before showing the invoice. If the reservation can no longer be
+  /// paid (for example, its 15 minutes expired) the user is told and stays here.
+  Future<void> _confirmCardPayment(PaymentMethodModel paymentMethod) async {
+    final reservation = _reservation;
+    if (reservation == null) {
+      _goToInvoice(paymentMethod);
+      return;
+    }
+    final controller = ClientBookingController();
+    final confirmed = await controller.confirmPayment(reservation.id);
+    controller.dispose();
+    if (!mounted) return;
+    if (!confirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No pudimos confirmar el pago: la reserva ya no está pendiente '
+            'de pago.',
+          ),
+        ),
+      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      return;
+    }
+    _goToInvoice(paymentMethod);
   }
 
   void _openCardPayment() {
@@ -75,7 +105,7 @@ class _PaymentMethodSelectionPageState
           amount: _effectiveAmount,
           concept: _effectiveConcept,
           reservation: _reservation,
-          onContinue: widget.onContinue ?? _goToInvoice,
+          onContinue: widget.onContinue ?? _confirmCardPayment,
         ),
       ),
     );

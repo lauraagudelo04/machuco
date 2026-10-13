@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
@@ -8,6 +6,7 @@ import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_feedback.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_opacity.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
@@ -29,24 +28,28 @@ class BookingCheckoutPage extends StatefulWidget {
 
 class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
   late final ClientBookingController _controller;
-  Timer? _ticker;
+  bool _isLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _controller = ClientBookingController();
-    // Cuenta regresiva visible del abandono de pago (escenario: si pasan 15
-    // minutos en `pending` sin confirmar, la reserva se cancela sola y la
-    // franja vuelve a estar disponible).
-    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
-      _controller.checkExpirations();
-      if (mounted) setState(() {});
-    });
+    _load();
+  }
+
+  /// Carga la reserva y activa la cuenta regresiva del abandono de pago
+  /// (escenario: si pasan 15 minutos en `pending` sin confirmar, la reserva
+  /// se cancela sola y la franja vuelve a estar disponible). El temporizador
+  /// pertenece al controlador y se cancela junto con él.
+  Future<void> _load() async {
+    await _controller.refresh();
+    if (!mounted) return;
+    _controller.startExpirationWatch();
+    setState(() => _isLoaded = true);
   }
 
   @override
   void dispose() {
-    _ticker?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -59,6 +62,13 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) => _buildScaffold(context),
+    );
+  }
+
+  Widget _buildScaffold(BuildContext context) {
     final reservation = _controller.getById(widget.reservationId);
     return Scaffold(
       appBar: AppBar(
@@ -74,7 +84,9 @@ class _BookingCheckoutPageState extends State<BookingCheckoutPage> {
         title: const Text('Resumen antes de pagar'),
       ),
       body: SafeArea(
-        child: reservation == null
+        child: !_isLoaded
+            ? const Center(child: CircularProgressIndicator())
+            : reservation == null
             ? AppEmptyState(
                 icon: Icons.search_off_outlined,
                 title: 'Reserva no encontrada',
@@ -260,7 +272,9 @@ class _CountdownBanner extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(AppSpacing.s3),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.primary.withValues(alpha: .12),
+          color: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: AppOpacity.softFill),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: Row(

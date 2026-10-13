@@ -66,27 +66,27 @@ class _OwnerReservationDetailPageState
   }
 
   Future<void> _cancel() async {
-    final cancelled = await showCancellationReasonSheet(
-      context,
-      onConfirm: (reason) async {
-        try {
-          await _controller.cancelReservation(widget.reservationId, reason);
-        } on ReservationCancellationException catch (error) {
-          if (!mounted) return;
-          ScaffoldMessenger.of(
-            context,
-          ).showSnackBar(SnackBar(content: Text(error.message)));
-        }
-      },
-    );
-    if (cancelled) {
-      await _load();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Reserva cancelada. Se notificó al cliente.'),
-        ),
+    try {
+      final cancelled = await showCancellationReasonSheet(
+        context,
+        onConfirm: (reason) =>
+            _controller.cancelReservation(widget.reservationId, reason),
       );
+      if (cancelled) {
+        await _load();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Reserva cancelada. Se notificó al cliente.'),
+          ),
+        );
+      }
+    } on ReservationCancellationException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.message)));
+      await _load();
     }
   }
 

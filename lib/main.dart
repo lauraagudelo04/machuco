@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/repositories/booking/reservation_category_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/login/login_page.dart';
 
 void main() {
+  WidgetsFlutterBinding.ensureInitialized();
+  ReservationCategoryRepositoryProvider.useDatabase();
   runApp(const MachucoApp());
 }
 

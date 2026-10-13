@@ -33,11 +33,19 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
 
   Motel? _reviewMotel;
   bool _isLoadingReviewMotel = false;
+  bool _isLoaded = false;
 
   @override
   void initState() {
     super.initState();
     _controller = ClientBookingController();
+    _load();
+  }
+
+  Future<void> _load() async {
+    await _controller.refresh();
+    if (!mounted) return;
+    setState(() => _isLoaded = true);
     _loadReviewMotel();
   }
 
@@ -92,21 +100,20 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
   }
 
   Future<void> _cancelReservation(Reservation reservation) async {
-    final cancelled = await showCancellationReasonSheet(
-      context,
-      onConfirm: (reason) async {
-        try {
-          await _controller.cancelReservation(reservation.id, reason);
-        } on ReservationCancellationException catch (e) {
-          if (mounted) {
-            ScaffoldMessenger.of(
-              context,
-            ).showSnackBar(SnackBar(content: Text(e.message)));
-          }
-        }
-      },
-    );
-    if (cancelled && mounted) setState(() {});
+    try {
+      final cancelled = await showCancellationReasonSheet(
+        context,
+        onConfirm: (reason) =>
+            _controller.cancelReservation(reservation.id, reason),
+      );
+      if (cancelled && mounted) setState(() {});
+    } on ReservationCancellationException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.message)));
+      setState(() {});
+    }
   }
 
   @override
@@ -126,7 +133,9 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
         title: const Text('Detalle de la reserva'),
       ),
       body: SafeArea(
-        child: reservation == null
+        child: !_isLoaded
+            ? const Center(child: CircularProgressIndicator())
+            : reservation == null
             ? AppEmptyState(
                 icon: Icons.search_off_outlined,
                 title: 'Reserva no encontrada',

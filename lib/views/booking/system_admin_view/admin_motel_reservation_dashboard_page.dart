@@ -29,6 +29,7 @@ class _AdminMotelReservationDashboardPageState
     extends State<AdminMotelReservationDashboardPage> {
   late final SystemAdminBookingController _controller;
   ReservationStatus? _statusFilter;
+  int? _categoryFilter;
   bool _hasLoadedOnce = false;
 
   @override
@@ -57,6 +58,7 @@ class _AdminMotelReservationDashboardPageState
     await _controller.loadMotelDashboard(
       widget.motelId,
       status: _statusFilter,
+      categoryId: _categoryFilter,
       simulateError: simulateError,
       simulateOffline: simulateOffline,
     );
@@ -67,7 +69,20 @@ class _AdminMotelReservationDashboardPageState
 
   Future<void> _applyStatusFilter(ReservationStatus? status) async {
     setState(() => _statusFilter = status);
-    await _controller.applyEvolutionStatusFilter(widget.motelId, status);
+    await _controller.applyEvolutionStatusFilter(
+      widget.motelId,
+      status,
+      categoryId: _categoryFilter,
+    );
+  }
+
+  Future<void> _applyCategoryFilter(int? categoryId) async {
+    setState(() => _categoryFilter = categoryId);
+    await _controller.applyEvolutionStatusFilter(
+      widget.motelId,
+      _statusFilter,
+      categoryId: categoryId,
+    );
   }
 
   @override
@@ -206,6 +221,22 @@ class _AdminMotelReservationDashboardPageState
                           );
                     unawaited(_applyStatusFilter(status));
                   },
+                ),
+                ReservationFilterGroup(
+                  label: 'Categoría',
+                  selectedValue: _categoryFilter?.toString(),
+                  options: [
+                    for (final category in _controller.categories)
+                      ReservationFilterOption(
+                        value: category.id.toString(),
+                        label: category.name,
+                      ),
+                  ],
+                  onChanged: (value) => unawaited(
+                    _applyCategoryFilter(
+                      value == null ? null : int.tryParse(value),
+                    ),
+                  ),
                 ),
               ],
             ),

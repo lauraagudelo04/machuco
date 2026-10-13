@@ -111,15 +111,16 @@ void main() {
       await tester.pumpWidget(_wrap(const OwnerReservationsPage()));
       await _settle(tester);
 
-      // Motel Paraíso Élite (id '1') no tiene ninguna reserva "completed" en
-      // el dataset mockeado de OwnerBookingController.
-      await tester.tap(find.text('Motel: Todos'));
-      await tester.pumpAndSettle();
-      await _selectFilterOption(tester, 'Motel Paraíso Élite');
-
+      // La habitación 102 de Motel Paraíso Élite solo tiene una reserva
+      // próxima en el dataset compartido: cruzada con "Activa" no hay
+      // coincidencias.
       await tester.tap(find.text('Estado: Todos'));
       await tester.pumpAndSettle();
-      await _selectFilterOption(tester, 'Completada');
+      await _selectFilterOption(tester, 'Activa');
+
+      await tester.tap(find.text('Habitación: Todos'));
+      await tester.pumpAndSettle();
+      await _selectFilterOption(tester, '102 · Suite Privilegio');
 
       expect(find.text('Sin resultados'), findsOneWidget);
       expect(find.text('Limpiar filtros'), findsOneWidget);

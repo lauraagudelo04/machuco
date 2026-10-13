@@ -2,19 +2,25 @@ import 'package:flutter/foundation.dart';
 
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
+import 'package:machuco/repositories/booking/reservation_category_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/service/booking/booking_service.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
+import 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
 export 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
+export 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
 /// Controlador mock (patrón `ChangeNotifier`, sin backend) para la gestión
 /// de reservas del Propietario: todas las reservas de los moteles que
 /// administra, filtros combinados, métricas operativas y las acciones de
 /// cobro en efectivo y cancelación.
 ///
-/// El dataset (`_reservations`) es `static` y propio de este controller,
-/// independiente del de `ClientBookingController`, siguiendo la nota del
-/// feature de que "cada controller mantiene sus propios datos mockeados".
+/// Solo guarda estado de pantalla (carga, error, caché de las reservas del
+/// propietario) y delega las reglas de negocio en `BookingService`. Las
+/// reservas viven en el `BookingRepository` compartido, así que el
+/// propietario ve de inmediato lo que crea el cliente.
 ///
 /// Los métodos públicos que representan consultas (`reservationsForOwner`,
 /// `filteredReservations`, `reservationsForClient`, `getById`) son
@@ -24,7 +30,12 @@ class OwnerBookingController extends ChangeNotifier {
   OwnerBookingController({
     this.ownerId = demoOwnerId,
     MotelController? motelController,
-  }) : _motelController = motelController ?? MotelController();
+    ReservationCategoryRepository? categoryRepository,
+    BookingService? bookingService,
+  }) : _motelController = motelController ?? MotelController(),
+       _categoryRepository =
+           categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
+       _service = bookingService ?? BookingService();
 
   /// Propietario de demostración: coincide con el `ownerId` que ya trae
   /// mockeado `MotelController` (dueño de "Motel Paraíso Élite" y "Motel El
@@ -34,8 +45,14 @@ class OwnerBookingController extends ChangeNotifier {
 
   final String ownerId;
   final MotelController _motelController;
+  final ReservationCategoryRepository _categoryRepository;
+  final BookingService _service;
 
-  static final List<Reservation> _reservations = _seedReservations();
+  List<ReservationCategory> _categories = const [];
+
+  /// Category catalog cached by [loadReservations], used to build the
+  /// category filter. Empty if the catalog could not be loaded.
+  List<ReservationCategory> get categories => List.unmodifiable(_categories);
 
   bool _isLoading = false;
   String? _errorMessage;
@@ -56,9 +73,12 @@ class OwnerBookingController extends ChangeNotifier {
   /// Reservas de los moteles administrados por [ownerId], cacheadas desde
   /// la última carga exitosa y ordenadas de más reciente a más antigua.
   List<Reservation> get ownedReservations {
-    final list = List<Reservation>.from(_ownedReservations)
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return List.unmodifiable(list);
+    return List.unmodifiable(
+      _service.sortReservations(
+        _ownedReservations,
+        field: ReservationSortField.createdAt,
+      ),
+    );
   }
 
   /// Opciones de habitación (id → etiqueta) derivadas de las reservas
@@ -105,11 +125,15 @@ class OwnerBookingController extends ChangeNotifier {
       return;
     }
 
+    try {
+      _categories = await _categoryRepository.getCategories();
+    } catch (_) {
+      // The category filter is optional: reservations still load without it.
+      _categories = const [];
+    }
+
     _ownedMotels = await _motelController.getMotelsByOwnerId(ownerId);
-    final motelIds = _ownedMotels.map((motel) => motel.id).toSet();
-    _ownedReservations = _reservations
-        .where((reservation) => motelIds.contains(reservation.motelId))
-        .toList();
+    await _reloadOwnedReservations();
 
     _isLoading = false;
     notifyListeners();
@@ -120,12 +144,13 @@ class OwnerBookingController extends ChangeNotifier {
   Future<List<Reservation>> reservationsForOwner(String ownerId) async {
     final motels = await _motelController.getMotelsByOwnerId(ownerId);
     final motelIds = motels.map((motel) => motel.id).toSet();
-    final list =
-        _reservations
-            .where((reservation) => motelIds.contains(reservation.motelId))
-            .toList()
-          ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    return List.unmodifiable(list);
+    final owned = _service.filterReservations(
+      await _service.getReservations(),
+      motelIds: motelIds,
+    );
+    return List.unmodifiable(
+      _service.sortReservations(owned, field: ReservationSortField.createdAt),
+    );
   }
 
   /// Aplica una combinación de filtros sobre el dataset del propietario
@@ -136,21 +161,19 @@ class OwnerBookingController extends ChangeNotifier {
     String? roomId,
     String? clientId,
     ReservationStatus? status,
+    int? categoryId,
   }) async {
     final owned = await reservationsForOwner(ownerId);
-    final filtered = owned.where((reservation) {
-      final matchesMotel =
-          motelId == null || motelId.isEmpty || reservation.motelId == motelId;
-      final matchesRoom =
-          roomId == null || roomId.isEmpty || reservation.roomId == roomId;
-      final matchesClient =
-          clientId == null ||
-          clientId.isEmpty ||
-          reservation.guestId == clientId;
-      final matchesStatus = status == null || reservation.status == status;
-      return matchesMotel && matchesRoom && matchesClient && matchesStatus;
-    }).toList();
-    return List.unmodifiable(filtered);
+    return List.unmodifiable(
+      _service.filterReservations(
+        owned,
+        motelId: motelId,
+        roomId: roomId,
+        clientId: clientId,
+        status: status,
+        categoryId: categoryId,
+      ),
+    );
   }
 
   /// Historial de reservas de un cliente específico, limitado a los
@@ -174,35 +197,17 @@ class OwnerBookingController extends ChangeNotifier {
   /// cacheado por [loadReservations]; se recalcula en cada llamada (no
   /// cachea el resultado) para que refleje filtros aplicados en vivo.
   Map<String, int> operationalSummary({String? motelId}) {
-    final scoped = motelId == null || motelId.isEmpty
-        ? _ownedReservations
-        : _ownedReservations.where(
-            (reservation) => reservation.motelId == motelId,
-          );
-    final list = scoped.toList();
-    final activeOrUpcoming = list
-        .where(
-          (reservation) =>
-              reservation.status == ReservationStatus.active ||
-              reservation.status == ReservationStatus.upcoming,
-        )
-        .length;
-    final pendingPayment = list
-        .where((reservation) => reservation.status == ReservationStatus.pending)
-        .length;
+    final summary = _service.operationalSummary(
+      _service.filterReservations(_ownedReservations, motelId: motelId),
+    );
     return {
-      'total': list.length,
-      'activeOrUpcoming': activeOrUpcoming,
-      'pendingPayment': pendingPayment,
+      'total': summary.total,
+      'activeOrUpcoming': summary.activeOrUpcoming,
+      'pendingPayment': summary.pendingPayment,
     };
   }
 
-  Future<Reservation?> getById(String id) async {
-    for (final reservation in _reservations) {
-      if (reservation.id == id) return reservation;
-    }
-    return null;
-  }
+  Future<Reservation?> getById(String id) => _service.getReservation(id);
 
   /// Cancela una reserva y simula la notificación al cliente. Solo permitido
   /// si el estado actual es `pending` o `upcoming`; en cualquier otro caso
@@ -211,43 +216,14 @@ class OwnerBookingController extends ChangeNotifier {
   /// devolver silenciosamente `false`, para que la UI pueda mostrar un
   /// mensaje preciso.
   Future<void> cancelReservation(String id, String reason) async {
-    if (reason.trim().isEmpty) {
-      throw const ReservationCancellationException(
-        ReservationCancellationError.reasonRequired,
-      );
-    }
-
-    final index = _reservations.indexWhere(
-      (reservation) => reservation.id == id,
-    );
-    if (index == -1) {
-      throw const ReservationCancellationException(
-        ReservationCancellationError.notFound,
-      );
-    }
-
-    final reservation = _reservations[index];
-    final cancellable =
-        reservation.status == ReservationStatus.pending ||
-        reservation.status == ReservationStatus.upcoming;
-    if (!cancellable) {
-      throw const ReservationCancellationException(
-        ReservationCancellationError.invalidStatus,
-      );
-    }
-
     await Future<void>.delayed(const Duration(milliseconds: 400));
-
-    _reservations[index] = reservation.copyWith(
-      status: ReservationStatus.cancelled,
-      cancellationReason: reason.trim(),
-    );
-    _syncOwnedReservation(_reservations[index]);
+    final cancelled = await _service.cancelReservation(id, reason);
+    await _reloadOwnedReservations();
 
     // Notificación real fuera de alcance de esta rama: se simula solo de
     // forma visual/registrada, sin backend ni notificación real.
     debugPrint(
-      'Notificación simulada: se avisó a "${reservation.guestName}" sobre '
+      'Notificación simulada: se avisó a "${cancelled.guestName}" sobre '
       'la cancelación de la reserva $id.',
     );
 
@@ -256,48 +232,26 @@ class OwnerBookingController extends ChangeNotifier {
 
   /// Registra el cobro en efectivo de una reserva como realizado. Si la
   /// reserva seguía `pending`, además la mueve a `active`/`upcoming` según
-  /// la fecha de entrada (mismo gancho que `ClientBookingController
-  /// .confirmPayment`, para no dejar el pago registrado con una reserva
-  /// que sigue luciendo "pendiente de pago"). El acceso a la factura queda
-  /// en `InvoiceAccessStatus.pending`: la generación real de facturas está
+  /// la fecha de entrada. El acceso a la factura queda en
+  /// `InvoiceAccessStatus.pending`: la generación real de facturas está
   /// fuera de alcance de este módulo.
+  ///
+  /// Lanza [ReservationCancellationException] (`notFound`) si el id no
+  /// existe y [ReservationTransitionException] si la reserva está
+  /// cancelada o completada.
   Future<void> registerCashPayment(String id) async {
-    final index = _reservations.indexWhere(
-      (reservation) => reservation.id == id,
-    );
-    if (index == -1) {
-      throw const ReservationCancellationException(
-        ReservationCancellationError.notFound,
-      );
-    }
-
     await Future<void>.delayed(const Duration(milliseconds: 400));
-
-    final reservation = _reservations[index];
-    final now = DateTime.now();
-    final nextStatus = reservation.status == ReservationStatus.pending
-        ? (now.isBefore(reservation.checkIn)
-              ? ReservationStatus.upcoming
-              : ReservationStatus.active)
-        : reservation.status;
-
-    _reservations[index] = reservation.copyWith(
-      status: nextStatus,
-      invoiceAccessStatus: InvoiceAccessStatus.pending,
-    );
-    _syncOwnedReservation(_reservations[index]);
-
+    await _service.registerCashPayment(id);
+    await _reloadOwnedReservations();
     notifyListeners();
   }
 
-  void _syncOwnedReservation(Reservation updated) {
-    final index = _ownedReservations.indexWhere(
-      (reservation) => reservation.id == updated.id,
+  Future<void> _reloadOwnedReservations() async {
+    final motelIds = _ownedMotels.map((motel) => motel.id).toSet();
+    _ownedReservations = _service.filterReservations(
+      await _service.getReservations(),
+      motelIds: motelIds,
     );
-    if (index == -1) return;
-    final next = List<Reservation>.from(_ownedReservations);
-    next[index] = updated;
-    _ownedReservations = next;
   }
 }
 
@@ -307,154 +261,4 @@ class ReservationRoomOption {
 
   final String roomId;
   final String label;
-}
-
-List<Reservation> _seedReservations() {
-  final now = DateTime.now();
-  DateTime at(Duration offset) => now.add(offset);
-
-  return [
-    // Motel Paraíso Élite (id '1', owner-1020304050).
-    Reservation(
-      id: 'owner-reservation-001',
-      requestId: 'owner-seed-001',
-      motelId: '1',
-      motelName: 'Motel Paraíso Élite',
-      roomId: 'room-1-101',
-      roomName: 'Suite Élite',
-      roomNumber: '101',
-      checkIn: at(const Duration(hours: -2)),
-      checkOut: at(const Duration(hours: 1)),
-      stayMode: StayMode.dateWithHourBlock,
-      guestCount: 2,
-      services: const [],
-      products: const [],
-      roomTotal: 180000,
-      total: 180000,
-      status: ReservationStatus.active,
-      createdAt: at(const Duration(hours: -3)),
-      guestId: 'client-001',
-      guestName: 'Camila Restrepo',
-    ),
-    Reservation(
-      id: 'owner-reservation-002',
-      requestId: 'owner-seed-002',
-      motelId: '1',
-      motelName: 'Motel Paraíso Élite',
-      roomId: 'room-1-102',
-      roomName: 'Suite Privilegio',
-      roomNumber: '102',
-      checkIn: at(const Duration(days: 1, hours: 4)),
-      checkOut: at(const Duration(days: 1, hours: 8)),
-      stayMode: StayMode.dateWithHourBlock,
-      guestCount: 2,
-      services: const [
-        ReservationLineItem(
-          id: 'service-desayuno',
-          name: 'Desayuno a la habitación',
-          unitPrice: 18000,
-        ),
-      ],
-      products: const [],
-      roomTotal: 150000,
-      total: 168000,
-      status: ReservationStatus.upcoming,
-      createdAt: at(const Duration(hours: -6)),
-      guestId: 'client-002',
-      guestName: 'Julián Gómez',
-    ),
-    Reservation(
-      id: 'owner-reservation-003',
-      requestId: 'owner-seed-003',
-      motelId: '1',
-      motelName: 'Motel Paraíso Élite',
-      roomId: 'room-1-101',
-      roomName: 'Suite Élite',
-      roomNumber: '101',
-      checkIn: at(const Duration(days: 2, hours: 2)),
-      checkOut: at(const Duration(days: 2, hours: 6)),
-      stayMode: StayMode.dateWithHourBlock,
-      guestCount: 3,
-      services: const [],
-      products: const [
-        ReservationLineItem(
-          id: 'product-gaseosa',
-          name: 'Gaseosa',
-          unitPrice: 6000,
-          quantity: 2,
-        ),
-      ],
-      roomTotal: 180000,
-      total: 192000,
-      status: ReservationStatus.pending,
-      createdAt: at(const Duration(minutes: -40)),
-      guestId: 'client-001',
-      guestName: 'Camila Restrepo',
-    ),
-    // Motel El Edén (id '2', owner-1020304050).
-    Reservation(
-      id: 'owner-reservation-004',
-      requestId: 'owner-seed-004',
-      motelId: '2',
-      motelName: 'Motel El Edén',
-      roomId: 'room-2-201',
-      roomName: 'Cabaña Bosque',
-      roomNumber: '201',
-      checkIn: at(const Duration(days: -4, hours: -3)),
-      checkOut: at(const Duration(days: -4)),
-      stayMode: StayMode.dateTimeRange,
-      guestCount: 2,
-      services: const [],
-      products: const [],
-      roomTotal: 210000,
-      total: 210000,
-      status: ReservationStatus.completed,
-      createdAt: at(const Duration(days: -4, hours: -4)),
-      guestId: 'client-003',
-      guestName: 'Andrea Salazar',
-    ),
-    Reservation(
-      id: 'owner-reservation-005',
-      requestId: 'owner-seed-005',
-      motelId: '2',
-      motelName: 'Motel El Edén',
-      roomId: 'room-2-202',
-      roomName: 'Cabaña Río',
-      roomNumber: '202',
-      checkIn: at(const Duration(days: -1, hours: -5)),
-      checkOut: at(const Duration(days: -1, hours: -2)),
-      stayMode: StayMode.dateWithHourBlock,
-      guestCount: 4,
-      services: const [],
-      products: const [],
-      roomTotal: 195000,
-      total: 195000,
-      status: ReservationStatus.cancelled,
-      createdAt: at(const Duration(days: -1, hours: -6)),
-      guestId: 'client-002',
-      guestName: 'Julián Gómez',
-      cancellationReason: 'El huésped solicitó reprogramar para otra fecha.',
-    ),
-    Reservation(
-      id: 'owner-reservation-006',
-      requestId: 'owner-seed-006',
-      motelId: '2',
-      motelName: 'Motel El Edén',
-      roomId: 'room-2-201',
-      roomName: 'Cabaña Bosque',
-      roomNumber: '201',
-      checkIn: at(const Duration(days: 3, hours: 6)),
-      checkOut: at(const Duration(days: 3, hours: 10)),
-      stayMode: StayMode.dateWithHourBlock,
-      guestCount: 2,
-      services: const [],
-      products: const [],
-      roomTotal: 210000,
-      total: 210000,
-      status: ReservationStatus.pending,
-      createdAt: now,
-      guestId: 'client-004',
-      guestName: 'Santiago Marín',
-    ),
-  ];
 }

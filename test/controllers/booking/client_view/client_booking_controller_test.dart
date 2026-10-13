@@ -2,25 +2,32 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/service/booking/booking_service.dart';
 
 void main() {
   final now = DateTime.now();
 
   group('ClientBookingController.isSlotAvailable', () {
-    test('rechaza un rango donde la salida no es posterior a la entrada', () {
+    test(
+      'rechaza un rango donde la salida no es posterior a la entrada',
+      () async {
+        final controller = ClientBookingController();
+        await controller.refresh();
+
+        final available = controller.isSlotAvailable(
+          'room-101',
+          now.add(const Duration(hours: 5)),
+          now.add(const Duration(hours: 4)),
+        );
+
+        expect(available, isFalse);
+      },
+    );
+
+    test('bloquea un horario que se solapa con una reserva vigente', () async {
       final controller = ClientBookingController();
-
-      final available = controller.isSlotAvailable(
-        'room-101',
-        now.add(const Duration(hours: 5)),
-        now.add(const Duration(hours: 4)),
-      );
-
-      expect(available, isFalse);
-    });
-
-    test('bloquea un horario que se solapa con una reserva vigente', () {
-      final controller = ClientBookingController();
+      await controller.refresh();
 
       // 'room-101' tiene una reserva activa de seed entre now-1h y now+2h.
       final available = controller.isSlotAvailable(
@@ -34,8 +41,9 @@ void main() {
 
     test(
       'libera el horario apenas termina el margen de 1 hora de preparación',
-      () {
+      () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         // La reserva activa de 'room-101' termina en now+2h; el margen de
         // preparación de 1h la bloquea hasta now+3h. Se deja un colchón de
@@ -58,8 +66,9 @@ void main() {
       },
     );
 
-    test('una reserva cancelada no bloquea su propio horario', () {
+    test('una reserva cancelada no bloquea su propio horario', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       // 'room-201' solo tiene la reserva de seed cancelada.
       final available = controller.isSlotAvailable(
@@ -71,57 +80,66 @@ void main() {
       expect(available, isTrue);
     });
 
-    test('excludingReservationId ignora el solapamiento consigo misma', () {
-      final controller = ClientBookingController();
+    test(
+      'excludingReservationId ignora el solapamiento consigo misma',
+      () async {
+        final controller = ClientBookingController();
+        await controller.refresh();
 
-      final blockedWithoutExcluding = controller.isSlotAvailable(
-        'room-101',
-        now.add(const Duration(hours: -1)),
-        now.add(const Duration(hours: 2)),
-      );
-      final availableExcludingItself = controller.isSlotAvailable(
-        'room-101',
-        now.add(const Duration(hours: -1)),
-        now.add(const Duration(hours: 2)),
-        excludingReservationId: 'reservation-seed-active',
-      );
+        final blockedWithoutExcluding = controller.isSlotAvailable(
+          'room-101',
+          now.add(const Duration(hours: -1)),
+          now.add(const Duration(hours: 2)),
+        );
+        final availableExcludingItself = controller.isSlotAvailable(
+          'room-101',
+          now.add(const Duration(hours: -1)),
+          now.add(const Duration(hours: 2)),
+          excludingReservationId: 'reservation-seed-active',
+        );
 
-      expect(blockedWithoutExcluding, isFalse);
-      expect(availableExcludingItself, isTrue);
-    });
+        expect(blockedWithoutExcluding, isFalse);
+        expect(availableExcludingItself, isTrue);
+      },
+    );
 
-    test('respeta franjas externas bloqueadas y su margen de preparación', () {
-      final controller = ClientBookingController();
-      final externalBlocked = [
-        BlockedRange(
-          now.add(const Duration(hours: 10)),
-          now.add(const Duration(hours: 12)),
-        ),
-      ];
+    test(
+      'respeta franjas externas bloqueadas y su margen de preparación',
+      () async {
+        final controller = ClientBookingController();
+        await controller.refresh();
+        final externalBlocked = [
+          BlockedRange(
+            now.add(const Duration(hours: 10)),
+            now.add(const Duration(hours: 12)),
+          ),
+        ];
 
-      final overlapping = controller.isSlotAvailable(
-        'room-999-libre',
-        now.add(const Duration(hours: 12, minutes: 30)),
-        now.add(const Duration(hours: 13)),
-        externalBlocked: externalBlocked,
-      );
-      final afterBuffer = controller.isSlotAvailable(
-        'room-999-libre',
-        now.add(const Duration(hours: 13)),
-        now.add(const Duration(hours: 14)),
-        externalBlocked: externalBlocked,
-      );
+        final overlapping = controller.isSlotAvailable(
+          'room-999-libre',
+          now.add(const Duration(hours: 12, minutes: 30)),
+          now.add(const Duration(hours: 13)),
+          externalBlocked: externalBlocked,
+        );
+        final afterBuffer = controller.isSlotAvailable(
+          'room-999-libre',
+          now.add(const Duration(hours: 13)),
+          now.add(const Duration(hours: 14)),
+          externalBlocked: externalBlocked,
+        );
 
-      expect(overlapping, isFalse);
-      expect(afterBuffer, isTrue);
-    });
+        expect(overlapping, isFalse);
+        expect(afterBuffer, isTrue);
+      },
+    );
   });
 
   group('ClientBookingController.explainBlockedSlot', () {
     test(
       'explica el bloqueo mencionando la hora hasta la que está ocupado',
-      () {
+      () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         final explanation = controller.explainBlockedSlot(
           'room-101',
@@ -136,8 +154,9 @@ void main() {
 
     test(
       'da un mensaje genérico si el bloqueo viene de una franja externa',
-      () {
+      () async {
         final controller = ClientBookingController();
+        await controller.refresh();
         final externalBlocked = [
           BlockedRange(
             now.add(const Duration(hours: 20)),
@@ -160,6 +179,7 @@ void main() {
   group('ClientBookingController.createReservation — cálculo de costos', () {
     test('el total combina habitación, servicios y productos', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final result = await controller.createReservation(
         requestId: 'req-cost-calc-1',
@@ -207,6 +227,7 @@ void main() {
       'aborta la creación si la disponibilidad se pierde por concurrencia',
       () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         final result = await controller.createReservation(
           requestId: 'req-concurrency-1',
@@ -239,6 +260,7 @@ void main() {
     test('una interrupción de red no crea la reserva, y el reintento con el '
         'mismo requestId sí la crea sin duplicarla', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
       const requestId = 'req-network-retry-1';
 
       final firstAttempt = await controller.createReservation(
@@ -317,6 +339,7 @@ void main() {
     test('una reserva recién creada tiene ~15 minutos restantes antes de '
         'expirar', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final result = await controller.createReservation(
         requestId: 'req-remaining-time-1',
@@ -349,8 +372,9 @@ void main() {
 
     test(
       'remainingPendingTime es null para una reserva que no está pending',
-      () {
+      () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         final remaining = controller.remainingPendingTime(
           'reservation-seed-active',
@@ -360,24 +384,111 @@ void main() {
       },
     );
 
-    test(
-      'la cancelación automática a los 15 minutos no se puede simular sin '
-      'un reloj inyectable',
-      () {},
-      skip:
-          'ClientBookingController usa DateTime.now() directamente (no hay '
-          'un reloj/clock inyectable) y el proyecto no tiene aprobado un '
-          'paquete de time-travel para pruebas (p. ej. fake_async/clock); '
-          'agregarlo unilateralmente violaría la regla de dependencias de '
-          'CLAUDE.md. La constante pendingPaymentTimeout (15 min) y su '
-          'aplicación quedan cubiertas indirectamente por '
-          'remainingPendingTime en las pruebas de arriba.',
-    );
+    group('con reloj inyectado', () {
+      late DateTime clock;
+      late ClientBookingController controller;
+
+      setUp(() {
+        clock = DateTime(2026, 3, 10, 12);
+        final repository = InMemoryBookingRepository(
+          initial: [
+            Reservation(
+              id: 'pending-1',
+              requestId: 'req-pending-1',
+              motelId: '1',
+              motelName: 'Motel Prueba',
+              roomId: 'room-clock',
+              roomName: 'Suite Reloj',
+              roomNumber: '1',
+              checkIn: DateTime(2026, 3, 11, 14),
+              checkOut: DateTime(2026, 3, 11, 18),
+              stayMode: StayMode.dateTimeRange,
+              guestCount: 2,
+              services: const [],
+              products: const [],
+              roomTotal: 100000,
+              total: 100000,
+              status: ReservationStatus.pending,
+              createdAt: clock,
+              guestId: ClientBookingController.demoUserId,
+            ),
+          ],
+        );
+        controller = ClientBookingController(
+          bookingService: BookingService(
+            repository: repository,
+            now: () => clock,
+          ),
+        );
+      });
+
+      tearDown(() => controller.dispose());
+
+      test('la reserva sigue pending un segundo antes de los 15 minutos, '
+          'y se cancela y libera la franja justo a los 15', () async {
+        await controller.refresh();
+
+        clock = DateTime(2026, 3, 10, 12, 14, 59);
+        controller.checkExpirations();
+        expect(
+          controller.getById('pending-1')!.status,
+          ReservationStatus.pending,
+        );
+        expect(
+          controller.remainingPendingTime('pending-1'),
+          const Duration(seconds: 1),
+        );
+        expect(
+          controller.isSlotAvailable(
+            'room-clock',
+            DateTime(2026, 3, 11, 14),
+            DateTime(2026, 3, 11, 18),
+          ),
+          isFalse,
+        );
+
+        clock = DateTime(2026, 3, 10, 12, 15);
+        controller.checkExpirations();
+        expect(
+          controller.getById('pending-1')!.status,
+          ReservationStatus.cancelled,
+        );
+        expect(controller.remainingPendingTime('pending-1'), isNull);
+        expect(
+          controller.isSlotAvailable(
+            'room-clock',
+            DateTime(2026, 3, 11, 14),
+            DateTime(2026, 3, 11, 18),
+          ),
+          isTrue,
+        );
+      });
+
+      test('el temporizador del controlador expira la reserva y avisa a '
+          'los oyentes', () async {
+        await controller.refresh();
+        var notifications = 0;
+        controller.addListener(() => notifications++);
+
+        controller.startExpirationWatch(
+          interval: const Duration(milliseconds: 10),
+        );
+        clock = DateTime(2026, 3, 10, 12, 15);
+        await Future<void>.delayed(const Duration(milliseconds: 60));
+
+        expect(notifications, greaterThan(0));
+        expect(
+          controller.getById('pending-1')!.status,
+          ReservationStatus.cancelled,
+        );
+      });
+    });
   });
 
   group('ClientBookingController.confirmPayment', () {
     test('mueve una reserva pending con check-in futuro a upcoming', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final confirmed = await controller.confirmPayment(
         'reservation-seed-pending',
@@ -394,6 +505,7 @@ void main() {
       'mueve una reserva pending con check-in ya iniciado a active',
       () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         final result = await controller.createReservation(
           requestId: 'req-confirm-active-1',
@@ -425,6 +537,7 @@ void main() {
 
     test('devuelve false para un id inexistente', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final confirmed = await controller.confirmPayment('no-existe');
 
@@ -433,6 +546,7 @@ void main() {
 
     test('devuelve false si la reserva ya no está pending', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final confirmed = await controller.confirmPayment(
         'reservation-seed-active',
@@ -447,6 +561,7 @@ void main() {
       'rechaza un motivo vacío y no cambia el estado de la reserva',
       () async {
         final controller = ClientBookingController();
+        await controller.refresh();
 
         final result = await controller.createReservation(
           requestId: 'req-cancel-empty-reason-1',
@@ -484,6 +599,7 @@ void main() {
 
     test('cancela una reserva pending con motivo válido', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final result = await controller.createReservation(
         requestId: 'req-cancel-pending-1',
@@ -514,6 +630,7 @@ void main() {
 
     test('cancela una reserva upcoming con motivo válido', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       final result = await controller.createReservation(
         requestId: 'req-cancel-upcoming-1',
@@ -547,6 +664,7 @@ void main() {
     test('rechaza cancelar reservas en estados no cancelables (active, '
         'completed, cancelled)', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       for (final reservationId in [
         'reservation-seed-active',
@@ -569,6 +687,7 @@ void main() {
 
     test('lanza notFound si el id de la reserva no existe', () async {
       final controller = ClientBookingController();
+      await controller.refresh();
 
       await expectLater(
         controller.cancelReservation('no-existe', 'Motivo'),

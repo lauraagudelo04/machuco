@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_colors.dart';
+import 'package:machuco/core/design_system/tokens/app_opacity.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
@@ -98,7 +99,7 @@ class _ReservationFilterChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s3),
           decoration: BoxDecoration(
             color: isActive
-                ? activeColor.withValues(alpha: .14)
+                ? activeColor.withValues(alpha: AppOpacity.selectedFill)
                 : context.appColors.elevated,
             borderRadius: BorderRadius.circular(AppRadius.pill),
             border: Border.all(

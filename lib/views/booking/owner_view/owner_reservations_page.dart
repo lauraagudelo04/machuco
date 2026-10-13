@@ -32,6 +32,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
   String? _motelFilter;
   String? _roomFilter;
   ReservationStatus? _statusFilter;
+  int? _categoryFilter;
   bool _hasLoadedOnce = false;
   List<Reservation> _visibleReservations = const [];
 
@@ -73,6 +74,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       motelId: _motelFilter,
       roomId: _roomFilter,
       status: _statusFilter,
+      categoryId: _categoryFilter,
       clientId: widget.clientId,
     );
     if (!mounted) return;
@@ -84,6 +86,7 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       _motelFilter = null;
       _roomFilter = null;
       _statusFilter = null;
+      _categoryFilter = null;
     });
     unawaited(_applyFilters());
   }
@@ -239,6 +242,25 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                   ],
                   onChanged: (value) {
                     setState(() => _roomFilter = value);
+                    unawaited(_applyFilters());
+                  },
+                ),
+                ReservationFilterGroup(
+                  label: 'Categoría',
+                  selectedValue: _categoryFilter?.toString(),
+                  options: [
+                    for (final category in _controller.categories)
+                      ReservationFilterOption(
+                        value: category.id.toString(),
+                        label: category.name,
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(
+                      () => _categoryFilter = value == null
+                          ? null
+                          : int.tryParse(value),
+                    );
                     unawaited(_applyFilters());
                   },
                 ),
