@@ -1,9 +1,10 @@
 # Módulo: Reservas (`booking`)
 
-Estado general: **parcial, con datos mock**. Los flujos de creación,
-consulta, cancelación y pago en efectivo están implementados en memoria,
-sin backend ni pasarela de pagos real. La organización de archivos y el
-contexto funcional detallado de este módulo ya están documentados en:
+Estado general: **funcional con persistencia local**. Los flujos de
+creación, consulta, cancelación y pago en efectivo están implementados sobre
+una capa de servicio y un repositorio con SQLite (Floor), sin backend ni
+pasarela de pagos real. La organización de archivos y el contexto funcional
+detallado de este módulo ya están documentados en:
 
 - [`docs/booking_structure.md`](../booking_structure.md) — convención de
   carpetas por rol (`client_view`, `owner_view`, `system_admin_view`) y
@@ -22,6 +23,29 @@ contexto funcional detallado de este módulo ya están documentados en:
 Este archivo no repite ese contenido; describe el estado real de la
 implementación.
 
+## Capas
+
+```
+views -> controllers -> BookingService -> BookingRepository -> Floor DAO
+```
+
+- **Views** (`lib/views/booking/**`): solo presentación; no consultan datos
+  ni calculan reglas.
+- **Controllers** (`lib/controllers/booking/**`): estado de pantalla (carga,
+  error, caché) y delegación en el servicio.
+- **`BookingService`** (`lib/service/booking/booking_service.dart`): reglas de
+  negocio (disponibilidad, precios, transiciones de estado, cancelación,
+  filtros, ordenamiento y KPIs). No guarda estado propio y recibe el
+  repositorio y el reloj por inyección.
+- **`BookingRepository`** (`lib/repositories/booking/booking_repository.dart`):
+  interfaz de acceso a datos con tres implementaciones:
+  `InMemoryBookingRepository` (pruebas), `FloorBookingRepository` (SQLite) y
+  `LazyBookingRepository` (resuelve la base al primer uso).
+  `BookingRepositoryProvider` expone la instancia compartida por los tres
+  roles.
+- **Floor DAO** (`ReservationDao`, `ReservationCategoryDao`) sobre
+  `AppDatabase`.
+
 ## Modelos
 
 - `lib/models/booking/booking.dart`: entidad `Reservation` compartida por
@@ -32,20 +56,23 @@ implementación.
 ## Controllers (`ChangeNotifier`, por rol)
 
 - `controllers/booking/client_view/client_booking_controller.dart`
-  (`ClientBookingController`): **estado: mock funcional.** Maneja
-  disponibilidad de franjas horarias (incluye 1 hora de preparación tras
-  cada reserva), creación idempotente por `requestId`, expiración
-  automática de reservas `pending` sin pago tras 15 minutos, y cancelación
-  con motivo obligatorio. Los datos viven en una colección `static` en
-  memoria compartida entre instancias del controlador (ver
-  [../decisions_log.md](../decisions_log.md)); no hay persistencia real ni
-  llamada a backend.
+  (`ClientBookingController`): selección de categoría, creación idempotente
+  por `requestId`, resumen previo al pago y cancelación con motivo
+  obligatorio. Las reglas (franjas, 1 hora de preparación, expiración a los
+  15 minutos) viven en `BookingService`.
 - `controllers/booking/owner_view/owner_booking_controller.dart`
   (`OwnerBookingController`): reservas generales del propietario, filtros
-  por motel/estado y flujo de cancelación con notificación al cliente.
+  por motel, habitación, cliente, estado y categoría, y flujo de cancelación
+  con notificación simulada al cliente.
 - `controllers/booking/system_admin_view/system_admin_booking_controller.dart`
   (`SystemAdminBookingController`): estadísticas y dashboard por motel para
-  el administrador del sistema.
+  el administrador del sistema, con filtro por estado y categoría.
+
+Los tres controladores exponen un estado de error recuperable: si el
+repositorio o el servicio lanzan una excepción, `errorMessage` queda
+definido y la vista muestra el estado de error con reintento (nunca un
+listado vacío). Los parámetros `simulateError` y `simulateOffline` se
+conservan solo como ganchos de demostración.
 
 ## Pantallas
 
@@ -72,32 +99,60 @@ Todas las rutas de reservas están centralizadas en `lib/routes/routes.dart`
 
 ## Pruebas
 
-Es el único feature con pruebas automatizadas encontradas en el
-repositorio:
+Pruebas automatizadas del módulo:
 
+- `test/service/booking/booking_service_test.dart`
+- `test/repositories/booking/` (repositorio en memoria y Floor)
 - `test/controllers/booking/client_view/client_booking_controller_test.dart`
 - `test/controllers/booking/owner_view/owner_booking_controller_test.dart`
 - `test/controllers/booking/system_admin_view/system_admin_booking_controller_test.dart`
 - `test/widgets/booking/*_test.dart` (cancelación, dashboards, detalle,
-  listados)
+  listados, resumen de pago con desglose de costos)
+
+Los controladores de propietario y administrador incluyen pruebas con un
+repositorio que siempre falla, para verificar el estado de error.
+
+## Transiciones por reloj
+
+`BookingService` recibe un reloj inyectable (`DateTime Function() now`), de
+modo que las transiciones se prueban de forma determinista:
+
+- `pending` sin pago pasa a `cancelled` a los 15 minutos y libera la franja.
+- `upcoming` pasa a `active` al llegar la hora de entrada y a `completed` al
+  cumplirse la salida.
+- `syncStatuses` persiste esas transiciones al consultar; `resolveStatuses`
+  es la versión pura que usan los getters síncronos de los controladores.
+
+## Categorías y filtros
+
+El catálogo `reservation_categories` se carga desde SQLite. El cliente debe
+elegir una categoría antes de reservar y la reserva guarda su `categoryId`
+(nulo en reservas anteriores al catálogo). Propietario y administrador
+filtran por categoría; si el catálogo no carga, el filtro se omite sin
+bloquear la pantalla.
+
+## Cobertura de escenarios de la spec
+
+Cubiertos: asignación aleatoria entre habitaciones activas libres del tipo y
+rechazo sin unidades activas; conflicto de concurrencia con mensaje;
+reintento idempotente tras error de red; validación de fecha y hora
+obligatorias; desglose de costos en el resumen; estado vacío y error con
+reintento en "Mis reservas"; filtro por cliente del propietario (reutiliza
+`reservationsForClient`); estados de error recuperable en propietario y
+administrador.
 
 ## Qué falta o es provisional
 
-- No hay backend. Las reservas se persisten localmente en SQLite (Floor) al
-  correr la app (ver "Persistencia local"); en pruebas se usa el repositorio
-  en memoria.
-- El pago real de una reserva (`confirmPayment` en
-  `ClientBookingController`) tiene un método listo para integrarse, pero
-  ninguna pantalla en el alcance actual lo dispara; el procesamiento de
-  pagos está fuera del alcance implementado hoy.
-- La disponibilidad de habitaciones se calcula combinando este controlador
-  con datos mock de otro módulo (`RoomVisualData`, ver
-  `widgets/room` y `controllers/room/room_mock_data.dart`); no hay una
-  única fuente de verdad de disponibilidad.
+- No hay backend: las reservas se persisten solo en el dispositivo (ver
+  "Persistencia local").
+- El pago real de una reserva (`confirmPayment`) se dispara desde el pago con
+  tarjeta; el procesamiento con pasarela real está fuera del alcance.
+- La disponibilidad de habitaciones se calcula combinando este módulo con
+  datos mock de otro (`RoomVisualData`, ver `widgets/room` y
+  `controllers/room/room_mock_data.dart`); no hay una única fuente de verdad.
 - La nota final de `docs/booking_context.md` ("Nota para el LLM (Claude)")
-  sobre métricas adicionales para el dashboard de administrador sigue sin
-  resolver: es una petición abierta, no una implementación pendiente
-  confirmada por el equipo.
+  sobre métricas adicionales del dashboard de administrador sigue sin
+  resolver: es una petición abierta, no una implementación confirmada.
 
 ## Persistencia local de reservas (Floor)
 
@@ -106,6 +161,7 @@ repositorio por defecto a `LazyBookingRepository` -> `FloorBookingRepository`.
 El modelo de dominio `Reservation` no tiene anotaciones de Floor.
 
 - Tablas (base `machuco.db`, version 2):
+  - `reservation_categories`: catálogo de categorías (desde la versión 1).
   - `reservations`: una fila por reserva (`ReservationEntity`). Fechas como
     epoch en milisegundos, enums como su `name`. Indices en `requestId` y
     `motelId`.

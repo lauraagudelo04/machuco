@@ -117,14 +117,21 @@ class SystemAdminBookingController extends ChangeNotifier {
       return;
     }
 
-    final motels = await motelsForOwner(ownerId);
-    final kpis = <String, Map<String, dynamic>>{};
-    for (final motel in motels) {
-      kpis[motel.id] = await motelKpiSummary(motel.id);
+    try {
+      final motels = await motelsForOwner(ownerId);
+      final kpis = <String, Map<String, dynamic>>{};
+      for (final motel in motels) {
+        kpis[motel.id] = await motelKpiSummary(motel.id);
+      }
+      _motels = motels;
+      _kpiByMotelId = kpis;
+    } catch (_) {
+      // A failed query must never look like "no motels".
+      _errorMessage =
+          'No pudimos cargar los moteles de este propietario. Intenta de '
+          'nuevo.';
     }
 
-    _motels = motels;
-    _kpiByMotelId = kpis;
     _isLoading = false;
     notifyListeners();
   }
@@ -167,14 +174,24 @@ class SystemAdminBookingController extends ChangeNotifier {
       _categories = const [];
     }
 
-    _selectedMotel = await _motelController.getMotelById(motelId);
-    _historicalTotal = await historicalReservationsTotal(motelId);
-    _evolution = await reservationsEvolution(
-      motelId,
-      status: status,
-      categoryId: categoryId,
-    );
-    _paymentBreakdown = await paymentBreakdownByMethod(motelId);
+    try {
+      final motel = await _motelController.getMotelById(motelId);
+      final total = await historicalReservationsTotal(motelId);
+      final series = await reservationsEvolution(
+        motelId,
+        status: status,
+        categoryId: categoryId,
+      );
+      final payments = await paymentBreakdownByMethod(motelId);
+      _selectedMotel = motel;
+      _historicalTotal = total;
+      _evolution = series;
+      _paymentBreakdown = payments;
+    } catch (_) {
+      // A failed query must never look like "no reservations".
+      _errorMessage =
+          'No pudimos cargar el dashboard de este motel. Intenta de nuevo.';
+    }
 
     _isLoading = false;
     notifyListeners();

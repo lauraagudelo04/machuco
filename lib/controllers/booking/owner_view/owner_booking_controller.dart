@@ -151,8 +151,14 @@ class OwnerBookingController extends ChangeNotifier {
       _categories = const [];
     }
 
-    _ownedMotels = await _motelController.getMotelsByOwnerId(ownerId);
-    await _reloadOwnedReservations();
+    try {
+      _ownedMotels = await _motelController.getMotelsByOwnerId(ownerId);
+      await _reloadOwnedReservations();
+    } catch (_) {
+      // A failed query must never look like "no reservations".
+      _errorMessage =
+          'No pudimos cargar las reservas de tus moteles. Intenta de nuevo.';
+    }
 
     _isLoading = false;
     notifyListeners();

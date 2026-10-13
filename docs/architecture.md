@@ -25,8 +25,10 @@ lib/
 
 Esta lista refleja los directorios que existen realmente en el repositorio.
 `GUIA_MACHUCO.md#estructura-provisional-del-proyecto` también describe
-`data/` y `repository/`; **ninguno de los dos existe todavía**. Ver
-"Inconsistencia: capa de datos" más abajo.
+`data/` y `repository/`; **no existen con esos nombres**. Solo `booking`
+tiene capa de servicio y repositorios reales (`service/booking/`,
+`repositories/booking/`, `database/`). Ver "Inconsistencia: capa de datos"
+más abajo.
 
 ## Qué hay implementado en cada capa
 
@@ -98,14 +100,17 @@ push, etc.). Detalle completo en [modules/auth.md](modules/auth.md).
 
 ### `data` y `repository`
 
-**No existen como directorios en el proyecto.** La responsabilidad que
+**No existen como directorios con esos nombres.** La responsabilidad que
 `GUIA_MACHUCO.md` les asigna (abstraer el origen de la información para que
 las vistas no dependan de él directamente) hoy está cubierta de forma
 parcial e inconsistente:
 
 - En `service/auth/`, sí existe una abstracción real
   (`RegisteredUserDirectory`) con dos implementaciones intercambiables.
-- En el resto de features (`booking`, `room`, `payment`, etc.), los
+- En `booking` existe `BookingRepository` (`repositories/booking/`) con
+  implementaciones en memoria y SQLite (Floor, `database/`), consumido por
+  `BookingService`. Ver [modules/booking.md](modules/booking.md).
+- En el resto de features (`room`, `payment`, etc.), los
   controladores contienen los datos de ejemplo directamente (por ejemplo
   `controllers/room/room_mock_data.dart`, o las listas `static` dentro de
   cada `*Controller`), sin una interfaz de repositorio intermedia.

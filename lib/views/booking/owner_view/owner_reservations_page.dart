@@ -64,7 +64,9 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       simulateError: simulateError,
       simulateOffline: simulateOffline,
     );
-    if (!simulateError && !simulateOffline) {
+    if (!simulateError &&
+        !simulateOffline &&
+        _controller.errorMessage == null) {
       _hasLoadedOnce = true;
       await _applyFilters();
     }

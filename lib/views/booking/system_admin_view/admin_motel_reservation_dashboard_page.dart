@@ -62,7 +62,9 @@ class _AdminMotelReservationDashboardPageState
       simulateError: simulateError,
       simulateOffline: simulateOffline,
     );
-    if (!simulateError && !simulateOffline) {
+    if (!simulateError &&
+        !simulateOffline &&
+        _controller.errorMessage == null) {
       _hasLoadedOnce = true;
     }
   }

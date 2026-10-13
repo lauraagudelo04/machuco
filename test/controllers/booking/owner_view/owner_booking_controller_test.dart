@@ -2,8 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/service/booking/booking_service.dart';
 
 void main() {
+  _failureTests();
+
   group('OwnerBookingController.reservationsForOwner', () {
     test('devuelve solo reservas de los moteles del propietario, ordenadas '
         'de más reciente a más antigua', () async {
@@ -340,6 +344,44 @@ void main() {
 
       expect(summary['total'], expectedTotal);
       expect(summary['activeOrUpcoming'], expectedActiveOrUpcoming);
+    });
+  });
+}
+
+class _FailingBookingRepository implements BookingRepository {
+  @override
+  Future<List<Reservation>> getAll() => Future.error(StateError('offline'));
+
+  @override
+  Future<Reservation?> getById(String id) => Future.error(StateError('x'));
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) =>
+      Future.error(StateError('x'));
+
+  @override
+  Future<void> add(Reservation reservation) => Future.error(StateError('x'));
+
+  @override
+  Future<void> update(Reservation reservation) => Future.error(StateError('x'));
+}
+
+void _failureTests() {
+  group('OwnerBookingController con repositorio que falla', () {
+    test('loadReservations expone el error recuperable y reintenta', () async {
+      final controller = OwnerBookingController(
+        bookingService: BookingService(repository: _FailingBookingRepository()),
+      );
+
+      await controller.loadReservations();
+
+      expect(controller.errorMessage, isNotNull);
+      expect(controller.isLoading, isFalse);
+      expect(controller.ownedReservations, isEmpty);
+
+      // Retrying while the repository still fails keeps the error state.
+      await controller.loadReservations();
+      expect(controller.errorMessage, isNotNull);
     });
   });
 }
