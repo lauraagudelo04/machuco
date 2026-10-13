@@ -387,7 +387,7 @@ List<Reservation> _generateMotelHistory({
               ? ReservationStatus.cancelled
               : ReservationStatus.completed,
           createdAt: checkIn.subtract(const Duration(hours: 2)),
-          guestId: 'guest-$motelId-${i % 5}',
+          guestId: _guestIdFor(i),
           guestName: _guestNameFor(i),
           categoryId: 1 + (i % 5),
           paymentMethod: cancelled ? null : _paymentMethodFor(sequence),
@@ -403,6 +403,10 @@ String _paymentMethodFor(int sequence) {
   const methods = ['Efectivo', 'Tarjeta', 'Transferencia'];
   return methods[sequence % methods.length];
 }
+
+/// Matches the ids of the hand-written seeds above, so one client keeps a
+/// single id across motels and the client filter shows each name once.
+String _guestIdFor(int index) => 'client-00${(index % 5) + 1}';
 
 String _guestNameFor(int index) {
   const names = [
