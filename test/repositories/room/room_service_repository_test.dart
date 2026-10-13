@@ -1,27 +1,36 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/room/room_service.dart';
-import 'package:machuco/repositories/room/room_dao.dart';
-import 'package:machuco/repositories/room/room_service_repository.dart';
+import 'package:machuco/database/repository/room/room_dao.dart';
+import 'package:machuco/database/repository/room/room_service_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late AppDatabase database;
   late RoomDao dao;
+  late Directory directory;
 
-  setUpAll(sqfliteFfiInit);
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
 
-  setUp(() {
-    database = AppDatabase(
-      factory: databaseFactoryFfi,
-      databasePath: inMemoryDatabasePath,
+  setUp(() async {
+    directory = await Directory.systemTemp.createTemp('machuco_room_service_');
+    database = await AppDatabaseProvider.open(
+      name: '${directory.path}${Platform.pathSeparator}rooms.db',
     );
     dao = database.roomDao;
   });
 
-  tearDown(() => database.close());
+  tearDown(() async {
+    await database.close();
+    await directory.delete(recursive: true);
+  });
 
   test('consulta Supabase y guarda el resultado localmente', () async {
     final client = MockClient((request) async {

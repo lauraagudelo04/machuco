@@ -238,3 +238,18 @@ atadas a quien las creó. Detalle en
 **Estado:** cerrado. Reemplaza el punto "API `SharedPreferencesAsync`" de la
 entrada anterior; el resto de esa decisión (paquete y ubicación en
 `lib/service/storage/`) sigue vigente.
+
+## 2026-10-06 — Floor (SQLite) para persistencia local de datos de dominio
+
+**Hallazgo:** el profesor pidió una base de datos local con esta estructura:
+`lib/database/app_database.dart`, la entidad en `lib/models/`, el DAO en
+`lib/repositories/` y el controlador conectado al repositorio. Su ejemplo
+(`EjemploSQLite`) usa Floor sobre `sqflite`.
+
+**Por qué importa:** `CLAUDE.md` pide una decisión documentada antes de fijar
+la base de datos. Las 17 ramas comparten `AppDatabase`.
+
+**A confirmar:** si el equipo adopta Floor (`floor`, `floor_generator` y
+`build_runner`) para los datos de dominio locales. No cubre el backend
+remoto, las preferencias de interfaz (`shared_preferences`) ni las
+credenciales.

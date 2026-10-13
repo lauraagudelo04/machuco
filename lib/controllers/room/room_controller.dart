@@ -2,11 +2,12 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/models/room/room_service.dart';
-import 'package:machuco/repositories/room/room_dao.dart';
-import 'package:machuco/repositories/room/room_service_repository.dart';
+import 'package:machuco/database/repository/room/room_dao.dart';
+import 'package:machuco/database/repository/room/room_service_repository.dart';
 import 'package:machuco/service/room/supabase_room_config.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
 
 /// Conecta la presentación del maestro con su repositorio.
 class RoomController extends ChangeNotifier {
@@ -19,13 +20,18 @@ class RoomController extends ChangeNotifier {
   RoomController._(this._roomDao, this._serviceRepository, this._preferences);
 
   factory RoomController.fromEnvironment({AppDatabase? database}) {
-    final appDatabase = database ?? AppDatabase();
+    final appDatabaseFuture = database == null
+        ? AppDatabaseProvider.database
+        : Future.value(database);
+    final roomDao = RoomDao(
+      () async => (await appDatabaseFuture).database as sqflite.Database,
+    );
     return RoomController(
-      roomDao: appDatabase.roomDao,
+      roomDao: roomDao,
       serviceRepository: RoomServiceRepository(
         baseUrl: SupabaseRoomConfig.baseUrl,
         apiKey: SupabaseRoomConfig.apiKey,
-        roomDao: appDatabase.roomDao,
+        roomDao: roomDao,
       ),
       preferences: SharedPreferencesLocalService(namespace: 'rooms'),
     );

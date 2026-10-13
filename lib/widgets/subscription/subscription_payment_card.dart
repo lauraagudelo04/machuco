@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/subscription/subscription.dart';
+import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 

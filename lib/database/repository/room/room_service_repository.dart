@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:machuco/models/room/room_service.dart';
-import 'package:machuco/repositories/room/room_dao.dart';
+import 'package:machuco/database/repository/room/room_dao.dart';
 
 class RoomServiceRepositoryException implements Exception {
   const RoomServiceRepositoryException(this.message);
