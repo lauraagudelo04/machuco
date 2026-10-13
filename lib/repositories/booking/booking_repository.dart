@@ -85,18 +85,22 @@ class FloorBookingRepository implements BookingRepository {
   Future<void>? _seeding;
 
   Future<void> _ensureSeeded() {
-    return _seeding ??= _seed();
+    final seeding = _seeding ??= _seed();
+    // A failed seed must not stay memoized, so the next call retries.
+    return seeding.catchError((Object error) {
+      _seeding = null;
+      throw error;
+    });
   }
 
   Future<void> _seed() async {
     final count = await _dao.countReservations() ?? 0;
     if (count > 0) return;
-    for (final reservation in buildSeedReservations(_now())) {
-      await _dao.insertReservation(
-        ReservationMapper.toEntity(reservation),
-        ReservationMapper.toLineItemEntities(reservation),
-      );
-    }
+    final seeds = buildSeedReservations(_now());
+    await _dao.insertReservations(
+      [for (final r in seeds) ReservationMapper.toEntity(r)],
+      [for (final r in seeds) ...ReservationMapper.toLineItemEntities(r)],
+    );
   }
 
   @override

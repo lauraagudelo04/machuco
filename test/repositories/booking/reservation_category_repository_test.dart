@@ -9,6 +9,7 @@ class _FakeDao implements ReservationCategoryDao {
 
   final List<ReservationCategory> rows;
   int insertAllCalls = 0;
+  bool failInsert = false;
 
   @override
   Future<List<ReservationCategory>> findAll() async =>
@@ -25,6 +26,7 @@ class _FakeDao implements ReservationCategoryDao {
   @override
   Future<void> insertAll(List<ReservationCategory> categories) async {
     insertAllCalls++;
+    if (failInsert) throw StateError('seed failed');
     rows.addAll(categories);
   }
 
@@ -68,6 +70,32 @@ void main() {
       await repository.getCategories();
 
       expect(dao.insertAllCalls, 1);
+    });
+
+    test('concurrent reads seed once', () async {
+      final dao = _FakeDao();
+      final repository = FloorReservationCategoryRepository(dao);
+
+      await Future.wait([
+        repository.getCategories(),
+        repository.getCategories(),
+        repository.getCategoryById(1),
+      ]);
+
+      expect(dao.insertAllCalls, 1);
+      expect(dao.rows.length, defaultReservationCategories.length);
+    });
+
+    test('a failed seed is retried on the next call', () async {
+      final dao = _FakeDao()..failInsert = true;
+      final repository = FloorReservationCategoryRepository(dao);
+
+      await expectLater(repository.getCategories(), throwsStateError);
+      dao.failInsert = false;
+      final categories = await repository.getCategories();
+
+      expect(categories.length, defaultReservationCategories.length);
+      expect(dao.insertAllCalls, 2);
     });
 
     test('getCategoryById returns the row or null', () async {

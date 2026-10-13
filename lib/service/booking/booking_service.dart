@@ -170,6 +170,19 @@ class BookingService {
   final DateTime Function() _now;
   final Random _random;
 
+  /// Tail of the reservation creation queue. It is static because the
+  /// repository provider instance is shared by every service (one per
+  /// controller), so the check + insert must be serialized across all of them.
+  static Future<void> _creationQueue = Future<void>.value();
+
+  /// Runs [action] after every previously queued creation has finished,
+  /// whether it succeeded or failed.
+  static Future<T> _serialized<T>(Future<T> Function() action) {
+    final result = _creationQueue.then((_) => action());
+    _creationQueue = result.then<void>((_) {}, onError: (_) {});
+    return result;
+  }
+
   DateTime get now => _now();
 
   // ---------------------------------------------------------------------
@@ -464,7 +477,7 @@ class BookingService {
     String guestName = '',
     List<BlockedRange> externalBlocked = const [],
     bool roomIsActive = true,
-  }) async {
+  }) => _serialized(() async {
     final existing = await _repository.findByRequestId(requestId);
     if (existing != null) return existing;
 
@@ -494,7 +507,7 @@ class BookingService {
     );
     final created = now;
     final reservation = Reservation(
-      id: 'reservation-${created.microsecondsSinceEpoch}',
+      id: 'reservation-${created.microsecondsSinceEpoch}-$requestId',
       requestId: requestId,
       motelId: motelId,
       motelName: motelName,
@@ -517,7 +530,7 @@ class BookingService {
     );
     await _repository.add(reservation);
     return reservation;
-  }
+  });
 
   /// Active rooms of [rooms] that have no overlapping `pending`, `upcoming`
   /// or `active` reservation (buffer included) in `[start, end)`.

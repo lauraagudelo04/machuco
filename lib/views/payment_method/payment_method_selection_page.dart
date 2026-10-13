@@ -7,6 +7,15 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/views/payment_method/payment_method_page.dart';
 
+Future<bool> _confirmWithClientController(String reservationId) async {
+  final controller = ClientBookingController();
+  try {
+    return await controller.confirmPayment(reservationId);
+  } finally {
+    controller.dispose();
+  }
+}
+
 class PaymentMethodSelectionPage extends StatefulWidget {
   const PaymentMethodSelectionPage({
     super.key,
@@ -14,12 +23,17 @@ class PaymentMethodSelectionPage extends StatefulWidget {
     this.amount = 120000,
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
     this.onContinue,
+    this.confirmReservationPayment,
   });
 
   final Reservation? reservation;
   final int amount;
   final String concept;
   final ValueChanged<PaymentMethodModel>? onContinue;
+
+  /// Confirms the payment of a reservation and reports success. Defaults to
+  /// the client booking flow; injectable so the view builds no controller.
+  final Future<bool> Function(String reservationId)? confirmReservationPayment;
 
   @override
   State<PaymentMethodSelectionPage> createState() =>
@@ -78,9 +92,9 @@ class _PaymentMethodSelectionPageState
       _goToInvoice(paymentMethod);
       return;
     }
-    final controller = ClientBookingController();
-    final confirmed = await controller.confirmPayment(reservation.id);
-    controller.dispose();
+    final confirmed =
+        await (widget.confirmReservationPayment ??
+            _confirmWithClientController)(reservation.id);
     if (!mounted) return;
     if (!confirmed) {
       ScaffoldMessenger.of(context).showSnackBar(

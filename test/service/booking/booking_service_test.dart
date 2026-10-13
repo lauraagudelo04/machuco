@@ -286,6 +286,22 @@ void main() {
       expect((await repository.getAll()).length, 1);
     });
 
+    test('concurrent calls with the same requestId create one', () async {
+      final results = await Future.wait([create(), create()]);
+
+      expect(results[0].id, results[1].id);
+      expect((await repository.getAll()).length, 1);
+    });
+
+    test('same-microsecond creations get distinct ids', () async {
+      final a = await create(requestId: 'req-a', roomId: 'room-a');
+      final b = await create(requestId: 'req-b', roomId: 'room-b');
+
+      expect(a.createdAt, b.createdAt);
+      expect(a.id, isNot(b.id));
+      expect((await repository.getAll()).length, 2);
+    });
+
     test('throws when the slot is taken', () async {
       seed([reservation(checkIn: at(11, 14), checkOut: at(11, 18))]);
 

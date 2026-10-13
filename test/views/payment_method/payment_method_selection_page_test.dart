@@ -6,14 +6,21 @@ import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 
-Future<void> _payWithCard(WidgetTester tester, Reservation reservation) async {
+Future<void> _payWithCard(
+  WidgetTester tester,
+  Reservation reservation, {
+  Future<bool> Function(String reservationId)? confirmReservationPayment,
+}) async {
   tester.view.physicalSize = const Size(800, 2400);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   await tester.pumpWidget(
     MaterialApp(
       theme: AppTheme.light,
-      home: PaymentMethodSelectionPage(reservation: reservation),
+      home: PaymentMethodSelectionPage(
+        reservation: reservation,
+        confirmReservationPayment: confirmReservationPayment,
+      ),
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
         settings: settings,
         builder: (_) => Scaffold(body: Text('route:${settings.name}')),
@@ -88,6 +95,30 @@ void main() {
     expect(
       (await repository.getById(notPending.id))?.status,
       ReservationStatus.completed,
+    );
+  });
+
+  testWidgets('uses the injected payment confirmation', (tester) async {
+    final repository = BookingRepositoryProvider.instance;
+    final pending = (await repository.getAll()).firstWhere(
+      (r) => r.status == ReservationStatus.pending,
+    );
+    String? confirmedId;
+
+    await _payWithCard(
+      tester,
+      pending,
+      confirmReservationPayment: (id) async {
+        confirmedId = id;
+        return true;
+      },
+    );
+
+    expect(confirmedId, pending.id);
+    expect(find.text('route:${AppRoutes.invoice}'), findsOneWidget);
+    expect(
+      (await repository.getById(pending.id))?.status,
+      ReservationStatus.pending,
     );
   });
 }

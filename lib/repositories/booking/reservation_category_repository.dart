@@ -26,15 +26,27 @@ class FloorReservationCategoryRepository
   FloorReservationCategoryRepository(this._dao);
 
   final ReservationCategoryDao _dao;
+  Future<void>? _seeding;
+
+  Future<void> _ensureSeeded() {
+    final seeding = _seeding ??= _seed();
+    // A failed seed must not stay memoized, so the next call retries.
+    return seeding.catchError((Object error) {
+      _seeding = null;
+      throw error;
+    });
+  }
+
+  Future<void> _seed() async {
+    if ((await _dao.findAll()).isEmpty) {
+      await _dao.insertAll(defaultReservationCategories);
+    }
+  }
 
   @override
   Future<List<ReservationCategory>> getCategories() async {
-    var categories = await _dao.findAll();
-    if (categories.isEmpty) {
-      await _dao.insertAll(defaultReservationCategories);
-      categories = await _dao.findAll();
-    }
-    return categories;
+    await _ensureSeeded();
+    return _dao.findAll();
   }
 
   @override

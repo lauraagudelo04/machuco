@@ -390,7 +390,7 @@ class _$ReservationDao extends ReservationDao {
   @override
   Future<void> insertReservationRow(ReservationEntity reservation) async {
     await _reservationEntityInsertionAdapter.insert(
-        reservation, OnConflictStrategy.replace);
+        reservation, OnConflictStrategy.abort);
   }
 
   @override
@@ -437,6 +437,24 @@ class _$ReservationDao extends ReservationDao {
           ..database = transaction;
         await transactionDatabase.reservationDao
             .replaceReservation(reservation, items);
+      });
+    }
+  }
+
+  @override
+  Future<void> insertReservations(
+    List<ReservationEntity> reservations,
+    List<ReservationLineItemEntity> items,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.insertReservations(reservations, items);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.reservationDao
+            .insertReservations(reservations, items);
       });
     }
   }

@@ -12,6 +12,8 @@ class FakeReservationDao extends ReservationDao {
   final Map<String, ReservationEntity> reservations = {};
   final List<ReservationLineItemEntity> lineItems = [];
   int insertCalls = 0;
+  int bulkInsertCalls = 0;
+  bool failBulkInsert = false;
   int replaceCalls = 0;
   int _nextRowId = 1;
 
@@ -90,6 +92,19 @@ class FakeReservationDao extends ReservationDao {
   }
 
   @override
+  Future<void> insertReservations(
+    List<ReservationEntity> reservations,
+    List<ReservationLineItemEntity> items,
+  ) async {
+    bulkInsertCalls++;
+    if (failBulkInsert) throw StateError('seed failed');
+    for (final reservation in reservations) {
+      this.reservations[reservation.id] = reservation;
+    }
+    _storeItems(items);
+  }
+
+  @override
   Future<void> replaceReservation(
     ReservationEntity reservation,
     List<ReservationLineItemEntity> items,
@@ -118,8 +133,27 @@ void main() {
     await repository.getAll();
 
     expect(all.map((r) => r.id).toSet(), seed.map((r) => r.id).toSet());
-    expect(dao.insertCalls, seed.length);
+    expect(dao.bulkInsertCalls, 1);
+    expect(dao.reservations.length, seed.length);
     expect(dao.lineItems, isNotEmpty);
+  });
+
+  test('concurrent first reads seed once', () async {
+    await Future.wait([repository.getAll(), repository.getAll()]);
+
+    expect(dao.bulkInsertCalls, 1);
+  });
+
+  test('a failed seed is retried on the next call', () async {
+    dao.failBulkInsert = true;
+    await expectLater(repository.getAll(), throwsStateError);
+    expect(dao.reservations, isEmpty);
+
+    dao.failBulkInsert = false;
+    final all = await repository.getAll();
+
+    expect(all, isNotEmpty);
+    expect(dao.bulkInsertCalls, 2);
   });
 
   test('does not seed when the table already has data', () async {

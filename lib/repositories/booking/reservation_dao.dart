@@ -30,7 +30,7 @@ abstract class ReservationDao {
   @Query('DELETE FROM reservation_line_items WHERE reservationId = :id')
   Future<void> deleteLineItems(String id);
 
-  @Insert(onConflict: OnConflictStrategy.replace)
+  @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertReservationRow(ReservationEntity reservation);
 
   @update
@@ -58,6 +58,19 @@ abstract class ReservationDao {
   ) async {
     await updateReservationRow(reservation);
     await deleteLineItems(reservation.id);
+    await insertLineItems(items);
+  }
+
+  /// Inserts every reservation with its line items in one transaction, so a
+  /// failure leaves the tables untouched.
+  @transaction
+  Future<void> insertReservations(
+    List<ReservationEntity> reservations,
+    List<ReservationLineItemEntity> items,
+  ) async {
+    for (final reservation in reservations) {
+      await insertReservationRow(reservation);
+    }
     await insertLineItems(items);
   }
 }
