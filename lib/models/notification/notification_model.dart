@@ -1,28 +1,59 @@
 import 'package:flutter/material.dart';
+
 import '../../core/design_system/tokens/app_colors.dart';
 
-enum NotificationType { reservation, payment, review, system }
+class NotificationType {
+  const NotificationType({
+    required this.id,
+    required this.code,
+    required this.name,
+    this.description,
+  });
 
-extension NotificationTypeData on NotificationType {
-  String get label => switch (this) {
-    NotificationType.reservation => 'Reservas',
-    NotificationType.payment => 'Pagos',
-    NotificationType.review => 'Reseñas',
-    NotificationType.system => 'Sistema',
+  final int id;
+  final String code;
+  final String name;
+  final String? description;
+
+  factory NotificationType.fromJson(Map<String, dynamic> json) {
+    final id = json['id'];
+    final code = json['code'];
+    final name = json['name'];
+    if (id is! int ||
+        code is! String ||
+        code.trim().isEmpty ||
+        name is! String ||
+        name.trim().isEmpty) {
+      throw const FormatException('Tipo de notificación inválido');
+    }
+    final description = json['description'];
+    if (description != null && description is! String) {
+      throw const FormatException('Tipo de notificación inválido');
+    }
+    return NotificationType(
+      id: id,
+      code: code.trim(),
+      name: name.trim(),
+      description: description?.trim(),
+    );
+  }
+}
+
+extension NotificationTypePresentation on NotificationType {
+  IconData get icon => switch (code) {
+    'reservation' => Icons.event_outlined,
+    'payment' => Icons.payments_outlined,
+    'review' => Icons.star_outline,
+    'system' => Icons.campaign_outlined,
+    _ => Icons.notifications_outlined,
   };
 
-  IconData get icon => switch (this) {
-    NotificationType.reservation => Icons.event_outlined,
-    NotificationType.payment => Icons.payments_outlined,
-    NotificationType.review => Icons.star_outline,
-    NotificationType.system => Icons.campaign_outlined,
-  };
-
-  Color get color => switch (this) {
-    NotificationType.reservation => AppColors.violet,
-    NotificationType.payment => AppColors.available,
-    NotificationType.review => AppColors.fuchsia,
-    NotificationType.system => AppColors.purple,
+  Color get color => switch (code) {
+    'reservation' => AppColors.violet,
+    'payment' => AppColors.available,
+    'review' => AppColors.fuchsia,
+    'system' => AppColors.purple,
+    _ => AppColors.violet,
   };
 }
 
@@ -38,50 +69,23 @@ extension NotificationTargetData on NotificationTarget {
 class AppNotification {
   const AppNotification({
     required this.id,
-    required this.type,
+    required this.typeId,
     required this.title,
     required this.message,
-    required this.time,
-    this.isUnread = false,
-    this.target = NotificationTarget.all,
+    required this.sentAt,
+    required this.isUnread,
+    required this.target,
+    this.type,
     this.recipientUser,
   });
 
-  final String id;
-  final NotificationType type;
+  final int id;
+  final int typeId;
+  final NotificationType? type;
   final String title;
   final String message;
-  final String time;
+  final DateTime sentAt;
   final bool isUnread;
   final NotificationTarget target;
   final String? recipientUser;
-
-  AppNotification copyWith({
-    bool? isUnread,
-    NotificationType? type,
-    String? title,
-    String? message,
-    String? time,
-    NotificationTarget? target,
-    String? recipientUser,
-  }) {
-    return AppNotification(
-      id: id,
-      type: type ?? this.type,
-      title: title ?? this.title,
-      message: message ?? this.message,
-      time: time ?? this.time,
-      isUnread: isUnread ?? this.isUnread,
-      target: target ?? this.target,
-      recipientUser: recipientUser ?? this.recipientUser,
-    );
-  }
-}
-
-/// Modelo de estado. Los datos iniciales se cargan desde el controlador.
-class NotificationModel {
-  NotificationModel({List<AppNotification>? notifications})
-    : notifications = notifications ?? [];
-
-  List<AppNotification> notifications;
 }

@@ -74,13 +74,15 @@ class _$AppDatabase extends AppDatabase {
 
   SubscriptionDao? _subscriptionDaoInstance;
 
+  NotificationDao? _notificationDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 4,
+      version: 5,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -100,7 +102,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
+        await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -112,6 +120,12 @@ class _$AppDatabase extends AppDatabase {
   SubscriptionDao get subscriptionDao {
     return _subscriptionDaoInstance ??=
         _$SubscriptionDao(database, changeListener);
+  }
+
+  @override
+  NotificationDao get notificationDao {
+    return _notificationDaoInstance ??=
+        _$NotificationDao(database, changeListener);
   }
 }
 
@@ -268,6 +282,97 @@ class _$SubscriptionDao extends SubscriptionDao {
   Future<int> updateSubscription(SubscriptionDetails subscription) {
     return _subscriptionDetailsUpdateAdapter.updateAndReturnChangedRows(
         subscription, OnConflictStrategy.abort);
+  }
+}
+
+class _$NotificationDao extends NotificationDao {
+  _$NotificationDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _notificationEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'notifications',
+            (NotificationEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'typeId': item.typeId,
+                  'title': item.title,
+                  'message': item.message,
+                  'sentAt': _subscriptionDateConverter.encode(item.sentAt),
+                  'target': item.target,
+                  'recipientUser': item.recipientUser
+                }),
+        _notificationReadInsertionAdapter = InsertionAdapter(
+            database,
+            'notification_reads',
+            (NotificationRead item) => <String, Object?>{
+                  'id': item.id,
+                  'notificationId': item.notificationId,
+                  'userId': item.userId,
+                  'readAt': _subscriptionDateConverter.encode(item.readAt)
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<NotificationEntry> _notificationEntryInsertionAdapter;
+
+  final InsertionAdapter<NotificationRead> _notificationReadInsertionAdapter;
+
+  @override
+  Future<List<NotificationEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM notifications ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(
+            id: row['id'] as int?,
+            typeId: row['typeId'] as int,
+            title: row['title'] as String,
+            message: row['message'] as String,
+            sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+            target: row['target'] as String,
+            recipientUser: row['recipientUser'] as String?));
+  }
+
+  @override
+  Future<List<NotificationEntry>> findForRecipient(String recipientUser) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUser: row['recipientUser'] as String?),
+        arguments: [recipientUser]);
+  }
+
+  @override
+  Future<List<int>> findReadNotificationIds(String userId) async {
+    return _queryAdapter.queryList(
+        'SELECT notificationId FROM notification_reads WHERE userId = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [userId]);
+  }
+
+  @override
+  Future<NotificationRead?> findRead(
+    int notificationId,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM notification_reads WHERE notificationId = ?1 AND userId = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => NotificationRead(id: row['id'] as int?, notificationId: row['notificationId'] as int, userId: row['userId'] as String, readAt: _subscriptionDateConverter.decode(row['readAt'] as int)),
+        arguments: [notificationId, userId]);
+  }
+
+  @override
+  Future<int> insertNotification(NotificationEntry notification) {
+    return _notificationEntryInsertionAdapter.insertAndReturnId(
+        notification, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<int> insertRead(NotificationRead notificationRead) {
+    return _notificationReadInsertionAdapter.insertAndReturnId(
+        notificationRead, OnConflictStrategy.abort);
   }
 }
 

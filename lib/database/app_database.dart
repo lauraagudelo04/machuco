@@ -3,7 +3,9 @@
 import 'dart:async';
 
 import 'package:floor/floor.dart';
+import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
@@ -15,9 +17,18 @@ part 'app_database.g.dart';
   SubscriptionStatusConverter,
   SubscriptionFeaturesConverter,
 ])
-@Database(version: 4, entities: [SubscriptionDetails, SubscriptionPayment])
+@Database(
+  version: 5,
+  entities: [
+    SubscriptionDetails,
+    SubscriptionPayment,
+    NotificationEntry,
+    NotificationRead,
+  ],
+)
 abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
+  NotificationDao get notificationDao;
 }
 
 class AppDatabaseProvider {
@@ -34,6 +45,7 @@ class AppDatabaseProvider {
     migration1To2,
     migration2To3,
     migration3To4,
+    migration4To5,
   ]).build();
 }
 
@@ -113,5 +125,25 @@ final migration3To4 = Migration(3, 4, (database) async {
   await database.execute(
     'CREATE INDEX index_subscription_payments_subscriptionId '
     'ON subscription_payments (subscriptionId)',
+  );
+});
+
+/// Agrega la persistencia de notificaciones sin modificar migraciones previas.
+final migration4To5 = Migration(4, 5, (database) async {
+  await database.execute(
+    'CREATE TABLE notifications ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, typeId INTEGER NOT NULL, '
+    'title TEXT NOT NULL, message TEXT NOT NULL, sentAt INTEGER NOT NULL, '
+    'target TEXT NOT NULL, recipientUser TEXT)',
+  );
+  await database.execute(
+    'CREATE TABLE notification_reads ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, notificationId INTEGER NOT NULL, '
+    'userId TEXT NOT NULL, readAt INTEGER NOT NULL, '
+    'FOREIGN KEY (notificationId) REFERENCES notifications (id))',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX index_notification_reads_notificationId_userId '
+    'ON notification_reads (notificationId, userId)',
   );
 });
