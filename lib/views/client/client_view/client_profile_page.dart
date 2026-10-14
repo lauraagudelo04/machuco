@@ -31,7 +31,7 @@ class ClientProfilePage extends StatelessWidget {
             if (controller.errorMessage != null && controller.currentClient == null) {
               return AppErrorState(
                 message: controller.errorMessage!,
-                onRetry: controller.loadCurrentClient,
+                onRetry: controller.loadData,
               );
             }
 
@@ -54,7 +54,7 @@ class ClientProfilePage extends StatelessWidget {
                     _InfoRow(
                       icon: Icons.phone_outlined,
                       label: 'Teléfono',
-                      value: client.phone,
+                      value: '${client.countryCode} ${client.phone}',
                     ),
                     _InfoRow(
                       icon: Icons.email_outlined,

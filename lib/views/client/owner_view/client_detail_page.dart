@@ -31,7 +31,7 @@ class ClientDetailPage extends StatelessWidget {
                 _InfoRow(
                   icon: Icons.phone_outlined,
                   label: 'Teléfono',
-                  value: client.phone,
+                  value: '${client.countryCode} ${client.phone}',
                 ),
                 _InfoRow(
                   icon: Icons.email_outlined,
