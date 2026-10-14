@@ -28,6 +28,11 @@ abstract class ClientDao {
   Future<void> deleteById(int id);
 }
 
+class ClientRepositoryException implements Exception {
+  const ClientRepositoryException(this.message);
+  final String message;
+}
+
 class ClientRepository {
   ClientRepository({
     AppDatabase? database,
@@ -54,38 +59,59 @@ class ClientRepository {
   final String _supabaseUrl;
   final String _publishableKey;
 
-  /// Descarga los clientes de Supabase y los guarda en Floor
   Future<void> _syncClients() async {
-    // Pedimos los datos ordenados por ID para asegurar que "el primero" siempre sea el mismo
-    final uri = Uri.parse('$_supabaseUrl/rest/v1/clients?select=*&order=id.asc');
+    final base = Uri.tryParse(_supabaseUrl);
+    
+    // 1. Validación estricta copiada de NotificationRepository
+    if (base == null || base.scheme != 'https' || base.host.isEmpty || _publishableKey.isEmpty) {
+      print('Advertencia: Conexión a Supabase no configurada. Usando datos locales.');
+      return; 
+    }
+
+    final uri = base.replace(
+      path: '/rest/v1/clients',
+      queryParameters: {'select': '*', 'order': 'id.asc'},
+    );
+
+    late final http.Response response;
     try {
-      final response = await _get(
+      response = await _get(
         uri,
         headers: {'apikey': _publishableKey, 'Accept': 'application/json'},
       ).timeout(const Duration(seconds: 15));
+    } catch (_) {
+      print('Advertencia: Sin internet. Usando caché local de clientes.');
+      return;
+    }
 
-      if (response.statusCode == 200) {
-        final List<dynamic> rows = jsonDecode(utf8.decode(response.bodyBytes));
-        final clients = rows
-            .map((row) => Client.fromJson(row as Map<String, dynamic>))
-            .toList();
+    if (response.statusCode != 200) {
+      print('Error ${response.statusCode} al consultar Supabase.');
+      return;
+    }
 
-        final dao = (await _database).clientDao;
-        // Guarda todos los clientes en la base de datos local de un solo golpe
-        await dao.insertClients(clients);
-      }
-    } catch (e) {
-      print('Sincronización de clientes fallida (Offline): $e');
+    // 2. Manejo riguroso de JSON y Tipos
+    try {
+      final rows = jsonDecode(utf8.decode(response.bodyBytes));
+      if (rows is! List) throw const FormatException('Respuesta inválida');
+      
+      final clients = rows
+          .map((row) => Client.fromJson(row as Map<String, dynamic>))
+          .toList(growable: false);
+
+      final dao = (await _database).clientDao;
+      await dao.insertClients(clients);
+
+    } on FormatException {
+      print('Error crítico: El JSON de clientes está malformado.');
+    } on TypeError {
+      print('Error crítico: Los tipos de datos de Supabase no coinciden con el modelo Client.');
     }
   }
 
   Future<List<Client>> getAllClients() async {
-    // 1. Primero intentamos sincronizar con la nube silenciosamente
-    await _syncClients();
-    
-    // 2. Retornamos lo que hay en la base de datos local (que ahora está actualizada)
+    await _syncClients(); // Descarga silenciosa
     final dao = (await _database).clientDao;
-    return await dao.findAll();
+    return await dao.findAll(); // Devuelve datos unificados
   }
 
   Future<Client?> getClientById(int id) async {
