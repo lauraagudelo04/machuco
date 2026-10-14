@@ -1,154 +1,197 @@
-import 'package:flutter/material.dart';
-import '../../models/notification/notification_model.dart';
+import 'package:flutter/foundation.dart';
+import 'package:machuco/database/model/notification/notification.dart';
+import 'package:machuco/database/repository/notification/notification_repository.dart';
+import 'package:machuco/models/notification/notification_model.dart';
+import 'package:machuco/service/storage/local_preferences_service.dart';
+import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
-/// Controlador en la arquitectura MVC
-/// Modifica los datos del modelo y notifica a la vista mediante ChangeNotifier
 class NotificationController extends ChangeNotifier {
-  static final NotificationController _instance =
-      NotificationController._internal();
-
-  factory NotificationController() => _instance;
-
-  NotificationController._internal()
-    : _model = NotificationModel(notifications: _initialNotifications);
+  NotificationController({
+    this.recipientUser,
+    NotificationRepository? repository,
+    LocalPreferencesService? preferences,
+  }) : _repository = repository ?? NotificationRepository(),
+       _preferences =
+           preferences ??
+           SharedPreferencesLocalService(namespace: 'notification') {
+    ready = load();
+  }
 
   static const demoClientUser = 'laura@machuco.com';
   static const demoOwnerUser = 'owner-1020304050';
+  static const _lastTypeFilterIdKey = 'lastTypeFilterId';
 
-  /// Data mockeada del modulo. Vive en el controlador para que el modelo
-  /// conserve solo la estructura y el estado.
-  static final List<AppNotification> _initialNotifications = [
-    const AppNotification(
-      id: 'notif-1',
-      type: NotificationType.reservation,
-      title: 'Reserva confirmada',
-      message:
-          'Tu reserva en Motel El Paraíso quedó confirmada para hoy a las 3:00 PM.',
-      time: 'hace 5 min',
-      isUnread: true,
-      target: NotificationTarget.specificUser,
-      recipientUser: demoClientUser,
-    ),
-    const AppNotification(
-      id: 'notif-2',
-      type: NotificationType.payment,
-      title: 'Pago recibido',
-      message: 'Recibimos tu pago de \$120.000 por la reserva #4821.',
-      time: 'hace 1 h',
-      isUnread: true,
-      target: NotificationTarget.specificUser,
-      recipientUser: demoClientUser,
-    ),
-    const AppNotification(
-      id: 'notif-3',
-      type: NotificationType.review,
-      title: 'Nueva reseña',
-      message:
-          'Tu huésped dejó una reseña de 5 estrellas en la habitación Estándar.',
-      time: 'hace 3 h',
-      target: NotificationTarget.specificUser,
-      recipientUser: demoOwnerUser,
-    ),
-    const AppNotification(
-      id: 'notif-4',
-      type: NotificationType.system,
-      title: 'Mantenimiento programado',
-      message:
-          'El próximo martes se hará mantenimiento en las habitaciones 2 y 3.',
-      time: 'ayer',
-      target: NotificationTarget.all,
-    ),
-    const AppNotification(
-      id: 'notif-5',
-      type: NotificationType.reservation,
-      title: 'Recordatorio de check-in',
-      message: 'Tu check-in en Motel Suites Central es hoy a las 3:00 PM.',
-      time: 'hace 2 días',
-      target: NotificationTarget.specificUser,
-      recipientUser: 'camilo@machuco.com',
-    ),
-  ];
+  final String? recipientUser;
+  final NotificationRepository _repository;
+  final LocalPreferencesService _preferences;
+  late final Future<void> ready;
 
-  final NotificationModel _model;
+  List<AppNotification> _notifications = const [];
+  List<NotificationType> _types = const [];
+  int? _selectedTypeId;
+  bool _isLoading = true;
+  bool _isSaving = false;
+  bool _disposed = false;
+  String? _errorMessage;
 
-  List<AppNotification> get notifications =>
-      List.unmodifiable(_model.notifications);
+  List<AppNotification> get notifications => List.unmodifiable(_notifications);
+  List<NotificationType> get types => List.unmodifiable(_types);
+  int? get selectedTypeId => _selectedTypeId;
+  bool get isLoading => _isLoading;
+  bool get isSaving => _isSaving;
+  String? get errorMessage => _errorMessage;
+  int get unreadCount => _notifications.where((item) => item.isUnread).length;
 
-  int get unreadCount => _model.notifications.where((n) => n.isUnread).length;
-
-  int receivedUnreadCount(String recipientUser) => getReceivedNotifications(
-    recipientUser: recipientUser,
-  ).where((n) => n.isUnread).length;
-
-  List<AppNotification> getFilteredNotifications(NotificationType? filter) {
-    if (filter == null) return notifications;
-    return _model.notifications.where((n) => n.type == filter).toList();
+  List<AppNotification> get filteredNotifications {
+    if (_selectedTypeId == null) return notifications;
+    return _notifications
+        .where((notification) => notification.typeId == _selectedTypeId)
+        .toList(growable: false);
   }
 
-  List<AppNotification> getReceivedNotifications({
-    required String recipientUser,
-    NotificationType? filter,
-  }) {
-    final normalizedRecipient = recipientUser.trim().toLowerCase();
-    return _model.notifications.where((notification) {
-      final isForEveryone = notification.target == NotificationTarget.all;
-      final isForRecipient =
-          notification.recipientUser?.trim().toLowerCase() ==
-          normalizedRecipient;
-      final matchesType = filter == null || notification.type == filter;
-      return (isForEveryone || isForRecipient) && matchesType;
-    }).toList();
-  }
+  Future<void> load() async {
+    _isLoading = true;
+    _errorMessage = null;
+    _notify();
+    try {
+      final entries = recipientUser == null
+          ? await _repository.findAllNotifications()
+          : await _repository.findNotificationsForRecipient(recipientUser!);
+      final readIds = recipientUser == null
+          ? <int>{}
+          : await _repository.findReadNotificationIds(recipientUser!);
 
-  void markAllRead() {
-    _model.notifications = [
-      for (final n in _model.notifications) n.copyWith(isUnread: false),
-    ];
-    notifyListeners();
-  }
-
-  void markReceivedAsRead(String recipientUser) {
-    final visibleIds = getReceivedNotifications(
-      recipientUser: recipientUser,
-    ).map((n) => n.id).toSet();
-    _model.notifications = [
-      for (final n in _model.notifications)
-        visibleIds.contains(n.id) ? n.copyWith(isUnread: false) : n,
-    ];
-    notifyListeners();
-  }
-
-  void markAsRead(AppNotification notification) {
-    if (!notification.isUnread) return;
-    final index = _model.notifications.indexWhere(
-      (n) => n.id == notification.id,
-    );
-    if (index != -1) {
-      _model.notifications[index] = notification.copyWith(isUnread: false);
-      notifyListeners();
+      try {
+        final types = await _repository.findTypes();
+        final filterId = await _preferences.getInt(_lastTypeFilterIdKey);
+        _types = types;
+        _selectedTypeId = types.any((type) => type.id == filterId)
+            ? filterId
+            : null;
+      } on NotificationRepositoryException catch (error) {
+        _types = const [];
+        _selectedTypeId = null;
+        _errorMessage = error.message;
+      }
+      _notifications = _toAppNotifications(entries, readIds);
+    } on NotificationRepositoryException catch (error) {
+      _errorMessage = error.message;
+    } catch (_) {
+      _errorMessage = 'No se pudieron cargar las notificaciones.';
+    } finally {
+      _isLoading = false;
+      _notify();
     }
   }
 
-  AppNotification addNotification({
+  Future<void> selectType(int? typeId) async {
+    _selectedTypeId = typeId;
+    if (typeId == null) {
+      await _preferences.remove(_lastTypeFilterIdKey);
+    } else {
+      await _preferences.setInt(_lastTypeFilterIdKey, typeId);
+    }
+    _notify();
+  }
+
+  Future<void> markAsRead(AppNotification notification) async {
+    final userId = recipientUser;
+    if (userId == null || !notification.isUnread) return;
+    await _repository.markAsRead(
+      notificationId: notification.id,
+      userId: userId,
+    );
+    await _loadLocalNotifications();
+  }
+
+  Future<void> markAllRead() async {
+    final userId = recipientUser;
+    if (userId == null) return;
+    for (final notification in _notifications.where((item) => item.isUnread)) {
+      await _repository.markAsRead(
+        notificationId: notification.id,
+        userId: userId,
+      );
+    }
+    await _loadLocalNotifications();
+  }
+
+  Future<void> addNotification({
     required NotificationType type,
     required String title,
     required String message,
     required NotificationTarget target,
     String? recipientUser,
-  }) {
-    final newNotification = AppNotification(
-      id: 'notif-${DateTime.now().millisecondsSinceEpoch}',
-      type: type,
-      title: title,
-      message: message,
-      time: 'Justo ahora',
-      isUnread: true,
-      target: target,
-      recipientUser: recipientUser,
-    );
+  }) async {
+    if (_isSaving) throw StateError('Ya se está guardando una notificación');
+    if (title.trim().isEmpty || message.trim().isEmpty) {
+      throw ArgumentError('El título y el mensaje son obligatorios');
+    }
+    if (target == NotificationTarget.specificUser &&
+        (recipientUser == null || recipientUser.trim().isEmpty)) {
+      throw ArgumentError('El destinatario es obligatorio');
+    }
+    _isSaving = true;
+    _notify();
+    try {
+      await _repository.saveNotification(
+        typeId: type.id,
+        title: title,
+        message: message,
+        target: target,
+        recipientUser: recipientUser,
+      );
+      await _loadLocalNotifications();
+    } finally {
+      _isSaving = false;
+      _notify();
+    }
+  }
 
-    _model.notifications.insert(0, newNotification);
-    notifyListeners();
-    return newNotification;
+  Future<void> _loadLocalNotifications() async {
+    final entries = recipientUser == null
+        ? await _repository.findAllNotifications()
+        : await _repository.findNotificationsForRecipient(recipientUser!);
+    final readIds = recipientUser == null
+        ? <int>{}
+        : await _repository.findReadNotificationIds(recipientUser!);
+    _notifications = _toAppNotifications(entries, readIds);
+    _notify();
+  }
+
+  List<AppNotification> _toAppNotifications(
+    List<NotificationEntry> entries,
+    Set<int> readIds,
+  ) {
+    final typesById = {for (final type in _types) type.id: type};
+    return entries
+        .map((entry) {
+          final id = entry.id;
+          if (id == null) {
+            throw StateError('La notificación no tiene identificador');
+          }
+          return AppNotification(
+            id: id,
+            typeId: entry.typeId,
+            type: typesById[entry.typeId],
+            title: entry.title,
+            message: entry.message,
+            sentAt: entry.sentAt,
+            isUnread: recipientUser != null && !readIds.contains(id),
+            target: NotificationTarget.values.byName(entry.target),
+            recipientUser: entry.recipientUser,
+          );
+        })
+        .toList(growable: false);
+  }
+
+  void _notify() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
