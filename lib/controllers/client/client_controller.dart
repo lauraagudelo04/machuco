@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// 1. Rutas actualizadas hacia la carpeta database
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 
@@ -53,23 +52,20 @@ class ClientController extends ChangeNotifier {
       if (clientJson != null) {
         final data = jsonDecode(clientJson) as Map<String, dynamic>;
         _currentClient = Client(
-          // 3. El ID ahora se extrae como int?
           id: data['id'] as int?, 
           name: data['name'] as String,
           phone: data['phone'] as String,
           email: data['email'] as String,
           password: data['password'] as String,
-          // 4. Soporte para la clave legacy 'countryCode' y la nueva 'country_code'
           countryCode: (data['countryCode'] ?? data['country_code'] ?? '+57') as String,
         );
         _syncToDirectory(_currentClient!);
       } else if (_allClients.isNotEmpty) {
-        // Fallback si hay clientes en Floor pero no hay sesión guardada
         _currentClient = _allClients.first;
       }
     } catch (e, stacktrace) {
-      print('CRÍTICO - Error cargando perfil: $e'); // Añade esto
-      print(stacktrace); // Esto te dirá la línea exacta del fallo
+      print('CRÍTICO - Error cargando perfil: $e'); 
+      print(stacktrace);
       _errorMessage = 'No pudimos cargar la información de tu perfil.';
     } finally {
       _isLoading = false;
@@ -97,16 +93,13 @@ class ClientController extends ChangeNotifier {
         countryCode: countryCode,
       );
 
-      // 1. Guardar sesión activa en SharedPreferences (usando toJson() del modelo)
       final prefs = await SharedPreferences.getInstance();
       final success = await prefs.setString(_clientKey, jsonEncode(updatedClient.toJson()));
 
       if (!success) throw Exception('Error guardando en SharedPreferences');
 
-      // 2. Actualizar registro en la base de datos local (Floor)
       await _clientRepo.updateClient(updatedClient);
 
-      // 3. Actualizar estado en memoria
       _currentClient = updatedClient;
       _syncToDirectory(updatedClient);
       
@@ -148,13 +141,10 @@ class ClientController extends ChangeNotifier {
   }
 
   void unlink(Client client) async {
-    // Eliminar de memoria
     _allClients.removeWhere((c) => c.id == client.id);
     
-    // Eliminar de Floor
     await _clientRepo.removeClient(client);
 
-    // Si se elimina el usuario actual, limpiar SharedPreferences
     if (_currentClient?.id == client.id) {
       final prefs = await SharedPreferences.getInstance();
       await prefs.remove(_clientKey);
