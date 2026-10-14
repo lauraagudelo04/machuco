@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/widgets/subscription/add_payment_sheet.dart';
 
 void main() {
@@ -25,6 +26,12 @@ void main() {
                     isScrollControlled: true,
                     builder: (_) => AddPaymentSheet(
                       defaultAmount: 150000,
+                      loadPaymentMethods: () async => const [
+                        SubscriptionPaymentMethod(
+                          id: 4,
+                          name: 'Transferencia bancaria',
+                        ),
+                      ],
                       onSave:
                           ({
                             required int amount,
@@ -33,6 +40,7 @@ void main() {
                           }) async {
                             attempts++;
                             expect(amount, 150000);
+                            expect(paymentMethod, 'Transferencia bancaria');
                             expect(reference, 'TRANS-123');
                             if (attempts == 1) {
                               throw StateError('No se pudo escribir');

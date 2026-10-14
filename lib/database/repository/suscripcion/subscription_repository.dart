@@ -116,6 +116,56 @@ class SubscriptionRepository {
     }
   }
 
+  Future<List<SubscriptionPaymentMethod>> findPaymentMethods() async {
+    final base = Uri.tryParse(_supabaseUrl);
+    if (base == null ||
+        base.scheme != 'https' ||
+        base.host.isEmpty ||
+        _publishableKey.isEmpty) {
+      throw const SubscriptionRepositoryException(
+        'La consulta de métodos de pago no está configurada.',
+      );
+    }
+    final uri = base.replace(
+      path: '/rest/v1/payment_method',
+      queryParameters: {'select': 'id,nombre', 'order': 'id.asc'},
+    );
+    late final http.Response response;
+    try {
+      response = await _get(
+        uri,
+        headers: {'apikey': _publishableKey, 'Accept': 'application/json'},
+      ).timeout(const Duration(seconds: 15));
+    } catch (_) {
+      throw const SubscriptionRepositoryException(
+        'No se pudo conectar con el catálogo de métodos de pago.',
+      );
+    }
+    if (response.statusCode != 200) {
+      throw const SubscriptionRepositoryException(
+        'No se pudieron consultar los métodos de pago en Supabase.',
+      );
+    }
+    try {
+      final rows = jsonDecode(utf8.decode(response.bodyBytes));
+      if (rows is! List) throw const FormatException('Respuesta inválida');
+      return rows
+          .map(
+            (row) =>
+                SubscriptionPaymentMethod.fromJson(row as Map<String, dynamic>),
+          )
+          .toList();
+    } on FormatException {
+      throw const SubscriptionRepositoryException(
+        'El catálogo de métodos de pago devolvió datos inválidos.',
+      );
+    } on TypeError {
+      throw const SubscriptionRepositoryException(
+        'El catálogo de métodos de pago devolvió datos inválidos.',
+      );
+    }
+  }
+
   Future<SubscriptionDetails?> findSubscription(
     int? id, {
     List<SubscriptionPlan>? plans,
