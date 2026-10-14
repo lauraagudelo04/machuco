@@ -74,13 +74,17 @@ class _$AppDatabase extends AppDatabase {
 
   SubscriptionDao? _subscriptionDaoInstance;
 
+  ClientDao? _clientDaoInstance;
+
+  PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 4,
+      version: 6,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -100,6 +104,10 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
 
         await callback?.onCreate?.call(database, version);
@@ -112,6 +120,17 @@ class _$AppDatabase extends AppDatabase {
   SubscriptionDao get subscriptionDao {
     return _subscriptionDaoInstance ??=
         _$SubscriptionDao(database, changeListener);
+  }
+
+  @override
+  ClientDao get clientDao {
+    return _clientDaoInstance ??= _$ClientDao(database, changeListener);
+  }
+
+  @override
+  PhoneCountryCodeDao get phoneCountryCodeDao {
+    return _phoneCountryCodeDaoInstance ??=
+        _$PhoneCountryCodeDao(database, changeListener);
   }
 }
 
@@ -268,6 +287,173 @@ class _$SubscriptionDao extends SubscriptionDao {
   Future<int> updateSubscription(SubscriptionDetails subscription) {
     return _subscriptionDetailsUpdateAdapter.updateAndReturnChangedRows(
         subscription, OnConflictStrategy.abort);
+  }
+}
+
+class _$ClientDao extends ClientDao {
+  _$ClientDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _clientInsertionAdapter = InsertionAdapter(
+            database,
+            'clients',
+            (Client item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'country_code': item.countryCode,
+                  'password': item.password
+                }),
+        _clientUpdateAdapter = UpdateAdapter(
+            database,
+            'clients',
+            ['id'],
+            (Client item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'country_code': item.countryCode,
+                  'password': item.password
+                }),
+        _clientDeletionAdapter = DeletionAdapter(
+            database,
+            'clients',
+            ['id'],
+            (Client item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'phone': item.phone,
+                  'email': item.email,
+                  'country_code': item.countryCode,
+                  'password': item.password
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<Client> _clientInsertionAdapter;
+
+  final UpdateAdapter<Client> _clientUpdateAdapter;
+
+  final DeletionAdapter<Client> _clientDeletionAdapter;
+
+  @override
+  Future<Client?> findById(int id) async {
+    return _queryAdapter.query('SELECT * FROM clients WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => Client(
+            id: row['id'] as int?,
+            name: row['name'] as String,
+            phone: row['phone'] as String,
+            email: row['email'] as String,
+            countryCode: row['country_code'] as String,
+            password: row['password'] as String),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<Client>> findAll() async {
+    return _queryAdapter.queryList('SELECT * FROM clients',
+        mapper: (Map<String, Object?> row) => Client(
+            id: row['id'] as int?,
+            name: row['name'] as String,
+            phone: row['phone'] as String,
+            email: row['email'] as String,
+            countryCode: row['country_code'] as String,
+            password: row['password'] as String));
+  }
+
+  @override
+  Future<void> deleteById(int id) async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM clients WHERE id = ?1', arguments: [id]);
+  }
+
+  @override
+  Future<int> insertClient(Client client) {
+    return _clientInsertionAdapter.insertAndReturnId(
+        client, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertClients(List<Client> clients) async {
+    await _clientInsertionAdapter.insertList(
+        clients, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<int> updateClient(Client client) {
+    return _clientUpdateAdapter.updateAndReturnChangedRows(
+        client, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<int> deleteClient(Client client) {
+    return _clientDeletionAdapter.deleteAndReturnChangedRows(client);
+  }
+}
+
+class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
+  _$PhoneCountryCodeDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _phoneCountryCodeInsertionAdapter = InsertionAdapter(
+            database,
+            'phone_country_codes',
+            (PhoneCountryCode item) => <String, Object?>{
+                  'id': item.id,
+                  'country_code': item.countryCode,
+                  'country_name': item.countryName,
+                  'calling_code': item.callingCode,
+                  'active': item.active ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PhoneCountryCode> _phoneCountryCodeInsertionAdapter;
+
+  @override
+  Future<List<PhoneCountryCode>> findAll() async {
+    return _queryAdapter.queryList('SELECT * FROM phone_country_codes',
+        mapper: (Map<String, Object?> row) => PhoneCountryCode(
+            id: row['id'] as int,
+            countryCode: row['country_code'] as String,
+            countryName: row['country_name'] as String,
+            callingCode: row['calling_code'] as String,
+            active: (row['active'] as int) != 0));
+  }
+
+  @override
+  Future<List<PhoneCountryCode>> findActive() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM phone_country_codes WHERE active = 1',
+        mapper: (Map<String, Object?> row) => PhoneCountryCode(
+            id: row['id'] as int,
+            countryCode: row['country_code'] as String,
+            countryName: row['country_name'] as String,
+            callingCode: row['calling_code'] as String,
+            active: (row['active'] as int) != 0));
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM phone_country_codes');
+  }
+
+  @override
+  Future<void> insertCountryCodes(List<PhoneCountryCode> codes) async {
+    await _phoneCountryCodeInsertionAdapter.insertList(
+        codes, OnConflictStrategy.replace);
   }
 }
 

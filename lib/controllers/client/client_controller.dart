@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:machuco/models/client/client.dart';
-import 'package:machuco/models/client/phone_country_code.dart';
-import 'package:machuco/repositories/client/client_repository.dart';
-import 'package:machuco/repositories/client/country_code_repository.dart';
+
+// 1. Rutas actualizadas hacia la carpeta database
+import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/database/repository/client/client_repository.dart';
+
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
+import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
 
 class ClientController extends ChangeNotifier {
   ClientController._();
@@ -28,9 +31,8 @@ class ClientController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  // Inicializa los repositorios
-  void init(ClientRepository clientRepo, CountryCodeRepository countryCodeRepo) {
-    _clientRepo = clientRepo;
+  void init(CountryCodeRepository countryCodeRepo, {ClientRepository? clientRepo}) {
+    _clientRepo = clientRepo ?? ClientRepository();
     _countryCodeRepo = countryCodeRepo;
     loadData();
   }
@@ -51,19 +53,23 @@ class ClientController extends ChangeNotifier {
       if (clientJson != null) {
         final data = jsonDecode(clientJson) as Map<String, dynamic>;
         _currentClient = Client(
-          id: data['id'] as String,
+          // 3. El ID ahora se extrae como int?
+          id: data['id'] as int?, 
           name: data['name'] as String,
           phone: data['phone'] as String,
           email: data['email'] as String,
           password: data['password'] as String,
-          countryCode: data['countryCode'] as String? ?? '+57',
+          // 4. Soporte para la clave legacy 'countryCode' y la nueva 'country_code'
+          countryCode: (data['countryCode'] ?? data['country_code'] ?? '+57') as String,
         );
         _syncToDirectory(_currentClient!);
       } else if (_allClients.isNotEmpty) {
         // Fallback si hay clientes en Floor pero no hay sesión guardada
         _currentClient = _allClients.first;
       }
-    } catch (e) {
+    } catch (e, stacktrace) {
+      print('CRÍTICO - Error cargando perfil: $e'); // Añade esto
+      print(stacktrace); // Esto te dirá la línea exacta del fallo
       _errorMessage = 'No pudimos cargar la información de tu perfil.';
     } finally {
       _isLoading = false;
@@ -91,16 +97,9 @@ class ClientController extends ChangeNotifier {
         countryCode: countryCode,
       );
 
-      // 1. Guardar sesión activa en SharedPreferences
+      // 1. Guardar sesión activa en SharedPreferences (usando toJson() del modelo)
       final prefs = await SharedPreferences.getInstance();
-      final success = await prefs.setString(_clientKey, jsonEncode({
-        'id': updatedClient.id,
-        'name': updatedClient.name,
-        'phone': updatedClient.phone,
-        'email': updatedClient.email,
-        'password': updatedClient.password,
-        'countryCode': updatedClient.countryCode,
-      }));
+      final success = await prefs.setString(_clientKey, jsonEncode(updatedClient.toJson()));
 
       if (!success) throw Exception('Error guardando en SharedPreferences');
 
@@ -140,7 +139,8 @@ class ClientController extends ChangeNotifier {
         .toList();
   }
 
-  Client? getById(String id) {
+  // 5. El parámetro ID ahora es int
+  Client? getById(int id) {
     for (final client in _allClients) {
       if (client.id == id) return client;
     }

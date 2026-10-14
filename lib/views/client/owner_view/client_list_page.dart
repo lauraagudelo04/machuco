@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/client/client.dart';
+import 'package:machuco/database/model/client/client.dart';
 
 class ClientListPage extends StatefulWidget {
   const ClientListPage({super.key});
