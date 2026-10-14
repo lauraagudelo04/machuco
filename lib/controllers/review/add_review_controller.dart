@@ -1,6 +1,19 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/models/review/review_data.dart';
+import 'package:machuco/service/storage/local_preferences_service.dart';
+import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+
+/// Borrador de una reseña a medio escribir en el formulario.
+typedef ReviewDraft = ({
+  ReviewType type,
+  String? roomId,
+  int rating,
+  String title,
+  String body,
+});
 
 /// Controlador de reseñas para el cliente.
 ///
@@ -9,6 +22,14 @@ import 'package:machuco/models/review/review_data.dart';
 /// UI a través de [ListenableBuilder].  En el futuro este controlador
 /// delegará en un [ReviewRepository] para persistir en el backend.
 class ReviewsController extends ChangeNotifier {
+  ReviewsController({LocalPreferencesService? preferences})
+    : _preferences =
+          preferences ?? SharedPreferencesLocalService(namespace: 'reviews');
+
+  static const _draftKey = 'addReviewDraft';
+
+  final LocalPreferencesService _preferences;
+
   final List<Review> _reviews = [];
 
   int get totalCount => _reviews.length;
@@ -51,6 +72,58 @@ class ReviewsController extends ChangeNotifier {
   void addReview(Review review) {
     _reviews.insert(0, review);
     notifyListeners();
+    clearDraft();
+  }
+
+  /// Devuelve el borrador guardado para [motelId], o `null` si no hay uno o
+  /// pertenece a otro motel.
+  Future<ReviewDraft?> loadDraft(String motelId) async {
+    try {
+      final raw = await _preferences.getString(_draftKey);
+      if (raw == null) return null;
+
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (json['motelId'] != motelId) return null;
+
+      return (
+        type: ReviewType.fromString(json['type'] as String),
+        roomId: json['roomId'] as String?,
+        rating: json['rating'] as int,
+        title: json['title'] as String,
+        body: json['body'] as String,
+      );
+    } catch (error) {
+      // El borrador es una comodidad: si no se puede leer, el formulario
+      // simplemente arranca vacío.
+      debugPrint('loadDraft: $error');
+      return null;
+    }
+  }
+
+  Future<void> saveDraft(String motelId, ReviewDraft draft) async {
+    try {
+      await _preferences.setString(
+        _draftKey,
+        jsonEncode({
+          'motelId': motelId,
+          'type': draft.type.name,
+          'roomId': draft.roomId,
+          'rating': draft.rating,
+          'title': draft.title,
+          'body': draft.body,
+        }),
+      );
+    } catch (error) {
+      debugPrint('saveDraft: $error');
+    }
+  }
+
+  Future<void> clearDraft() async {
+    try {
+      await _preferences.remove(_draftKey);
+    } catch (error) {
+      debugPrint('clearDraft: $error');
+    }
   }
 
   /// TODO: reemplazar por carga desde el backend cuando el repositorio

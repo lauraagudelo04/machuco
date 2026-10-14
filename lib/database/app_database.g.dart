@@ -74,9 +74,7 @@ class _$AppDatabase extends AppDatabase {
 
   SubscriptionDao? _subscriptionDaoInstance;
 
-  ClientDao? _clientDaoInstance;
-
-  PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
+  NotificationDao? _notificationDaoInstance;
 
   Future<sqflite.Database> open(
     String path,
@@ -104,11 +102,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
+            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -123,14 +123,9 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
-  ClientDao get clientDao {
-    return _clientDaoInstance ??= _$ClientDao(database, changeListener);
-  }
-
-  @override
-  PhoneCountryCodeDao get phoneCountryCodeDao {
-    return _phoneCountryCodeDaoInstance ??=
-        _$PhoneCountryCodeDao(database, changeListener);
+  NotificationDao get notificationDao {
+    return _notificationDaoInstance ??=
+        _$NotificationDao(database, changeListener);
   }
 }
 
@@ -290,45 +285,31 @@ class _$SubscriptionDao extends SubscriptionDao {
   }
 }
 
-class _$ClientDao extends ClientDao {
-  _$ClientDao(
+class _$NotificationDao extends NotificationDao {
+  _$NotificationDao(
     this.database,
     this.changeListener,
   )   : _queryAdapter = QueryAdapter(database),
-        _clientInsertionAdapter = InsertionAdapter(
+        _notificationEntryInsertionAdapter = InsertionAdapter(
             database,
-            'clients',
-            (Client item) => <String, Object?>{
+            'notifications',
+            (NotificationEntry item) => <String, Object?>{
                   'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'typeId': item.typeId,
+                  'title': item.title,
+                  'message': item.message,
+                  'sentAt': _subscriptionDateConverter.encode(item.sentAt),
+                  'target': item.target,
+                  'recipientUser': item.recipientUser
                 }),
-        _clientUpdateAdapter = UpdateAdapter(
+        _notificationReadInsertionAdapter = InsertionAdapter(
             database,
-            'clients',
-            ['id'],
-            (Client item) => <String, Object?>{
+            'notification_reads',
+            (NotificationRead item) => <String, Object?>{
                   'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
-                }),
-        _clientDeletionAdapter = DeletionAdapter(
-            database,
-            'clients',
-            ['id'],
-            (Client item) => <String, Object?>{
-                  'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'notificationId': item.notificationId,
+                  'userId': item.userId,
+                  'readAt': _subscriptionDateConverter.encode(item.readAt)
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -337,123 +318,61 @@ class _$ClientDao extends ClientDao {
 
   final QueryAdapter _queryAdapter;
 
-  final InsertionAdapter<Client> _clientInsertionAdapter;
+  final InsertionAdapter<NotificationEntry> _notificationEntryInsertionAdapter;
 
-  final UpdateAdapter<Client> _clientUpdateAdapter;
-
-  final DeletionAdapter<Client> _clientDeletionAdapter;
+  final InsertionAdapter<NotificationRead> _notificationReadInsertionAdapter;
 
   @override
-  Future<Client?> findById(int id) async {
-    return _queryAdapter.query('SELECT * FROM clients WHERE id = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => Client(
-            id: row['id'] as int?,
-            name: row['name'] as String,
-            phone: row['phone'] as String,
-            email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String),
-        arguments: [id]);
-  }
-
-  @override
-  Future<List<Client>> findAll() async {
-    return _queryAdapter.queryList('SELECT * FROM clients',
-        mapper: (Map<String, Object?> row) => Client(
-            id: row['id'] as int?,
-            name: row['name'] as String,
-            phone: row['phone'] as String,
-            email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String));
-  }
-
-  @override
-  Future<void> deleteById(int id) async {
-    await _queryAdapter
-        .queryNoReturn('DELETE FROM clients WHERE id = ?1', arguments: [id]);
-  }
-
-  @override
-  Future<int> insertClient(Client client) {
-    return _clientInsertionAdapter.insertAndReturnId(
-        client, OnConflictStrategy.abort);
-  }
-
-  @override
-  Future<void> insertClients(List<Client> clients) async {
-    await _clientInsertionAdapter.insertList(
-        clients, OnConflictStrategy.replace);
-  }
-
-  @override
-  Future<int> updateClient(Client client) {
-    return _clientUpdateAdapter.updateAndReturnChangedRows(
-        client, OnConflictStrategy.abort);
-  }
-
-  @override
-  Future<int> deleteClient(Client client) {
-    return _clientDeletionAdapter.deleteAndReturnChangedRows(client);
-  }
-}
-
-class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
-  _$PhoneCountryCodeDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _phoneCountryCodeInsertionAdapter = InsertionAdapter(
-            database,
-            'phone_country_codes',
-            (PhoneCountryCode item) => <String, Object?>{
-                  'id': item.id,
-                  'country_code': item.countryCode,
-                  'country_name': item.countryName,
-                  'calling_code': item.callingCode,
-                  'active': item.active ? 1 : 0
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<PhoneCountryCode> _phoneCountryCodeInsertionAdapter;
-
-  @override
-  Future<List<PhoneCountryCode>> findAll() async {
-    return _queryAdapter.queryList('SELECT * FROM phone_country_codes',
-        mapper: (Map<String, Object?> row) => PhoneCountryCode(
-            id: row['id'] as int,
-            countryCode: row['country_code'] as String,
-            countryName: row['country_name'] as String,
-            callingCode: row['calling_code'] as String,
-            active: (row['active'] as int) != 0));
-  }
-
-  @override
-  Future<List<PhoneCountryCode>> findActive() async {
+  Future<List<NotificationEntry>> findAll() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM phone_country_codes WHERE active = 1',
-        mapper: (Map<String, Object?> row) => PhoneCountryCode(
-            id: row['id'] as int,
-            countryCode: row['country_code'] as String,
-            countryName: row['country_name'] as String,
-            callingCode: row['calling_code'] as String,
-            active: (row['active'] as int) != 0));
+        'SELECT * FROM notifications ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(
+            id: row['id'] as int?,
+            typeId: row['typeId'] as int,
+            title: row['title'] as String,
+            message: row['message'] as String,
+            sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+            target: row['target'] as String,
+            recipientUser: row['recipientUser'] as String?));
   }
 
   @override
-  Future<void> deleteAll() async {
-    await _queryAdapter.queryNoReturn('DELETE FROM phone_country_codes');
+  Future<List<NotificationEntry>> findForRecipient(String recipientUser) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUser: row['recipientUser'] as String?),
+        arguments: [recipientUser]);
   }
 
   @override
-  Future<void> insertCountryCodes(List<PhoneCountryCode> codes) async {
-    await _phoneCountryCodeInsertionAdapter.insertList(
-        codes, OnConflictStrategy.replace);
+  Future<List<int>> findReadNotificationIds(String userId) async {
+    return _queryAdapter.queryList(
+        'SELECT notificationId FROM notification_reads WHERE userId = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [userId]);
+  }
+
+  @override
+  Future<NotificationRead?> findRead(
+    int notificationId,
+    String userId,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM notification_reads WHERE notificationId = ?1 AND userId = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => NotificationRead(id: row['id'] as int?, notificationId: row['notificationId'] as int, userId: row['userId'] as String, readAt: _subscriptionDateConverter.decode(row['readAt'] as int)),
+        arguments: [notificationId, userId]);
+  }
+
+  @override
+  Future<int> insertNotification(NotificationEntry notification) {
+    return _notificationEntryInsertionAdapter.insertAndReturnId(
+        notification, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<int> insertRead(NotificationRead notificationRead) {
+    return _notificationReadInsertionAdapter.insertAndReturnId(
+        notificationRead, OnConflictStrategy.abort);
   }
 }
 
