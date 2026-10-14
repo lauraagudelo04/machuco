@@ -86,6 +86,8 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                         name: widget.motel.name,
                         rooms: widget.rooms ?? buildRoomMockData().where((room) => room.motelId == widget.motel.id).toList(),
                         onSave: (review) => _controller.addReview(review),
+                        loadDraft: () => _controller.loadDraft(widget.motel.id),
+                        onDraftChanged: (draft) => _controller.saveDraft(widget.motel.id, draft),
                       )
                   : null,
             ),

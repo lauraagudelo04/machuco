@@ -1,7 +1,22 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/service/storage/local_preferences_service.dart';
+import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+
+/// Borrador de una reseña a medio escribir en el formulario.
+typedef ReviewDraft = ({String tag, int rating, String title, String body});
 
 class ReviewsController extends ChangeNotifier {
+  ReviewsController({LocalPreferencesService? preferences})
+    : _preferences =
+          preferences ?? SharedPreferencesLocalService(namespace: 'reviews');
+
+  static const _draftKey = 'addReviewDraft';
+
+  final LocalPreferencesService _preferences;
+
   final List<Review> _reviews = [
     Review(
       parentId: "3",
@@ -56,5 +71,55 @@ class ReviewsController extends ChangeNotifier {
   void addReview(Review review) {
     _reviews.insert(0, review);
     notifyListeners();
+    clearDraft();
+  }
+
+  /// Devuelve el borrador guardado para [parentId], o `null` si no hay uno o
+  /// pertenece a otro motel.
+  Future<ReviewDraft?> loadDraft(String parentId) async {
+    try {
+      final raw = await _preferences.getString(_draftKey);
+      if (raw == null) return null;
+
+      final json = jsonDecode(raw) as Map<String, dynamic>;
+      if (json['parentId'] != parentId) return null;
+
+      return (
+        tag: json['tag'] as String,
+        rating: json['rating'] as int,
+        title: json['title'] as String,
+        body: json['body'] as String,
+      );
+    } catch (error) {
+      // El borrador es una comodidad: si no se puede leer, el formulario
+      // simplemente arranca vacío.
+      debugPrint('loadDraft: $error');
+      return null;
+    }
+  }
+
+  Future<void> saveDraft(String parentId, ReviewDraft draft) async {
+    try {
+      await _preferences.setString(
+        _draftKey,
+        jsonEncode({
+          'parentId': parentId,
+          'tag': draft.tag,
+          'rating': draft.rating,
+          'title': draft.title,
+          'body': draft.body,
+        }),
+      );
+    } catch (error) {
+      debugPrint('saveDraft: $error');
+    }
+  }
+
+  Future<void> clearDraft() async {
+    try {
+      await _preferences.remove(_draftKey);
+    } catch (error) {
+      debugPrint('clearDraft: $error');
+    }
   }
 }

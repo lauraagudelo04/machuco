@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/review/add_review_controller.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/models/room/room_models.dart';
 import '../../core/design_system/design_system.dart';
@@ -10,12 +11,20 @@ class AddReviewSheet extends StatefulWidget {
   final void Function(Review review) onSave;
   final List<RoomVisualData>? rooms;
 
+  /// Recupera el borrador guardado, si lo hay, al abrir el formulario.
+  final Future<ReviewDraft?> Function()? loadDraft;
+
+  /// Se invoca cada vez que cambia algún campo, para persistir el borrador.
+  final void Function(ReviewDraft draft)? onDraftChanged;
+
   const AddReviewSheet({
     super.key,
     required this.onSave,
     required this.parentId,
     required this.rooms,
     required this.name,
+    this.loadDraft,
+    this.onDraftChanged,
   });
 
   static Future<void> show(
@@ -24,6 +33,8 @@ class AddReviewSheet extends StatefulWidget {
     required void Function(Review review) onSave,
     required List<RoomVisualData>? rooms,
     required String name,
+    Future<ReviewDraft?> Function()? loadDraft,
+    void Function(ReviewDraft draft)? onDraftChanged,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -35,6 +46,8 @@ class AddReviewSheet extends StatefulWidget {
         parentId: parentId,
         rooms: rooms,
         name: name,
+        loadDraft: loadDraft,
+        onDraftChanged: onDraftChanged,
       ),
     );
   }
@@ -50,6 +63,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   late String _selectedTag;
   int _rating = 0;
   bool _submitted = false;
+  bool _draftRestored = false;
 
   // Genera la lista de opciones: Nombre del motel + tipos de habitaciones
   List<String> get _tagOptions {
@@ -64,6 +78,36 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   void initState() {
     super.initState();
     _selectedTag = widget.name; // Por defecto selecciona el motel
+    _restoreDraft();
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await widget.loadDraft?.call();
+    if (draft == null || !mounted) return;
+
+    // Si la persona ya empezó a escribir, no se pisa lo que lleva.
+    final untouched =
+        _rating == 0 &&
+        _titleController.text.isEmpty &&
+        _bodyController.text.isEmpty;
+    if (!untouched) return;
+
+    setState(() {
+      if (_tagOptions.contains(draft.tag)) _selectedTag = draft.tag;
+      _rating = draft.rating;
+      _titleController.text = draft.title;
+      _bodyController.text = draft.body;
+      _draftRestored = true;
+    });
+  }
+
+  void _notifyDraftChanged() {
+    widget.onDraftChanged?.call((
+      tag: _selectedTag,
+      rating: _rating,
+      title: _titleController.text,
+      body: _bodyController.text,
+    ));
   }
 
   @override
@@ -169,13 +213,20 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 onChanged: (value) {
                   if (value != null) {
                     setState(() => _selectedTag = value);
+                    _notifyDraftChanged();
                   }
                 },
               ),
               const SizedBox(height: AppSpacing.s4),
 
               StarRatingSelector(
-                onChanged: (v) => setState(() => _rating = v),
+                // Al restaurar el borrador se recrea para tomar la calificación guardada.
+                key: ValueKey(_draftRestored),
+                initialRating: _rating,
+                onChanged: (v) {
+                  setState(() => _rating = v);
+                  _notifyDraftChanged();
+                },
               ),
               if (_ratingError != null) ...[
                 const SizedBox(height: AppSpacing.s2),
@@ -195,6 +246,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 errorText: _titleError,
                 onChanged: (_) {
                   if (_submitted) setState(() {});
+                  _notifyDraftChanged();
                 },
               ),
               const SizedBox(height: AppSpacing.s4),
@@ -206,6 +258,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 maxLines: 4,
                 onChanged: (_) {
                   if (_submitted) setState(() {});
+                  _notifyDraftChanged();
                 },
               ),
               const SizedBox(height: AppSpacing.s6),
