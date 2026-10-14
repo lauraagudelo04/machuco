@@ -23,6 +23,7 @@ class AddReviewSheet extends StatefulWidget {
     required this.motelId,
     required this.motelName,
     required this.rooms,
+    required this.name,
     this.loadDraft,
     this.onDraftChanged,
   });
@@ -33,6 +34,7 @@ class AddReviewSheet extends StatefulWidget {
     required String motelName,
     required void Function(Review review) onSave,
     required List<RoomVisualData>? rooms,
+    required String name,
     Future<ReviewDraft?> Function()? loadDraft,
     void Function(ReviewDraft draft)? onDraftChanged,
   }) {
@@ -46,6 +48,7 @@ class AddReviewSheet extends StatefulWidget {
         motelId: motelId,
         motelName: motelName,
         rooms: rooms,
+        name: name,
         loadDraft: loadDraft,
         onDraftChanged: onDraftChanged,
       ),
@@ -66,9 +69,19 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   bool _submitted = false;
   bool _draftRestored = false;
 
+  // Genera la lista de opciones: Nombre del motel + tipos de habitaciones
+  List<String> get _tagOptions {
+    final options = <String>[widget.name];
+    if (widget.rooms != null && widget.rooms!.isNotEmpty) {
+      options.addAll(widget.rooms!.map((room) => room.name));
+    }
+    return options;
+  }
+
   @override
   void initState() {
     super.initState();
+    _selectedTag = widget.name; // Por defecto selecciona el motel
     _restoreDraft();
   }
 
@@ -84,12 +97,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
     if (!untouched) return;
 
     setState(() {
-      _reviewType = draft.type;
-      // La habitación del borrador pudo dejar de existir en el motel.
-      final roomExists = (widget.rooms ?? []).any(
-        (room) => room.id == draft.roomId,
-      );
-      if (roomExists) _selectedRoomId = draft.roomId;
+      if (_tagOptions.contains(draft.tag)) _selectedTag = draft.tag;
       _rating = draft.rating;
       _titleController.text = draft.title;
       _bodyController.text = draft.body;
@@ -99,8 +107,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
   void _notifyDraftChanged() {
     widget.onDraftChanged?.call((
-      type: _reviewType,
-      roomId: _selectedRoomId,
+      tag: _selectedTag,
       rating: _rating,
       title: _titleController.text,
       body: _bodyController.text,
@@ -212,7 +219,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _reviewType = value);
+                    setState(() => _selectedTag = value);
                     _notifyDraftChanged();
                   }
                 },
@@ -248,7 +255,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
               StarRatingSelector(
                 // Al restaurar el borrador se recrea para tomar la calificación guardada.
-                key: ValueKey('rating-$_draftRestored'),
+                key: ValueKey(_draftRestored),
                 initialRating: _rating,
                 onChanged: (v) {
                   setState(() => _rating = v);

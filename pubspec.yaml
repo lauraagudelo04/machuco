@@ -37,13 +37,8 @@ dependencies:
   auth0_flutter: ^2.6.0
   http: ^1.2.2
   shared_preferences: ^2.5.5
-<<<<<<< HEAD
-  sqflite: ^2.4.4+2
-  sqflite_common_ffi_web: ^1.2.0
-=======
   floor: ^1.5.0
   sqflite: ^2.4.2
->>>>>>> 732ff02 (suscripcion, se agrega archivos para conexiona base de datos y la impementacion del mismo para la feature suscipcion)
 
 dev_dependencies:
   flutter_test:
