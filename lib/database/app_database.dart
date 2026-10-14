@@ -218,7 +218,7 @@ final migration5To6 = Migration(5, 6, (database) async {
     'ON notification_reads (notificationId, userId)',
   );
 });
-final migration6to7 = Migration(4, 5, (database) async {
+final migration6To7 = Migration(6, 7, (database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `clients` ('
     '`id` INTEGER PRIMARY KEY AUTOINCREMENT, '
