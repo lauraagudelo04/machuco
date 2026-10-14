@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_controller.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/controllers/room/room_owner_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
@@ -25,8 +26,11 @@ class RoomOwnerPage extends StatefulWidget {
 
 class _RoomOwnerPageState extends State<RoomOwnerPage> {
   final _searchController = TextEditingController();
-  late final RoomOwnerController _controller;
+  late RoomOwnerController _controller;
+  late final RoomController _dataController;
   final Set<String> _expandedTypeIds = <String>{};
+  bool _isLoadingLocalData = true;
+  String? _localDataError;
 
   @override
   void initState() {
@@ -36,12 +40,41 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       seedRooms: widget.rooms,
       seedTypes: widget.types,
     );
+    _dataController = RoomController.fromEnvironment();
+    _dataController.addListener(_onDataChanged);
+    _initializeData();
   }
 
   @override
   void dispose() {
+    _dataController.removeListener(_onDataChanged);
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _onDataChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initializeData() async {
+    try {
+      await _dataController.loadLocalData();
+      if (_dataController.rooms.isEmpty && _dataController.roomTypes.isEmpty) {
+        await _dataController.saveRoomTypes(_controller.allTypes);
+        await _dataController.saveRooms(_controller.allRooms);
+      } else {
+        _controller = RoomOwnerController(
+          motelId: widget.motel.id,
+          seedRooms: _dataController.rooms,
+          seedTypes: _dataController.roomTypes,
+        );
+      }
+    } catch (_) {
+      _localDataError = 'No fue posible abrir la base SQLite local.';
+    } finally {
+      if (mounted) setState(() => _isLoadingLocalData = false);
+    }
+    await _dataController.loadIncludedServices(forceRefresh: true);
   }
 
   @override
@@ -88,6 +121,18 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                           vertical: AppSpacing.s2,
                         ),
                         child: Text(widget.motel.name),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                    _PersistenceStatus(
+                      isLoading:
+                          _isLoadingLocalData ||
+                          _dataController.isLoadingServices,
+                      localError: _localDataError,
+                      serviceError: _dataController.servicesError,
+                      serviceCount: _dataController.includedServices.length,
+                      onRetry: () => _dataController.loadIncludedServices(
+                        forceRefresh: true,
                       ),
                     ),
                   ],
@@ -159,15 +204,16 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   Future<void> _createType() async {
     final name = await _openTypeForm();
     if (name == null) return;
+    final type = RoomTypeData(
+      id: 'type-${DateTime.now().millisecondsSinceEpoch}',
+      motelId: widget.motel.id,
+      name: name,
+    );
     setState(() {
-      final type = RoomTypeData(
-        id: 'type-${DateTime.now().millisecondsSinceEpoch}',
-        motelId: widget.motel.id,
-        name: name,
-      );
       _controller.addType(type);
       _expandedTypeIds.add(type.id);
     });
+    await _persist(() => _dataController.upsertRoomType(type));
   }
 
   Future<void> _editType(RoomTypeData type) async {
@@ -177,6 +223,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     );
     if (name != null) {
       setState(() => _controller.updateType(type.id, name));
+      await _persist(
+        () => _dataController.upsertRoomType(type.copyWith(name: name)),
+      );
     }
   }
 
@@ -279,6 +328,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
         _controller.deleteType(type.id);
         _expandedTypeIds.remove(type.id);
       });
+      await _persist(() => _dataController.deleteRoomType(type.id));
     }
   }
 
@@ -303,6 +353,12 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     var services = List<String>.of(room?.includedServices ?? const []);
     String? feedbackMessage;
     var feedbackIsError = false;
+    final remoteServices = _dataController.includedServices
+        .map((service) => service.name)
+        .toList(growable: false);
+    final serviceCatalog = remoteServices.isEmpty
+        ? roomIncludedServiceCatalog
+        : remoteServices;
     final saved = await showModalBottomSheet<RoomVisualData>(
       context: context,
       isScrollControlled: true,
@@ -391,7 +447,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                 Wrap(
                   spacing: AppSpacing.s2,
                   runSpacing: AppSpacing.s2,
-                  children: roomIncludedServiceCatalog
+                  children: serviceCatalog
                       .map(
                         (service) => FilterChip(
                           label: Text(service),
@@ -521,7 +577,84 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
         }
         _expandedTypeIds.add(saved.idType);
       });
+      await _persist(() => _dataController.upsertRoom(saved));
     }
+  }
+
+  Future<void> _persist(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.rose,
+          content: _SnackBarMessage(
+            icon: Icons.storage_outlined,
+            message: 'No fue posible guardar el cambio en SQLite.',
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class _PersistenceStatus extends StatelessWidget {
+  const _PersistenceStatus({
+    required this.isLoading,
+    required this.localError,
+    required this.serviceError,
+    required this.serviceCount,
+    required this.onRetry,
+  });
+
+  final bool isLoading;
+  final String? localError;
+  final String? serviceError;
+  final int serviceCount;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    if (isLoading) {
+      return const Row(
+        children: [
+          SizedBox.square(
+            dimension: AppSpacing.s4,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: AppSpacing.s2),
+          Expanded(child: Text('Sincronizando datos locales y servicios...')),
+        ],
+      );
+    }
+
+    final error = localError ?? serviceError;
+    if (error != null) {
+      return Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.maintenance),
+          const SizedBox(width: AppSpacing.s2),
+          Expanded(child: Text(error)),
+          if (localError == null)
+            IconButton(
+              tooltip: 'Reintentar',
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      );
+    }
+
+    return Row(
+      children: [
+        const Icon(Icons.cloud_done_outlined, color: AppColors.available),
+        const SizedBox(width: AppSpacing.s2),
+        Expanded(
+          child: Text('SQLite activo · $serviceCount servicios sincronizados'),
+        ),
+      ],
+    );
   }
 }
 
