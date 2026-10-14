@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/review/add_review_controller.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/models/room/room_models.dart';
 import '../../core/design_system/design_system.dart';
@@ -10,12 +11,20 @@ class AddReviewSheet extends StatefulWidget {
   final void Function(Review review) onSave;
   final List<RoomVisualData>? rooms;
 
+  /// Recupera el borrador guardado, si lo hay, al abrir el formulario.
+  final Future<ReviewDraft?> Function()? loadDraft;
+
+  /// Se invoca cada vez que cambia algún campo, para persistir el borrador.
+  final void Function(ReviewDraft draft)? onDraftChanged;
+
   const AddReviewSheet({
     super.key,
     required this.onSave,
     required this.motelId,
     required this.motelName,
     required this.rooms,
+    this.loadDraft,
+    this.onDraftChanged,
   });
 
   static Future<void> show(
@@ -24,6 +33,8 @@ class AddReviewSheet extends StatefulWidget {
     required String motelName,
     required void Function(Review review) onSave,
     required List<RoomVisualData>? rooms,
+    Future<ReviewDraft?> Function()? loadDraft,
+    void Function(ReviewDraft draft)? onDraftChanged,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -35,6 +46,8 @@ class AddReviewSheet extends StatefulWidget {
         motelId: motelId,
         motelName: motelName,
         rooms: rooms,
+        loadDraft: loadDraft,
+        onDraftChanged: onDraftChanged,
       ),
     );
   }
@@ -51,6 +64,48 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   ReviewType _reviewType = ReviewType.motel;
   int _rating = 0;
   bool _submitted = false;
+  bool _draftRestored = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _restoreDraft();
+  }
+
+  Future<void> _restoreDraft() async {
+    final draft = await widget.loadDraft?.call();
+    if (draft == null || !mounted) return;
+
+    // Si la persona ya empezó a escribir, no se pisa lo que lleva.
+    final untouched =
+        _rating == 0 &&
+        _titleController.text.isEmpty &&
+        _bodyController.text.isEmpty;
+    if (!untouched) return;
+
+    setState(() {
+      _reviewType = draft.type;
+      // La habitación del borrador pudo dejar de existir en el motel.
+      final roomExists = (widget.rooms ?? []).any(
+        (room) => room.id == draft.roomId,
+      );
+      if (roomExists) _selectedRoomId = draft.roomId;
+      _rating = draft.rating;
+      _titleController.text = draft.title;
+      _bodyController.text = draft.body;
+      _draftRestored = true;
+    });
+  }
+
+  void _notifyDraftChanged() {
+    widget.onDraftChanged?.call((
+      type: _reviewType,
+      roomId: _selectedRoomId,
+      rating: _rating,
+      title: _titleController.text,
+      body: _bodyController.text,
+    ));
+  }
 
   @override
   void dispose() {
@@ -142,6 +197,8 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
               // Selector de tipo de reseña
               DropdownButtonFormField<ReviewType>(
+                // Al restaurar el borrador se recrea para tomar el tipo guardado.
+                key: ValueKey('reviewType-$_draftRestored'),
                 initialValue: _reviewType,
                 decoration: const InputDecoration(
                   labelText: '¿Qué deseas reseñar?',
@@ -156,6 +213,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 onChanged: (value) {
                   if (value != null) {
                     setState(() => _reviewType = value);
+                    _notifyDraftChanged();
                   }
                 },
               ),
@@ -181,6 +239,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                   onChanged: (value) {
                     if (value != null) {
                       setState(() => _selectedRoomId = value);
+                      _notifyDraftChanged();
                     }
                   },
                 ),
@@ -188,7 +247,13 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ],
 
               StarRatingSelector(
-                onChanged: (v) => setState(() => _rating = v),
+                // Al restaurar el borrador se recrea para tomar la calificación guardada.
+                key: ValueKey('rating-$_draftRestored'),
+                initialRating: _rating,
+                onChanged: (v) {
+                  setState(() => _rating = v);
+                  _notifyDraftChanged();
+                },
               ),
               if (_ratingError != null) ...[
                 const SizedBox(height: AppSpacing.s2),
@@ -208,6 +273,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 errorText: _titleError,
                 onChanged: (_) {
                   if (_submitted) setState(() {});
+                  _notifyDraftChanged();
                 },
               ),
               const SizedBox(height: AppSpacing.s4),
@@ -219,6 +285,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                 maxLines: 4,
                 onChanged: (_) {
                   if (_submitted) setState(() {});
+                  _notifyDraftChanged();
                 },
               ),
               const SizedBox(height: AppSpacing.s6),
