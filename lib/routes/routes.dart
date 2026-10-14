@@ -14,6 +14,7 @@ import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
@@ -169,27 +170,18 @@ abstract final class AppRoutes {
             ? settings.arguments! as Motel
             : null,
       ),
-      clientRooms => RoomClientPage(
-        motel: settings.arguments is Motel
-            ? settings.arguments! as Motel
-            : throw Exception(
-                'Error: Se requiere pasar un objeto Motel para consultar las habitaciones.',
-              ),
-      ),
-      ownerRooms => RoomOwnerPage(
-        motel: settings.arguments is Motel
-            ? settings.arguments! as Motel
-            : throw Exception(
-                'Error: Se requiere pasar un objeto Motel para administrar las habitaciones.',
-              ),
-      ),
-      adminRooms => RoomAdminPage(
-        motel: settings.arguments is Motel
-            ? settings.arguments! as Motel
-            : throw Exception(
-                'Error: Se requiere pasar un objeto Motel para consultar las habitaciones.',
-              ),
-      ),
+      clientRooms =>
+        settings.arguments is Motel
+            ? RoomClientPage(motel: settings.arguments! as Motel)
+            : const ClientMotelsPage(),
+      ownerRooms =>
+        settings.arguments is Motel
+            ? RoomOwnerPage(motel: settings.arguments! as Motel)
+            : const OwnerMotelsPage(),
+      adminRooms =>
+        settings.arguments is Motel
+            ? RoomAdminPage(motel: settings.arguments! as Motel)
+            : const AdminMotelsPage(),
 
       clientReservations => const ClientReservationsPage(),
       clientCreateBooking => CreateBookingPage(
@@ -251,11 +243,19 @@ abstract final class AppRoutes {
         final args = settings.arguments;
         if (args is Reservation) return InvoicePage(reservation: args);
         if (args is Map) {
-          final res = args['reservation'] is Reservation ? args['reservation'] as Reservation : null;
-          final pm = args['paymentMethod'] is PaymentMethodModel ? args['paymentMethod'] as PaymentMethodModel : null;
-          if (res != null) return InvoicePage(reservation: res, paymentMethod: pm);
+          final res = args['reservation'] is Reservation
+              ? args['reservation'] as Reservation
+              : null;
+          final pm = args['paymentMethod'] is PaymentMethodModel
+              ? args['paymentMethod'] as PaymentMethodModel
+              : null;
+          if (res != null) {
+            return InvoicePage(reservation: res, paymentMethod: pm);
+          }
         }
-        throw Exception('Se requiere un objeto Reservation para abrir la factura.');
+        throw Exception(
+          'Se requiere un objeto Reservation para abrir la factura.',
+        );
       }(),
       _ => const _UnknownRoutePage(),
     };

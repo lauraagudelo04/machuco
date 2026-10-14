@@ -6,8 +6,8 @@ import '../../core/design_system/design_system.dart';
 import 'star_rating_selector.dart';
 
 class AddReviewSheet extends StatefulWidget {
-  final String parentId;
-  final String name;
+  final String motelId;
+  final String motelName;
   final void Function(Review review) onSave;
   final List<RoomVisualData>? rooms;
 
@@ -20,19 +20,19 @@ class AddReviewSheet extends StatefulWidget {
   const AddReviewSheet({
     super.key,
     required this.onSave,
-    required this.parentId,
+    required this.motelId,
+    required this.motelName,
     required this.rooms,
-    required this.name,
     this.loadDraft,
     this.onDraftChanged,
   });
 
   static Future<void> show(
     BuildContext context, {
-    required String parentId,
+    required String motelId,
+    required String motelName,
     required void Function(Review review) onSave,
     required List<RoomVisualData>? rooms,
-    required String name,
     Future<ReviewDraft?> Function()? loadDraft,
     void Function(ReviewDraft draft)? onDraftChanged,
   }) {
@@ -43,9 +43,9 @@ class AddReviewSheet extends StatefulWidget {
       showDragHandle: true,
       builder: (_) => AddReviewSheet(
         onSave: onSave,
-        parentId: parentId,
+        motelId: motelId,
+        motelName: motelName,
         rooms: rooms,
-        name: name,
         loadDraft: loadDraft,
         onDraftChanged: onDraftChanged,
       ),
@@ -59,25 +59,16 @@ class AddReviewSheet extends StatefulWidget {
 class _AddReviewSheetState extends State<AddReviewSheet> {
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
-  
-  late String _selectedTag;
+
+  String? _selectedRoomId;
+  ReviewType _reviewType = ReviewType.motel;
   int _rating = 0;
   bool _submitted = false;
   bool _draftRestored = false;
 
-  // Genera la lista de opciones: Nombre del motel + tipos de habitaciones
-  List<String> get _tagOptions {
-    final options = <String>[widget.name];
-    if (widget.rooms != null && widget.rooms!.isNotEmpty) {
-      options.addAll(widget.rooms!.map((room) => room.name));
-    }
-    return options;
-  }
-
   @override
   void initState() {
     super.initState();
-    _selectedTag = widget.name; // Por defecto selecciona el motel
     _restoreDraft();
   }
 
@@ -93,7 +84,12 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
     if (!untouched) return;
 
     setState(() {
-      if (_tagOptions.contains(draft.tag)) _selectedTag = draft.tag;
+      _reviewType = draft.type;
+      // La habitación del borrador pudo dejar de existir en el motel.
+      final roomExists = (widget.rooms ?? []).any(
+        (room) => room.id == draft.roomId,
+      );
+      if (roomExists) _selectedRoomId = draft.roomId;
       _rating = draft.rating;
       _titleController.text = draft.title;
       _bodyController.text = draft.body;
@@ -103,7 +99,8 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
   void _notifyDraftChanged() {
     widget.onDraftChanged?.call((
-      tag: _selectedTag,
+      type: _reviewType,
+      roomId: _selectedRoomId,
       rating: _rating,
       title: _titleController.text,
       body: _bodyController.text,
@@ -125,13 +122,17 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
     widget.onSave(
       Review(
-        parentId: widget.parentId,
-        author: 'Tú',
+        id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
+        authorId: 'user-current',
+        authorName: 'Tú',
         title: title,
         body: body,
         rating: _rating,
         date: DateTime.now(),
-        tag: _selectedTag,
+        motelId: widget.motelId,
+        roomId: _selectedRoomId,
+        type: _reviewType,
+        status: ReviewModerationStatus.visible,
       ),
     );
 
@@ -194,34 +195,60 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               ),
               const SizedBox(height: AppSpacing.s4),
 
-              // 🔻 AQUÍ ESTÁ EL SELECCIONADOR 🔻
-              DropdownButtonFormField<String>(
-                value: _selectedTag,
+              // Selector de tipo de reseña
+              DropdownButtonFormField<ReviewType>(
+                // Al restaurar el borrador se recrea para tomar el tipo guardado.
+                key: ValueKey('reviewType-$_draftRestored'),
+                initialValue: _reviewType,
                 decoration: const InputDecoration(
                   labelText: '¿Qué deseas reseñar?',
                   prefixIcon: Icon(Icons.sell_outlined),
                 ),
-                items: _tagOptions.map((tag) {
-                  return DropdownMenuItem<String>(
-                    value: tag,
-                    child: Text(
-                      tag,
-                      overflow: TextOverflow.ellipsis,
-                    ),
+                items: ReviewType.values.map((type) {
+                  return DropdownMenuItem<ReviewType>(
+                    value: type,
+                    child: Text(type.label),
                   );
                 }).toList(),
                 onChanged: (value) {
                   if (value != null) {
-                    setState(() => _selectedTag = value);
+                    setState(() => _reviewType = value);
                     _notifyDraftChanged();
                   }
                 },
               ),
               const SizedBox(height: AppSpacing.s4),
 
+              // Selector de habitación (solo visible si se reseña la habitación)
+              if (_reviewType == ReviewType.room && (widget.rooms ?? []).isNotEmpty) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedRoomId,
+                  decoration: const InputDecoration(
+                    labelText: 'Seleccionar habitación',
+                    prefixIcon: Icon(Icons.kitchen_outlined),
+                  ),
+                  items: (widget.rooms ?? [])
+                      .map((room) => DropdownMenuItem<String>(
+                            value: room.id,
+                            child: Text(
+                              room.name,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ))
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setState(() => _selectedRoomId = value);
+                      _notifyDraftChanged();
+                    }
+                  },
+                ),
+                const SizedBox(height: AppSpacing.s4),
+              ],
+
               StarRatingSelector(
                 // Al restaurar el borrador se recrea para tomar la calificación guardada.
-                key: ValueKey(_draftRestored),
+                key: ValueKey('rating-$_draftRestored'),
                 initialRating: _rating,
                 onChanged: (v) {
                   setState(() => _rating = v);
