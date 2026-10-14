@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 import 'package:machuco/widgets/review/admin_review_card.dart';
 import 'package:machuco/widgets/review/review_stat_card.dart';
 import 'package:machuco/widgets/review/review_reply_sheet.dart';
@@ -23,29 +24,21 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
   final TextEditingController _searchController = TextEditingController();
 
   late final ReviewAdministrationController _controller;
-  bool _controllerInitialized = false;
 
   @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    if (_controllerInitialized) return;
-    _controller = widget.controller ?? ReviewAdministrationController.instance;
-    _controllerInitialized = true;
-    _controller.addListener(_refresh);
+  void initState() {
+    super.initState();
+    _controller = widget.controller ?? ReviewAdministrationController();
     unawaited(_controller.loadReviews());
   }
 
-  void _refresh() {
-    if (mounted) setState(() {});
-  }
-
-  Future<void> _confirmDelete(AdminReviewEntry entry) async {
+  Future<void> _confirmDelete(Review review) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Eliminar reseña'),
         content: Text(
-          'Esta acción eliminará de forma permanente la reseña de ${entry.review.author}. ¿Deseas continuar?',
+          'Esta acción eliminará de forma permanente la reseña de ${review.authorName}. ¿Deseas continuar?',
         ),
         actions: [
           TextButton(
@@ -62,45 +55,49 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
         ],
       ),
     );
-    if (confirmed == true) _controller.delete(entry);
+    if (confirmed == true) _controller.delete(review.id);
   }
 
-  void _openReplySheet(AdminReviewEntry entry) {
+  void _openReplySheet(Review review) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
       builder: (context) => ReviewReplySheet(
-        entry: entry,
-        onSubmit: (message) => _controller.reply(entry, message),
+        review: review,
+        onSubmit: (message) => _controller.reply(review.id, message),
       ),
     );
   }
 
   @override
   void dispose() {
-    _controller.removeListener(_refresh);
     _searchController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Reseñas')),
-      body: SafeArea(
-        child: _controller.isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _controller.errorMessage != null
-            ? _buildErrorState(context)
-            : _buildContent(context),
-      ),
+    return ListenableBuilder(
+      listenable: _controller,
+      builder: (context, _) {
+        return Scaffold(
+          appBar: AppBar(title: const Text('Reseñas')),
+          body: SafeArea(
+            child: _controller.isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _controller.errorMessage != null
+                ? _buildErrorState(context)
+                : _buildContent(context),
+          ),
+        );
+      },
     );
   }
 
   Widget _buildContent(BuildContext context) {
-    final entries = _controller.entries;
+    final reviews = _controller.reviews;
     return ListView(
       padding: const EdgeInsets.all(AppSpacing.screen),
       children: [
@@ -127,7 +124,7 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
               ),
             ),
             Text(
-              '${entries.length} registros',
+              '${reviews.length} registros',
               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                 color: context.appColors.textSecondary,
               ),
@@ -135,18 +132,18 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
           ],
         ),
         const SizedBox(height: AppSpacing.s3),
-        if (entries.isEmpty)
+        if (reviews.isEmpty)
           _buildEmptyState(context)
         else
-          ...entries.map(
-            (entry) => Padding(
+          ...reviews.map(
+            (review) => Padding(
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: AdminReviewCard(
-                entry: entry,
-                onToggleVisibility: () => _controller.toggleVisibility(entry),
-                onDismissReport: () => _controller.dismissReport(entry),
-                onReply: () => _openReplySheet(entry),
-                onDelete: () => _confirmDelete(entry),
+                review: review,
+                onToggleVisibility: () => _controller.toggleVisibility(review.id),
+                onDismissReport: () => _controller.dismissReport(review.id),
+                onReply: () => _openReplySheet(review),
+                onDelete: () => _confirmDelete(review),
               ),
             ),
           ),
