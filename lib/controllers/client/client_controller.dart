@@ -20,6 +20,8 @@ class ClientController extends ChangeNotifier {
   List<Client> _allClients = [];
   Client? _currentClient;
   List<PhoneCountryCode> _countryCodes = [];
+
+  bool _isInitialized = false;
   
   bool _isLoading = true;
   String? _errorMessage;
@@ -33,10 +35,16 @@ class ClientController extends ChangeNotifier {
   void init(CountryCodeRepository countryCodeRepo, {ClientRepository? clientRepo}) {
     _clientRepo = clientRepo ?? ClientRepository();
     _countryCodeRepo = countryCodeRepo;
-    loadData();
   }
 
   Future<void> loadData() async {
+
+    if (!_isInitialized) {
+      _clientRepo = ClientRepository();
+      _countryCodeRepo = CountryCodeRepository();
+      _isInitialized = true;
+    }
+
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
@@ -62,6 +70,15 @@ class ClientController extends ChangeNotifier {
         _syncToDirectory(_currentClient!);
       } else if (_allClients.isNotEmpty) {
         _currentClient = _allClients.first;
+      } else {
+        _currentClient = Client(
+          id: 1,
+          name: 'Usuario de Prueba',
+          phone: '3001234567',
+          email: 'prueba@machuco.com',
+          password: 'password123',
+          countryCode: '+57',
+        );
       }
     } catch (e, stacktrace) {
       print('CRÍTICO - Error cargando perfil: $e'); 

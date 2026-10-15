@@ -36,7 +36,15 @@ class ClientProfilePage extends StatelessWidget {
             }
 
             final client = controller.currentClient;
-            if (client == null) return const SizedBox.shrink();
+            if (client == null) {
+              return AppEmptyState(
+                icon: Icons.person_off_outlined,
+                title: 'Perfil no encontrado',
+                message: 'No hay datos de perfil guardados en este dispositivo.',
+                actionLabel: 'Recargar',
+                onAction: controller.loadData,
+              );
+            }
 
             return ListView(
               padding: const EdgeInsets.all(AppSpacing.screen),
