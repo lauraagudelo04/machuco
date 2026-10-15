@@ -3,7 +3,7 @@ import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
-import 'package:machuco/models/client/client.dart';
+import 'package:machuco/database/model/client/client.dart';
 
 class ClientDetailPage extends StatelessWidget {
   const ClientDetailPage({super.key, required this.client});
@@ -31,7 +31,7 @@ class ClientDetailPage extends StatelessWidget {
                 _InfoRow(
                   icon: Icons.phone_outlined,
                   label: 'Teléfono',
-                  value: client.phone,
+                  value: '${client.countryCode} ${client.phone}',
                 ),
                 _InfoRow(
                   icon: Icons.email_outlined,

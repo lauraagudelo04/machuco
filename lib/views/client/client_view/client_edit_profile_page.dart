@@ -6,7 +6,7 @@ import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
-import 'package:machuco/models/client/client.dart';
+import 'package:machuco/database/model/client/client.dart';
 
 class ClientEditProfilePage extends StatefulWidget {
   const ClientEditProfilePage({super.key});
@@ -21,14 +21,16 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   late final TextEditingController _passwordController;
   final _formKey = GlobalKey<FormState>();
 
-  Client get _client => ClientController.currentClient;
+  late String _selectedCountryCode;
 
   @override
   void initState() {
     super.initState();
-    _nameController = TextEditingController(text: _client.name);
-    _phoneController = TextEditingController(text: _client.phone);
-    _passwordController = TextEditingController(text: _client.password);
+    final client = ClientController.instance.currentClient;
+    _nameController = TextEditingController(text: client?.name ?? '');
+    _phoneController = TextEditingController(text: client?.phone ?? '');
+    _passwordController = TextEditingController(text: client?.password ?? '');
+    _selectedCountryCode = client?.countryCode ?? '+57';
   }
 
   @override
@@ -39,20 +41,32 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     super.dispose();
   }
 
-  void _save() {
+  Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-
-    ClientController.updateClient(
-      id: _client.id,
+    
+    final success = await ClientController.instance.updateCurrentClient(
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
       password: _passwordController.text,
+      countryCode: _selectedCountryCode,
     );
 
-    Navigator.pop(context);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Perfil actualizado correctamente.')),
-    );
+    if (!mounted) return;
+
+    if (success) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Perfil actualizado correctamente.')),
+      );
+    } else {
+      final error = ClientController.instance.errorMessage ?? 'Error desconocido';
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    }
   }
 
   @override
@@ -60,85 +74,154 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Editar perfil')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            _buildHeader(context),
-            const SizedBox(height: AppSpacing.s6),
-            Form(
-              key: _formKey,
-              child: _DetailSection(
-                title: 'Información personal',
-                children: [
-                  AppTextField(
-                    label: 'Nombre',
-                    controller: _nameController,
-                    prefixIcon: const Icon(Icons.person_outline),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'El nombre es obligatorio';
-                      }
-                      return null;
-                    },
+        child: ListenableBuilder(
+          listenable: ClientController.instance,
+          builder: (context, _) {
+            final client = ClientController.instance.currentClient;
+            if (client == null) return const SizedBox.shrink();
+            
+            final isSubmitting = ClientController.instance.isLoading;
+            final availableCodes = ClientController.instance.countryCodes;
+
+            List<DropdownMenuItem<String>> dropdownItems = [];
+            
+            if (availableCodes.isNotEmpty) {
+              if (!availableCodes.any((c) => c.callingCode == _selectedCountryCode)) {
+                _selectedCountryCode = availableCodes.first.callingCode;
+              }
+              
+              dropdownItems = availableCodes.map((code) {
+                return DropdownMenuItem(
+                  value: code.callingCode,
+                  child: Text('${code.countryCode} ${code.callingCode}'),
+                );
+              }).toList();
+            } else {
+              dropdownItems = [
+                DropdownMenuItem(
+                  value: _selectedCountryCode,
+                  child: Text(_selectedCountryCode),
+                )
+              ];
+            }
+
+            return ListView(
+              padding: const EdgeInsets.all(AppSpacing.screen),
+              children: [
+                _buildHeader(context, client),
+                const SizedBox(height: AppSpacing.s6),
+                Form(
+                  key: _formKey,
+                  child: _DetailSection(
+                    title: 'Información personal',
+                    children: [
+                      AppTextField(
+                        label: 'Nombre',
+                        controller: _nameController,
+                        enabled: !isSubmitting,
+                        prefixIcon: const Icon(Icons.person_outline),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'El nombre es obligatorio';
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: AppSpacing.s4),
+                      AppTextField(
+                        label: 'Correo electrónico',
+                        controller: TextEditingController(text: client.email),
+                        enabled: false,
+                        prefixIcon: const Icon(Icons.email_outlined),
+                      ),
+                      const SizedBox(height: AppSpacing.s4),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            flex: 4,
+                            child: DropdownButtonFormField<String>(
+                              initialValue: _selectedCountryCode,
+                              decoration: InputDecoration(
+                                labelText: 'Cód.',
+                                filled: true,
+                                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(AppRadius.md),
+                                  borderSide: BorderSide.none,
+                                ),
+                              ),
+                              items: dropdownItems,
+                              onChanged: (isSubmitting || availableCodes.isEmpty)
+                                  ? null
+                                  : (val) {
+                                      if (val != null) {
+                                        setState(() => _selectedCountryCode = val);
+                                      }
+                                    },
+                            ),
+                          ),
+                          const SizedBox(width: AppSpacing.s2),
+                          Expanded(
+                            flex: 6,
+                            child: AppTextField(
+                              label: 'Teléfono',
+                              controller: _phoneController,
+                              enabled: !isSubmitting,
+                              keyboardType: TextInputType.phone,
+                              prefixIcon: const Icon(Icons.phone_outlined),
+                              validator: (value) {
+                                if (value == null || value.trim().isEmpty) {
+                                  return 'El teléfono es obligatorio';
+                                }
+                                return null;
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.s4),
+                      AppTextField(
+                        label: 'Contraseña',
+                        controller: _passwordController,
+                        enabled: !isSubmitting,
+                        obscureText: true,
+                        prefixIcon: const Icon(Icons.lock_outline),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return 'La contraseña es obligatoria';
+                          }
+                          if (value.length < 4) {
+                            return 'Mínimo 4 caracteres';
+                          }
+                          return null;
+                        },
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: AppSpacing.s4),
-                  AppTextField(
-                    label: 'Correo electrónico',
-                    controller: TextEditingController(text: _client.email),
-                    enabled: false,
-                    prefixIcon: const Icon(Icons.email_outlined),
-                  ),
-                  const SizedBox(height: AppSpacing.s4),
-                  AppTextField(
-                    label: 'Teléfono',
-                    controller: _phoneController,
-                    keyboardType: TextInputType.phone,
-                    prefixIcon: const Icon(Icons.phone_outlined),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'El teléfono es obligatorio';
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: AppSpacing.s4),
-                  AppTextField(
-                    label: 'Contraseña',
-                    controller: _passwordController,
-                    obscureText: true,
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return 'La contraseña es obligatoria';
-                      }
-                      if (value.length < 4) {
-                        return 'Mínimo 4 caracteres';
-                      }
-                      return null;
-                    },
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s6),
-            AppButton(
-              label: 'Guardar cambios',
-              icon: Icons.check_outlined,
-              onPressed: _save,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            AppButton(
-              label: 'Cancelar',
-              variant: AppButtonVariant.secondary,
-              onPressed: () => Navigator.pop(context),
-            ),
-          ],
+                ),
+                const SizedBox(height: AppSpacing.s6),
+                AppButton(
+                  label: 'Guardar cambios',
+                  icon: Icons.check_outlined,
+                  loading: isSubmitting,
+                  onPressed: isSubmitting ? null : _save,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                AppButton(
+                  label: 'Cancelar',
+                  variant: AppButtonVariant.secondary,
+                  onPressed: isSubmitting ? null : () => Navigator.pop(context),
+                ),
+              ],
+            );
+          }
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, Client client) {
     return AppCard(
       child: Column(
         children: [
@@ -153,7 +236,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
             ),
             alignment: Alignment.center,
             child: Text(
-              _client.initials,
+              client.initials,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                 color: Theme.of(context).colorScheme.primary,
                 fontWeight: FontWeight.w700,
@@ -162,13 +245,13 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
           ),
           const SizedBox(height: AppSpacing.s3),
           Text(
-            _client.name,
+            client.name,
             style: Theme.of(context).textTheme.headlineSmall,
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(
-            _client.email,
+            client.email,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: context.appColors.textSecondary,
             ),
@@ -181,7 +264,6 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
 
 class _DetailSection extends StatelessWidget {
   const _DetailSection({required this.title, required this.children});
-
   final String title;
   final List<Widget> children;
 
