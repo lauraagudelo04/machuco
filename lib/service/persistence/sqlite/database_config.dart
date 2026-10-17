@@ -55,7 +55,7 @@ Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
   // Ejemplo:
   // if (oldVersion < 2) {
   //   await db.execute('ALTER TABLE owners ADD COLUMN new_field TEXT');
-  // }
+ // }
 }
 
 /// Abre (o crea) la base de datos SQLite.
@@ -71,5 +71,4 @@ Future<Database> openDatabaseInstance() async {
     version: databaseVersion,
     onCreate: _onCreate,
     onUpgrade: _onUpgrade,
-  );
-}
+  );}
