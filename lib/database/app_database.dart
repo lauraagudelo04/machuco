@@ -8,6 +8,9 @@ import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/payment/payment.dart';
+import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 part 'app_database.g.dart';
@@ -17,14 +20,19 @@ part 'app_database.g.dart';
   SubscriptionDateConverter,
   SubscriptionStatusConverter,
   SubscriptionFeaturesConverter,
+  PaymentStatusConverter,
+  PaymentMethodConverter,
+  PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 6,
+  version: 7,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
     NotificationEntry,
     NotificationRead,
+    PaymentCatalogEntry,
+    PaymentRecord,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -32,6 +40,7 @@ abstract class AppDatabase extends FloorDatabase {
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
+  PaymentDao get paymentDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -55,6 +64,7 @@ class AppDatabaseProvider {
         migration3To4,
         migration4To5,
         migration5To6,
+        migration6To7,
       ])
       .addCallback(Callback(onCreate: _createRoomSchema))
       .build();
@@ -207,4 +217,28 @@ final migration5To6 = Migration(5, 6, (database) async {
     'CREATE UNIQUE INDEX IF NOT EXISTS index_notification_reads_notificationId_userId '
     'ON notification_reads (notificationId, userId)',
   );
+});
+
+/// Agrega Payment sin modificar las tablas de las demás funcionalidades.
+final migration6To7 = Migration(6, 7, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS payment_method_catalog ('
+    'id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS payments ('
+    'id TEXT NOT NULL PRIMARY KEY, bookingId TEXT NOT NULL, '
+    'bookingReference TEXT NOT NULL, clientId TEXT NOT NULL, '
+    'client TEXT NOT NULL, motelId TEXT NOT NULL, motel TEXT NOT NULL, '
+    'roomId TEXT NOT NULL, room TEXT NOT NULL, '
+    'reservationDate INTEGER NOT NULL, amount INTEGER NOT NULL, '
+    'status TEXT NOT NULL, method TEXT, paymentMethodId INTEGER, '
+    'paidAt INTEGER, receiptNumber TEXT, '
+    'FOREIGN KEY (paymentMethodId) REFERENCES payment_method_catalog (id))',
+  );
+  for (final column in ['clientId', 'motelId', 'paymentMethodId']) {
+    await database.execute(
+      'CREATE INDEX IF NOT EXISTS index_payments_$column ON payments ($column)',
+    );
+  }
 });
