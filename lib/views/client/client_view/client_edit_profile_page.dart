@@ -6,7 +6,7 @@ import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
-import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/models/client/client_model.dart';
 
 class ClientEditProfilePage extends StatefulWidget {
   const ClientEditProfilePage({super.key});
@@ -221,7 +221,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     );
   }
 
-  Widget _buildHeader(BuildContext context, Client client) {
+  Widget _buildHeader(BuildContext context, ClientModel client) {
     return AppCard(
       child: Column(
         children: [

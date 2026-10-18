@@ -7,22 +7,22 @@ import 'package:machuco/database/model/client/client.dart';
 @dao
 abstract class ClientDao {
   @Query('SELECT * FROM clients WHERE id = :id LIMIT 1')
-  Future<Client?> findById(int id);
+  Future<ClientEntry?> findById(int id);
 
   @Query('SELECT * FROM clients')
-  Future<List<Client>> findAll();
+  Future<List<ClientEntry>> findAll();
 
   @insert
-  Future<int> insertClient(Client client); 
+  Future<int> insertClient(ClientEntry client); 
 
   @Insert(onConflict: OnConflictStrategy.replace)
-  Future<void> insertClients(List<Client> clients);
+  Future<void> insertClients(List<ClientEntry> clients);
 
   @update
-  Future<int> updateClient(Client client);
+  Future<int> updateClient(ClientEntry client);
 
   @delete
-  Future<int> deleteClient(Client client);
+  Future<int> deleteClient(ClientEntry client);
 
   @Query('DELETE FROM clients WHERE id = :id')
   Future<void> deleteById(int id);
@@ -62,7 +62,6 @@ class ClientRepository {
   Future<void> _syncClients() async {
     final base = Uri.tryParse(_supabaseUrl);
     
-    // 1. Validación estricta copiada de NotificationRepository
     if (base == null || base.scheme != 'https' || base.host.isEmpty || _publishableKey.isEmpty) {
       print('Advertencia: Conexión a Supabase no configurada. Usando datos locales.');
       return; 
@@ -89,13 +88,12 @@ class ClientRepository {
       return;
     }
 
-    // 2. Manejo riguroso de JSON y Tipos
     try {
       final rows = jsonDecode(utf8.decode(response.bodyBytes));
       if (rows is! List) throw const FormatException('Respuesta inválida');
       
       final clients = rows
-          .map((row) => Client.fromJson(row as Map<String, dynamic>))
+          .map((row) => ClientEntry.fromJson(row as Map<String, dynamic>))
           .toList(growable: false);
 
       final dao = (await _database).clientDao;
@@ -108,28 +106,28 @@ class ClientRepository {
     }
   }
 
-  Future<List<Client>> getAllClients() async {
-    await _syncClients(); // Descarga silenciosa
+  Future<List<ClientEntry>> getAllClients() async {
+    await _syncClients();
     final dao = (await _database).clientDao;
-    return await dao.findAll(); // Devuelve datos unificados
+    return await dao.findAll();
   }
 
-  Future<Client?> getClientById(int id) async {
+  Future<ClientEntry?> getClientById(int id) async {
     final dao = (await _database).clientDao;
     return await dao.findById(id);
   }
 
-  Future<void> saveClient(Client client) async {
+  Future<void> saveClient(ClientEntry client) async {
     final dao = (await _database).clientDao;
     await dao.insertClient(client);
   }
 
-  Future<void> updateClient(Client client) async {
+  Future<void> updateClient(ClientEntry client) async {
     final dao = (await _database).clientDao;
     await dao.updateClient(client);
   }
 
-  Future<void> removeClient(Client client) async {
+  Future<void> removeClient(ClientEntry client) async {
     final dao = (await _database).clientDao;
     await dao.deleteClient(client);
   }

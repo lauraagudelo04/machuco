@@ -28,7 +28,7 @@ part 'app_database.g.dart';
     SubscriptionPayment,
     NotificationEntry,
     NotificationRead, 
-    Client, 
+    ClientEntry, 
     PhoneCountryCode
   ],
 )

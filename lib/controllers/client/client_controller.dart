@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
+import 'package:machuco/models/client/client_model.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 
@@ -17,28 +17,22 @@ class ClientController extends ChangeNotifier {
   late ClientRepository _clientRepo;
   late CountryCodeRepository _countryCodeRepo;
 
-  List<Client> _allClients = [];
-  Client? _currentClient;
+  List<ClientModel> _allClients = [];
+  ClientModel? _currentClient;
   List<PhoneCountryCode> _countryCodes = [];
 
   bool _isInitialized = false;
   
-  bool _isLoading = true;
+  bool _isLoading = false; 
   String? _errorMessage;
 
-  Client? get currentClient => _currentClient;
-  List<Client> get allClients => List.unmodifiable(_allClients);
+  ClientModel? get currentClient => _currentClient;
+  List<ClientModel> get allClients => List.unmodifiable(_allClients);
   List<PhoneCountryCode> get countryCodes => List.unmodifiable(_countryCodes);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  void init(CountryCodeRepository countryCodeRepo, {ClientRepository? clientRepo}) {
-    _clientRepo = clientRepo ?? ClientRepository();
-    _countryCodeRepo = countryCodeRepo;
-  }
-
   Future<void> loadData() async {
-
     if (!_isInitialized) {
       _clientRepo = ClientRepository();
       _countryCodeRepo = CountryCodeRepository();
@@ -51,15 +45,24 @@ class ClientController extends ChangeNotifier {
 
     try {
       _countryCodes = await _countryCodeRepo.getActiveCountryCodes();
-
-      _allClients = await _clientRepo.getAllClients();
+      
+      final clientEntries = await _clientRepo.getAllClients();
+      
+      _allClients = clientEntries.map((entry) => ClientModel(
+        id: entry.id,
+        name: entry.name,
+        phone: entry.phone,
+        email: entry.email,
+        countryCode: entry.countryCode,
+        password: entry.password,
+      )).toList();
 
       final prefs = await SharedPreferences.getInstance();
       final clientJson = prefs.getString(_clientKey);
       
       if (clientJson != null) {
         final data = jsonDecode(clientJson) as Map<String, dynamic>;
-        _currentClient = Client(
+        _currentClient = ClientModel(
           id: data['id'] as int?, 
           name: data['name'] as String,
           phone: data['phone'] as String,
@@ -71,7 +74,7 @@ class ClientController extends ChangeNotifier {
       } else if (_allClients.isNotEmpty) {
         _currentClient = _allClients.first;
       } else {
-        _currentClient = Client(
+        _currentClient = const ClientModel(
           id: 1,
           name: 'Usuario de Prueba',
           phone: '3001234567',
@@ -103,7 +106,7 @@ class ClientController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final updatedClient = _currentClient!.copyWith(
+      final updatedClientModel = _currentClient!.copyWith(
         name: name,
         phone: phone,
         password: password,
@@ -111,14 +114,29 @@ class ClientController extends ChangeNotifier {
       );
 
       final prefs = await SharedPreferences.getInstance();
-      final success = await prefs.setString(_clientKey, jsonEncode(updatedClient.toJson()));
+      final success = await prefs.setString(_clientKey, jsonEncode({
+         'id': updatedClientModel.id,
+         'name': updatedClientModel.name,
+         'phone': updatedClientModel.phone,
+         'email': updatedClientModel.email,
+         'countryCode': updatedClientModel.countryCode,
+         'password': updatedClientModel.password,
+      }));
 
       if (!success) throw Exception('Error guardando en SharedPreferences');
 
-      await _clientRepo.updateClient(updatedClient);
+      final entryToUpdate = ClientEntry(
+        id: updatedClientModel.id,
+        name: updatedClientModel.name,
+        phone: updatedClientModel.phone,
+        email: updatedClientModel.email,
+        countryCode: updatedClientModel.countryCode,
+        password: updatedClientModel.password,
+      );
+      await _clientRepo.updateClient(entryToUpdate);
 
-      _currentClient = updatedClient;
-      _syncToDirectory(updatedClient);
+      _currentClient = updatedClientModel;
+      _syncToDirectory(updatedClientModel);
       
       return true;
     } catch (e) {
@@ -130,7 +148,7 @@ class ClientController extends ChangeNotifier {
     }
   }
 
-  void _syncToDirectory(Client updatedClient) {
+  void _syncToDirectory(ClientModel updatedClient) {
     final index = _allClients.indexWhere((c) => c.id == updatedClient.id);
     if (index != -1) {
       _allClients[index] = updatedClient;
@@ -139,7 +157,7 @@ class ClientController extends ChangeNotifier {
     }
   }
 
-  List<Client> search(String query) {
+  List<ClientModel> search(String query) {
     if (query.isEmpty) return List.unmodifiable(_allClients);
     final lower = query.toLowerCase();
     return _allClients
@@ -149,18 +167,25 @@ class ClientController extends ChangeNotifier {
         .toList();
   }
 
-  // 5. El parámetro ID ahora es int
-  Client? getById(int id) {
+  ClientModel? getById(int id) {
     for (final client in _allClients) {
       if (client.id == id) return client;
     }
     return null;
   }
 
-  void unlink(Client client) async {
+  void unlink(ClientModel client) async {
     _allClients.removeWhere((c) => c.id == client.id);
     
-    await _clientRepo.removeClient(client);
+    final entryToDelete = ClientEntry(
+        id: client.id,
+        name: client.name,
+        phone: client.phone,
+        email: client.email,
+        countryCode: client.countryCode,
+        password: client.password,
+    );
+    await _clientRepo.removeClient(entryToDelete);
 
     if (_currentClient?.id == client.id) {
       final prefs = await SharedPreferences.getInstance();

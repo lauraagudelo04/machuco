@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/models/client/client_model.dart';
 import 'package:machuco/routes/routes.dart';
 
 class ClientProfilePage extends StatelessWidget {
@@ -93,7 +93,7 @@ class ClientProfilePage extends StatelessWidget {
     );
   }
 
-  Widget _buildHeader(BuildContext context, Client client) {
+  Widget _buildHeader(BuildContext context, ClientModel client) {
     return AppCard(
       child: Column(
         children: [

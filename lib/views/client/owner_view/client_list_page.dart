@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/models/client/client_model.dart';
 
 class ClientListPage extends StatefulWidget {
   const ClientListPage({super.key});
@@ -30,7 +30,7 @@ class _ClientListPageState extends State<ClientListPage> {
     super.dispose();
   }
 
-  void _confirmUnlink(BuildContext context, Client client) {
+  void _confirmUnlink(BuildContext context, ClientModel client) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -124,7 +124,7 @@ class _ClientCard extends StatelessWidget {
     required this.onTap,
   });
 
-  final Client client;
+  final ClientModel client;
   final VoidCallback onUnlink;
   final VoidCallback onTap;
 

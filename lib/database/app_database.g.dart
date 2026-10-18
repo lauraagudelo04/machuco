@@ -400,10 +400,10 @@ class _$ClientDao extends ClientDao {
     this.database,
     this.changeListener,
   )   : _queryAdapter = QueryAdapter(database),
-        _clientInsertionAdapter = InsertionAdapter(
+        _clientEntryInsertionAdapter = InsertionAdapter(
             database,
             'clients',
-            (Client item) => <String, Object?>{
+            (ClientEntry item) => <String, Object?>{
                   'id': item.id,
                   'name': item.name,
                   'phone': item.phone,
@@ -411,11 +411,11 @@ class _$ClientDao extends ClientDao {
                   'country_code': item.countryCode,
                   'password': item.password
                 }),
-        _clientUpdateAdapter = UpdateAdapter(
+        _clientEntryUpdateAdapter = UpdateAdapter(
             database,
             'clients',
             ['id'],
-            (Client item) => <String, Object?>{
+            (ClientEntry item) => <String, Object?>{
                   'id': item.id,
                   'name': item.name,
                   'phone': item.phone,
@@ -423,11 +423,11 @@ class _$ClientDao extends ClientDao {
                   'country_code': item.countryCode,
                   'password': item.password
                 }),
-        _clientDeletionAdapter = DeletionAdapter(
+        _clientEntryDeletionAdapter = DeletionAdapter(
             database,
             'clients',
             ['id'],
-            (Client item) => <String, Object?>{
+            (ClientEntry item) => <String, Object?>{
                   'id': item.id,
                   'name': item.name,
                   'phone': item.phone,
@@ -442,16 +442,16 @@ class _$ClientDao extends ClientDao {
 
   final QueryAdapter _queryAdapter;
 
-  final InsertionAdapter<Client> _clientInsertionAdapter;
+  final InsertionAdapter<ClientEntry> _clientEntryInsertionAdapter;
 
-  final UpdateAdapter<Client> _clientUpdateAdapter;
+  final UpdateAdapter<ClientEntry> _clientEntryUpdateAdapter;
 
-  final DeletionAdapter<Client> _clientDeletionAdapter;
+  final DeletionAdapter<ClientEntry> _clientEntryDeletionAdapter;
 
   @override
-  Future<Client?> findById(int id) async {
+  Future<ClientEntry?> findById(int id) async {
     return _queryAdapter.query('SELECT * FROM clients WHERE id = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => Client(
+        mapper: (Map<String, Object?> row) => ClientEntry(
             id: row['id'] as int?,
             name: row['name'] as String,
             phone: row['phone'] as String,
@@ -462,9 +462,9 @@ class _$ClientDao extends ClientDao {
   }
 
   @override
-  Future<List<Client>> findAll() async {
+  Future<List<ClientEntry>> findAll() async {
     return _queryAdapter.queryList('SELECT * FROM clients',
-        mapper: (Map<String, Object?> row) => Client(
+        mapper: (Map<String, Object?> row) => ClientEntry(
             id: row['id'] as int?,
             name: row['name'] as String,
             phone: row['phone'] as String,
@@ -480,26 +480,26 @@ class _$ClientDao extends ClientDao {
   }
 
   @override
-  Future<int> insertClient(Client client) {
-    return _clientInsertionAdapter.insertAndReturnId(
+  Future<int> insertClient(ClientEntry client) {
+    return _clientEntryInsertionAdapter.insertAndReturnId(
         client, OnConflictStrategy.abort);
   }
 
   @override
-  Future<void> insertClients(List<Client> clients) async {
-    await _clientInsertionAdapter.insertList(
+  Future<void> insertClients(List<ClientEntry> clients) async {
+    await _clientEntryInsertionAdapter.insertList(
         clients, OnConflictStrategy.replace);
   }
 
   @override
-  Future<int> updateClient(Client client) {
-    return _clientUpdateAdapter.updateAndReturnChangedRows(
+  Future<int> updateClient(ClientEntry client) {
+    return _clientEntryUpdateAdapter.updateAndReturnChangedRows(
         client, OnConflictStrategy.abort);
   }
 
   @override
-  Future<int> deleteClient(Client client) {
-    return _clientDeletionAdapter.deleteAndReturnChangedRows(client);
+  Future<int> deleteClient(ClientEntry client) {
+    return _clientEntryDeletionAdapter.deleteAndReturnChangedRows(client);
   }
 }
 
