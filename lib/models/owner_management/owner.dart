@@ -41,4 +41,34 @@ class Owner {
     address: address,
     isActive: isActive ?? this.isActive,
   );
+
+  /// Mapea a un Map para inserción/actualización en SQLite.
+  /// Usa documentType.name para ser consistente con OwnerDao._mapToOwner.
+  Map<String, dynamic> toMap() => {
+        'id': id,
+        'full_name': fullName,
+        'document_type': documentType.name,
+        'document_number': documentNumber,
+        'email': email,
+        'phone': phone,
+        'address': address,
+        'is_active': isActive ? 1 : 0,
+        'synchronized': 0,
+        'created_at': DateTime.now().millisecondsSinceEpoch,
+        'updated_at': DateTime.now().millisecondsSinceEpoch,
+      };
+
+  /// Crea un Owner desde un Map leído de la base de datos.
+  factory Owner.fromMap(Map<String, dynamic> map) => Owner(
+    id: map['id'] as String,
+    fullName: map['full_name'] as String,
+    documentType: DocumentType.values
+        .firstWhere((e) => e.name == map['document_type'],
+        orElse: () => DocumentType.citizenshipCard),
+    documentNumber: map['document_number'] as String,
+    email: map['email'] as String,
+    phone: map['phone'] as String,
+    address: map['address'] as String?,
+    isActive: map['is_active'] == 1,
+  );
 }
