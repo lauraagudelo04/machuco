@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:floor/floor.dart';
+import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
@@ -19,7 +20,7 @@ part 'app_database.g.dart';
   SubscriptionFeaturesConverter,
 ])
 @Database(
-  version: 6,
+  version: 7,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -55,8 +56,16 @@ class AppDatabaseProvider {
         migration3To4,
         migration4To5,
         migration5To6,
+        migration6To7,
       ])
-      .addCallback(Callback(onCreate: _createRoomSchema))
+      .addCallback(
+        Callback(
+          onCreate: (database, version) async {
+            await _createRoomSchema(database, version);
+            await seedSubscriptionTestOwner(database);
+          },
+        ),
+      )
       .build();
 }
 
