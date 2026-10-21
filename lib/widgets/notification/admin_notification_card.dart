@@ -5,18 +5,18 @@ import '../../core/design_system/tokens/app_colors.dart';
 import '../../core/design_system/tokens/app_radius.dart';
 import '../../core/design_system/tokens/app_spacing.dart';
 import '../../models/notification/notification_model.dart';
+import '../../utils/date_formatter.dart';
 
 class AdminNotificationCard extends StatelessWidget {
-  const AdminNotificationCard({
-    super.key,
-    required this.notification,
-  });
+  const AdminNotificationCard({super.key, required this.notification});
 
   final AppNotification notification;
 
   @override
   Widget build(BuildContext context) {
-    final color = notification.type.color;
+    final color = notification.type?.color ?? AppColors.violet;
+    final icon = notification.type?.icon ?? Icons.notifications_outlined;
+    final typeName = notification.type?.name ?? 'Tipo no disponible';
     final isAll = notification.target == NotificationTarget.all;
 
     return AppCard(
@@ -38,14 +38,14 @@ class AdminNotificationCard extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(notification.type.icon, size: 14, color: color),
+                    Icon(icon, size: 14, color: color),
                     const SizedBox(width: 4),
                     Text(
-                      notification.type.label,
-                      style: Theme.of(context)
-                          .textTheme
-                          .labelSmall
-                          ?.copyWith(color: color, fontWeight: FontWeight.bold),
+                      typeName,
+                      style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
                   ],
                 ),
@@ -67,33 +67,33 @@ class AdminNotificationCard extends StatelessWidget {
                       ? '📢 Todos'
                       : '👤 Para: ${notification.recipientUser ?? "Usuario"}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: isAll ? AppColors.violet : AppColors.fuchsia,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    color: isAll ? AppColors.violet : AppColors.fuchsia,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const Spacer(),
               Text(
-                notification.time,
+                formatDateTimeLabel(notification.sentAt),
                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                      color: context.appColors.textMuted,
-                    ),
+                  color: context.appColors.textMuted,
+                ),
               ),
             ],
           ),
           const SizedBox(height: AppSpacing.s3),
           Text(
             notification.title,
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.bold,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
           Text(
             notification.message,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ],
       ),
