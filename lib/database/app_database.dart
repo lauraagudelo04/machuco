@@ -3,7 +3,9 @@
 import 'dart:async';
 
 import 'package:floor/floor.dart';
+import 'package:machuco/database/model/owner/owner_entry.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
@@ -15,9 +17,10 @@ part 'app_database.g.dart';
   SubscriptionStatusConverter,
   SubscriptionFeaturesConverter,
 ])
-@Database(version: 4, entities: [SubscriptionDetails, SubscriptionPayment])
+@Database(version: 5, entities: [SubscriptionDetails, SubscriptionPayment, OwnerEntry])
 abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
+  OwnerDao get ownerDao;
 }
 
 class AppDatabaseProvider {
@@ -34,6 +37,7 @@ class AppDatabaseProvider {
     migration1To2,
     migration2To3,
     migration3To4,
+    migration4To5,
   ]).build();
 }
 
@@ -113,5 +117,26 @@ final migration3To4 = Migration(3, 4, (database) async {
   await database.execute(
     'CREATE INDEX index_subscription_payments_subscriptionId '
     'ON subscription_payments (subscriptionId)',
+  );
+});
+
+/// Agrega la tabla de propietarios del módulo de administración de dueños.
+///
+/// Debe coincidir con el esquema que genera Floor para `OwnerEntry`.
+final migration4To5 = Migration(4, 5, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `owners` ('
+    '`id` TEXT NOT NULL, '
+    '`fullName` TEXT NOT NULL, '
+    '`documentType` TEXT NOT NULL, '
+    '`documentNumber` TEXT NOT NULL, '
+    '`email` TEXT NOT NULL, '
+    '`phone` TEXT NOT NULL, '
+    '`address` TEXT, '
+    '`isActive` INTEGER NOT NULL, '
+    '`synchronized` INTEGER NOT NULL, '
+    '`createdAt` INTEGER NOT NULL, '
+    '`updatedAt` INTEGER NOT NULL, '
+    'PRIMARY KEY (`id`))',
   );
 });

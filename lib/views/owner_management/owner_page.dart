@@ -39,7 +39,9 @@ class OwnerPage extends StatefulWidget {
 }
 
 class _OwnerPageState extends State<OwnerPage> {
-  final OwnerController _controller = OwnerController();
+  // Instancia compartida: el detalle, el formulario y la gestión de moteles
+  // deben ver el mismo estado del módulo.
+  final OwnerController _controller = OwnerController.instance;
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
   final SessionPreferences _sessionPreferences = SessionPreferences();
@@ -49,6 +51,7 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   void initState() {
     super.initState();
+    _controller.init();
     _loadAdminEmail();
   }
 
@@ -62,7 +65,8 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   void dispose() {
     _searchController.dispose();
-    _controller.dispose();
+    // No se dispone del controlador: es una instancia compartida por varias
+    // pantallas y debe sobrevivir a esta página.
     super.dispose();
   }
 
@@ -139,11 +143,11 @@ class _OwnerPageState extends State<OwnerPage> {
     // a activarlo es inocuo y no necesita confirmación.
     if (owner.isActive && !await _confirmDeactivation(owner)) return;
     if (!mounted) return;
-    final updated = _controller.setActiveState(
+    final updated = await _controller.setActiveState(
       owner.id,
       isActive: !owner.isActive,
     );
-    if (updated == null) return;
+    if (updated == null || !mounted) return;
     _showMessage(
       updated.isActive
           ? '${updated.fullName} quedó activo.'
@@ -154,8 +158,8 @@ class _OwnerPageState extends State<OwnerPage> {
   Future<void> _deleteOwner(Owner owner) async {
     if (!await _confirmDeletion(owner)) return;
     if (!mounted) return;
-    final deleted = _controller.deleteOwner(owner.id);
-    if (deleted == null) return;
+    final deleted = await _controller.deleteOwner(owner.id);
+    if (deleted == null || !mounted) return;
     _showMessage('${deleted.fullName} fue eliminado.');
   }
 

@@ -32,7 +32,10 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   int _selectedIndex = 0; 
   
   final MotelController _motelController = MotelController();
-  final OwnerController _ownerController = OwnerController();
+
+  // Instancia compartida con la página de propietarios: si aquí se cambia el
+  // dueño de un motel, el listado de propietarios refleja el mismo estado.
+  final OwnerController _ownerController = OwnerController.instance;
   
   List<Motel> _motels = [];
   List<Owner> _owners = [];
@@ -51,6 +54,9 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   Future<void> _loadOwnersAndMotels() async {
     setState(() => _isLoading = true);
     
+    // Carga desde la base local; si otro cambio de pantalla ya la cargó, la
+    // recarga es inocua y garantiza datos frescos.
+    await _ownerController.init();
     final ownersList = _ownerController.owners;
     _owners = ownersList;
     
@@ -64,6 +70,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
 
     final motelesObtenidos = await _motelController.getMotelsByOwnerId(_currentOwnerId);
     
+    if (!mounted) return;
     setState(() {
       _motels = motelesObtenidos;
       _isLoading = false;

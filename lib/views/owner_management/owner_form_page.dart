@@ -132,7 +132,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   void _focusNextField() => FocusScope.of(context).nextFocus();
 
-  void _submitForm() {
+  Future<void> _submitForm() async {
     setState(() {
       _hasAttemptedSubmit = true;
       _updateErrors();
@@ -150,28 +150,50 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
     final initialData = widget.initialData;
     if (initialData != null) {
-      Navigator.of(context).pop(
-        widget.controller.updateOwnerPhone(
-          initialData.id,
-          _phoneController.text.trim(),
-        ),
+      final updated = await widget.controller.updateOwnerPhone(
+        initialData.id,
+        _phoneController.text.trim(),
       );
+      if (!mounted) return;
+      if (updated == null) {
+        // La persistencia falló: el controlador expone el motivo.
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              widget.controller.lastError ??
+                  'No se pudieron guardar los cambios.',
+            ),
+          ),
+        );
+        return;
+      }
+      Navigator.of(context).pop(updated);
       return;
     }
 
     FocusScope.of(context).unfocus();
     final address = _addressController.text.trim();
-    setState(() {
-      _createdOwner = widget.controller.createOwner(
-        fullName: _fullNameController.text.trim(),
-        documentType: _documentType,
-        documentNumber: _documentNumberController.text.trim(),
-        email: _emailController.text.trim(),
-        phone: _phoneController.text.trim(),
-        address: address.isEmpty ? null : address,
-        isActive: _isActive,
+    final created = await widget.controller.createOwner(
+      fullName: _fullNameController.text.trim(),
+      documentType: _documentType,
+      documentNumber: _documentNumberController.text.trim(),
+      email: _emailController.text.trim(),
+      phone: _phoneController.text.trim(),
+      address: address.isEmpty ? null : address,
+      isActive: _isActive,
+    );
+    if (!mounted) return;
+    if (created == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.lastError ?? 'No se pudo registrar el propietario.',
+          ),
+        ),
       );
-    });
+      return;
+    }
+    setState(() => _createdOwner = created);
   }
 
   void _cancelForm() => Navigator.of(context).maybePop();
