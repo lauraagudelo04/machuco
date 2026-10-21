@@ -118,16 +118,90 @@ class ClientRepository {
   }
 
   Future<void> saveClient(ClientEntry client) async {
-    final dao = (await _database).clientDao;
-    await dao.insertClient(client);
+    final uri = Uri.parse('$_supabaseUrl/rest/v1/clients');
+    
+    try {
+      final response = await http.post(
+        uri,
+        headers: {
+          'apikey': _publishableKey, 
+          'Content-Type': 'application/json',
+          'Prefer': 'return=representation'
+        },
+        body: jsonEncode({
+          'name': client.name,
+          'phone': client.phone,
+          'email': client.email,
+          'country_code': client.countryCode,
+          'password': client.password,
+        }),
+      ).timeout(const Duration(seconds: 10));
+
+      final dao = (await _database).clientDao;
+      
+      if (response.statusCode == 201) {
+        final List<dynamic> responseData = jsonDecode(utf8.decode(response.bodyBytes));
+        final serverClient = ClientEntry.fromJson(responseData.first as Map<String, dynamic>);
+        await dao.insertClient(serverClient);
+      } else {
+        print('Error de Supabase: ${response.statusCode} - ${response.body}');
+        await dao.insertClient(client);
+      }
+    } catch (e) {
+      print('Sin conexión. Guardando cliente localmente: $e');
+      final dao = (await _database).clientDao;
+      await dao.insertClient(client);
+    }
   }
 
   Future<void> updateClient(ClientEntry client) async {
+    if (client.id != null) {
+      final uri = Uri.parse('$_supabaseUrl/rest/v1/clients?id=eq.${client.id}');
+      try {
+        final response = await http.patch(
+          uri,
+          headers: {
+            'apikey': _publishableKey, 
+            'Content-Type': 'application/json'
+          },
+          body: jsonEncode({
+            'name': client.name,
+            'phone': client.phone,
+            'email': client.email,
+            'country_code': client.countryCode,
+            'password': client.password,
+          }),
+        ).timeout(const Duration(seconds: 10));
+        
+        if (response.statusCode >= 400) {
+           print('Error actualizando en Supabase: ${response.body}');
+        }
+      } catch (e) {
+        print('Sin conexión. Actualizando cliente solo en modo local: $e');
+      }
+    }
+
     final dao = (await _database).clientDao;
     await dao.updateClient(client);
   }
 
   Future<void> removeClient(ClientEntry client) async {
+    if (client.id != null) {
+      final uri = Uri.parse('$_supabaseUrl/rest/v1/clients?id=eq.${client.id}');
+      try {
+        final response = await http.delete(
+          uri,
+          headers: {'apikey': _publishableKey},
+        ).timeout(const Duration(seconds: 10));
+
+        if (response.statusCode >= 400) {
+           print('Error borrando en Supabase: ${response.body}');
+        }
+      } catch (e) {
+        print('Sin conexión. Borrando cliente solo en modo local: $e');
+      }
+    }
+
     final dao = (await _database).clientDao;
     await dao.deleteClient(client);
   }
