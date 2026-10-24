@@ -2,11 +2,18 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/models/review/review_data.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
 /// Borrador de una reseña a medio escribir en el formulario.
-typedef ReviewDraft = ({String tag, int rating, String title, String body});
+typedef ReviewDraft = ({
+  ReviewType type,
+  String? roomId,
+  int rating,
+  String title,
+  String body,
+});
 
 /// Controlador de reseñas para el cliente.
 ///
@@ -23,44 +30,7 @@ class ReviewsController extends ChangeNotifier {
 
   final LocalPreferencesService _preferences;
 
-  final List<Review> _reviews = [
-    Review(
-      parentId: "3",
-      author: 'Carlos M.',
-      title: 'Muy cómodo y tranquilo',
-      body: 'Las habitaciones estaban limpias y el personal fue muy amable. La cama súper cómoda.',
-      rating: 5,
-      date: DateTime(2026, 7, 20),
-      tag: "Motel Eclipse"
-    ),
-    Review(
-      parentId: "3",
-      author: 'Luisa P.',
-      title: 'Buena ubicación',
-      body: 'Está bien ubicado, cerca de todo. El precio es justo para lo que ofrece.',
-      rating: 4,
-      date: DateTime(2026, 6, 15),
-      tag: "Motel Eclipse"
-    ),
-    Review(
-      parentId: "3",
-      author: 'Roberto V.',
-      title: 'Aceptable',
-      body: 'Correcto para una noche. El wifi un poco lento pero el resto bien.',
-      rating: 3,
-      date: DateTime(2026, 5, 3),
-      tag: "Motel Eclipse"
-    ),
-    Review(
-      parentId: "2",
-      author: 'Roberto V.',
-      title: 'Aceptable',
-      body: 'Un poco desorganizada pero el ambiente se sentia bien.',
-      rating: 3,
-      date: DateTime(2026, 5, 3),
-      tag: 'Suite Nova'
-    ),
-  ];
+  final List<Review> _reviews = [];
 
   int get totalCount => _reviews.length;
 
@@ -105,18 +75,19 @@ class ReviewsController extends ChangeNotifier {
     clearDraft();
   }
 
-  /// Devuelve el borrador guardado para [parentId], o `null` si no hay uno o
+  /// Devuelve el borrador guardado para [motelId], o `null` si no hay uno o
   /// pertenece a otro motel.
-  Future<ReviewDraft?> loadDraft(String parentId) async {
+  Future<ReviewDraft?> loadDraft(String motelId) async {
     try {
       final raw = await _preferences.getString(_draftKey);
       if (raw == null) return null;
 
       final json = jsonDecode(raw) as Map<String, dynamic>;
-      if (json['parentId'] != parentId) return null;
+      if (json['motelId'] != motelId) return null;
 
       return (
-        tag: json['tag'] as String,
+        type: ReviewType.fromString(json['type'] as String),
+        roomId: json['roomId'] as String?,
         rating: json['rating'] as int,
         title: json['title'] as String,
         body: json['body'] as String,
@@ -129,13 +100,14 @@ class ReviewsController extends ChangeNotifier {
     }
   }
 
-  Future<void> saveDraft(String parentId, ReviewDraft draft) async {
+  Future<void> saveDraft(String motelId, ReviewDraft draft) async {
     try {
       await _preferences.setString(
         _draftKey,
         jsonEncode({
-          'parentId': parentId,
-          'tag': draft.tag,
+          'motelId': motelId,
+          'type': draft.type.name,
+          'roomId': draft.roomId,
           'rating': draft.rating,
           'title': draft.title,
           'body': draft.body,

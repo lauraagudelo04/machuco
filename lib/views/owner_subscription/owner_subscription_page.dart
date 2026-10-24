@@ -30,6 +30,7 @@ class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => AddPaymentSheet(
         defaultAmount: subscription.amount,
+        loadPaymentMethods: _controller.loadPaymentMethods,
         onSave:
             ({
               required int amount,

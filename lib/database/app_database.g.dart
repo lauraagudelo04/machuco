@@ -74,7 +74,7 @@ class _$AppDatabase extends AppDatabase {
 
   SubscriptionDao? _subscriptionDaoInstance;
 
-  OwnerDao? _ownerDaoInstance;
+  NotificationDao? _notificationDaoInstance;
 
   Future<sqflite.Database> open(
     String path,
@@ -82,7 +82,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 5,
+      version: 6,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -102,9 +102,13 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
+        await database.execute(
+            'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -119,8 +123,9 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
-  OwnerDao get ownerDao {
-    return _ownerDaoInstance ??= _$OwnerDao(database, changeListener);
+  NotificationDao get notificationDao {
+    return _notificationDaoInstance ??=
+        _$NotificationDao(database, changeListener);
   }
 }
 
@@ -280,45 +285,31 @@ class _$SubscriptionDao extends SubscriptionDao {
   }
 }
 
-class _$OwnerDao extends OwnerDao {
-  _$OwnerDao(
+class _$NotificationDao extends NotificationDao {
+  _$NotificationDao(
     this.database,
     this.changeListener,
   )   : _queryAdapter = QueryAdapter(database),
-        _ownerEntryInsertionAdapter = InsertionAdapter(
+        _notificationEntryInsertionAdapter = InsertionAdapter(
             database,
-            'owners',
-            (OwnerEntry item) => <String, Object?>{
+            'notifications',
+            (NotificationEntry item) => <String, Object?>{
                   'id': item.id,
-                  'fullName': item.fullName,
-                  'documentType': item.documentType,
-                  'documentNumber': item.documentNumber,
-                  'email': item.email,
-                  'phone': item.phone,
-                  'address': item.address,
-                  'isActive': item.isActive,
-                  'synchronized': item.synchronized,
-                  'createdAt':
-                      _subscriptionDateConverter.encode(item.createdAt),
-                  'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
+                  'typeId': item.typeId,
+                  'title': item.title,
+                  'message': item.message,
+                  'sentAt': _subscriptionDateConverter.encode(item.sentAt),
+                  'target': item.target,
+                  'recipientUser': item.recipientUser
                 }),
-        _ownerEntryUpdateAdapter = UpdateAdapter(
+        _notificationReadInsertionAdapter = InsertionAdapter(
             database,
-            'owners',
-            ['id'],
-            (OwnerEntry item) => <String, Object?>{
+            'notification_reads',
+            (NotificationRead item) => <String, Object?>{
                   'id': item.id,
-                  'fullName': item.fullName,
-                  'documentType': item.documentType,
-                  'documentNumber': item.documentNumber,
-                  'email': item.email,
-                  'phone': item.phone,
-                  'address': item.address,
-                  'isActive': item.isActive,
-                  'synchronized': item.synchronized,
-                  'createdAt':
-                      _subscriptionDateConverter.encode(item.createdAt),
-                  'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
+                  'notificationId': item.notificationId,
+                  'userId': item.userId,
+                  'readAt': _subscriptionDateConverter.encode(item.readAt)
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -327,80 +318,61 @@ class _$OwnerDao extends OwnerDao {
 
   final QueryAdapter _queryAdapter;
 
-  final InsertionAdapter<OwnerEntry> _ownerEntryInsertionAdapter;
+  final InsertionAdapter<NotificationEntry> _notificationEntryInsertionAdapter;
 
-  final UpdateAdapter<OwnerEntry> _ownerEntryUpdateAdapter;
+  final InsertionAdapter<NotificationRead> _notificationReadInsertionAdapter;
 
   @override
-  Future<List<OwnerEntry>> findAll() async {
-    return _queryAdapter.queryList('SELECT * FROM owners ORDER BY fullName ASC',
-        mapper: (Map<String, Object?> row) => OwnerEntry(
-            id: row['id'] as String,
-            fullName: row['fullName'] as String,
-            documentType: row['documentType'] as String,
-            documentNumber: row['documentNumber'] as String,
-            email: row['email'] as String,
-            phone: row['phone'] as String,
-            address: row['address'] as String?,
-            isActive: row['isActive'] as int,
-            synchronized: row['synchronized'] as int,
-            createdAt:
-                _subscriptionDateConverter.decode(row['createdAt'] as int),
-            updatedAt:
-                _subscriptionDateConverter.decode(row['updatedAt'] as int)));
+  Future<List<NotificationEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM notifications ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(
+            id: row['id'] as int?,
+            typeId: row['typeId'] as int,
+            title: row['title'] as String,
+            message: row['message'] as String,
+            sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+            target: row['target'] as String,
+            recipientUser: row['recipientUser'] as String?));
   }
 
   @override
-  Future<OwnerEntry?> findById(String id) async {
-    return _queryAdapter.query('SELECT * FROM owners WHERE id = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => OwnerEntry(
-            id: row['id'] as String,
-            fullName: row['fullName'] as String,
-            documentType: row['documentType'] as String,
-            documentNumber: row['documentNumber'] as String,
-            email: row['email'] as String,
-            phone: row['phone'] as String,
-            address: row['address'] as String?,
-            isActive: row['isActive'] as int,
-            synchronized: row['synchronized'] as int,
-            createdAt:
-                _subscriptionDateConverter.decode(row['createdAt'] as int),
-            updatedAt:
-                _subscriptionDateConverter.decode(row['updatedAt'] as int)),
-        arguments: [id]);
+  Future<List<NotificationEntry>> findForRecipient(String recipientUser) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUser: row['recipientUser'] as String?),
+        arguments: [recipientUser]);
   }
 
   @override
-  Future<OwnerEntry?> findByDocument(
-    String documentType,
-    String documentNumber,
+  Future<List<int>> findReadNotificationIds(String userId) async {
+    return _queryAdapter.queryList(
+        'SELECT notificationId FROM notification_reads WHERE userId = ?1',
+        mapper: (Map<String, Object?> row) => row.values.first as int,
+        arguments: [userId]);
+  }
+
+  @override
+  Future<NotificationRead?> findRead(
+    int notificationId,
+    String userId,
   ) async {
     return _queryAdapter.query(
-        'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 LIMIT 1',
-        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int)),
-        arguments: [documentType, documentNumber]);
+        'SELECT * FROM notification_reads WHERE notificationId = ?1 AND userId = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => NotificationRead(id: row['id'] as int?, notificationId: row['notificationId'] as int, userId: row['userId'] as String, readAt: _subscriptionDateConverter.decode(row['readAt'] as int)),
+        arguments: [notificationId, userId]);
   }
 
   @override
-  Future<int?> count() async {
-    return _queryAdapter.query('SELECT COUNT(*) FROM owners',
-        mapper: (Map<String, Object?> row) => row.values.first as int);
+  Future<int> insertNotification(NotificationEntry notification) {
+    return _notificationEntryInsertionAdapter.insertAndReturnId(
+        notification, OnConflictStrategy.abort);
   }
 
   @override
-  Future<void> deleteById(String id) async {
-    await _queryAdapter
-        .queryNoReturn('DELETE FROM owners WHERE id = ?1', arguments: [id]);
-  }
-
-  @override
-  Future<void> insertOwner(OwnerEntry owner) async {
-    await _ownerEntryInsertionAdapter.insert(owner, OnConflictStrategy.abort);
-  }
-
-  @override
-  Future<void> updateOwner(OwnerEntry owner) async {
-    await _ownerEntryUpdateAdapter.update(owner, OnConflictStrategy.abort);
+  Future<int> insertRead(NotificationRead notificationRead) {
+    return _notificationReadInsertionAdapter.insertAndReturnId(
+        notificationRead, OnConflictStrategy.abort);
   }
 }
 

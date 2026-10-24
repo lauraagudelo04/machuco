@@ -12,8 +12,6 @@ import 'package:machuco/controllers/owner_management/platform_finance_summary.da
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
-import 'package:machuco/service/auth/session_preferences.dart';
-
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
@@ -39,34 +37,14 @@ class OwnerPage extends StatefulWidget {
 }
 
 class _OwnerPageState extends State<OwnerPage> {
-  // Instancia compartida: el detalle, el formulario y la gestión de moteles
-  // deben ver el mismo estado del módulo.
-  final OwnerController _controller = OwnerController.instance;
+  final OwnerController _controller = OwnerController();
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
-  final SessionPreferences _sessionPreferences = SessionPreferences();
-
-  String? _adminEmail;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller.init();
-    _loadAdminEmail();
-  }
-
-  Future<void> _loadAdminEmail() async {
-    final email = await _sessionPreferences.readEmail();
-    if (mounted) {
-      setState(() => _adminEmail = email);
-    }
-  }
 
   @override
   void dispose() {
     _searchController.dispose();
-    // No se dispone del controlador: es una instancia compartida por varias
-    // pantallas y debe sobrevivir a esta página.
+    _controller.dispose();
     super.dispose();
   }
 
@@ -143,11 +121,11 @@ class _OwnerPageState extends State<OwnerPage> {
     // a activarlo es inocuo y no necesita confirmación.
     if (owner.isActive && !await _confirmDeactivation(owner)) return;
     if (!mounted) return;
-    final updated = await _controller.setActiveState(
+    final updated = _controller.setActiveState(
       owner.id,
       isActive: !owner.isActive,
     );
-    if (updated == null || !mounted) return;
+    if (updated == null) return;
     _showMessage(
       updated.isActive
           ? '${updated.fullName} quedó activo.'
@@ -158,8 +136,8 @@ class _OwnerPageState extends State<OwnerPage> {
   Future<void> _deleteOwner(Owner owner) async {
     if (!await _confirmDeletion(owner)) return;
     if (!mounted) return;
-    final deleted = await _controller.deleteOwner(owner.id);
-    if (deleted == null || !mounted) return;
+    final deleted = _controller.deleteOwner(owner.id);
+    if (deleted == null) return;
     _showMessage('${deleted.fullName} fue eliminado.');
   }
 
@@ -215,7 +193,7 @@ class _OwnerPageState extends State<OwnerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: _AdminAppBarTitle(adminEmail: _adminEmail),
+        title: const Text('Propietarios'),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s2),
@@ -660,38 +638,6 @@ class _OwnerDetailLine extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Título de la AppBar con "Propietarios" y el correo del administrador debajo.
-class _AdminAppBarTitle extends StatelessWidget {
-  const _AdminAppBarTitle({required this.adminEmail});
-
-  final String? adminEmail;
-
-  @override
-  Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final color = context.appColors.textSecondary;
-
-    if (adminEmail == null) {
-      return const Text('Propietarios');
-    }
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        const Text('Propietarios'),
-        const SizedBox(height: 2),
-        Text(
-          adminEmail!,
-          style: textTheme.bodySmall?.copyWith(color: color),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 1,
-        ),
-      ],
     );
   }
 }

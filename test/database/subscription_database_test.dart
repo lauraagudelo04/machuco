@@ -130,6 +130,40 @@ void main() {
     },
   );
 
+  test(
+    'consulta los métodos de pago y conserva los nombres de Supabase',
+    () async {
+      database = await AppDatabaseProvider.open(name: path);
+      final repo = repository(
+        client: MockClient((request) async {
+          expect(request.url.path, '/rest/v1/payment_method');
+          expect(request.url.queryParameters['select'], 'id,nombre');
+          expect(request.url.queryParameters['order'], 'id.asc');
+          expect(request.headers['apikey'], startsWith('sb_publishable_'));
+          return http.Response.bytes(
+            utf8.encode(
+              jsonEncode([
+                {'id': 1, 'nombre': 'Efectivo'},
+                {'id': 2, 'nombre': 'Tarjeta de crédito'},
+                {'id': 3, 'nombre': 'Tarjeta de débito'},
+                {'id': 4, 'nombre': 'Transferencia bancaria'},
+              ]),
+            ),
+            200,
+          );
+        }),
+      );
+      final methods = await repo.findPaymentMethods();
+      expect(methods.map((method) => method.id), [1, 2, 3, 4]);
+      expect(methods.map((method) => method.name), [
+        'Efectivo',
+        'Tarjeta de crédito',
+        'Tarjeta de débito',
+        'Transferencia bancaria',
+      ]);
+    },
+  );
+
   test('genera IDs de suscripción 1 y 2 cuando no se indica un ID', () async {
     database = await AppDatabaseProvider.open(name: path);
     final repo = repository();

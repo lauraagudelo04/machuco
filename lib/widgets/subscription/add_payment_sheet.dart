@@ -12,6 +12,7 @@ class AddPaymentSheet extends StatefulWidget {
   });
 
   final int defaultAmount;
+  final Future<List<SubscriptionPaymentMethod>> Function() loadPaymentMethods;
   final Future<void> Function({
     required int amount,
     required String paymentMethod,
@@ -27,16 +28,12 @@ class _AddPaymentSheetState extends State<AddPaymentSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _amountController;
   final _referenceController = TextEditingController();
-  String _selectedMethod = 'Transferencia Bancaria';
+  SubscriptionPaymentMethod? _selectedMethod;
+  List<SubscriptionPaymentMethod> _paymentMethods = [];
+  bool _isLoadingMethods = true;
+  String? _methodsError;
   bool _isSaving = false;
   String? _saveError;
-
-  static const List<String> _paymentMethods = [
-    'Transferencia Bancaria',
-    'Tarjeta de Crédito',
-    'PSE / Nequi / Daviplata',
-    'Efectivo / Corresponsal',
-  ];
 
   @override
   void initState() {
@@ -82,7 +79,11 @@ class _AddPaymentSheetState extends State<AddPaymentSheet> {
   }
 
   Future<void> _handleSubmit() async {
-    if (_isSaving) return;
+    if (_isSaving ||
+        _isLoadingMethods ||
+        _selectedMethod == null ||
+        _methodsError != null)
+      return;
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
     final cleaned = _amountController.text.replaceAll(RegExp(r'[^0-9]'), '');
@@ -96,7 +97,7 @@ class _AddPaymentSheetState extends State<AddPaymentSheet> {
     try {
       await widget.onSave(
         amount: amount,
-        paymentMethod: _selectedMethod,
+        paymentMethod: _selectedMethod!.name,
         reference: reference,
       );
       if (!mounted) return;
@@ -188,25 +189,48 @@ class _AddPaymentSheetState extends State<AddPaymentSheet> {
                     border: Border.all(color: semantic.border),
                   ),
                   child: DropdownButtonHideUnderline(
-                    child: DropdownButton<String>(
+                    child: DropdownButton<SubscriptionPaymentMethod>(
                       value: _selectedMethod,
+                      hint: Text(
+                        _isLoadingMethods
+                            ? 'Cargando métodos de pago...'
+                            : 'Selecciona un método de pago',
+                      ),
                       isExpanded: true,
                       items: _paymentMethods
                           .map(
                             (m) => DropdownMenuItem(
                               value: m,
-                              child: Text(m, style: AppTextStyles.body),
+                              child: Text(m.name, style: AppTextStyles.body),
                             ),
                           )
                           .toList(),
-                      onChanged: (val) {
-                        if (val != null) {
-                          setState(() => _selectedMethod = val);
-                        }
-                      },
+                      onChanged:
+                          _isSaving ||
+                              _isLoadingMethods ||
+                              _methodsError != null
+                          ? null
+                          : (val) {
+                              if (val != null) {
+                                setState(() => _selectedMethod = val);
+                              }
+                            },
                     ),
                   ),
                 ),
+                if (_isLoadingMethods) const LinearProgressIndicator(),
+                if (_methodsError != null) ...[
+                  Text(
+                    _methodsError!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _loadMethods,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.s3),
 
                 // Reference field
@@ -237,7 +261,12 @@ class _AddPaymentSheetState extends State<AddPaymentSheet> {
                 AppButton(
                   label: 'Confirmar pago',
                   icon: Icons.check_circle_outline,
-                  onPressed: _handleSubmit,
+                  onPressed:
+                      _isLoadingMethods ||
+                          _methodsError != null ||
+                          _selectedMethod == null
+                      ? null
+                      : _handleSubmit,
                   loading: _isSaving,
                 ),
                 const SizedBox(height: AppSpacing.s2),

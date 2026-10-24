@@ -1,25 +1,34 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/models/room/room_service.dart';
-import 'package:machuco/repositories/room/room_dao.dart';
+import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late AppDatabase database;
   late RoomDao dao;
+  late Directory directory;
 
-  setUpAll(sqfliteFfiInit);
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
 
   setUp(() async {
-    database = AppDatabase(
-      factory: databaseFactoryFfi,
-      databasePath: inMemoryDatabasePath,
+    directory = await Directory.systemTemp.createTemp('machuco_room_dao_');
+    database = await AppDatabaseProvider.open(
+      name: '${directory.path}${Platform.pathSeparator}rooms.db',
     );
     dao = database.roomDao;
   });
 
-  tearDown(() => database.close());
+  tearDown(() async {
+    await database.close();
+    await directory.delete(recursive: true);
+  });
 
   test('persiste y recupera habitaciones', () async {
     const room = RoomVisualData(
