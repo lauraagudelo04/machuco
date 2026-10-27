@@ -1,8 +1,10 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:machuco/database/repository/review/review_type_repository.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/models/review/review_data.dart';
+import 'package:machuco/service/room/supabase_room_config.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
@@ -22,15 +24,33 @@ typedef ReviewDraft = ({
 /// UI a través de [ListenableBuilder].  En el futuro este controlador
 /// delegará en un [ReviewRepository] para persistir en el backend.
 class ReviewsController extends ChangeNotifier {
-  ReviewsController({LocalPreferencesService? preferences})
-    : _preferences =
-          preferences ?? SharedPreferencesLocalService(namespace: 'reviews');
+  ReviewsController({
+    LocalPreferencesService? preferences,
+    ReviewTypeRepository? typeRepository,
+  }) : _preferences =
+           preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
+       _typeRepository =
+           typeRepository ??
+           ReviewTypeRepository(
+             baseUrl: SupabaseRoomConfig.baseUrl,
+             apiKey: SupabaseRoomConfig.apiKey,
+           );
 
   static const _draftKey = 'addReviewDraft';
 
   final LocalPreferencesService _preferences;
+  final ReviewTypeRepository _typeRepository;
 
   final List<Review> _reviews = [];
+
+  List<ReviewTypeOption>? _reviewTypes;
+
+  /// Tipos de reseña de Supabase. Se consultan una sola vez por controller.
+  ///
+  /// Lanza [ReviewTypeRepositoryException] si no se pudieron obtener.
+  Future<List<ReviewTypeOption>> loadReviewTypes() async {
+    return _reviewTypes ??= await _typeRepository.getReviewTypes();
+  }
 
   int get totalCount => _reviews.length;
 

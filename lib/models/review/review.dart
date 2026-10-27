@@ -1,10 +1,15 @@
 /// Tipo de reseña según qué elemento del motel se está evaluando.
+///
+/// [id] coincide con la tabla `review_types` de Supabase; [label] es el nombre
+/// local que se usa mientras no se haya consultado la tabla.
 enum ReviewType {
-  motel('Motel'),
-  room('Habitación');
+  room(1, 'Habitación'),
+  motel(2, 'Motel'),
+  attention(3, 'Atención');
 
+  final int id;
   final String label;
-  const ReviewType(this.label);
+  const ReviewType(this.id, this.label);
 
   static ReviewType fromString(String value) {
     return ReviewType.values.firstWhere(
@@ -12,7 +17,18 @@ enum ReviewType {
       orElse: () => ReviewType.motel,
     );
   }
+
+  /// Devuelve el tipo con [id], o `null` si la app aún no lo conoce.
+  static ReviewType? fromId(int id) {
+    for (final type in ReviewType.values) {
+      if (type.id == id) return type;
+    }
+    return null;
+  }
 }
+
+/// Opción del selector de tipo de reseña: el tipo y el nombre a mostrar.
+typedef ReviewTypeOption = ({ReviewType type, String name});
 
 /// Estado de moderación asignado por el administrador a una reseña.
 enum ReviewModerationStatus {

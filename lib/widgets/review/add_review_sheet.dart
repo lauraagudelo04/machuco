@@ -17,6 +17,10 @@ class AddReviewSheet extends StatefulWidget {
   /// Se invoca cada vez que cambia algún campo, para persistir el borrador.
   final void Function(ReviewDraft draft)? onDraftChanged;
 
+  /// Consulta los tipos de reseña disponibles. Si falla o no se pasa, el
+  /// selector usa los nombres locales de [ReviewType].
+  final Future<List<ReviewTypeOption>> Function()? loadReviewTypes;
+
   const AddReviewSheet({
     super.key,
     required this.onSave,
@@ -25,6 +29,7 @@ class AddReviewSheet extends StatefulWidget {
     required this.rooms,
     this.loadDraft,
     this.onDraftChanged,
+    this.loadReviewTypes,
   });
 
   static Future<void> show(
@@ -35,6 +40,7 @@ class AddReviewSheet extends StatefulWidget {
     required List<RoomVisualData>? rooms,
     Future<ReviewDraft?> Function()? loadDraft,
     void Function(ReviewDraft draft)? onDraftChanged,
+    Future<List<ReviewTypeOption>> Function()? loadReviewTypes,
   }) {
     return showModalBottomSheet(
       context: context,
@@ -48,6 +54,7 @@ class AddReviewSheet extends StatefulWidget {
         rooms: rooms,
         loadDraft: loadDraft,
         onDraftChanged: onDraftChanged,
+        loadReviewTypes: loadReviewTypes,
       ),
     );
   }
@@ -66,10 +73,43 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   bool _submitted = false;
   bool _draftRestored = false;
 
+  List<ReviewTypeOption> _typeOptions = [
+    for (final type in ReviewType.values) (type: type, name: type.label),
+  ];
+  bool _typesFailed = false;
+
+  // Se incrementa cuando el tipo cambia por código, para recrear el selector.
+  int _typeFieldVersion = 0;
+
   @override
   void initState() {
     super.initState();
     _restoreDraft();
+    _loadReviewTypes();
+  }
+
+  Future<void> _loadReviewTypes() async {
+    final load = widget.loadReviewTypes;
+    if (load == null) return;
+
+    try {
+      final options = await load();
+      if (!mounted) return;
+      setState(() {
+        _typeOptions = options;
+        _ensureSelectableType();
+      });
+    } catch (error) {
+      debugPrint('loadReviewTypes: $error');
+      if (mounted) setState(() => _typesFailed = true);
+    }
+  }
+
+  /// Si el tipo elegido no está entre las opciones, toma la primera.
+  void _ensureSelectableType() {
+    if (_typeOptions.any((option) => option.type == _reviewType)) return;
+    _reviewType = _typeOptions.first.type;
+    _typeFieldVersion++;
   }
 
   Future<void> _restoreDraft() async {
@@ -85,6 +125,8 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
     setState(() {
       _reviewType = draft.type;
+      _typeFieldVersion++;
+      _ensureSelectableType();
       // La habitación del borrador pudo dejar de existir en el motel.
       final roomExists = (widget.rooms ?? []).any(
         (room) => room.id == draft.roomId,
@@ -130,7 +172,8 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
         rating: _rating,
         date: DateTime.now(),
         motelId: widget.motelId,
-        roomId: _selectedRoomId,
+        // La habitación solo aplica a reseñas de tipo habitación.
+        roomId: _reviewType == ReviewType.room ? _selectedRoomId : null,
         type: _reviewType,
         status: ReviewModerationStatus.visible,
       ),
@@ -197,17 +240,20 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
 
               // Selector de tipo de reseña
               DropdownButtonFormField<ReviewType>(
-                // Al restaurar el borrador se recrea para tomar el tipo guardado.
-                key: ValueKey('reviewType-$_draftRestored'),
+                // Se recrea cuando el tipo cambia por código (borrador u opciones).
+                key: ValueKey('reviewType-$_typeFieldVersion'),
                 initialValue: _reviewType,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: '¿Qué deseas reseñar?',
-                  prefixIcon: Icon(Icons.sell_outlined),
+                  prefixIcon: const Icon(Icons.sell_outlined),
+                  helperText: _typesFailed
+                      ? 'No se pudieron cargar los tipos; se muestran los predeterminados.'
+                      : null,
                 ),
-                items: ReviewType.values.map((type) {
+                items: _typeOptions.map((option) {
                   return DropdownMenuItem<ReviewType>(
-                    value: type,
-                    child: Text(type.label),
+                    value: option.type,
+                    child: Text(option.name),
                   );
                 }).toList(),
                 onChanged: (value) {
