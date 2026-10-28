@@ -253,3 +253,39 @@ la base de datos. Las 17 ramas comparten `AppDatabase`.
 `build_runner`) para los datos de dominio locales. No cubre el backend
 remoto, las preferencias de interfaz (`shared_preferences`) ni las
 credenciales.
+
+## 2026-10-20 — Maestro `phone_country_codes` (Supabase → caché SQLite)
+
+**Contexto:** la funcionalidad de administración de moteles necesita el
+maestro de códigos telefónicos de país. Se sigue el mismo patrón que el
+maestro de servicios incluidos de habitaciones (`room_included_services`).
+
+**Decisión:**
+- La tabla remota vive en Supabase y se consulta por REST
+  (`/rest/v1/phone_country_codes?select=*`) con el header `apikey`.
+- Las credenciales se inyectan con `--dart-define`
+  (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), no se escriben en el repositorio.
+- El resultado se cachea en la tabla local `phone_country_codes` (SQLite) y,
+  si falla la red, se devuelve la caché.
+- Se usa `sqflite` con DAO manual (sin `@entity` ni codegen nuevo) y el DAO
+  se expone desde `AppDatabase` junto a los demás, con la migración `6 → 7`.
+- Las carpetas siguen la convención ya usada por el módulo de habitaciones
+  (`lib/database/repository/motel/`), no `lib/repositories/`.
+
+**Nota:** el maestro en Supabase puede estar vacío; en ese caso la lista se
+verá vacía hasta que se inserten filas en la tabla remota.
+
+**Estado:** implementado en `lib/models/phone_country_code/`,
+`lib/service/phone_country_code/`, `lib/database/repository/motel/` y
+`lib/controllers/motel/phone_country_code_controller.dart`.
+
+## 2026-10-28 — Moteles: Supabase + caché SQLite (Floor)
+
+**Decisión:**
+- Tabla remota `public.motels` con RLS (SELECT/INSERT/UPDATE para `anon`), sin DELETE (inhabilitación con `is_available = false`).
+- Credenciales por `--dart-define` vía `SupabasePhoneCountryCodeConfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
+- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10`.
+- `MotelRepository`: red primero con `apikey`, `Prefer: return=representation`, decodificación UTF-8, fallback a caché en errores, excepción clara sin red/caché, 409 por NIT duplicado -> "Ya existe un motel con ese NIT", mapeo snake_case sin modificar `Motel`.
+- `MotelController`: constructor opcional con `MotelRepository`, factory `MotelController.persistent()`; comportamiento mock por defecto preservado para otros módulos y tests.
+
+**Estado:** implementado en `lib/database/model/motel/`, `lib/database/repository/motel/`, `lib/controllers/motel/`, vistas del propietario actualizadas con manejo de errores. Tests en `test/repositories/motel/`. Documentado en `docs/motels_persistence.md`.

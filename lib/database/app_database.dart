@@ -4,8 +4,10 @@ import 'dart:async';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
+import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
@@ -29,7 +31,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 9,
+  version: 10,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -39,6 +41,7 @@ part 'app_database.g.dart';
     PaymentRecord,
     ClientEntry,
     PhoneCountryCode,
+    MotelEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -53,6 +56,7 @@ abstract class AppDatabase extends FloorDatabase {
 
   ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
+  MotelDao get motelDao;
 }
 
 class AppDatabaseProvider {
@@ -76,6 +80,7 @@ class AppDatabaseProvider {
         migration6To7,
         migration7To8,
         migration8To9,
+        migration9To10,
       ])
       .addCallback(
         Callback(
@@ -253,6 +258,29 @@ final migration7To8 = Migration(7, 8, (database) async {
 /// Actualiza bases existentes para dejar disponible la suscripciÃ³n de prueba.
 final migration8To9 = Migration(8, 9, (database) async {
   await seedSubscriptionTestOwner(database);
+});
+
+final migration9To10 = Migration(9, 10, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS motels (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      email TEXT NOT NULL,
+      room_count INTEGER NOT NULL,
+      nit TEXT NOT NULL,
+      address TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      description TEXT,
+      general_location TEXT,
+      payment_methods_json TEXT NOT NULL,
+      image_urls_json TEXT NOT NULL,
+      is_available INTEGER NOT NULL
+    )
+  ''');
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_motels_nit ON motels (nit)',
+  );
 });
 
 Future<void> _createPaymentSchema(sqflite.Database database) async {
