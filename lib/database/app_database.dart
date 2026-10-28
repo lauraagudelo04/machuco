@@ -16,6 +16,8 @@ import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
+import 'package:machuco/database/model/owner/owner_entry.dart';
+import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 part 'app_database.g.dart';
@@ -29,7 +31,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 9,
+  version: 10,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -39,6 +41,7 @@ part 'app_database.g.dart';
     PaymentRecord,
     ClientEntry,
     PhoneCountryCode,
+    OwnerEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -47,6 +50,7 @@ abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
+  OwnerDao get ownerDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -76,6 +80,7 @@ class AppDatabaseProvider {
         migration6To7,
         migration7To8,
         migration8To9,
+        migration9To10,
       ])
       .addCallback(
         Callback(
@@ -254,6 +259,31 @@ final migration7To8 = Migration(7, 8, (database) async {
 final migration8To9 = Migration(8, 9, (database) async {
   await seedSubscriptionTestOwner(database);
 });
+
+/// Agrega la tabla de propietarios del módulo de administración de dueños.
+///
+/// Debe coincidir con el esquema que genera Floor para `OwnerEntry`.
+final migration9To10 = Migration(9, 10, (database) async {
+  await _createOwnerSchema(database);
+});
+
+Future<void> _createOwnerSchema(sqflite.Database database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT NOT NULL PRIMARY KEY,
+      fullName TEXT NOT NULL,
+      documentType TEXT NOT NULL,
+      documentNumber TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT,
+      isActive INTEGER NOT NULL,
+      synchronized INTEGER NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  ''');
+}
 
 Future<void> _createPaymentSchema(sqflite.Database database) async {
   await database.execute(

@@ -78,6 +78,8 @@ class _$AppDatabase extends AppDatabase {
 
   PaymentDao? _paymentDaoInstance;
 
+  OwnerDao? _ownerDaoInstance;
+
   ClientDao? _clientDaoInstance;
 
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
@@ -88,7 +90,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 9,
+      version: 10,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -119,6 +121,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
         await database.execute(
@@ -151,6 +155,11 @@ class _$AppDatabase extends AppDatabase {
   @override
   PaymentDao get paymentDao {
     return _paymentDaoInstance ??= _$PaymentDao(database, changeListener);
+  }
+
+  @override
+  OwnerDao get ownerDao {
+    return _ownerDaoInstance ??= _$OwnerDao(database, changeListener);
   }
 
   @override
@@ -619,6 +628,150 @@ class _$PaymentDao extends PaymentDao {
             id, motelId, paymentMethodId, paidAt, receiptNumber);
       });
     }
+  }
+}
+
+class _$OwnerDao extends OwnerDao {
+  _$OwnerDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _ownerEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'owners',
+            (OwnerEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'fullName': item.fullName,
+                  'documentType': item.documentType,
+                  'documentNumber': item.documentNumber,
+                  'email': item.email,
+                  'phone': item.phone,
+                  'address': item.address,
+                  'isActive': item.isActive,
+                  'synchronized': item.synchronized,
+                  'createdAt':
+                      _subscriptionDateConverter.encode(item.createdAt),
+                  'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
+                }),
+        _ownerEntryUpdateAdapter = UpdateAdapter(
+            database,
+            'owners',
+            ['id'],
+            (OwnerEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'fullName': item.fullName,
+                  'documentType': item.documentType,
+                  'documentNumber': item.documentNumber,
+                  'email': item.email,
+                  'phone': item.phone,
+                  'address': item.address,
+                  'isActive': item.isActive,
+                  'synchronized': item.synchronized,
+                  'createdAt':
+                      _subscriptionDateConverter.encode(item.createdAt),
+                  'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<OwnerEntry> _ownerEntryInsertionAdapter;
+
+  final UpdateAdapter<OwnerEntry> _ownerEntryUpdateAdapter;
+
+  @override
+  Future<List<OwnerEntry>> findAll() async {
+    return _queryAdapter.queryList('SELECT * FROM owners ORDER BY fullName ASC',
+        mapper: (Map<String, Object?> row) => OwnerEntry(
+            id: row['id'] as String,
+            fullName: row['fullName'] as String,
+            documentType: row['documentType'] as String,
+            documentNumber: row['documentNumber'] as String,
+            email: row['email'] as String,
+            phone: row['phone'] as String,
+            address: row['address'] as String?,
+            isActive: row['isActive'] as int,
+            synchronized: row['synchronized'] as int,
+            createdAt:
+                _subscriptionDateConverter.decode(row['createdAt'] as int),
+            updatedAt:
+                _subscriptionDateConverter.decode(row['updatedAt'] as int)));
+  }
+
+  @override
+  Future<OwnerEntry?> findById(String id) async {
+    return _queryAdapter.query('SELECT * FROM owners WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OwnerEntry(
+            id: row['id'] as String,
+            fullName: row['fullName'] as String,
+            documentType: row['documentType'] as String,
+            documentNumber: row['documentNumber'] as String,
+            email: row['email'] as String,
+            phone: row['phone'] as String,
+            address: row['address'] as String?,
+            isActive: row['isActive'] as int,
+            synchronized: row['synchronized'] as int,
+            createdAt:
+                _subscriptionDateConverter.decode(row['createdAt'] as int),
+            updatedAt:
+                _subscriptionDateConverter.decode(row['updatedAt'] as int)),
+        arguments: [id]);
+  }
+
+  @override
+  Future<OwnerEntry?> findByDocument(
+    String documentType,
+    String documentNumber,
+  ) async {
+    return _queryAdapter.query(
+        'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int)),
+        arguments: [documentType, documentNumber]);
+  }
+
+  @override
+  Future<int?> count() async {
+    return _queryAdapter.query('SELECT COUNT(*) FROM owners',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<List<OwnerEntry>> findUnsynchronized() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM owners WHERE synchronized = 0 ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => OwnerEntry(
+            id: row['id'] as String,
+            fullName: row['fullName'] as String,
+            documentType: row['documentType'] as String,
+            documentNumber: row['documentNumber'] as String,
+            email: row['email'] as String,
+            phone: row['phone'] as String,
+            address: row['address'] as String?,
+            isActive: row['isActive'] as int,
+            synchronized: row['synchronized'] as int,
+            createdAt:
+                _subscriptionDateConverter.decode(row['createdAt'] as int),
+            updatedAt:
+                _subscriptionDateConverter.decode(row['updatedAt'] as int)));
+  }
+
+  @override
+  Future<void> deleteById(String id) async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM owners WHERE id = ?1', arguments: [id]);
+  }
+
+  @override
+  Future<void> insertOwner(OwnerEntry owner) async {
+    await _ownerEntryInsertionAdapter.insert(owner, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> updateOwner(OwnerEntry owner) async {
+    await _ownerEntryUpdateAdapter.update(owner, OnConflictStrategy.abort);
   }
 }
 

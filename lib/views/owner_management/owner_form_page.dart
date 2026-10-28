@@ -60,6 +60,10 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   // de ser editable y confirma exactamente qué información quedó guardada.
   Owner? _createdOwner;
 
+  // Mientras la persistencia está en curso se bloquean los botones para evitar
+  // envíos duplicados.
+  bool _isSaving = false;
+
   OwnerFormMode get _mode =>
       widget.initialData == null ? OwnerFormMode.create : OwnerFormMode.edit;
 
@@ -132,7 +136,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   void _focusNextField() => FocusScope.of(context).nextFocus();
 
-  void _submitForm() {
+  Future<void> _submitForm() async {
+    if (_isSaving) return;
     setState(() {
       _hasAttemptedSubmit = true;
       _updateErrors();
@@ -148,21 +153,19 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       return;
     }
 
-    final initialData = widget.initialData;
-    if (initialData != null) {
-      Navigator.of(context).pop(
-        widget.controller.updateOwnerPhone(
-          initialData.id,
-          _phoneController.text.trim(),
-        ),
-      );
-      return;
-    }
-
     FocusScope.of(context).unfocus();
-    final address = _addressController.text.trim();
-    setState(() {
-      _createdOwner = widget.controller.createOwner(
+    setState(() => _isSaving = true);
+
+    final initialData = widget.initialData;
+    final Owner? saved;
+    if (initialData != null) {
+      saved = await widget.controller.updateOwnerPhone(
+        initialData.id,
+        _phoneController.text.trim(),
+      );
+    } else {
+      final address = _addressController.text.trim();
+      saved = await widget.controller.createOwner(
         fullName: _fullNameController.text.trim(),
         documentType: _documentType,
         documentNumber: _documentNumberController.text.trim(),
@@ -171,7 +174,29 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         address: address.isEmpty ? null : address,
         isActive: _isActive,
       );
-    });
+    }
+
+    if (!mounted) return;
+    setState(() => _isSaving = false);
+
+    if (saved == null) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            widget.controller.lastError ??
+                'No se pudo guardar el propietario. Intenta de nuevo.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    if (initialData != null) {
+      Navigator.of(context).pop(saved);
+      return;
+    }
+
+    setState(() => _createdOwner = saved);
   }
 
   void _cancelForm() => Navigator.of(context).maybePop();
@@ -227,6 +252,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         bottomNavigationBar: createdOwner == null
             ? _OwnerFormActions(
                 mode: _mode,
+                isSaving: _isSaving,
                 onSubmit: _submitForm,
                 onCancel: _cancelForm,
               )
@@ -526,11 +552,13 @@ class _ActiveStateField extends StatelessWidget {
 class _OwnerFormActions extends StatelessWidget {
   const _OwnerFormActions({
     required this.mode,
+    required this.isSaving,
     required this.onSubmit,
     required this.onCancel,
   });
 
   final OwnerFormMode mode;
+  final bool isSaving;
   final VoidCallback onSubmit;
   final VoidCallback onCancel;
 
@@ -542,7 +570,7 @@ class _OwnerFormActions extends StatelessWidget {
           child: AppButton(
             label: 'Cancelar',
             variant: AppButtonVariant.secondary,
-            onPressed: onCancel,
+            onPressed: isSaving ? null : onCancel,
           ),
         ),
         const SizedBox(width: AppSpacing.s3),
@@ -552,6 +580,7 @@ class _OwnerFormActions extends StatelessWidget {
             label: mode == OwnerFormMode.create
                 ? 'Crear propietario'
                 : 'Guardar cambios',
+            loading: isSaving,
             onPressed: onSubmit,
           ),
         ),

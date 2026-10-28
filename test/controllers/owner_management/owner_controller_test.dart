@@ -60,6 +60,7 @@ void main() {
       );
 
       expect(created, isNotNull);
+      expect(created!.isSynchronized, isFalse);
 
       // Nueva instancia = sesión nueva: la memoria arranca vacía.
       final secondSession = buildController();

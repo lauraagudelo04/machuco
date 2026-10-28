@@ -24,6 +24,10 @@ abstract class OwnerDao {
   @Query('SELECT COUNT(*) FROM owners')
   Future<int?> count();
 
+  /// Registros que aún no han viajado a la nube (`synchronized = 0`).
+  @Query('SELECT * FROM owners WHERE synchronized = 0 ORDER BY createdAt ASC')
+  Future<List<OwnerEntry>> findUnsynchronized();
+
   @insert
   Future<void> insertOwner(OwnerEntry owner);
 
@@ -73,6 +77,15 @@ class OwnerRepository {
     final database = await _database;
     final entry = await database.ownerDao.findByDocument(type.name, number);
     return entry != null;
+  }
+
+  /// Propietarios que todavía no se han enviado a la nube.
+  ///
+  /// Será la fuente del proceso de sincronización cuando exista el backend.
+  Future<List<Owner>> findUnsynchronized() async {
+    final database = await _database;
+    final entries = await database.ownerDao.findUnsynchronized();
+    return entries.map(_toOwner).toList(growable: false);
   }
 
   Future<void> insert(Owner owner) async {
@@ -132,6 +145,7 @@ class OwnerRepository {
     phone: entry.phone,
     address: entry.address,
     isActive: entry.isActive == 1,
+    isSynchronized: entry.synchronized == 1,
   );
 
   /// Al crear, el registro nace con la marca `synchronized = 0` (pendiente

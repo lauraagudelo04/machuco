@@ -37,14 +37,22 @@ class OwnerPage extends StatefulWidget {
 }
 
 class _OwnerPageState extends State<OwnerPage> {
-  final OwnerController _controller = OwnerController();
+  // Instancia compartida: el detalle, el formulario y la gestión de moteles
+  // deben ver el mismo estado del módulo.
+  final OwnerController _controller = OwnerController.instance;
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
 
   @override
+  void initState() {
+    super.initState();
+    _controller.init();
+  }
+
+  @override
   void dispose() {
     _searchController.dispose();
-    _controller.dispose();
+    // No se libera el controlador: lo comparten varias pantallas del módulo.
     super.dispose();
   }
 
@@ -121,11 +129,18 @@ class _OwnerPageState extends State<OwnerPage> {
     // a activarlo es inocuo y no necesita confirmación.
     if (owner.isActive && !await _confirmDeactivation(owner)) return;
     if (!mounted) return;
-    final updated = _controller.setActiveState(
+    final updated = await _controller.setActiveState(
       owner.id,
       isActive: !owner.isActive,
     );
-    if (updated == null) return;
+    if (!mounted) return;
+    if (updated == null) {
+      _showMessage(
+        _controller.lastError ??
+            'No se pudo cambiar el estado del propietario.',
+      );
+      return;
+    }
     _showMessage(
       updated.isActive
           ? '${updated.fullName} quedó activo.'
@@ -136,8 +151,14 @@ class _OwnerPageState extends State<OwnerPage> {
   Future<void> _deleteOwner(Owner owner) async {
     if (!await _confirmDeletion(owner)) return;
     if (!mounted) return;
-    final deleted = _controller.deleteOwner(owner.id);
-    if (deleted == null) return;
+    final deleted = await _controller.deleteOwner(owner.id);
+    if (!mounted) return;
+    if (deleted == null) {
+      _showMessage(
+        _controller.lastError ?? 'No se pudo eliminar el propietario.',
+      );
+      return;
+    }
     _showMessage('${deleted.fullName} fue eliminado.');
   }
 
@@ -218,6 +239,15 @@ class _OwnerPageState extends State<OwnerPage> {
         child: ListenableBuilder(
           listenable: _controller,
           builder: (context, _) {
+            if (_controller.isLoading && !_controller.hasOwners) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!_controller.hasOwners && _controller.lastError != null) {
+              return AppErrorState(
+                message: _controller.lastError!,
+                onRetry: _controller.init,
+              );
+            }
             if (!_controller.hasOwners) {
               return AppEmptyState(
                 icon: Icons.people_outline,
@@ -294,7 +324,7 @@ class _OwnerPageState extends State<OwnerPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _createOwner,
+        onPressed: _controller.isLoading ? null : _createOwner,
         tooltip: 'Crear propietario',
         child: const Icon(Icons.add),
       ),

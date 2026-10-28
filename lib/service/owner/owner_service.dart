@@ -50,12 +50,14 @@ class OwnerService {
 
   final OwnerRepository _repository;
 
-  /// Carga los propietarios guardados; si la tabla está vacía, siembra los
-  /// datos demo antes de leer.
-  Future<List<Owner>> cargarPropietarios() async {
-    await _repository.seedIfEmpty(buildSeedOwners());
-    return _repository.findAll();
-  }
+  /// Carga los propietarios guardados.
+  ///
+  /// La siembra inicial vive en [sembrarDatosDemo] para que una lectura (por
+  /// ejemplo tras eliminar al último propietario) no reponga datos borrados.
+  Future<List<Owner>> cargarPropietarios() => _repository.findAll();
+
+  /// Siembra los datos demo solo la primera vez, cuando la tabla está vacía.
+  Future<void> sembrarDatosDemo() => _repository.seedIfEmpty(buildSeedOwners());
 
   /// Devuelve un mensaje si ya existe un propietario con ese documento.
   Future<String?> validarDuplicado(DocumentType tipo, String numero) async {

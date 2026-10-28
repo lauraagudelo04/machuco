@@ -32,7 +32,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   int _selectedIndex = 0; 
   
   final MotelController _motelController = MotelController();
-  final OwnerController _ownerController = OwnerController();
+  final OwnerController _ownerController = OwnerController.instance;
   
   List<Motel> _motels = [];
   List<Owner> _owners = [];
@@ -50,7 +50,10 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
 
   Future<void> _loadOwnersAndMotels() async {
     setState(() => _isLoading = true);
-    
+
+    // La instancia es compartida: se recarga desde la base para que el listado
+    // refleje los cambios hechos en otras pantallas del módulo.
+    await _ownerController.init();
     final ownersList = _ownerController.owners;
     _owners = ownersList;
     

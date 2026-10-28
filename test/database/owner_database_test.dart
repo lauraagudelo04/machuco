@@ -139,6 +139,52 @@ void main() {
     expect(await repository.findAll(), isEmpty);
   });
 
+  test('un propietario nuevo nace pendiente de sincronizar', () async {
+    final owner = buildOwner();
+    await repository.insert(owner);
+
+    final loaded = await repository.findById(owner.id);
+    expect(loaded!.isSynchronized, isFalse);
+
+    // Escenario del feature: el campo 'sincronizado' queda en 0 en la fila.
+    final rows = await database.database.query(
+      'owners',
+      columns: ['synchronized'],
+      where: 'id = ?',
+      whereArgs: [owner.id],
+    );
+    expect(rows.single['synchronized'], 0);
+  });
+
+  test('findUnsynchronized ignora los registros ya enviados a la nube',
+      () async {
+    await repository.insert(buildOwner());
+    await repository.insert(
+      buildOwner(
+        id: 'owner-2',
+        fullName: 'Inversiones Machuco S.A.S.',
+        documentType: DocumentType.taxId,
+        documentNumber: '900123456-7',
+        email: 'contacto@inversionesmachuco.com',
+      ),
+    );
+
+    expect(await repository.findUnsynchronized(), hasLength(2));
+
+    // Simula que la nube confirmó el primero: solo ese sale de pendientes.
+    await database.database.update(
+      'owners',
+      {'synchronized': 1},
+      where: 'id = ?',
+      whereArgs: ['owner-1'],
+    );
+
+    final pending = await repository.findUnsynchronized();
+    expect(pending, hasLength(1));
+    expect(pending.single.id, 'owner-2');
+    expect(pending.single.isSynchronized, isFalse);
+  });
+
   test('seedIfEmpty siembra la primera vez y no duplica después', () async {
     final seeds = buildSeedOwners();
 
