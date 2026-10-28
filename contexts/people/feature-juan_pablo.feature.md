@@ -22,10 +22,18 @@ rechazar cuentas `pending_approval`).
 
 ## Decisiones de esta rama
 
-- **Proveedor de identidad final: exclusivamente Firebase Authentication**
-  (reemplaza a Auth0). Firebase Auth se usa **solo para identidad**
-  (correo/contraseña, Google, recuperación de contraseña). No es la base de
-  datos de la app.
+- **Proveedor de seguridad: exclusivamente Firebase Authentication**
+  (identidad, sesión, correo/contraseña y recuperación de contraseña).
+- **Proveedor de almacenamiento: Firebase**. El perfil del usuario (incluidos
+  NIT y tipo de persona), las solicitudes de propietarios y los archivos se
+  guardan en Firebase (Cloud Firestore y/o Cloud Storage, pendiente de
+  confirmar cuál) protegidos por reglas de seguridad. Los **maestros** siguen
+  en Supabase.
+- **Proveedores externos (Google/Gmail y GitHub): solo definidos, no
+  implementados**. Se ingresarán más adelante a través de Firebase Auth y en
+  cooperación con otras ramas. En esta rama solo se dejan escritos sus
+  escenarios (ver "Ingreso con proveedores externos [Futuro]"); no se agregan
+  dependencias, botones funcionales ni lógica para ellos.
 - **Login quemado temporal**: mientras Firebase no esté configurado, la app
   funciona con el `HardcodedAuthService` (usuarios de prueba por rol). **No
   se elimina por ahora**, pero es transitorio: cuando Firebase Auth esté
@@ -48,17 +56,33 @@ rechazar cuentas `pending_approval`).
   `auth`.
 - **SQLite (Floor / `AppDatabase`)**: caché local de los maestros de Supabase
   y del perfil básico del usuario autenticado.
-- **Supabase**: fuente del maestro de **indicativo telefónico por país**,
-  consumido por REST (`/rest/v1/...`) con el mismo patrón de
-  `RoomServiceRepository` (caché primero, red después).
+- **Supabase**: fuente de los maestros de **indicativo telefónico por país**
+  y de **planes de suscripción para propietarios**, consumidos por REST
+  (`/rest/v1/...`) con el mismo patrón de `RoomServiceRepository` (caché
+  primero, red después). El maestro de planes reutiliza la tabla
+  `subscription_plans` que ya consume la rama de suscripciones; se amplía en
+  coordinación con ella, no se duplica.
 - **Sin documento de identidad**: ningún perfil (Cliente, Propietario ni
   Administrador) solicita tipo ni número de documento. Se retira el maestro
   `identification_types` del alcance de esta rama.
+- **NIT y tipo de persona del Propietario**: todo propietario, sea persona
+  **natural** o **jurídica**, debe indicar su tipo de persona y su **NIT**
+  (dato tributario, no documento de identidad). La razón social solo se pide
+  a la persona jurídica.
 
-> Antes de agregar `firebase_core` / `firebase_auth` al `pubspec.yaml`,
-> registrar la decisión "Auth0 → Firebase Auth" en `docs/decisions_log.md`
-> (regla no negociable de `CLAUDE.md`: no fijar servicios sin decisión
-> documentada). Hasta entonces se trabaja con el login quemado temporal.
+> **Estado de la dependencia de Firebase (verificado 2026-10-27)**:
+> integrada. `pubspec.yaml` incluye `firebase_core`, `firebase_auth` y
+> `cloud_firestore`; existen `android/app/google-services.json`,
+> `lib/firebase_options.dart` (FlutterFire) y `firebase.json`, y
+> `lib/main.dart` inicializa Firebase. No existe
+> `ios/Runner/GoogleService-Info.plist`. Auth0 fue retirado. El login usa
+> `FirebaseAuthService` (el login quemado sigue disponible solo con
+> `AUTH_USE_HARDCODED_AUTH_USERS=true`) y el perfil, rol y estado viven en
+> Cloud Firestore (`users/{uid}`) protegidos por `firestore.rules`. Las
+> decisiones están en `docs/decisions_log.md` (2026-10-27). Pendiente:
+> crear la base de datos Firestore en la consola, desplegar las reglas
+> (`firebase deploy --only firestore:rules`) y habilitar Correo/contraseña
+> en Authentication. Ver `docs/firebase.md`.
 
 ## Feature: Inicio de sesión
 
@@ -129,12 +153,6 @@ And carga desde SharedPreferences el correo del usuario autenticado
 And navega directamente a la ruta de su rol sin mostrar el formulario de login
 But si la sesión expiró o no puede restaurarse, borra el correo de sesión y muestra la pantalla de login
 
-Scenario: Inicio de sesión con Google
-Given un usuario en la pantalla de login con Firebase configurado
-When presiona "Continuar con Google" y completa el flujo del proveedor
-Then el sistema autentica al usuario, guarda su correo en SharedPreferences y navega a la ruta de su rol
-But si el usuario cancela el flujo de Google, permanece en el login sin mostrar error
-
 Scenario: Recuperación de contraseña
 Given un usuario en la pantalla de login
 When presiona "¿Olvidaste tu contraseña?", ingresa su correo y confirma
@@ -194,12 +212,6 @@ Then el sistema crea una sesión local con el rol de ese usuario
 And guarda su correo en SharedPreferences igual que lo haría con Firebase
 And navega a la ruta de ese rol igual que lo haría con Firebase
 
-Scenario: [Temporal] Google no disponible sin Firebase
-Given la aplicación ejecutándose con el login quemado
-When el usuario presiona "Continuar con Google"
-Then el sistema muestra un aviso indicando que el inicio con Google aún no está disponible
-And no lanza una excepción ni bloquea el resto del formulario
-
 Scenario: [Temporal] Creación de administradores y aprobación de propietarios en modo desarrollo
 Given la app en modo desarrollo con un administrador de prueba autenticado
 When crea un administrador o aprueba/rechaza un propietario
@@ -226,11 +238,11 @@ And el aviso de modo desarrollo deja claro que no hay validación real de identi
 | --- | --- | --- | --- |
 | Datos comunes (nombres, apellidos, indicativo y celular, correo, contraseña, confirmación) | Sí | Sí | Sí (sin contraseña, ver feature de creación) |
 | Tipo y número de documento | **No se solicita** | **No se solicita** | **No se solicita** |
-| Campos propios | Fecha de nacimiento | Tipo de persona (natural/jurídica); si es jurídica: razón social y NIT de la empresa | — |
+| Campos propios | Fecha de nacimiento | Tipo de persona (natural/jurídica), NIT y plan de suscripción de interés (obligatorios); si es jurídica, además razón social | — |
 | Regla clave | Debe ser mayor de 18 años | Su cuenta debe aprobarla un administrador | Solo un administrador autenticado puede crearlo |
 | Estado inicial de la cuenta | `active` | `pending_approval` | `active` |
 | Destino tras el registro | Ruta del cliente | Pantalla "Cuenta en revisión" | (No aplica: el creador permanece en su vista) |
-| Registro con Google | Sí | Sí, pero luego debe completar los campos propios | No |
+| Registro con Google o GitHub ([Futuro], no se implementa aún) | Sí | Sí, pero luego debe completar los campos propios | No |
 
 Scenario: Visitante elige el rol antes de diligenciar el formulario
 Given un visitante en la pestaña "Registrarse"
@@ -261,10 +273,11 @@ And no crea la cuenta
 
 Scenario: Propietario persona natural se registra (camino feliz)
 Given un visitante que eligió el perfil Propietario y el tipo de persona "Natural"
-When diligencia los datos comunes
+When el sistema muestra el campo NIT como obligatorio
+And el visitante diligencia los datos comunes y su NIT
 And presiona "Crear cuenta"
-Then el sistema no le solicita tipo ni número de documento
-And crea la cuenta con rol `owner` y estado `pending_approval`
+Then el sistema no le solicita tipo ni número de documento ni razón social
+And crea la cuenta con rol `owner`, tipo de persona natural, su NIT y estado `pending_approval`
 And la solicitud aparece en "Solicitudes de propietarios" de los administradores
 And navega a la pantalla "Cuenta en revisión", que explica que un administrador debe aprobarla
 
@@ -273,20 +286,22 @@ Given un visitante que eligió el perfil Propietario y el tipo de persona "Jurí
 When el sistema muestra los campos razón social y NIT como obligatorios
 And el visitante los diligencia junto con los datos comunes del representante (sin documento del representante)
 And presiona "Crear cuenta"
-Then el sistema crea la cuenta con rol `owner`, tipo de persona jurídica y estado `pending_approval`
+Then el sistema crea la cuenta con rol `owner`, tipo de persona jurídica, razón social, NIT y estado `pending_approval`
 But si falta la razón social o el NIT tiene un formato inválido, no envía el formulario y señala el campo
+
+Scenario: Propietario sin tipo de persona o sin NIT
+Given un visitante que eligió el perfil Propietario
+When intenta crear la cuenta sin elegir el tipo de persona o sin diligenciar el NIT
+Then el sistema no envía el formulario
+And señala que el tipo de persona y el NIT son obligatorios para todo propietario
+When cambia el tipo de persona de "Jurídica" a "Natural"
+Then conserva el NIT escrito y oculta y descarta la razón social
 
 Scenario: Propietario pendiente de aprobación intenta iniciar sesión
 Given un propietario registrado cuya cuenta sigue en estado `pending_approval`
 When inicia sesión con credenciales correctas
 Then el sistema lo lleva a la pantalla "Cuenta en revisión"
 And no le da acceso a las vistas de gestión de moteles hasta que un administrador apruebe la cuenta
-
-Scenario: Registro con Google según el rol
-Given un visitante en el formulario de registro
-When elige "Continuar con Google"
-Then para Cliente, el sistema crea la cuenta y pide completar los datos que Google no entrega (celular y fecha de nacimiento) antes de navegar
-And para Propietario, pide completar celular y tipo de persona, y la cuenta queda en `pending_approval`
 
 Scenario: Intento de registrarse como administrador desde el registro público
 Given cualquier registro público
@@ -334,6 +349,110 @@ When presiona "Crear cuenta"
 Then el sistema informa que el correo ya está en uso
 And ofrece ir a "Iniciar sesión" o "¿Olvidaste tu contraseña?"
 
+## Feature: Consulta de planes de suscripción para propietarios (Supabase + SQLite)
+
+> Esta rama solo **consulta** los planes posibles y registra el plan de
+> interés del propietario. El cobro, la activación y la gestión de la
+> suscripción pertenecen a la rama de suscripciones
+> (`lib/database/repository/suscripcion/`).
+
+Scenario: El propietario consulta los planes disponibles al registrarse
+Given un visitante que eligió el perfil Propietario en el formulario de registro
+When se muestra el bloque propio del propietario
+Then el sistema consulta los planes activos del maestro `subscription_plans`
+And los muestra ordenados por `sort_order` con nombre, descripción, precio en COP, periodicidad, número máximo de moteles y características
+And el visitante debe elegir un plan de interés antes de "Crear cuenta"
+
+Scenario: El plan elegido se guarda con la solicitud del propietario
+Given un visitante Propietario que eligió un plan y diligenció el formulario válido
+When presiona "Crear cuenta"
+Then la cuenta se crea en `pending_approval` con el id del plan elegido (no el nombre mostrado)
+And el plan aparece en el detalle de la solicitud que ve el administrador
+And la suscripción no se activa ni se cobra hasta que la cuenta sea aprobada y la rama de suscripciones lo procese
+
+Scenario: Uso de la caché local de planes
+Given un dispositivo con los planes ya guardados en SQLite hace menos de 24 horas
+When el visitante elige el perfil Propietario
+Then el sistema muestra los planes desde SQLite sin esperar a la red
+And solo consulta Supabase cuando se fuerza el refresco o la caché venció
+
+Scenario: Sin conexión y sin caché de planes
+Given un dispositivo sin caché de planes y sin conexión
+When el visitante elige el perfil Propietario
+Then el bloque de planes muestra un estado de error con opción de reintentar
+And el botón "Crear cuenta" permanece deshabilitado para Propietario
+But el registro de Cliente y el inicio de sesión siguen funcionando
+
+Scenario: Sin planes activos
+Given el maestro `subscription_plans` sin registros activos
+When el visitante elige el perfil Propietario
+Then el sistema muestra un estado vacío "No hay planes disponibles por ahora"
+And no permite crear la cuenta de propietario
+
+Scenario: Un plan se desactiva
+Given un plan marcado como inactivo en Supabase
+When el sistema refresca los planes
+Then el plan deja de mostrarse en el registro
+But los propietarios que ya lo eligieron conservan la referencia en su solicitud
+
+Scenario: El plan elegido no se usa para autorizar ni cobrar desde la app
+Given una petición de registro con un `plan_id` manipulado o inexistente
+When llega al backend
+Then el backend valida que el plan exista y esté activo, y si no, rechaza el registro
+And el precio nunca se toma del valor enviado por la app
+
+## Feature: Ingreso con proveedores externos (Google/Gmail y GitHub) [Futuro]
+
+> **Solo definición, no implementación.** Estos escenarios se implementarán
+> más adelante con los proveedores de Firebase Auth (`GoogleAuthProvider` y
+> `GithubAuthProvider`) y **en cooperación con otras ramas** (configuración
+> del proyecto de Firebase, OAuth App de GitHub, SHA-1/SHA-256 de Android,
+> URL schemes de iOS). En esta rama **no** se agregan dependencias
+> (`google_sign_in` u otras), ni lógica de controller, ni servicios para
+> ellos. Mientras tanto solo aplica el escenario "Proveedores externos aún no
+> disponibles".
+
+Scenario: Proveedores externos aún no disponibles
+Given la aplicación sin los proveedores externos habilitados
+When el usuario ve la pantalla de login o de registro
+Then los botones "Continuar con Google" y "Continuar con GitHub" no se muestran, o se muestran deshabilitados con la etiqueta "Próximamente"
+And presionarlos no lanza una excepción ni bloquea el formulario de correo y contraseña
+
+Scenario: [Futuro] Inicio de sesión con Google (Gmail)
+Given un usuario con cuenta existente vinculada a Google y Firebase Auth configurado con el proveedor de Google
+When presiona "Continuar con Google" y completa el flujo del proveedor
+Then el sistema autentica al usuario con Firebase Auth
+And obtiene su rol y estado de cuenta desde el backend
+And guarda su correo en SharedPreferences y navega a la ruta de su rol mediante `resolvePostLoginRoute`
+But si el usuario cancela el flujo, permanece en el login sin mostrar error
+
+Scenario: [Futuro] Inicio de sesión con GitHub
+Given un usuario con cuenta existente vinculada a GitHub y Firebase Auth configurado con el proveedor de GitHub
+When presiona "Continuar con GitHub" y autoriza la aplicación
+Then el sistema autentica al usuario con Firebase Auth
+And obtiene su rol y estado de cuenta desde el backend
+And guarda su correo en SharedPreferences y navega a la ruta de su rol
+But si GitHub no entrega un correo verificado, el sistema no crea sesión e informa que debe usar una cuenta con correo público o verificado
+
+Scenario: [Futuro] Registro con un proveedor externo según el rol
+Given un visitante en el formulario de registro que eligió un tipo de perfil
+When elige "Continuar con Google" o "Continuar con GitHub" y completa el flujo
+Then para Cliente, el sistema pide completar los datos que el proveedor no entrega (nombres y apellidos si faltan, indicativo y celular, fecha de nacimiento) antes de crear el perfil y navegar
+And para Propietario, pide completar indicativo y celular, tipo de persona, NIT y, si es jurídica, razón social, y la cuenta queda en `pending_approval`
+And el rol y el estado inicial los asigna y valida el backend, igual que en el registro con correo
+And nunca se crea una cuenta `admin` por este medio
+
+Scenario: [Futuro] Correo ya registrado con otro método
+Given un visitante cuyo correo ya tiene cuenta con correo y contraseña u otro proveedor
+When intenta ingresar con Google o GitHub usando ese mismo correo
+Then el sistema no crea una cuenta duplicada
+And le indica que ya existe una cuenta con ese correo y que inicie sesión con el método original para vincular el proveedor
+
+Scenario: [Futuro] Cuenta deshabilitada, pendiente o rechazada con proveedor externo
+Given un usuario cuya cuenta está `disabled`, `pending_approval` o `rejected`
+When inicia sesión con Google o GitHub
+Then el sistema aplica las mismas reglas que en el inicio de sesión con correo y contraseña
+
 ## Feature: Validación de formato de los datos del formulario
 
 > Aplica al login, al registro público y al formulario de creación de
@@ -347,7 +466,7 @@ And ofrece ir a "Iniciar sesión" o "¿Olvidaste tu contraseña?"
 | Nombres / apellidos | Solo letras (con tildes y ñ), espacios, guion y apóstrofo; 2 a 50 caracteres; sin espacios dobles |
 | Correo | Formato `usuario@dominio.ext`, máx. 254 caracteres; se recortan espacios y se guarda en minúsculas |
 | Celular | Solo dígitos; longitud entre `phone_min_length` y `phone_max_length` del país |
-| NIT de la empresa (solo persona jurídica) | 9 dígitos, guion opcional y dígito de verificación válido (p. ej. `900123456-7`) |
+| NIT del propietario (natural y jurídica, obligatorio) | Solo dígitos, guion opcional y dígito de verificación válido. Jurídica: 9 dígitos + DV (p. ej. `900123456-7`). Natural: número base de 6 a 10 dígitos + DV (p. ej. `1020304050-3`) |
 | Razón social | 2 a 120 caracteres; letras, números, espacios y `. , & -` |
 | Fecha de nacimiento | Fecha real, no futura, edad ≥ 18 años |
 | Contraseña | 8 a 64 caracteres, al menos una letra y un número |
@@ -465,7 +584,7 @@ Then el sistema muestra un estado vacío "No hay solicitudes pendientes"
 Scenario: Ver el detalle de una solicitud
 Given un administrador en la lista de solicitudes
 When selecciona una solicitud
-Then el sistema muestra los datos del registro: nombres, apellidos, celular con indicativo, correo, tipo de persona y, si es jurídica, razón social y NIT
+Then el sistema muestra los datos del registro: nombres, apellidos, celular con indicativo, correo, tipo de persona, NIT, plan de suscripción de interés y, si es jurídica, razón social
 And los botones "Aprobar" y "Rechazar"
 
 Scenario: Aprobar una solicitud
@@ -568,12 +687,34 @@ And si no hay coincidencias muestra un estado vacío
 | `is_active` | `bool` | |
 | `sort_order` | `int` | Colombia primero |
 
+`subscription_plans` (planes de suscripción para propietarios)
+
+La tabla **ya existe** en Supabase y la rama de suscripciones la consulta
+hoy con `select=id,name`. Esta rama la **amplía** con las columnas
+siguientes, en coordinación con esa rama (agregar columnas no rompe su
+consulta actual):
+
+| Columna | Tipo | Notas |
+| --- | --- | --- |
+| `id` | `int` PK | Existente |
+| `name` | `text` | Existente; texto visible en español |
+| `description` | `text` nullable | Resumen del plan |
+| `price` | `numeric(12,2)` | Precio de referencia; el backend valida el cobro |
+| `currency` | `text` | `COP` por defecto |
+| `billing_period` | `text` | `monthly` / `yearly` |
+| `max_motels` | `int` nullable | Límite de moteles del plan |
+| `features` | `text[]` | Características visibles |
+| `is_active` | `bool` | |
+| `sort_order` | `int` | |
+
 > El maestro `identification_types` (tipo de identificación) se retiró del
 > alcance: ningún perfil solicita tipo ni número de documento.
 
-La tabla es de **solo lectura** para la app: política RLS que permita
-`select` con la `anon key` y ninguna escritura desde el cliente. La
-administración de los registros se hace desde Supabase.
+Las tablas son de **solo lectura** para la app: política RLS que permita
+`select` con la clave pública y ninguna escritura desde el cliente. La
+administración de los registros se hace desde Supabase. El detalle de
+conexión (URL, clave, SQL y recorrido) está en el documento "MACHUCO —
+Conexión con Firebase y Supabase".
 
 ### Maestros adicionales sugeridos (no son criterio de aceptación)
 
@@ -597,8 +738,8 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
 - **Política de contraseñas** (`password_policies`): longitud mínima y
   reglas, para no fijarlas en el código.
 - **Proveedores de inicio de sesión habilitados** (`auth_providers`: correo,
-  Google, teléfono): permite encender o apagar "Continuar con Google" sin
-  publicar una nueva versión.
+  Google, GitHub): permite encender o apagar "Continuar con Google" y
+  "Continuar con GitHub" sin publicar una nueva versión.
 - **Motivos de bloqueo o desactivación de cuenta** (`account_block_reasons`):
   mensaje claro al usuario cuando su cuenta está deshabilitada.
 - **Género o tratamiento** (`genders`), solo si producto lo necesita.
@@ -611,20 +752,21 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - Rutas nuevas en `lib/routes/routes.dart` (solo rol administrador): `adminAdministrators` (`/auth/admin/administrators`), `adminCreateAdministrator` (`/auth/admin/administrators/new`), `adminOwnerApprovals` (`/auth/admin/owner-approvals`) y `adminOwnerApprovalDetail` (`/auth/admin/owner-approvals/detail`). Se enlazan desde el perfil o menú del administrador.
   - Modelos: `lib/models/auth/`.
     - `registered_user.dart`: agregar `firstNames`, `lastNames`, `phoneCountryCodeId` y `accountStatus`. No incluir campos de tipo ni número de documento.
-    - Datos propios por rol: `birthDate` (cliente); `personType`, `companyName` y `nit` (propietario). Modelarlos como campos opcionales validados por rol o como un objeto de detalle por rol; no crear tres modelos de usuario paralelos.
+    - Datos propios por rol: `birthDate` (cliente); `personType` y `nit` obligatorios y `companyName` solo para persona jurídica (propietario). Modelarlos como campos opcionales validados por rol o como un objeto de detalle por rol; no crear tres modelos de usuario paralelos.
     - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo).
     - Se mantiene `RegisteredUserRole { admin, client, owner }` como único enum de rol.
   - Registro por rol: la validación específica de cada rol vive en el controller (o en un validador por rol en `lib/controllers/auth/`), no en la vista. La vista solo decide qué bloque de campos mostrar según el rol elegido.
   - Servicios de autenticación: `lib/service/auth/`.
-    - Destino final: `firebase_auth_service.dart` como **único** proveedor (pendiente de la decisión documentada).
-    - Transitorio: el contrato `AuthService` / `AuthSession` / `AuthFailure` (extraído de `auth0_auth_service.dart` a `auth_service.dart` para no depender de Auth0) y `hardcoded_auth_service.dart` se mantienen solo mientras exista el login quemado. No se amplía el contrato con capacidades nuevas; al integrar Firebase se retiran junto con el selector de implementación (`auth_service_factory.dart`, si se llegó a crear). `LoginController` ya no debe lanzar "Auth0 no está configurado".
+    - Destino final: `firebase_auth_service.dart` como **único** proveedor (pendiente de la decisión documentada y de agregar `firebase_core` / `firebase_auth`).
+    - Transitorio: el contrato `AuthService` / `AuthSession` / `AuthFailure` (en `auth_service.dart`) y `hardcoded_auth_service.dart` se mantienen solo mientras exista el login quemado. No se amplía el contrato con capacidades nuevas; al integrar Firebase se retiran junto con el selector de implementación (`auth_service_factory.dart`, si se llegó a crear).
     - La creación de administradores y la aprobación/rechazo de propietarios se exponen como operaciones del backend; la app solo las invoca a través de un repositorio (p. ej. `lib/database/repository/auth/admin_access_repository.dart`).
-    - `auth0_auth_service.dart`, `auth0_config.dart` y la dependencia `auth0_flutter` se retiran cuando el servicio de Firebase exista. Antes de borrarlos, verificar con `grep` que ninguna otra rama los importa.
-  - Maestros: `lib/database/repository/auth/` — `auth_catalog_dao.dart` (tabla `country_phone_codes` en SQLite) y `auth_catalog_repository.dart` (REST a Supabase + caché), siguiendo el patrón de `lib/database/repository/room/room_service_repository.dart`.
+    - Limpieza (no es un escenario): el código heredado de un proveedor anterior (`auth0_auth_service.dart`, `auth0_config.dart`, la dependencia `auth0_flutter` y sus referencias en `login_controller.dart`, `login_page.dart`, `logout_navigation.dart`, `backend_registered_user_directory.dart`, `hardcoded_auth_service.dart` y las pruebas) se retira al integrar Firebase. Antes de borrarlo, verificar con `grep` que ninguna otra rama lo importa. No se escriben escenarios ni se amplía ese código. **Hecho (2026-10-27):** `FirebaseAuthService` reemplaza a Auth0; el contrato quedó en `auth_service.dart` y los flags en `auth_config.dart`.
+  - Maestros: `lib/database/repository/auth/` — `auth_catalog_dao.dart` (tablas `country_phone_codes` y `subscription_plan_options` en SQLite) y `auth_catalog_repository.dart` (REST a Supabase + caché), siguiendo el patrón de `lib/database/repository/room/room_service_repository.dart`. Modelo nuevo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
+  - Almacenamiento en Firebase: el perfil del usuario y las solicitudes de propietarios se leen y escriben a través de un repositorio (p. ej. `lib/database/repository/auth/user_profile_repository.dart`), nunca desde la vista.
   - Preferencias: `SharedPreferencesLocalService` con `namespace: 'auth'` (contrato en `lib/service/storage/local_preferences_service.dart`). El acceso compartido al correo se expone con una clase pequeña (p. ej. `lib/service/auth/auth_preferences.dart`) que otras ramas consumen sin conocer las claves.
 - **Claves de SharedPreferences (namespace `auth`)**: `current_user_email` (string; correo del usuario autenticado, compartido con otras funcionalidades), `remember_email` (bool), `remembered_email` (string), `last_country_code_id` (int), `last_auth_tab` (string), `catalogs_synced_at` (string ISO-8601). **Nunca** guardar contraseñas, tokens ni el NIT en SharedPreferences. La persistencia del token la maneja el SDK de Firebase; en el login quemado la sesión es solo en memoria.
-- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 5). Es un archivo compartido con otras ramas (`room`, `suscripcion`): coordinar el número de versión antes de hacer merge para no chocar migraciones.
-- **Configuración de Supabase**: reutilizar `SUPABASE_URL` y `SUPABASE_ANON_KEY` vía `--dart-define`. `SupabaseRoomConfig` es específico de habitaciones; si se necesita una configuración común, proponer al equipo una sola clase compartida en lugar de crear otra copia.
+- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 7; la 6 → 7 crea `country_phone_codes`, la caché de planes irá en la 7 → 8). Es un archivo compartido con otras ramas (`room`, `suscripcion`): coordinar el número de versión antes de hacer merge para no chocar migraciones.
+- **Configuración de Supabase**: reutilizar `SUPABASE_URL` y `SUPABASE_ANON_KEY` vía `--dart-define`. Las ramas de suscripciones y notificaciones leen `SUPABASE_PUBLISHABLE_KEY`; proponer al equipo un solo nombre. `SupabaseRoomConfig` es específico de habitaciones; si se necesita una configuración común, proponer al equipo una sola clase compartida en lugar de crear otra copia.
 - **Dependencias de entrada**: rutas por rol de `lib/routes/routes.dart` (`clientMotels`, `ownerMotels`, `ownerManagement`); componentes del sistema de diseño (`AppTextField`, `AppButton`, `AppCard`, `AppBottomSheet`).
 - **Dependencias de salida**: todas las vistas protegidas dependen de la sesión que expone `LoginController` (usuario y rol). `logout_navigation.dart` es consumido por otras ramas para cerrar sesión: no cambiar su firma sin avisar. El lector del correo compartido (`AuthPreferences` o equivalente) también es una API pública para otras ramas.
 - **Fuera de alcance**:
@@ -632,7 +774,9 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - La gestión general de usuarios (activar/desactivar cuentas existentes, editar o eliminar administradores).
   - El contenido real de los términos y condiciones (solo se deja el botón con contenido provisional).
   - El CRUD de los maestros (se administran directamente en Supabase).
+  - El cobro, la activación y la gestión de la suscripción del propietario (rama de suscripciones); aquí solo se consultan los planes y se registra el plan de interés.
   - Inicio de sesión por SMS/OTP con el número de celular.
+  - La implementación del login y registro con Google/Gmail y GitHub: aquí solo se definen sus escenarios; se implementa más adelante en cooperación con otras ramas.
   - Verificación de correo obligatoria antes del primer ingreso (queda como mejora posible con Firebase).
 - **Reglas de seguridad**:
   - La autorización por rol se valida en el backend. El rol enviado por la app es solo una solicitud: la creación de administradores, la aprobación de propietarios, la mayoría de edad del cliente y el estado inicial del propietario se verifican del lado del servidor.
@@ -648,10 +792,17 @@ Estas reglas son una propuesta de esta rama. Se implementan así mientras
 nadie las corrija, pero deben confirmarse:
 
 - Los campos propios de cada rol (fecha de nacimiento del cliente; tipo de
-  persona, razón social y NIT del propietario).
+  persona, NIT y razón social del propietario).
 - La edad mínima de 18 años para clientes.
-- Si el NIT de la persona jurídica se mantiene como dato de la empresa o
-  también se retira junto con el documento de identidad.
+- La longitud del número base del NIT de persona natural (propuesta: 6 a 10
+  dígitos más dígito de verificación).
+- Si el propietario elige el plan de suscripción al registrarse (propuesta,
+  obligatorio) o después de ser aprobado, y cuáles son los planes reales.
+- ~~Si el almacenamiento en Firebase es Cloud Firestore, Cloud Storage o ambos,
+  y si el rol se guarda como custom claim (requiere Cloud Functions) o en un
+  documento de Firestore.~~ **Resuelto (2026-10-27):** Cloud Firestore; el rol
+  y el estado se guardan en el documento `users/{uid}`. Cloud Storage
+  (archivos) sigue sin decidir.
 - Si el administrador creado define su contraseña mediante correo de
   restablecimiento (propuesta) o con una contraseña temporal.
 - Si un propietario rechazado puede corregir sus datos y volver a enviar la
@@ -666,8 +817,9 @@ nadie las corrija, pero deben confirmarse:
   `lib/controllers/booking/`, `lib/models/booking/`). Ese trabajo ya no es
   responsabilidad de esta rama; no refactorizarlo como parte del login.
 - El login actual ya tiene la base: pestañas de login y registro, selector
-  de tipo de perfil, avisos de Auth0 y usuarios de prueba, y una tarjeta de
-  sesión activa. El indicativo está fijo como texto `'CO +57'` en
+  de tipo de perfil, avisos de modo desarrollo y usuarios de prueba, y una
+  tarjeta de sesión activa. Los avisos que mencionan al proveedor anterior
+  deben reemplazarse por el aviso de modo desarrollo. El indicativo está fijo como texto `'CO +57'` en
   `_RegisterForm`: debe reemplazarse por el selector alimentado por el
   maestro. La opción "Administrador" del selector de perfil debe retirarse
   del registro público.
@@ -685,8 +837,9 @@ nadie las corrija, pero deben confirmarse:
 - **Login**: logo y título "Machuco" arriba, selector de pestañas
   "Iniciar sesión / Registrarse", formulario dentro de un AppCard con
   correo, contraseña (con botón mostrar/ocultar), casilla "Recordar mi
-  correo", enlace "¿Olvidaste tu contraseña?", botón principal "Ingresar" y
-  botón secundario "Continuar con Google".
+  correo", enlace "¿Olvidaste tu contraseña?" y botón principal "Ingresar".
+  Los botones secundarios "Continuar con Google" y "Continuar con GitHub"
+  quedan ocultos o deshabilitados ("Próximamente") hasta que se implementen.
 - **Aviso de modo desarrollo [Temporal]**: banner informativo (tono warning
   del design system) visible en la parte superior mientras se use el login
   quemado, con la lista desplegable de usuarios de prueba.
@@ -695,8 +848,9 @@ nadie las corrija, pero deben confirmarse:
   porque define el resto del formulario. Luego: nombres y apellidos
   (sin campos de documento) → indicativo + celular
   (en una fila) → **bloque propio del rol** dentro de un AppCard con título
-  (Cliente: fecha de nacimiento; Propietario: tipo de persona y, si es
-  jurídica, razón social y NIT) → correo → contraseña → confirmación →
+  (Cliente: fecha de nacimiento; Propietario: tipo de persona, NIT, si es
+  jurídica razón social, y los planes de suscripción como tarjetas
+  seleccionables con nombre, precio, periodicidad y características) → correo → contraseña → confirmación →
   enlace "Términos y condiciones" → "Crear cuenta". Los bloques que
   aparecen o desaparecen según el rol usan una transición corta con los
   tokens de duración del design system. Los errores de formato se muestran

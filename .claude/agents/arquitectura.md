@@ -19,8 +19,10 @@ Al iniciar cualquier revisión:
    responsabilidades (una vista no debe contener lógica de negocio ni acceso
    directo a datos; un controller no debe construir widgets).
 3. Si el cambio introduce una dependencia nueva (pubspec.yaml) o resuelve por
-   su cuenta algo listado como "pendiente" en README.md (backend, base de
-   datos, autenticación, pagos, gestor de estado, almacenamiento), deténlo y
+   su cuenta algo listado como "pendiente" en README.md (pagos, gestor de
+   estado, almacenamiento de imágenes), o una alternativa a lo ya decidido
+   (Firebase, Supabase, Firebase Authentication, Floor,
+   `shared_preferences`), deténlo y
    explica por qué debe ser una decisión acordada por el equipo, no algo
    fijado dentro de una sola rama.
 4. Revisa `contexts/people/` para detectar si dos personas están
