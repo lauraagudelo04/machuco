@@ -24,6 +24,31 @@ void main() {
     expect(find.text('Inicia sesión o crea tu cuenta'), findsOneWidget);
   });
 
+  testWidgets('el registro se dibuja sin errores y no ofrece Administrador', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(412, 2200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: LoginPage(
+          authService: _FakeAuthService(),
+          initialTab: AuthTab.register,
+        ),
+      ),
+    );
+    await tester.pump();
+
+    // Un InputDecorator sin ancho dentro de un Row dejaba la vista en blanco.
+    expect(tester.takeException(), isNull);
+    expect(find.text('Cliente'), findsOneWidget);
+    expect(find.text('Propietario'), findsOneWidget);
+    expect(find.text('Administrador'), findsNothing);
+  });
+
   test('guarda el rol seleccionado al registrar', () async {
     final auth = _FakeAuthService();
     final controller = LoginController(authService: auth);

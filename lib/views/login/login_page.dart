@@ -15,7 +15,9 @@ import 'package:machuco/widgets/form/app_phone_field.dart';
 
 enum AuthTab { login, register }
 
-const _registerPasswordMinLength = 15;
+// En desarrollo la contraseña solo exige longitud mínima, sin reglas de
+// complejidad (mayúsculas, números o símbolos). Endurecer antes de producción.
+const _registerPasswordMinLength = 8;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -956,7 +958,7 @@ class _RegisterForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.s4),
           AppTextField(
             label: 'Contraseña',
-            hint: 'Mínimo 15 caracteres',
+            hint: 'Mínimo $_registerPasswordMinLength caracteres',
             controller: passwordController,
             obscureText: !passwordVisible,
             textInputAction: TextInputAction.next,
@@ -1061,12 +1063,8 @@ class _ProfileTypeSelector extends StatelessWidget {
             String subtitle,
           })
         >[
-          (
-            type: RegisteredUserRole.admin,
-            icon: Icons.security_rounded,
-            title: 'Administrador',
-            subtitle: 'Gestión total del sistema',
-          ),
+          // El registro público no ofrece Administrador: solo otro
+          // administrador puede crearlo (ver firestore.rules).
           (
             type: RegisteredUserRole.client,
             icon: Icons.person_rounded,

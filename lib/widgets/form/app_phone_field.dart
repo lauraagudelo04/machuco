@@ -83,15 +83,19 @@ class AppPhoneField extends StatelessWidget {
                 key: const ValueKey('phone-country-code-button'),
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 onTap: canPick ? () => _openPicker(context) : null,
-                child: InputDecorator(
-                  decoration: InputDecoration(
-                    labelText: 'Indicativo',
-                    enabled: canPick,
-                    suffixIcon: canPick
-                        ? const Icon(Icons.arrow_drop_down)
-                        : null,
+                // Dentro de un Row el InputDecorator recibe ancho ilimitado y
+                // rompe el layout; IntrinsicWidth lo ajusta a su contenido.
+                child: IntrinsicWidth(
+                  child: InputDecorator(
+                    decoration: InputDecoration(
+                      labelText: 'Indicativo',
+                      enabled: canPick,
+                      suffixIcon: canPick
+                          ? const Icon(Icons.arrow_drop_down)
+                          : null,
+                    ),
+                    child: dialCodeContent,
                   ),
-                  child: dialCodeContent,
                 ),
               ),
             ),
