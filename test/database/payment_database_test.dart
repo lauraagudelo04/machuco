@@ -304,7 +304,7 @@ void main() {
 
   for (final hasPayments in [true, false]) {
     test(
-      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v8 sin perder datos',
+      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v9 sin perder datos',
       () async {
         var raw = database.database as sqflite.Database;
         final freshSchema = await _moduleSchema(raw);
@@ -353,7 +353,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 8);
+        expect(await raw.getVersion(), 9);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
@@ -375,7 +375,7 @@ void main() {
     );
   }
 
-  test('migra de v6 a v8 conservando los otros módulos y el esquema', () async {
+  test('migra de v6 a v9 conservando los otros módulos y el esquema', () async {
     var raw = database.database as sqflite.Database;
     final freshSchema = await _moduleSchema(raw);
 
@@ -454,7 +454,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 8);
+    expect(await raw.getVersion(), 9);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
