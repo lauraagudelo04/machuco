@@ -4,6 +4,7 @@ import 'package:machuco/database/repository/invoice/invoice_repository.dart';
 import 'package:machuco/models/invoice/invoice_model.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/service/invoice/invoice_pdf_service.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
@@ -30,12 +31,15 @@ class InvoiceController extends ChangeNotifier {
   InvoiceController({
     InvoiceRepository? repository,
     LocalPreferencesService? preferences,
+    InvoicePdfService? pdfService,
   }) : _repository = repository ?? SupabaseInvoiceRepository(),
        _preferences =
-           preferences ?? SharedPreferencesLocalService(namespace: 'invoices');
+           preferences ?? SharedPreferencesLocalService(namespace: 'invoices'),
+       _pdfService = pdfService ?? const PrintingInvoicePdfService();
 
   final InvoiceRepository _repository;
   final LocalPreferencesService _preferences;
+  final InvoicePdfService _pdfService;
 
   // Claves del módulo: se guardan como 'invoices.<clave>'.
   static const _downloadedReservationIdsKey = 'downloadedReservationIds';
@@ -115,21 +119,23 @@ class InvoiceController extends ChangeNotifier {
         ReservationStatus.completed => true,
       };
 
-  /// Simula la descarga/guardado de la factura. Actualmente sólo espera un
-  /// pequeño tiempo y devuelve bytes vacíos. Se puede extender para generar
-  /// un PDF real usando `package:pdf` + `printing`.
-  Future<Uint8List> generatePdfBytes(InvoiceModel invoice) async {
-    // TODO: Implementar generación real de PDF si se añade dependencia.
-    await Future<void>.delayed(const Duration(milliseconds: 250));
-    return Uint8List(0);
-  }
+  /// Genera el PDF de [invoice].
+  Future<Uint8List> generatePdfBytes(InvoiceModel invoice) =>
+      _pdfService.build(invoice);
 
-  /// Descarga la factura cargada y, si tuvo éxito, la recuerda como
-  /// descargada. Devuelve false si no hay factura disponible.
+  /// Genera el PDF de la factura cargada, lo entrega al dispositivo y, si
+  /// tuvo éxito, la recuerda como descargada. Devuelve false si no hay
+  /// factura disponible o si falla la generación/guardado.
   Future<bool> downloadCurrent() async {
     final invoice = _invoice;
     if (invoice == null) return false;
-    await generatePdfBytes(invoice);
+    try {
+      final bytes = await generatePdfBytes(invoice);
+      await _pdfService.save(bytes, 'factura_${invoice.invoiceNumber}.pdf');
+    } catch (error) {
+      debugPrint('No se pudo descargar la factura: $error');
+      return false;
+    }
     await _markDownloaded(invoice.reservationId);
     return true;
   }

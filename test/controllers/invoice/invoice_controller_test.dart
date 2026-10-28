@@ -1,9 +1,12 @@
+import 'dart:typed_data';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/invoice/invoice_controller.dart';
 import 'package:machuco/database/repository/invoice/invoice_repository.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/invoice/invoice_model.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/service/invoice/invoice_pdf_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -71,16 +74,31 @@ class _FakeInvoiceRepository implements InvoiceRepository {
       const [];
 }
 
+/// Genera el PDF real pero no lo entrega al dispositivo (no hay plugin
+/// nativo en las pruebas).
+class _FakeInvoicePdfService extends PrintingInvoicePdfService {
+  final List<String> savedFileNames = [];
+  bool fail = false;
+
+  @override
+  Future<void> save(Uint8List bytes, String fileName) async {
+    if (fail) throw Exception('Sin permisos');
+    savedFileNames.add(fileName);
+  }
+}
+
 void main() {
   late _FakeInvoiceRepository repository;
+  late _FakeInvoicePdfService pdfService;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     repository = _FakeInvoiceRepository();
+    pdfService = _FakeInvoicePdfService();
   });
 
   InvoiceController newController() =>
-      InvoiceController(repository: repository);
+      InvoiceController(repository: repository, pdfService: pdfService);
 
   group('InvoiceController carga desde el repositorio', () {
     test('usa la factura existente sin volver a emitirla', () async {
@@ -187,6 +205,33 @@ void main() {
         ).getStringList('downloadedReservationIds'),
         ['res-1'],
       );
+    });
+  });
+
+  group('InvoiceController PDF', () {
+    test('genera un PDF válido de la factura', () async {
+      final bytes = await newController().generatePdfBytes(
+        _invoiceFor(_reservation('res-1')),
+      );
+
+      expect(String.fromCharCodes(bytes.take(4)), '%PDF');
+    });
+
+    test('guarda el PDF con el número de factura', () async {
+      final controller = newController();
+      await controller.loadForReservation(_reservation('res-1'));
+
+      expect(await controller.downloadCurrent(), isTrue);
+      expect(pdfService.savedFileNames, ['factura_FAC-000001.pdf']);
+    });
+
+    test('si falla el guardado no la marca como descargada', () async {
+      pdfService.fail = true;
+      final controller = newController();
+      await controller.loadForReservation(_reservation('res-1'));
+
+      expect(await controller.downloadCurrent(), isFalse);
+      expect(controller.isDownloaded('res-1'), isFalse);
     });
   });
 }
