@@ -6,25 +6,30 @@ import 'package:floor/floor.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
+import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart'; // Añadir import
+import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart'; // Añadir import
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 part 'app_database.g.dart';
 
-/// Registro común de las tablas y los DAO de la aplicación.
 @TypeConverters([
   SubscriptionDateConverter,
   SubscriptionStatusConverter,
   SubscriptionFeaturesConverter,
 ])
 @Database(
-  version: 6,
+  version: 7,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
     NotificationEntry,
-    NotificationRead,
+    NotificationRead, 
+    ClientEntry, 
+    PhoneCountryCode
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -35,6 +40,9 @@ abstract class AppDatabase extends FloorDatabase {
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
+  
+  ClientDao get clientDao;
+  PhoneCountryCodeDao get phoneCountryCodeDao;
 }
 
 class AppDatabaseProvider {
@@ -55,6 +63,7 @@ class AppDatabaseProvider {
         migration3To4,
         migration4To5,
         migration5To6,
+        migration6To7,
       ])
       .addCallback(Callback(onCreate: _createRoomSchema))
       .build();
@@ -206,5 +215,24 @@ final migration5To6 = Migration(5, 6, (database) async {
   await database.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS index_notification_reads_notificationId_userId '
     'ON notification_reads (notificationId, userId)',
+  );
+});
+final migration6To7 = Migration(6, 7, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `clients` ('
+    '`id` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`name` TEXT NOT NULL, '
+    '`phone` TEXT NOT NULL, '
+    '`email` TEXT NOT NULL, '
+    '`country_code` TEXT NOT NULL, '
+    '`password` TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `phone_country_codes` ('
+    '`id` INTEGER NOT NULL PRIMARY KEY, '
+    '`country_code` TEXT NOT NULL, '
+    '`country_name` TEXT NOT NULL, '
+    '`calling_code` TEXT NOT NULL, '
+    '`active` INTEGER NOT NULL)'
   );
 });
