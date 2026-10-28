@@ -4,8 +4,8 @@
 /// role can access in the product.
 enum RegisteredUserRole { admin, client, owner }
 
-/// Maps a [RegisteredUserRole] to the string value stored in Auth0
-/// user/app metadata and sent to the backend users API.
+/// Maps a [RegisteredUserRole] to the string value used in the Firebase
+/// `role` custom claim and sent to the backend users API.
 extension RegisteredUserRoleValue on RegisteredUserRole {
   String get metadataValue => switch (this) {
     RegisteredUserRole.admin => 'admin',
@@ -14,7 +14,7 @@ extension RegisteredUserRoleValue on RegisteredUserRole {
   };
 }
 
-/// Parses a role coming from an external source (Auth0 claims or the
+/// Parses a role coming from an external source (Firebase claims or the
 /// backend users API) into a [RegisteredUserRole].
 ///
 /// Accepts a few historical/alternate spellings (`administrator`,
@@ -36,10 +36,10 @@ RegisteredUserRole roleFromMetadataValue(String value) {
 }
 
 /// A user as known by the MACHUCO users directory, independent of the
-/// Auth0 session that authenticated them.
+/// Firebase session that authenticated them.
 ///
 /// Used by [RegisteredUserDirectory] implementations to list and persist
-/// application users beyond what an Auth0 session token carries.
+/// application users beyond what a Firebase session token carries.
 class RegisteredUser {
   const RegisteredUser({
     required this.id,

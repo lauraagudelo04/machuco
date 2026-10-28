@@ -1,0 +1,70 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // Nombre y celular con tipo y largo acotados (mismos limites que la app).
+    function hasValidContactFields(data) {
+      return data.fullName is string
+        && data.fullName.size() >= 3 && data.fullName.size() <= 100
+        && data.phoneNumber is string
+        && data.phoneNumber.size() >= 4 && data.phoneNumber.size() <= 20;
+    }
+
+    // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
+    // se pueden asignar en la creacion (valores iniciales) o por un admin.
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Registro publico: nunca admin; cliente activo, propietario pendiente.
+      allow create: if isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasOnly(
+          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
+        && hasValidContactFields(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['client', 'owner']
+        && (
+          (request.resource.data.role == 'client'
+            && request.resource.data.accountStatus == 'active')
+          ||
+          (request.resource.data.role == 'owner'
+            && request.resource.data.accountStatus == 'pending_approval')
+        )
+        && request.resource.data.createdAt == request.time;
+
+      // Un admin solo cambia el estado de la cuenta (aprobar, rechazar,
+      // deshabilitar); nunca el rol, ni siquiera el suyo. Si la aprobacion de
+      // propietarios necesita mas campos (p. ej. motivo de rechazo), se
+      // agregan aqui de forma explicita.
+      // El propio usuario solo puede cambiar su nombre y su celular.
+      allow update: if (isAdmin()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['accountStatus'])
+          && request.resource.data.accountStatus
+              in ['active', 'pending_approval', 'rejected', 'disabled'])
+        || (isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['fullName', 'phoneNumber'])
+          && hasValidContactFields(request.resource.data));
+
+      allow delete: if false;
+    }
+
+    // Denegado por defecto. Cada rama debe agregar su coleccion de forma
+    // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
