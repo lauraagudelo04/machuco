@@ -21,7 +21,7 @@ class OwnerMotelFormPage extends StatefulWidget {
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
-  final MotelController _motelController = MotelController();
+  final MotelController _motelController = MotelController.persistent();
   bool _isSaving = false;
 
   /// Maestro de indicativos telefónicos (Supabase + caché SQLite).
@@ -117,21 +117,34 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       nit: _nitController.text.trim(),
       address: _addressController.text.trim(),
       phone: '$_selectedCallingCode ${_phoneController.text.trim()}',
-      description: _descriptionController.text.trim(),
-      generalLocation: _generalLocationController.text.trim(),
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
+      generalLocation: _generalLocationController.text.trim().isEmpty
+          ? null
+          : _generalLocationController.text.trim(),
       paymentMethods: _selectedPaymentMethods,
       imageUrls: _imageUrls.isEmpty ? ['https://via.placeholder.com/400'] : _imageUrls,
       isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
     );
 
-    if (widget.isEditing) {
-      await _motelController.updateMotel(motelToSave);
-    } else {
-      await _motelController.addMotel(motelToSave);
-    }
+    try {
+      if (widget.isEditing) {
+        await _motelController.updateMotel(motelToSave);
+      } else {
+        await _motelController.addMotel(motelToSave);
+      }
 
-    if (mounted) {
-      Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
     }
   }
 

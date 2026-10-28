@@ -278,3 +278,14 @@ verá vacía hasta que se inserten filas en la tabla remota.
 **Estado:** implementado en `lib/models/phone_country_code/`,
 `lib/service/phone_country_code/`, `lib/database/repository/motel/` y
 `lib/controllers/motel/phone_country_code_controller.dart`.
+
+## 2026-10-28 — Moteles: Supabase + caché SQLite (Floor)
+
+**Decisión:**
+- Tabla remota `public.motels` con RLS (SELECT/INSERT/UPDATE para `anon`), sin DELETE (inhabilitación con `is_available = false`).
+- Credenciales por `--dart-define` vía `SupabasePhoneCountryCodeConfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
+- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10`.
+- `MotelRepository`: red primero con `apikey`, `Prefer: return=representation`, decodificación UTF-8, fallback a caché en errores, excepción clara sin red/caché, 409 por NIT duplicado -> "Ya existe un motel con ese NIT", mapeo snake_case sin modificar `Motel`.
+- `MotelController`: constructor opcional con `MotelRepository`, factory `MotelController.persistent()`; comportamiento mock por defecto preservado para otros módulos y tests.
+
+**Estado:** implementado en `lib/database/model/motel/`, `lib/database/repository/motel/`, `lib/controllers/motel/`, vistas del propietario actualizadas con manejo de errores. Tests en `test/repositories/motel/`. Documentado en `docs/motels_persistence.md`.

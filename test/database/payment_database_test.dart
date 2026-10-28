@@ -353,7 +353,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 9);
+        expect(await raw.getVersion(), 10);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
@@ -463,7 +463,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 9);
+    expect(await raw.getVersion(), 10);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;

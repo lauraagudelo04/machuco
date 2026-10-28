@@ -82,13 +82,15 @@ class _$AppDatabase extends AppDatabase {
 
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
 
+  MotelDao? _motelDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 9,
+      version: 10,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -119,6 +121,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `motels` (`id` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `name` TEXT NOT NULL, `email` TEXT NOT NULL, `room_count` INTEGER NOT NULL, `nit` TEXT NOT NULL, `address` TEXT NOT NULL, `phone` TEXT NOT NULL, `description` TEXT, `general_location` TEXT, `payment_methods_json` TEXT NOT NULL, `image_urls_json` TEXT NOT NULL, `is_available` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
         await database.execute(
@@ -162,6 +166,11 @@ class _$AppDatabase extends AppDatabase {
   PhoneCountryCodeDao get phoneCountryCodeDao {
     return _phoneCountryCodeDaoInstance ??=
         _$PhoneCountryCodeDao(database, changeListener);
+  }
+
+  @override
+  MotelDao get motelDao {
+    return _motelDaoInstance ??= _$MotelDao(database, changeListener);
   }
 }
 
@@ -786,6 +795,109 @@ class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
   Future<void> insertCountryCodes(List<PhoneCountryCode> codes) async {
     await _phoneCountryCodeInsertionAdapter.insertList(
         codes, OnConflictStrategy.replace);
+  }
+}
+
+class _$MotelDao extends MotelDao {
+  _$MotelDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _motelEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'motels',
+            (MotelEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'owner_id': item.ownerId,
+                  'name': item.name,
+                  'email': item.email,
+                  'room_count': item.roomCount,
+                  'nit': item.nit,
+                  'address': item.address,
+                  'phone': item.phone,
+                  'description': item.description,
+                  'general_location': item.generalLocation,
+                  'payment_methods_json': item.paymentMethodsJson,
+                  'image_urls_json': item.imageUrlsJson,
+                  'is_available': item.isAvailable
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<MotelEntity> _motelEntityInsertionAdapter;
+
+  @override
+  Future<List<MotelEntity>> findAll() async {
+    return _queryAdapter.queryList('SELECT * FROM motels ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => MotelEntity(
+            id: row['id'] as String,
+            ownerId: row['owner_id'] as String,
+            name: row['name'] as String,
+            email: row['email'] as String,
+            roomCount: row['room_count'] as int,
+            nit: row['nit'] as String,
+            address: row['address'] as String,
+            phone: row['phone'] as String,
+            description: row['description'] as String?,
+            generalLocation: row['general_location'] as String?,
+            paymentMethodsJson: row['payment_methods_json'] as String,
+            imageUrlsJson: row['image_urls_json'] as String,
+            isAvailable: row['is_available'] as int));
+  }
+
+  @override
+  Future<MotelEntity?> findById(String id) async {
+    return _queryAdapter.query('SELECT * FROM motels WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => MotelEntity(
+            id: row['id'] as String,
+            ownerId: row['owner_id'] as String,
+            name: row['name'] as String,
+            email: row['email'] as String,
+            roomCount: row['room_count'] as int,
+            nit: row['nit'] as String,
+            address: row['address'] as String,
+            phone: row['phone'] as String,
+            description: row['description'] as String?,
+            generalLocation: row['general_location'] as String?,
+            paymentMethodsJson: row['payment_methods_json'] as String,
+            imageUrlsJson: row['image_urls_json'] as String,
+            isAvailable: row['is_available'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM motels');
+  }
+
+  @override
+  Future<void> upsert(MotelEntity motel) async {
+    await _motelEntityInsertionAdapter.insert(
+        motel, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> upsertAll(List<MotelEntity> motels) async {
+    await _motelEntityInsertionAdapter.insertList(
+        motels, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> replaceAll(List<MotelEntity> motels) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(motels);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.motelDao.replaceAll(motels);
+      });
+    }
   }
 }
 
