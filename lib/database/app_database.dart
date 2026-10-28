@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:floor/floor.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
@@ -19,7 +20,7 @@ part 'app_database.g.dart';
   SubscriptionFeaturesConverter,
 ])
 @Database(
-  version: 6,
+  version: 7,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -29,12 +30,17 @@ part 'app_database.g.dart';
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
+  AuthCatalogDao? _authCatalogDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
+
+  AuthCatalogDao get authCatalogDao => _authCatalogDao ??= AuthCatalogDao(
+    () async => database as sqflite.Database,
+  );
 }
 
 class AppDatabaseProvider {
@@ -55,9 +61,18 @@ class AppDatabaseProvider {
         migration3To4,
         migration4To5,
         migration5To6,
+        migration6To7,
       ])
-      .addCallback(Callback(onCreate: _createRoomSchema))
+      .addCallback(Callback(onCreate: _createManualSchemas))
       .build();
+}
+
+Future<void> _createManualSchemas(
+  sqflite.Database database,
+  int version,
+) async {
+  await _createRoomSchema(database, version);
+  await _createAuthCatalogSchema(database);
 }
 
 Future<void> _createRoomSchema(sqflite.Database database, int _) async {
@@ -208,3 +223,27 @@ final migration5To6 = Migration(5, 6, (database) async {
     'ON notification_reads (notificationId, userId)',
   );
 });
+
+/// Maestros del módulo de autenticación (caché local de Supabase).
+Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS country_phone_codes (
+      id INTEGER PRIMARY KEY,
+      iso_code TEXT NOT NULL UNIQUE,
+      country_name TEXT NOT NULL,
+      dial_code TEXT NOT NULL,
+      flag_emoji TEXT,
+      phone_min_length INTEGER NOT NULL,
+      phone_max_length INTEGER NOT NULL,
+      is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+      sort_order INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// La migración 6 a 7 pertenece al módulo de autenticación.
+final migration6To7 = Migration(
+  6,
+  7,
+  (database) => _createAuthCatalogSchema(database),
+);

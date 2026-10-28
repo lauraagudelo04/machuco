@@ -1,15 +1,23 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
-import 'package:machuco/main.dart';
+import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/routes/routes.dart';
-import 'package:machuco/service/auth/auth0_auth_service.dart';
+import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/hardcoded_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
+import 'package:machuco/views/login/login_page.dart';
 
 void main() {
   testWidgets('muestra la pantalla de inicio de sesión', (tester) async {
-    await tester.pumpWidget(const MachucoApp());
+    // Se inyecta un servicio falso: las pruebas no dependen de Firebase real.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: LoginPage(authService: _FakeAuthService()),
+      ),
+    );
     await tester.pump();
 
     expect(find.text('Machuco'), findsOneWidget);
@@ -18,11 +26,7 @@ void main() {
 
   test('guarda el rol seleccionado al registrar', () async {
     final auth = _FakeAuthService();
-    final directory = _FakeRegisteredUserDirectory();
-    final controller = LoginController(
-      authService: auth,
-      userDirectory: directory,
-    );
+    final controller = LoginController(authService: auth);
 
     await controller.register(
       fullName: 'Ana Perez',
@@ -33,8 +37,7 @@ void main() {
     );
 
     expect(auth.registerRole, RegisteredUserRole.owner);
-    expect(directory.users, hasLength(1));
-    expect(directory.users.first.role, RegisteredUserRole.owner);
+    // La persistencia del perfil la hace el AuthService (Firestore).
   });
 
   test('redirige a la ruta correcta por rol', () {
