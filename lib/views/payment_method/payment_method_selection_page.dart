@@ -138,7 +138,7 @@ class _PaymentMethodSelectionPageState
               const SizedBox(height: AppSpacing.s4),
               _PaymentOptionCard(
                 icon: Icons.payments_outlined,
-                title: 'Efectivo',
+                title: 'En el Local',
                 description: 'Paga el valor total en la recepción.',
                 selected: _isCashSelected,
                 onTap: _selectCash,

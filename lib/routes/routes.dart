@@ -19,7 +19,6 @@ import 'package:machuco/views/additional_service/system_admin_view/additional_se
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
-import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
 import 'package:machuco/controllers/payment/payment_store.dart';
@@ -56,8 +55,6 @@ abstract final class AppRoutes {
   static const temporalHome = '/temporal';
 
   static const paymentMethod = '/payment/payment-method';
-  static const paymentConfirmation = '/payment/client/confirmation';
-  static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
   static const ownerSubscription = '/subscription/owner';
   static const adminPayments = '/payment/admin';
@@ -91,9 +88,6 @@ abstract final class AppRoutes {
   static const clientProfileEdit = '/client/profile/edit';
   static const invoice = '/invoice';
 
-  /// Alias conservado para los enlaces existentes desde las reservas.
-  static const payment = clientPayments;
-
   /// Resolves a [RouteSettings.name] to its screen and wraps it in a
   /// [MaterialPageRoute].
   ///
@@ -112,11 +106,6 @@ abstract final class AppRoutes {
                 reservation: settings.arguments! as Reservation,
               )
             : const PaymentMethodSelectionPage(),
-      clientPayments => ClientPaymentsPage(
-        clientId: settings.arguments is String
-            ? settings.arguments! as String
-            : PaymentStore.demoClientId,
-      ),
       ownerPayments =>
         settings.arguments is Motel
             ? OwnerPaymentsPage(
