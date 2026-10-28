@@ -3,9 +3,13 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:machuco/database/app_database.dart';
-import 'package:machuco/database/repository/motel/phone_country_code_dao.dart';
 import 'package:machuco/database/repository/motel/phone_country_code_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+
+/// Respuesta con el mismo formato que devuelve Supabase.
+const _colombiaJson =
+    '[{"id":1,"country_code":"CO","country_name":"Colombia",'
+    '"calling_code":"+57","active":true}]';
 
 class _FakeHttpClient extends http.BaseClient {
   _FakeHttpClient(this.response, {this.statusCode = 200});
@@ -13,10 +17,14 @@ class _FakeHttpClient extends http.BaseClient {
   final String response;
   final int statusCode;
   int calls = 0;
+  Uri? lastUrl;
+  Map<String, String>? lastHeaders;
 
   @override
   Future<http.StreamedResponse> send(http.BaseRequest request) async {
     calls++;
+    lastUrl = request.url;
+    lastHeaders = request.headers;
     return http.StreamedResponse(
       Stream.value(response.codeUnits),
       statusCode,
@@ -26,7 +34,6 @@ class _FakeHttpClient extends http.BaseClient {
 
 void main() {
   late AppDatabase database;
-  late PhoneCountryCodeDao dao;
   late Directory directory;
 
   setUpAll(() {
@@ -39,7 +46,6 @@ void main() {
     database = await AppDatabaseProvider.open(
       name: '${directory.path}${Platform.pathSeparator}country_repo.db',
     );
-    dao = database.phoneCountryCodeDao;
   });
 
   tearDown(() async {
@@ -51,27 +57,33 @@ void main() {
       PhoneCountryCodeRepository(
         baseUrl: 'https://ogrbbuwtsyezegkpwtsl.supabase.co',
         apiKey: 'test-api-key',
-        countryCodeDao: dao,
+        daoProvider: () async => database.phoneCountryCodeDao,
         httpClient: client,
       );
 
   test('consulta el maestro remoto y lo cachea', () async {
-    final client = _FakeHttpClient(
-      '[{"id":1,"country_code":"CO","country_name":"Colombia","calling_code":"+57","active":true}]',
-    );
-    final repository = repositoryWith(client);
+    final repository = repositoryWith(_FakeHttpClient(_colombiaJson));
 
     final countryCodes = await repository.getCountryCodes();
 
     expect(countryCodes, hasLength(1));
     expect(countryCodes.single.countryName, 'Colombia');
-    expect(await dao.getCountryCodes(), hasLength(1));
+    expect(countryCodes.single.callingCode, '+57');
+    expect(await database.phoneCountryCodeDao.findActive(), hasLength(1));
+  });
+
+  test('envía la apikey y filtra solo los activos', () async {
+    final client = _FakeHttpClient(_colombiaJson);
+
+    await repositoryWith(client).getCountryCodes();
+
+    expect(client.lastHeaders?['apikey'], 'test-api-key');
+    expect(client.lastUrl?.path, '/rest/v1/phone_country_codes');
+    expect(client.lastUrl?.queryParameters['active'], 'eq.true');
   });
 
   test('usa la caché sin consultar el maestro remoto', () async {
-    final client = _FakeHttpClient(
-      '[{"id":1,"country_code":"CO","country_name":"Colombia","calling_code":"+57","active":true}]',
-    );
+    final client = _FakeHttpClient(_colombiaJson);
     final repository = repositoryWith(client);
 
     await repository.getCountryCodes();
@@ -81,15 +93,10 @@ void main() {
   });
 
   test('recurre a la caché cuando Supabase falla', () async {
-    await repositoryWith(
-      _FakeHttpClient(
-        '[{"id":1,"country_code":"CO","country_name":"Colombia","calling_code":"+57","active":true}]',
-      ),
-    ).getCountryCodes();
+    await repositoryWith(_FakeHttpClient(_colombiaJson)).getCountryCodes();
 
-    final failingClient = _FakeHttpClient('{"message":"boom"}', statusCode: 500);
     final countryCodes = await repositoryWith(
-      failingClient,
+      _FakeHttpClient('{"message":"boom"}', statusCode: 500),
     ).getCountryCodes(forceRefresh: true);
 
     expect(countryCodes.single.countryName, 'Colombia');

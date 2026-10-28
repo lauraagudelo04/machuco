@@ -7,6 +7,7 @@ import '../../login/logout_navigation.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
+import '../../../controllers/client/client_controller.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -104,8 +105,11 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                 AppIconButton(
                   icon: Icons.person_outline,
                   tooltip: 'Perfil',
-                  onPressed: () =>
-                      Navigator.pushNamed(context, AppRoutes.clientProfile),
+                  onPressed: () {
+                    ClientController.instance.loadData();
+                    Navigator.pushNamed(context, AppRoutes.clientProfile);
+                  }
+                      
                 ),
                 const SizedBox(width: AppSpacing.s2),
                 AppIconButton(
