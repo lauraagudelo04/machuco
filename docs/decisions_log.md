@@ -253,3 +253,28 @@ la base de datos. Las 17 ramas comparten `AppDatabase`.
 `build_runner`) para los datos de dominio locales. No cubre el backend
 remoto, las preferencias de interfaz (`shared_preferences`) ni las
 credenciales.
+
+## 2026-10-20 — Maestro `phone_country_codes` (Supabase → caché SQLite)
+
+**Contexto:** la funcionalidad de administración de moteles necesita el
+maestro de códigos telefónicos de país. Se sigue el mismo patrón que el
+maestro de servicios incluidos de habitaciones (`room_included_services`).
+
+**Decisión:**
+- La tabla remota vive en Supabase y se consulta por REST
+  (`/rest/v1/phone_country_codes?select=*`) con el header `apikey`.
+- Las credenciales se inyectan con `--dart-define`
+  (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), no se escriben en el repositorio.
+- El resultado se cachea en la tabla local `phone_country_codes` (SQLite) y,
+  si falla la red, se devuelve la caché.
+- Se usa `sqflite` con DAO manual (sin `@entity` ni codegen nuevo) y el DAO
+  se expone desde `AppDatabase` junto a los demás, con la migración `6 → 7`.
+- Las carpetas siguen la convención ya usada por el módulo de habitaciones
+  (`lib/database/repository/motel/`), no `lib/repositories/`.
+
+**Nota:** el maestro en Supabase puede estar vacío; en ese caso la lista se
+verá vacía hasta que se inserten filas en la tabla remota.
+
+**Estado:** implementado en `lib/models/phone_country_code/`,
+`lib/service/phone_country_code/`, `lib/database/repository/motel/` y
+`lib/controllers/motel/phone_country_code_controller.dart`.

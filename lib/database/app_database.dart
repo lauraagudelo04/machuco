@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:floor/floor.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/motel/phone_country_code_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
@@ -19,7 +20,7 @@ part 'app_database.g.dart';
   SubscriptionFeaturesConverter,
 ])
 @Database(
-  version: 6,
+  version: 7,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -29,12 +30,18 @@ part 'app_database.g.dart';
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
+  PhoneCountryCodeDao? _phoneCountryCodeDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
+
+  PhoneCountryCodeDao get phoneCountryCodeDao =>
+      _phoneCountryCodeDao ??= PhoneCountryCodeDao(
+        () async => database as sqflite.Database,
+      );
 }
 
 class AppDatabaseProvider {
@@ -55,8 +62,16 @@ class AppDatabaseProvider {
         migration3To4,
         migration4To5,
         migration5To6,
+        migration6To7,
       ])
-      .addCallback(Callback(onCreate: _createRoomSchema))
+      .addCallback(
+        Callback(
+          onCreate: (database, _) async {
+            await _createRoomSchema(database, 7);
+            await _createPhoneCountryCodeSchema(database);
+          },
+        ),
+      )
       .build();
 }
 
@@ -101,11 +116,31 @@ Future<void> _createRoomSchema(sqflite.Database database, int _) async {
   ''');
 }
 
+/// Tabla del maestro de códigos telefónicos de país.
+Future<void> _createPhoneCountryCodeSchema(sqflite.Database database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS phone_country_codes (
+      id INTEGER PRIMARY KEY,
+      country_code TEXT NOT NULL,
+      country_name TEXT NOT NULL,
+      calling_code TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1
+    )
+  ''');
+}
+
 /// La migración 4 a 5 pertenece al módulo de habitaciones.
 final migration4To5 = Migration(
   4,
   5,
   (database) => _createRoomSchema(database, 5),
+);
+
+/// Agrega la tabla del maestro de códigos telefónicos de país.
+final migration6To7 = Migration(
+  6,
+  7,
+  (database) => _createPhoneCountryCodeSchema(database),
 );
 
 final migration1To2 = Migration(1, 2, (database) async {
@@ -208,3 +243,4 @@ final migration5To6 = Migration(5, 6, (database) async {
     'ON notification_reads (notificationId, userId)',
   );
 });
+
