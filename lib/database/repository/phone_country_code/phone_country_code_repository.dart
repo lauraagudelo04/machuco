@@ -74,9 +74,37 @@ class CountryCodeRepository {
   }
 
   Future<List<PhoneCountryCode>> getActiveCountryCodes() async {
-    await _syncCountryCodes();
+    try {
+      final uri = Uri.parse('$_supabaseUrl/rest/v1/phone_country_codes?active=eq.true');
+      
+      final response = await http.get(
+        uri,
+        headers: {
+          'apikey': _publishableKey,
+          'Content-Type': 'application/json'
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> responseData = jsonDecode(utf8.decode(response.bodyBytes));
+        
+        final serverCodes = responseData.map((json) => PhoneCountryCode(
+          id: json['id'] as int,
+          countryCode: json['country_code'] as String,
+          countryName: json['country_name'] as String,
+          callingCode: json['calling_code'] as String,
+          active: json['active'] as bool,
+        )).toList();
+
+        final dao = (await _database).phoneCountryCodeDao;
+        await dao.insertCountryCodes(serverCodes); 
+      }
+    } catch (e) {
+      print('Sin conexión o error al descargar country codes: $e');
+    }
+
     final dao = (await _database).phoneCountryCodeDao;
-    return await dao.findActive();
+    return await dao.findActive(); 
   }
 
   Future<void> saveCountryCodes(List<PhoneCountryCode> codes) async {
