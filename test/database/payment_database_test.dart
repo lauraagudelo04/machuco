@@ -386,6 +386,15 @@ void main() {
     await raw.execute('DROP TABLE clients');
     await raw.execute('DROP TABLE phone_country_codes');
     await raw.setVersion(6);
+    // La base nueva trae la suscripciÃ³n de prueba; se limpia para construir
+    // un fixture v6 con una suscripciÃ³n existente de id conocido.
+    await raw.delete('subscription_payments');
+    await raw.delete('subscriptions');
+    await raw.delete(
+      'sqlite_sequence',
+      where: 'name IN (?, ?)',
+      whereArgs: ['subscriptions', 'subscription_payments'],
+    );
     await raw.insert('subscriptions', {
       'id': 1,
       'userEmail': 'owner@example.com',
