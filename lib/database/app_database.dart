@@ -3,6 +3,7 @@
 import 'dart:async';
 
 import 'package:floor/floor.dart';
+import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
@@ -28,7 +29,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 8,
+  version: 9,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -74,8 +75,16 @@ class AppDatabaseProvider {
         migration5To6,
         migration6To7,
         migration7To8,
+        migration8To9,
       ])
-      .addCallback(Callback(onCreate: _createRoomSchema))
+      .addCallback(
+        Callback(
+          onCreate: (database, version) async {
+            await _createRoomSchema(database, version);
+            await seedSubscriptionTestOwner(database);
+          },
+        ),
+      )
       .build();
 }
 
@@ -239,6 +248,11 @@ final migration6To7 = Migration(6, 7, (database) async {
 final migration7To8 = Migration(7, 8, (database) async {
   await _createPaymentSchema(database);
   await _createClientSchema(database);
+});
+
+/// Actualiza bases existentes para dejar disponible la suscripciÃ³n de prueba.
+final migration8To9 = Migration(8, 9, (database) async {
+  await seedSubscriptionTestOwner(database);
 });
 
 Future<void> _createPaymentSchema(sqflite.Database database) async {

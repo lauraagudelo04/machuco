@@ -304,7 +304,7 @@ void main() {
 
   for (final hasPayments in [true, false]) {
     test(
-      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v8 sin perder datos',
+      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v9 sin perder datos',
       () async {
         var raw = database.database as sqflite.Database;
         final freshSchema = await _moduleSchema(raw);
@@ -353,7 +353,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 8);
+        expect(await raw.getVersion(), 9);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
@@ -375,7 +375,7 @@ void main() {
     );
   }
 
-  test('migra de v6 a v8 conservando los otros módulos y el esquema', () async {
+  test('migra de v6 a v9 conservando los otros módulos y el esquema', () async {
     var raw = database.database as sqflite.Database;
     final freshSchema = await _moduleSchema(raw);
 
@@ -386,6 +386,15 @@ void main() {
     await raw.execute('DROP TABLE clients');
     await raw.execute('DROP TABLE phone_country_codes');
     await raw.setVersion(6);
+    // La base nueva trae la suscripciÃ³n de prueba; se limpia para construir
+    // un fixture v6 con una suscripciÃ³n existente de id conocido.
+    await raw.delete('subscription_payments');
+    await raw.delete('subscriptions');
+    await raw.delete(
+      'sqlite_sequence',
+      where: 'name IN (?, ?)',
+      whereArgs: ['subscriptions', 'subscription_payments'],
+    );
     await raw.insert('subscriptions', {
       'id': 1,
       'userEmail': 'owner@example.com',
@@ -454,11 +463,20 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 8);
+    expect(await raw.getVersion(), 9);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
-      expect(await raw.query(name), previousData[name], reason: name);
+      final migratedRows = await raw.query(name);
+      if (name == 'subscriptions') {
+        // La migraciÃ³n 8->9 puede agregar la suscripciÃ³n de prueba, pero
+        // nunca debe eliminar la suscripciÃ³n que ya existÃ­a.
+        for (final previousRow in previousData[name]!) {
+          expect(migratedRows, contains(equals(previousRow)), reason: name);
+        }
+      } else {
+        expect(migratedRows, previousData[name], reason: name);
+      }
       expect(
         await raw.rawQuery('SELECT sql FROM sqlite_master WHERE name = ?', [
           name,
