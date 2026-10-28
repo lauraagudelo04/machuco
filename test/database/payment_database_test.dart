@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
@@ -300,14 +302,89 @@ void main() {
     expect(await database.paymentDao.findAll(), hasLength(1));
   });
 
-  test('migra de v6 a v7 conservando los otros módulos y el esquema', () async {
-    var raw = database.database as sqflite.Database;
-    final freshSchema = await _paymentSchema(raw);
+  for (final hasPayments in [true, false]) {
+    test(
+      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v8 sin perder datos',
+      () async {
+        var raw = database.database as sqflite.Database;
+        final freshSchema = await _moduleSchema(raw);
+        if (hasPayments) {
+          await database.paymentDao.saveCatalogEntries(catalog);
+          await database.paymentDao.insertPayment(
+            payment(status: PaymentStatus.paid, methodId: 1),
+          );
+          await raw.execute('DROP TABLE clients');
+          await raw.execute('DROP TABLE phone_country_codes');
+        } else {
+          await database.clientDao.insertClient(
+            ClientEntry(
+              id: 1,
+              name: 'Cliente existente',
+              phone: '3001234567',
+              email: 'client@example.com',
+              countryCode: 'CO',
+              password: 'fixture-only',
+            ),
+          );
+          await database.phoneCountryCodeDao.insertCountryCodes([
+            const PhoneCountryCode(
+              id: 1,
+              countryCode: 'CO',
+              countryName: 'Colombia',
+              callingCode: '+57',
+              active: true,
+            ),
+          ]);
+          await raw.execute('DROP TABLE payments');
+          await raw.execute('DROP TABLE payment_method_catalog');
+        }
+        await raw.setVersion(7);
+        final tables = await raw.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table' "
+          "AND name NOT LIKE 'sqlite_%' ORDER BY name",
+        );
+        final previousData = <String, List<Map<String, Object?>>>{};
+        for (final table in tables) {
+          final name = table['name'] as String;
+          previousData[name] = await raw.query(name);
+        }
 
-    // Fixture aislada: el esquema v6 es el actual sin las dos tablas nuevas.
+        await database.close();
+        database = await AppDatabaseProvider.open(name: path);
+        raw = database.database as sqflite.Database;
+
+        expect(await raw.getVersion(), 8);
+        expect(await _moduleSchema(raw), freshSchema);
+        for (final entry in previousData.entries) {
+          expect(await raw.query(entry.key), entry.value, reason: entry.key);
+        }
+        expect(await raw.rawQuery('PRAGMA foreign_key_check'), isEmpty);
+        expect(
+          await database.paymentDao.findAll(),
+          hasLength(hasPayments ? 1 : 0),
+        );
+        expect(
+          await database.clientDao.findAll(),
+          hasLength(hasPayments ? 0 : 1),
+        );
+        expect(
+          await database.phoneCountryCodeDao.findActive(),
+          hasLength(hasPayments ? 0 : 1),
+        );
+      },
+    );
+  }
+
+  test('migra de v6 a v8 conservando los otros módulos y el esquema', () async {
+    var raw = database.database as sqflite.Database;
+    final freshSchema = await _moduleSchema(raw);
+
+    // Fixture aislada: el esquema v6 no incluye tablas de Payment ni clientes.
     // Ninguna base de la aplicación se borra ni se degrada durante la migración.
     await raw.execute('DROP TABLE payments');
     await raw.execute('DROP TABLE payment_method_catalog');
+    await raw.execute('DROP TABLE clients');
+    await raw.execute('DROP TABLE phone_country_codes');
     await raw.setVersion(6);
     await raw.insert('subscriptions', {
       'id': 1,
@@ -377,8 +454,8 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 7);
-    expect(await _paymentSchema(raw), freshSchema);
+    expect(await raw.getVersion(), 8);
+    expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
       expect(await raw.query(name), previousData[name], reason: name);
@@ -407,11 +484,16 @@ void main() {
   });
 }
 
-Future<Map<String, List<Map<String, Object?>>>> _paymentSchema(
+Future<Map<String, List<Map<String, Object?>>>> _moduleSchema(
   sqflite.Database database,
 ) async {
   final schema = <String, List<Map<String, Object?>>>{};
-  for (final table in ['payment_method_catalog', 'payments']) {
+  for (final table in [
+    'payment_method_catalog',
+    'payments',
+    'clients',
+    'phone_country_codes',
+  ]) {
     for (final pragma in ['table_info', 'foreign_key_list', 'index_list']) {
       schema['$table.$pragma'] = await database.rawQuery(
         'PRAGMA $pragma($table)',

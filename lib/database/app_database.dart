@@ -6,16 +6,19 @@ import 'package:floor/floor.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
+import 'package:machuco/database/model/client/client.dart';
+import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
+import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 part 'app_database.g.dart';
 
-/// Registro común de las tablas y los DAO de la aplicación.
 @TypeConverters([
   SubscriptionDateConverter,
   SubscriptionStatusConverter,
@@ -25,7 +28,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 7,
+  version: 8,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -33,6 +36,8 @@ part 'app_database.g.dart';
     NotificationRead,
     PaymentCatalogEntry,
     PaymentRecord,
+    ClientEntry,
+    PhoneCountryCode,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -44,6 +49,9 @@ abstract class AppDatabase extends FloorDatabase {
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
+
+  ClientDao get clientDao;
+  PhoneCountryCodeDao get phoneCountryCodeDao;
 }
 
 class AppDatabaseProvider {
@@ -65,6 +73,7 @@ class AppDatabaseProvider {
         migration4To5,
         migration5To6,
         migration6To7,
+        migration7To8,
       ])
       .addCallback(Callback(onCreate: _createRoomSchema))
       .build();
@@ -219,8 +228,20 @@ final migration5To6 = Migration(5, 6, (database) async {
   );
 });
 
-/// Agrega Payment sin modificar las tablas de las demás funcionalidades.
+/// Agrega los esquemas de Payment y clientes sin modificar tablas existentes.
 final migration6To7 = Migration(6, 7, (database) async {
+  await _createPaymentSchema(database);
+  await _createClientSchema(database);
+});
+
+/// Ambas ramas publicaron una versión 7 con tablas distintas. Completa las
+/// tablas faltantes sin borrar los pagos, clientes ni catálogos existentes.
+final migration7To8 = Migration(7, 8, (database) async {
+  await _createPaymentSchema(database);
+  await _createClientSchema(database);
+});
+
+Future<void> _createPaymentSchema(sqflite.Database database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS payment_method_catalog ('
     'id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)',
@@ -241,4 +262,24 @@ final migration6To7 = Migration(6, 7, (database) async {
       'CREATE INDEX IF NOT EXISTS index_payments_$column ON payments ($column)',
     );
   }
-});
+}
+
+Future<void> _createClientSchema(sqflite.Database database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `clients` ('
+    '`id` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`name` TEXT NOT NULL, '
+    '`phone` TEXT NOT NULL, '
+    '`email` TEXT NOT NULL, '
+    '`country_code` TEXT NOT NULL, '
+    '`password` TEXT NOT NULL)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `phone_country_codes` ('
+    '`id` INTEGER NOT NULL PRIMARY KEY, '
+    '`country_code` TEXT NOT NULL, '
+    '`country_name` TEXT NOT NULL, '
+    '`calling_code` TEXT NOT NULL, '
+    '`active` INTEGER NOT NULL)',
+  );
+}
