@@ -2,11 +2,12 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/motel_controller.dart';
+import '../../../controllers/motel/phone_country_code_controller.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
   const OwnerMotelFormPage({
-    super.key, 
-    this.isEditing = false, 
+    super.key,
+    this.isEditing = false,
     this.motel,
     this.ownerId,
   });
@@ -20,8 +21,13 @@ class OwnerMotelFormPage extends StatefulWidget {
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
-  final MotelController _motelController = MotelController();
+  final MotelController _motelController = MotelController.persistent();
   bool _isSaving = false;
+
+  /// Maestro de indicativos telefónicos (Supabase + caché SQLite).
+  final PhoneCountryCodeController _phoneCodeController =
+      PhoneCountryCodeController.fromEnvironment();
+  String _selectedCallingCode = '+57';
 
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
@@ -34,21 +40,22 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
 
   final List<String> _selectedPaymentMethods = [];
   final List<String> _availablePaymentMethods = ['Efectivo', 'Tarjeta Crédito/Débito', 'Transferencia', 'Nequi / Daviplata'];
-  
+
   List<String> _imageUrls = [];
 
   @override
   void initState() {
     super.initState();
+    _phoneCodeController.load();
     if (widget.isEditing && widget.motel != null) {
       _emailController.text = widget.motel!.email;
       _nameController.text = widget.motel!.name;
       _roomsController.text = widget.motel!.roomCount.toString();
       _nitController.text = widget.motel!.nit;
       _addressController.text = widget.motel!.address;
-      _phoneController.text = widget.motel!.phone;
-      _descriptionController.text = widget.motel!.description ?? '';         
-      _generalLocationController.text = widget.motel!.generalLocation ?? '';   
+      _setPhoneFromSaved(widget.motel!.phone);
+      _descriptionController.text = widget.motel!.description ?? '';
+      _generalLocationController.text = widget.motel!.generalLocation ?? '';
       _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
       _imageUrls = List.from(widget.motel!.imageUrls);
     } else {
@@ -66,7 +73,20 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     _phoneController.dispose();
     _descriptionController.dispose();
     _generalLocationController.dispose();
+    _phoneCodeController.dispose();
     super.dispose();
+  }
+
+  /// Separa el indicativo del número cuando el teléfono se guardó
+  /// como `+57 3001234567`. Si no trae indicativo, se deja +57.
+  void _setPhoneFromSaved(String phone) {
+    final spaceIndex = phone.indexOf(' ');
+    if (phone.startsWith('+') && spaceIndex > 0) {
+      _selectedCallingCode = phone.substring(0, spaceIndex);
+      _phoneController.text = phone.substring(spaceIndex + 1);
+    } else {
+      _phoneController.text = phone;
+    }
   }
 
   void _togglePaymentMethod(String method) {
@@ -87,8 +107,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     final int roomCountParsed = int.tryParse(_roomsController.text.trim()) ?? 0;
 
     final Motel motelToSave = Motel(
-      id: widget.isEditing && widget.motel != null 
-          ? widget.motel!.id 
+      id: widget.isEditing && widget.motel != null
+          ? widget.motel!.id
           : 'motel_${DateTime.now().millisecondsSinceEpoch}',
       ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner-1020304050',
       name: _nameController.text.trim(),
@@ -96,22 +116,35 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       roomCount: roomCountParsed,
       nit: _nitController.text.trim(),
       address: _addressController.text.trim(),
-      phone: _phoneController.text.trim(),
-      description: _descriptionController.text.trim(),
-      generalLocation: _generalLocationController.text.trim(),
+      phone: '$_selectedCallingCode ${_phoneController.text.trim()}',
+      description: _descriptionController.text.trim().isEmpty
+          ? null
+          : _descriptionController.text.trim(),
+      generalLocation: _generalLocationController.text.trim().isEmpty
+          ? null
+          : _generalLocationController.text.trim(),
       paymentMethods: _selectedPaymentMethods,
       imageUrls: _imageUrls.isEmpty ? ['https://via.placeholder.com/400'] : _imageUrls,
       isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
     );
 
-    if (widget.isEditing) {
-      await _motelController.updateMotel(motelToSave);
-    } else {
-      await _motelController.addMotel(motelToSave);
-    }
+    try {
+      if (widget.isEditing) {
+        await _motelController.updateMotel(motelToSave);
+      } else {
+        await _motelController.addMotel(motelToSave);
+      }
 
-    if (mounted) {
-      Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.pop(context, true);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString())),
+        );
+      }
     }
   }
 
@@ -138,7 +171,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
               controller: _descriptionController,
               label: 'Descripción',
               keyboardType: TextInputType.multiline,
-              maxLines: 3, 
+              maxLines: 3,
             ),
             const SizedBox(height: AppSpacing.s3),
             _buildTextField(
@@ -147,11 +180,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: AppSpacing.s3),
-            _buildTextField(
-              controller: _phoneController,
-              label: 'Teléfono',
-              keyboardType: TextInputType.phone,
-            ),
+            _buildPhoneField(),
             const SizedBox(height: AppSpacing.s3),
             Row(
               children: [
@@ -228,8 +257,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                     Icon(Icons.add_photo_alternate_outlined, size: 40, color: context.appColors.textSecondary),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
-                      _imageUrls.isNotEmpty 
-                          ? '${_imageUrls.length} imagen(es) cargada(s)' 
+                      _imageUrls.isNotEmpty
+                          ? '${_imageUrls.length} imagen(es) cargada(s)'
                           : 'Toca para agregar imágenes',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.appColors.textSecondary,
@@ -252,6 +281,100 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
           ),
         ),
       ),
+    );
+  }
+
+  /// Selector de indicativo + campo del número.
+  Widget _buildPhoneField() {
+    return ListenableBuilder(
+      listenable: _phoneCodeController,
+      builder: (context, _) {
+        final codes = _phoneCodeController.countryCodes;
+        final hasSelected =
+            codes.any((c) => c.callingCode == _selectedCallingCode);
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 120,
+                  child: _phoneCodeController.isLoading
+                      ? const Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          ),
+                        )
+                      : DropdownButtonFormField<String>(
+                          value: hasSelected ? _selectedCallingCode : null,
+                          isExpanded: true,
+                          decoration: InputDecoration(
+                            labelText: 'Indicativo',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8.0),
+                            ),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
+                            ),
+                          ),
+                          selectedItemBuilder: (context) => codes
+                              .map((c) => Text(c.callingCode))
+                              .toList(),
+                          items: codes
+                              .map(
+                                (c) => DropdownMenuItem(
+                                  value: c.callingCode,
+                                  child: Text(
+                                    '${c.countryName}  ${c.callingCode}',
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _selectedCallingCode = value);
+                            }
+                          },
+                        ),
+                ),
+                const SizedBox(width: AppSpacing.s3),
+                Expanded(
+                  child: _buildTextField(
+                    controller: _phoneController,
+                    label: 'Teléfono',
+                    keyboardType: TextInputType.phone,
+                  ),
+                ),
+              ],
+            ),
+            if (_phoneCodeController.error != null && codes.isEmpty)
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      _phoneCodeController.error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _phoneCodeController.refresh,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
+              ),
+          ],
+        );
+      },
     );
   }
 

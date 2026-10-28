@@ -20,7 +20,7 @@ class OwnerMotelsPage extends StatefulWidget {
 class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   int _selectedIndex = 0;
 
-  final MotelController _motelController = MotelController();
+  final MotelController _motelController = MotelController.persistent();
 
   List<Motel> _motels = [];
   bool _isLoading = true;
@@ -43,17 +43,27 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   Future<void> _loadMotels() async {
     setState(() => _isLoading = true);
 
-    final motelesObtenidos = await _motelController.getMotelsByOwnerId(
-      _currentOwnerId,
-    );
+    try {
+      final motelesObtenidos = await _motelController.getMotelsByOwnerId(
+        _currentOwnerId,
+      );
 
-    setState(() {
-      _motels = motelesObtenidos;
-      _isLoading = false;
-    });
+      if (!mounted) return;
+      setState(() {
+        _motels = motelesObtenidos;
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
-  void _toggleMotelStatus(String motelId) {
+  Future<void> _toggleMotelStatus(String motelId) async {
+    final previous = List<Motel>.of(_motels);
     setState(() {
       final index = _motels.indexWhere((m) => m.id == motelId);
       if (index != -1) {
@@ -75,6 +85,15 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         );
       }
     });
+    try {
+      await _motelController.toggleMotelStatus(motelId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _motels = previous);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
   }
 
   Future<void> _logout() async {
