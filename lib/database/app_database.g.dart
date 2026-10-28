@@ -76,6 +76,8 @@ class _$AppDatabase extends AppDatabase {
 
   NotificationDao? _notificationDaoInstance;
 
+  PaymentDao? _paymentDaoInstance;
+
   ClientDao? _clientDaoInstance;
 
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
@@ -86,7 +88,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 7,
+      version: 8,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -110,6 +112,10 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `payment_method_catalog` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `bookingId` TEXT NOT NULL, `bookingReference` TEXT NOT NULL, `clientId` TEXT NOT NULL, `client` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motel` TEXT NOT NULL, `roomId` TEXT NOT NULL, `room` TEXT NOT NULL, `reservationDate` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `status` TEXT NOT NULL, `method` TEXT, `paymentMethodId` INTEGER, `paidAt` INTEGER, `receiptNumber` TEXT, FOREIGN KEY (`paymentMethodId`) REFERENCES `payment_method_catalog` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
@@ -117,6 +123,12 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
+        await database.execute(
+            'CREATE INDEX `index_payments_clientId` ON `payments` (`clientId`)');
+        await database.execute(
+            'CREATE INDEX `index_payments_motelId` ON `payments` (`motelId`)');
+        await database.execute(
+            'CREATE INDEX `index_payments_paymentMethodId` ON `payments` (`paymentMethodId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -134,6 +146,11 @@ class _$AppDatabase extends AppDatabase {
   NotificationDao get notificationDao {
     return _notificationDaoInstance ??=
         _$NotificationDao(database, changeListener);
+  }
+
+  @override
+  PaymentDao get paymentDao {
+    return _paymentDaoInstance ??= _$PaymentDao(database, changeListener);
   }
 
   @override
@@ -395,6 +412,216 @@ class _$NotificationDao extends NotificationDao {
   }
 }
 
+class _$PaymentDao extends PaymentDao {
+  _$PaymentDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _paymentRecordInsertionAdapter = InsertionAdapter(
+            database,
+            'payments',
+            (PaymentRecord item) => <String, Object?>{
+                  'id': item.id,
+                  'bookingId': item.bookingId,
+                  'bookingReference': item.bookingReference,
+                  'clientId': item.clientId,
+                  'client': item.client,
+                  'motelId': item.motelId,
+                  'motel': item.motel,
+                  'roomId': item.roomId,
+                  'room': item.room,
+                  'reservationDate':
+                      _subscriptionDateConverter.encode(item.reservationDate),
+                  'amount': item.amount,
+                  'status': _paymentStatusConverter.encode(item.status),
+                  'method': _paymentMethodConverter.encode(item.method),
+                  'paymentMethodId': item.paymentMethodId,
+                  'paidAt': _paymentOptionalDateConverter.encode(item.paidAt),
+                  'receiptNumber': item.receiptNumber
+                }),
+        _paymentCatalogEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'payment_method_catalog',
+            (PaymentCatalogEntry item) =>
+                <String, Object?>{'id': item.id, 'name': item.name}),
+        _paymentCatalogEntryUpdateAdapter = UpdateAdapter(
+            database,
+            'payment_method_catalog',
+            ['id'],
+            (PaymentCatalogEntry item) =>
+                <String, Object?>{'id': item.id, 'name': item.name});
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PaymentRecord> _paymentRecordInsertionAdapter;
+
+  final InsertionAdapter<PaymentCatalogEntry>
+      _paymentCatalogEntryInsertionAdapter;
+
+  final UpdateAdapter<PaymentCatalogEntry> _paymentCatalogEntryUpdateAdapter;
+
+  @override
+  Future<List<PaymentRecord>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payments ORDER BY reservationDate DESC, id DESC',
+        mapper: (Map<String, Object?> row) => PaymentRecord(
+            id: row['id'] as String,
+            bookingId: row['bookingId'] as String,
+            bookingReference: row['bookingReference'] as String,
+            clientId: row['clientId'] as String,
+            client: row['client'] as String,
+            motelId: row['motelId'] as String,
+            motel: row['motel'] as String,
+            roomId: row['roomId'] as String,
+            room: row['room'] as String,
+            reservationDate: _subscriptionDateConverter
+                .decode(row['reservationDate'] as int),
+            amount: row['amount'] as int,
+            status: _paymentStatusConverter.decode(row['status'] as String),
+            method: _paymentMethodConverter.decode(row['method'] as String?),
+            paymentMethodId: row['paymentMethodId'] as int?,
+            paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+            receiptNumber: row['receiptNumber'] as String?));
+  }
+
+  @override
+  Future<PaymentRecord?> findById(String id) async {
+    return _queryAdapter.query('SELECT * FROM payments WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => PaymentRecord(
+            id: row['id'] as String,
+            bookingId: row['bookingId'] as String,
+            bookingReference: row['bookingReference'] as String,
+            clientId: row['clientId'] as String,
+            client: row['client'] as String,
+            motelId: row['motelId'] as String,
+            motel: row['motel'] as String,
+            roomId: row['roomId'] as String,
+            room: row['room'] as String,
+            reservationDate: _subscriptionDateConverter
+                .decode(row['reservationDate'] as int),
+            amount: row['amount'] as int,
+            status: _paymentStatusConverter.decode(row['status'] as String),
+            method: _paymentMethodConverter.decode(row['method'] as String?),
+            paymentMethodId: row['paymentMethodId'] as int?,
+            paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+            receiptNumber: row['receiptNumber'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<PaymentRecord>> findByClient(String clientId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payments WHERE clientId = ?1 ORDER BY reservationDate DESC, id DESC',
+        mapper: (Map<String, Object?> row) => PaymentRecord(id: row['id'] as String, bookingId: row['bookingId'] as String, bookingReference: row['bookingReference'] as String, clientId: row['clientId'] as String, client: row['client'] as String, motelId: row['motelId'] as String, motel: row['motel'] as String, roomId: row['roomId'] as String, room: row['room'] as String, reservationDate: _subscriptionDateConverter.decode(row['reservationDate'] as int), amount: row['amount'] as int, status: _paymentStatusConverter.decode(row['status'] as String), method: _paymentMethodConverter.decode(row['method'] as String?), paymentMethodId: row['paymentMethodId'] as int?, paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?), receiptNumber: row['receiptNumber'] as String?),
+        arguments: [clientId]);
+  }
+
+  @override
+  Future<List<PaymentRecord>> findByMotel(String motelId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payments WHERE motelId = ?1 ORDER BY reservationDate DESC, id DESC',
+        mapper: (Map<String, Object?> row) => PaymentRecord(id: row['id'] as String, bookingId: row['bookingId'] as String, bookingReference: row['bookingReference'] as String, clientId: row['clientId'] as String, client: row['client'] as String, motelId: row['motelId'] as String, motel: row['motel'] as String, roomId: row['roomId'] as String, room: row['room'] as String, reservationDate: _subscriptionDateConverter.decode(row['reservationDate'] as int), amount: row['amount'] as int, status: _paymentStatusConverter.decode(row['status'] as String), method: _paymentMethodConverter.decode(row['method'] as String?), paymentMethodId: row['paymentMethodId'] as int?, paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?), receiptNumber: row['receiptNumber'] as String?),
+        arguments: [motelId]);
+  }
+
+  @override
+  Future<List<PaymentCatalogEntry>> findCatalogEntries() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM payment_method_catalog ORDER BY id',
+        mapper: (Map<String, Object?> row) => PaymentCatalogEntry(
+            id: row['id'] as int, name: row['name'] as String));
+  }
+
+  @override
+  Future<void> updatePendingPayment(
+    String id,
+    String motelId,
+    int paymentMethodId,
+    DateTime paidAt,
+    String receiptNumber,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE payments SET status = \'paid\', method = NULL, paymentMethodId = ?3, paidAt = ?4, receiptNumber = ?5 WHERE id = ?1 AND motelId = ?2 AND status = \'pending\' AND EXISTS (SELECT 1 FROM payment_method_catalog WHERE id = ?3)',
+        arguments: [
+          id,
+          motelId,
+          paymentMethodId,
+          _subscriptionDateConverter.encode(paidAt),
+          receiptNumber
+        ]);
+  }
+
+  @override
+  Future<int?> findAffectedRows() async {
+    return _queryAdapter.query('SELECT changes()',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> insertPayment(PaymentRecord payment) async {
+    await _paymentRecordInsertionAdapter.insert(
+        payment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> insertMissingDemoPayments(List<PaymentRecord> payments) async {
+    await _paymentRecordInsertionAdapter.insertList(
+        payments, OnConflictStrategy.ignore);
+  }
+
+  @override
+  Future<void> insertCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    await _paymentCatalogEntryInsertionAdapter.insertList(
+        entries, OnConflictStrategy.ignore);
+  }
+
+  @override
+  Future<void> updateCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    await _paymentCatalogEntryUpdateAdapter.updateList(
+        entries, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> saveCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    if (database is sqflite.Transaction) {
+      await super.saveCatalogEntries(entries);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.paymentDao.saveCatalogEntries(entries);
+      });
+    }
+  }
+
+  @override
+  Future<int> registerLocalPayment(
+    String id,
+    String motelId,
+    int paymentMethodId,
+    DateTime paidAt,
+    String receiptNumber,
+  ) async {
+    if (database is sqflite.Transaction) {
+      return super.registerLocalPayment(
+          id, motelId, paymentMethodId, paidAt, receiptNumber);
+    } else {
+      return (database as sqflite.Database)
+          .transaction<int>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        return transactionDatabase.paymentDao.registerLocalPayment(
+            id, motelId, paymentMethodId, paidAt, receiptNumber);
+      });
+    }
+  }
+}
+
 class _$ClientDao extends ClientDao {
   _$ClientDao(
     this.database,
@@ -566,3 +793,6 @@ class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
 final _subscriptionDateConverter = SubscriptionDateConverter();
 final _subscriptionStatusConverter = SubscriptionStatusConverter();
 final _subscriptionFeaturesConverter = SubscriptionFeaturesConverter();
+final _paymentStatusConverter = PaymentStatusConverter();
+final _paymentMethodConverter = PaymentMethodConverter();
+final _paymentOptionalDateConverter = PaymentOptionalDateConverter();
