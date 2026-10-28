@@ -15,9 +15,10 @@ import 'package:machuco/widgets/form/app_phone_field.dart';
 
 enum AuthTab { login, register }
 
-// En desarrollo la contraseña solo exige longitud mínima, sin reglas de
-// complejidad (mayúsculas, números o símbolos). Endurecer antes de producción.
-const _registerPasswordMinLength = 8;
+// Mínimo de la contraseña en login y registro. En desarrollo solo exige
+// longitud, sin reglas de complejidad (mayúsculas, números o símbolos).
+// Endurecer antes de producción.
+const _passwordMinLength = 8;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -358,8 +359,8 @@ class _LoginPageState extends State<LoginPage> {
     if (password.isEmpty) {
       return 'Ingresa tu contraseña.';
     }
-    if (password.length < 6) {
-      return 'Debe tener mínimo 6 caracteres.';
+    if (password.length < _passwordMinLength) {
+      return 'Debe tener mínimo $_passwordMinLength caracteres.';
     }
     return null;
   }
@@ -369,8 +370,8 @@ class _LoginPageState extends State<LoginPage> {
     if (password.isEmpty) {
       return 'Ingresa tu contraseña.';
     }
-    if (password.length < _registerPasswordMinLength) {
-      return 'Debe tener mínimo $_registerPasswordMinLength caracteres.';
+    if (password.length < _passwordMinLength) {
+      return 'Debe tener mínimo $_passwordMinLength caracteres.';
     }
     return null;
   }
@@ -958,7 +959,7 @@ class _RegisterForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.s4),
           AppTextField(
             label: 'Contraseña',
-            hint: 'Mínimo $_registerPasswordMinLength caracteres',
+            hint: 'Mínimo $_passwordMinLength caracteres',
             controller: passwordController,
             obscureText: !passwordVisible,
             textInputAction: TextInputAction.next,
