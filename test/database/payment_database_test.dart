@@ -463,7 +463,7 @@ void main() {
         // La migraciÃ³n 8->9 puede agregar la suscripciÃ³n de prueba, pero
         // nunca debe eliminar la suscripciÃ³n que ya existÃ­a.
         for (final previousRow in previousData[name]!) {
-          expect(migratedRows, contains(previousRow), reason: name);
+          expect(migratedRows, contains(equals(previousRow)), reason: name);
         }
       } else {
         expect(migratedRows, previousData[name], reason: name);
