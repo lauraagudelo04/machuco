@@ -94,6 +94,9 @@ de autorizar una operación, como exige
 cerrada en `README.md`, y que la autorización por rol en backend se agregue
 explícitamente como pendiente (hoy queda implícita dentro del mismo punto).
 
+*(Superado el 2026-10-27: Auth0 se retiró y lo reemplazó Firebase
+Authentication; ver "Retiro del código de Auth0".)*
+
 ## 2026-09-15 — Modo de autenticación con usuarios de prueba embebidos en el código
 
 **Hallazgo:** `lib/service/auth/hardcoded_auth_service.dart` define una
@@ -277,7 +280,8 @@ pendientes para las 17 ramas.
 - Firebase Authentication reemplaza a Auth0 como proveedor de autenticación
   acordado. `auth0_flutter` y `Auth0AuthService` siguen en el código hasta
   que se complete la migración; no se debe construir funcionalidad nueva
-  sobre Auth0.
+  sobre Auth0. *(Completado el mismo día: ver "Retiro del código de
+  Auth0".)*
 - El acceso a Firebase y a Supabase va siempre detrás de servicios en
   `lib/service/` y repositorios; ninguna vista los consulta directamente.
 - Las URL, llaves y configuración de Firebase/Supabase se inyectan por
@@ -402,8 +406,33 @@ verá vacía hasta que se inserten filas en la tabla remota.
 **Decisión:**
 - Tabla remota `public.motels` con RLS (SELECT/INSERT/UPDATE para `anon`), sin DELETE (inhabilitación con `is_available = false`).
 - Credenciales por `--dart-define` vía `SupabasePhoneCountryCodeConfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
-- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10`.
+- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10` (la versión actual es 11; ver la entrada "Versión 11 de la base local").
 - `MotelRepository`: red primero con `apikey`, `Prefer: return=representation`, decodificación UTF-8, fallback a caché en errores, excepción clara sin red/caché, 409 por NIT duplicado -> "Ya existe un motel con ese NIT", mapeo snake_case sin modificar `Motel`.
 - `MotelController`: constructor opcional con `MotelRepository`, factory `MotelController.persistent()`; comportamiento mock por defecto preservado para otros módulos y tests.
 
 **Estado:** implementado en `lib/database/model/motel/`, `lib/database/repository/motel/`, `lib/controllers/motel/`, vistas del propietario actualizadas con manejo de errores. Tests en `test/repositories/motel/`. Documentado en `docs/motels_persistence.md`.
+
+## 2026-10-28 — Versión 11 de la base local y ajustes del registro (rama `feature-juan_pablo`)
+
+**Base local:** la rama de moteles (PR #123) y esta rama publicaron cada una
+una migración `9 → 10` distinta (`motels` y `country_phone_codes`). Al
+fusionar se conservó la `9 → 10` de develop sin cambios y se agregó
+`migration10To11`, que crea `country_phone_codes` y completa `motels` con
+`IF NOT EXISTS`, de modo que ninguna base pierde datos venga de una rama o de
+la otra. Versión actual: **11**. Para evitar repetirlo, las ramas deben
+acordar el siguiente número de versión antes de crear una migración.
+
+**Registro público:** se retiró la opción "Administrador" del selector de
+tipo de cuenta (los administradores se crean en la consola de Firebase y las
+reglas ya rechazaban ese registro).
+
+**Contraseña:** login y registro exigen un mínimo de **8 caracteres**, sin
+reglas de complejidad, mientras el proyecto esté en desarrollo
+(`_passwordMinLength` en `lib/views/login/login_page.dart`). Endurecer antes
+de producción.
+
+**Firebase:** la base Firestore `(default)` existe (ubicación `nam5`), las
+reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
+`machuco`.
+
+**Estado:** cerrado.

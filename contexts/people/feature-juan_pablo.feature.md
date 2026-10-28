@@ -34,12 +34,13 @@ rechazar cuentas `pending_approval`).
   cooperación con otras ramas. En esta rama solo se dejan escritos sus
   escenarios (ver "Ingreso con proveedores externos [Futuro]"); no se agregan
   dependencias, botones funcionales ni lógica para ellos.
-- **Login quemado temporal**: mientras Firebase no esté configurado, la app
-  funciona con el `HardcodedAuthService` (usuarios de prueba por rol). **No
-  se elimina por ahora**, pero es transitorio: cuando Firebase Auth esté
-  integrado se retiran el `HardcodedAuthService`, la feature "Acceso local
-  temporal (sin Firebase)" y todos los escenarios marcados como
-  **[Temporal]**.
+- **Login quemado temporal**: Firebase Auth ya está integrado; el
+  `HardcodedAuthService` (usuarios de prueba por rol) queda solo como
+  herramienta de desarrollo y se activa con
+  `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=true`. **No se elimina por
+  ahora**, pero es transitorio: cuando el equipo ya no lo necesite se retiran
+  el `HardcodedAuthService`, la feature "Acceso local temporal" y todos los
+  escenarios marcados como **[Temporal]**.
 - **Contrato `AuthService` en retirada**: el contrato existe solo como puente
   mientras conviven el login quemado y Firebase. Los escenarios nuevos se
   escriben contra **Firebase Auth**; no se deben agregar escenarios ni
@@ -79,10 +80,11 @@ rechazar cuentas `pending_approval`).
 > `FirebaseAuthService` (el login quemado sigue disponible solo con
 > `AUTH_USE_HARDCODED_AUTH_USERS=true`) y el perfil, rol y estado viven en
 > Cloud Firestore (`users/{uid}`) protegidos por `firestore.rules`. Las
-> decisiones están en `docs/decisions_log.md` (2026-10-27). Pendiente:
-> crear la base de datos Firestore en la consola, desplegar las reglas
-> (`firebase deploy --only firestore:rules`) y habilitar Correo/contraseña
-> en Authentication. Ver `docs/firebase.md`.
+> decisiones están en `docs/decisions_log.md` (2026-10-27 y 2026-10-28).
+> Al 2026-10-28 la base Firestore existe (`nam5`), las reglas están
+> desplegadas y `.firebaserc` fija el proyecto `machuco`. Pendiente solo
+> confirmar en la consola que Correo/contraseña está habilitado. Ver
+> `docs/firebase.md`.
 
 ## Feature: Inicio de sesión
 
@@ -193,15 +195,16 @@ Given cualquier funcionalidad que lea `current_user_email`
 When toma una decisión de acceso o de datos del usuario
 Then la autorización se valida con la sesión de Firebase Auth en el backend, no con el correo guardado localmente
 
-## Feature: Acceso local temporal (sin Firebase) [Temporal]
+## Feature: Acceso local temporal (usuarios de prueba) [Temporal]
 
-> Toda esta feature se elimina cuando Firebase Auth esté integrado. No
-> ampliarla con capacidades nuevas.
+> Firebase Auth ya está integrado; esta feature queda como herramienta de
+> desarrollo y se elimina cuando el equipo ya no la necesite. No ampliarla
+> con capacidades nuevas.
 
-Scenario: [Temporal] La app funciona sin Firebase configurado
-Given la aplicación ejecutándose sin configuración de Firebase
+Scenario: [Temporal] La app usa usuarios de prueba en modo desarrollo
+Given la aplicación ejecutándose con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=true`
 When se abre la pantalla de login
-Then el `LoginController` usa automáticamente el `HardcodedAuthService`
+Then el `LoginController` usa el `HardcodedAuthService` en lugar de Firebase Auth
 And la pantalla muestra un aviso visible "Modo desarrollo: autenticación local, no productiva"
 And lista los usuarios de prueba disponibles por rol (cliente, propietario, administrador)
 
@@ -212,7 +215,7 @@ Then el sistema crea una sesión local con el rol de ese usuario
 And guarda su correo en SharedPreferences igual que lo haría con Firebase
 And navega a la ruta de ese rol igual que lo haría con Firebase
 
-Scenario: [Temporal] Creación de administradores y aprobación de propietarios en modo desarrollo
+Scenario: [Temporal] [Pendiente] Creación de administradores y aprobación de propietarios en modo desarrollo
 Given la app en modo desarrollo con un administrador de prueba autenticado
 When crea un administrador o aprueba/rechaza un propietario
 Then el cambio se aplica solo en memoria del servicio local
@@ -339,7 +342,7 @@ And señala cada campo obligatorio faltante
 
 Scenario: Contraseñas no coinciden o son débiles
 Given un visitante en el formulario de registro
-When la confirmación no coincide con la contraseña, o la contraseña no cumple la política mínima (al menos 8 caracteres, con letras y números)
+When la confirmación no coincide con la contraseña, o la contraseña tiene menos de 8 caracteres (en desarrollo no se exigen letras ni números; endurecer antes de producción)
 Then el sistema muestra el error junto al campo correspondiente
 And no envía el formulario
 
@@ -469,7 +472,7 @@ Then el sistema aplica las mismas reglas que en el inicio de sesión con correo 
 | NIT del propietario (natural y jurídica, obligatorio) | Solo dígitos, guion opcional y dígito de verificación válido. Jurídica: 9 dígitos + DV (p. ej. `900123456-7`). Natural: número base de 6 a 10 dígitos + DV (p. ej. `1020304050-3`) |
 | Razón social | 2 a 120 caracteres; letras, números, espacios y `. , & -` |
 | Fecha de nacimiento | Fecha real, no futura, edad ≥ 18 años |
-| Contraseña | 8 a 64 caracteres, al menos una letra y un número |
+| Contraseña | Mínimo 8 caracteres en desarrollo (sin reglas de complejidad). Propuesta para producción: 8 a 64 caracteres, al menos una letra y un número |
 
 Scenario: Formato inválido en un campo
 Given un usuario diligenciando cualquier formulario de esta rama
@@ -519,7 +522,10 @@ When se filtra la lista
 Then el filtro se aplica en memoria o con parámetros enlazados
 And la app no falla ni muestra resultados inesperados
 
-## Feature: Creación de administradores (vista del administrador)
+## Feature: Creación de administradores (vista del administrador) [Pendiente]
+
+> No implementada al 2026-10-28: los administradores se crean a mano en la
+> consola de Firebase (`users/{uid}` con `role: admin`).
 
 > Solo un administrador autenticado puede crear otro administrador. La
 > creación ocurre en el **backend** (p. ej. una función con Firebase Admin
@@ -567,7 +573,10 @@ When la creación todavía está en curso
 Then el botón muestra estado de carga y queda deshabilitado
 And un segundo toque no crea una segunda cuenta
 
-## Feature: Solicitudes de aprobación de propietarios (vista del administrador)
+## Feature: Solicitudes de aprobación de propietarios (vista del administrador) [Pendiente]
+
+> No implementada al 2026-10-28. Las reglas de Firestore ya permiten que un
+> admin cambie `accountStatus`; falta la interfaz.
 
 Scenario: El administrador consulta las solicitudes pendientes
 Given un administrador autenticado
@@ -753,19 +762,19 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - Modelos: `lib/models/auth/`.
     - `registered_user.dart`: agregar `firstNames`, `lastNames`, `phoneCountryCodeId` y `accountStatus`. No incluir campos de tipo ni número de documento.
     - Datos propios por rol: `birthDate` (cliente); `personType` y `nit` obligatorios y `companyName` solo para persona jurídica (propietario). Modelarlos como campos opcionales validados por rol o como un objeto de detalle por rol; no crear tres modelos de usuario paralelos.
-    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo).
+    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo). Al 2026-10-28 existen `country_phone_code.dart`, `account_status.dart` y `user_profile.dart`; `person_type.dart` y `owner_approval_request.dart` siguen pendientes.
     - Se mantiene `RegisteredUserRole { admin, client, owner }` como único enum de rol.
   - Registro por rol: la validación específica de cada rol vive en el controller (o en un validador por rol en `lib/controllers/auth/`), no en la vista. La vista solo decide qué bloque de campos mostrar según el rol elegido.
   - Servicios de autenticación: `lib/service/auth/`.
-    - Destino final: `firebase_auth_service.dart` como **único** proveedor (pendiente de la decisión documentada y de agregar `firebase_core` / `firebase_auth`).
+    - Destino final: `firebase_auth_service.dart` como **único** proveedor. **Hecho (2026-10-27):** decisión documentada y `firebase_core`, `firebase_auth` y `cloud_firestore` agregados.
     - Transitorio: el contrato `AuthService` / `AuthSession` / `AuthFailure` (en `auth_service.dart`) y `hardcoded_auth_service.dart` se mantienen solo mientras exista el login quemado. No se amplía el contrato con capacidades nuevas; al integrar Firebase se retiran junto con el selector de implementación (`auth_service_factory.dart`, si se llegó a crear).
-    - La creación de administradores y la aprobación/rechazo de propietarios se exponen como operaciones del backend; la app solo las invoca a través de un repositorio (p. ej. `lib/database/repository/auth/admin_access_repository.dart`).
+    - La creación de administradores y la aprobación/rechazo de propietarios se exponen como operaciones del backend; la app solo las invoca a través de un repositorio (p. ej. `lib/database/repository/auth/admin_access_repository.dart`, aún no creado).
     - Limpieza (no es un escenario): el código heredado de un proveedor anterior (`auth0_auth_service.dart`, `auth0_config.dart`, la dependencia `auth0_flutter` y sus referencias en `login_controller.dart`, `login_page.dart`, `logout_navigation.dart`, `backend_registered_user_directory.dart`, `hardcoded_auth_service.dart` y las pruebas) se retira al integrar Firebase. Antes de borrarlo, verificar con `grep` que ninguna otra rama lo importa. No se escriben escenarios ni se amplía ese código. **Hecho (2026-10-27):** `FirebaseAuthService` reemplaza a Auth0; el contrato quedó en `auth_service.dart` y los flags en `auth_config.dart`.
-  - Maestros: `lib/database/repository/auth/` — `auth_catalog_dao.dart` (tablas `country_phone_codes` y `subscription_plan_options` en SQLite) y `auth_catalog_repository.dart` (REST a Supabase + caché), siguiendo el patrón de `lib/database/repository/room/room_service_repository.dart`. Modelo nuevo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
+  - Maestros: `lib/database/repository/auth/` — `auth_catalog_dao.dart` (tabla `country_phone_codes` en SQLite; `subscription_plan_options` sigue pendiente) y `auth_catalog_repository.dart` (REST a Supabase + caché), siguiendo el patrón de `lib/database/repository/room/room_service_repository.dart`. Modelo nuevo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
   - Almacenamiento en Firebase: el perfil del usuario y las solicitudes de propietarios se leen y escriben a través de un repositorio (p. ej. `lib/database/repository/auth/user_profile_repository.dart`), nunca desde la vista.
   - Preferencias: `SharedPreferencesLocalService` con `namespace: 'auth'` (contrato en `lib/service/storage/local_preferences_service.dart`). El acceso compartido al correo se expone con una clase pequeña (p. ej. `lib/service/auth/auth_preferences.dart`) que otras ramas consumen sin conocer las claves.
 - **Claves de SharedPreferences (namespace `auth`)**: `current_user_email` (string; correo del usuario autenticado, compartido con otras funcionalidades), `remember_email` (bool), `remembered_email` (string), `last_country_code_id` (int), `last_auth_tab` (string), `catalogs_synced_at` (string ISO-8601). **Nunca** guardar contraseñas, tokens ni el NIT en SharedPreferences. La persistencia del token la maneja el SDK de Firebase; en el login quemado la sesión es solo en memoria.
-- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 7; la 6 → 7 crea `country_phone_codes`, la caché de planes irá en la 7 → 8). Es un archivo compartido con otras ramas (`room`, `suscripcion`): coordinar el número de versión antes de hacer merge para no chocar migraciones.
+- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 11; `country_phone_codes` se crea en la 10 → 11 y en instalaciones nuevas. La caché de planes, si se implementa, irá en una migración nueva). Es un archivo compartido con otras ramas (`room`, `suscripcion`, `motel`, `client`, pagos): coordinar el número de versión antes de hacer merge para no chocar migraciones.
 - **Configuración de Supabase**: reutilizar `SUPABASE_URL` y `SUPABASE_ANON_KEY` vía `--dart-define`. Las ramas de suscripciones y notificaciones leen `SUPABASE_PUBLISHABLE_KEY`; proponer al equipo un solo nombre. `SupabaseRoomConfig` es específico de habitaciones; si se necesita una configuración común, proponer al equipo una sola clase compartida en lugar de crear otra copia.
 - **Dependencias de entrada**: rutas por rol de `lib/routes/routes.dart` (`clientMotels`, `ownerMotels`, `ownerManagement`); componentes del sistema de diseño (`AppTextField`, `AppButton`, `AppCard`, `AppBottomSheet`).
 - **Dependencias de salida**: todas las vistas protegidas dependen de la sesión que expone `LoginController` (usuario y rol). `logout_navigation.dart` es consumido por otras ramas para cerrar sesión: no cambiar su firma sin avisar. El lector del correo compartido (`AuthPreferences` o equivalente) también es una API pública para otras ramas.
@@ -818,11 +827,11 @@ nadie las corrija, pero deben confirmarse:
   responsabilidad de esta rama; no refactorizarlo como parte del login.
 - El login actual ya tiene la base: pestañas de login y registro, selector
   de tipo de perfil, avisos de modo desarrollo y usuarios de prueba, y una
-  tarjeta de sesión activa. Los avisos que mencionan al proveedor anterior
-  deben reemplazarse por el aviso de modo desarrollo. El indicativo está fijo como texto `'CO +57'` en
-  `_RegisterForm`: debe reemplazarse por el selector alimentado por el
-  maestro. La opción "Administrador" del selector de perfil debe retirarse
-  del registro público.
+  tarjeta de sesión activa. **Hecho (2026-10-28):** se retiraron los avisos
+  del proveedor anterior, el indicativo fijo `'CO +57'` se reemplazó por
+  `AppPhoneField` alimentado por el maestro y la opción "Administrador" ya
+  no aparece en el registro público. Pendiente: la pantalla "Cuenta en
+  revisión" (hoy el propietario pendiente solo ve un mensaje en el login).
 - `login_page.dart` tiene más de 1100 líneas. Al tocarlo, extraer los
   componentes reutilizables a `lib/widgets/` en lugar de seguir creciendo el
   archivo.

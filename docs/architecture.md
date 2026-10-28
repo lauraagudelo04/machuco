@@ -21,12 +21,18 @@ lib/
 ├── service/
 │   ├── auth/                # Firebase Authentication, preferencias y directorio de usuarios
 │   ├── firebase/            # Nombres de colecciones Firestore y usuario actual
+│   ├── invoice/             # Generación de facturas en PDF (pdf/printing)
+│   ├── phone_country_code/  # Configuración de Supabase para indicativos y moteles
 │   ├── room/                # Configuración de Supabase (--dart-define)
-│   └── storage/             # Preferencias locales (shared_preferences)
+│   ├── storage/             # Preferencias locales (shared_preferences)
+│   └── subscription/        # Preferencias de suscripción
 ├── database/
-│   ├── app_database.dart    # Base Floor/SQLite común (+ .g.dart generado)
-│   ├── model/               # Entidades Floor (notification, suscripcion)
-│   └── repository/          # Repositorios y DAO por feature (auth, notification, room, suscripcion)
+│   ├── app_database.dart    # Base Floor/SQLite común, versión 11 (+ .g.dart generado)
+│   ├── migrations/          # Seeds de migración (suscripcion)
+│   ├── model/               # Entidades Floor (client, motel, notification, phone_country_code, suscripcion)
+│   └── repository/          # Repositorios y DAO por feature (auth, client, invoice, motel,
+│                            #   notification, phone_country_code, room, suscripcion)
+├── repositories/payment/    # Repositorio y DAO de pagos (fuera de database/, ver nota)
 ├── utils/                   # Formateadores y excepciones específicas de un dominio
 ├── firebase_options.dart    # Generado por FlutterFire CLI
 └── main.dart                # Inicializa Firebase y la base SQLite antes de runApp
@@ -112,10 +118,15 @@ recomienda `README_DISENO_FLUTTER.md#11-navegación`.
   para otras ramas en [firebase.md](firebase.md).
 - `service/room/`: `SupabaseRoomConfig` (URL y clave anónima de Supabase por
   `--dart-define`).
+- `service/phone_country_code/`: `SupabasePhoneCountryCodeConfig`, que usan
+  los repositorios de indicativos y de moteles de la rama de moteles.
+- `service/invoice/`: `InvoicePdfService` (facturas en PDF con `pdf` y
+  `printing`).
+- `service/subscription/`: preferencias locales de suscripción.
 - `service/storage/`: `LocalPreferencesService` y su implementación sobre
   `shared_preferences` (ver [shared_preferences.md](shared_preferences.md)).
 
-No hay servicios de pagos, imágenes ni notificaciones push.
+No hay servicios de pasarela de pagos, imágenes ni notificaciones push.
 
 ### `data` y `repository`
 
@@ -123,9 +134,16 @@ No existe `lib/data/` ni `lib/repository/` de primer nivel. La capa de acceso
 a datos vive en `lib/database/`:
 
 - `app_database.dart`: base Floor/SQLite común (`AppDatabase`,
-  `AppDatabaseProvider`, versión 7) con DAO de suscripción, notificaciones,
-  habitaciones y maestros de autenticación.
-- `database/model/`: entidades Floor de `notification` y `suscripcion`.
+  `AppDatabaseProvider`, **versión 11**) con DAO de suscripción,
+  notificaciones, pagos, habitaciones, clientes, indicativos
+  (`phoneCountryCodeDao`), moteles y maestros de autenticación
+  (`authCatalogDao`). Migraciones relevantes: 9 → 10 crea `motels` (rama de
+  moteles) y 10 → 11 crea `country_phone_codes` y completa `motels` si falta
+  (ambas ramas habían publicado una versión 10). Las ramas deben acordar el
+  siguiente número de versión antes de crear una migración.
+- `database/model/`: entidades Floor de `client`, `motel`, `notification`,
+  `phone_country_code` y `suscripcion`.
+- `database/migrations/suscripcion/`: seed de la suscripción de prueba.
 - `database/repository/auth/`: `AuthCatalogRepository` + `AuthCatalogDao`
   (indicativos telefónicos desde Supabase REST con caché SQLite) y
   `UserProfileRepository` (interfaz) + `FirestoreUserProfileRepository`
@@ -135,9 +153,20 @@ a datos vive en `lib/database/`:
 - `database/repository/notification/` y `database/repository/suscripcion/`:
   repositorios sobre SQLite (suscripción también consulta un catálogo en
   Supabase).
+- `database/repository/motel/`: `MotelRepository` (Supabase REST con caché
+  en SQLite), `MotelDao` y un repositorio de indicativos. Ver
+  [motels_persistence.md](motels_persistence.md).
+- `database/repository/phone_country_code/` y `database/repository/client/`:
+  maestro `phone_country_codes` y clientes (rama de clientes). Hay dos
+  maestros de indicativos en paralelo (`phone_country_codes` y
+  `country_phone_codes` de autenticación); está pendiente unificarlos.
+- `database/repository/invoice/`: facturas.
+- `lib/repositories/payment/`: repositorio y DAO de pagos. Está fuera de
+  `lib/database/`, a diferencia del resto; ver
+  [payment_persistence.md](payment_persistence.md).
 
-Fuera de estas features, los controladores (`booking`, `payment`, `pqrs`,
-etc.) siguen conteniendo datos de ejemplo directamente (por ejemplo
+Fuera de estas features, los controladores (`booking`, `pqrs`, etc.) siguen
+conteniendo datos de ejemplo directamente (por ejemplo
 `controllers/room/room_mock_data.dart`, o listas `static` en cada
 `*Controller`), sin repositorio intermedio. `UserProfileRepository` es la
 única interfaz de repositorio con implementación intercambiable; los demás
@@ -187,8 +216,8 @@ REST a Supabase con caché en SQLite.
 
 No hay un cliente HTTP compartido: `package:http` se usa en los repositorios
 de Supabase y en `BackendRegisteredUserDirectory`. Las features sin
-repositorio (reservas, pagos, PQRS, etc.) siguen operando sobre datos de
-ejemplo en memoria.
+repositorio (reservas, PQRS, etc.) siguen operando sobre datos de ejemplo en
+memoria.
 
 Las dependencias se construyen en la vista: `LoginPage` crea el
 `FirebaseAuthService` (o `HardcodedAuthService`), el directorio de usuarios y
@@ -205,9 +234,12 @@ no hay inyección de dependencias.
   `UserProfileRepository` sin red) y `test/widget_test.dart` (rol al
   registrar, redirección por rol, logout, usuarios quemados; con servicios
   falsos, sin Firebase real).
-- Persistencia y servicios: `test/database/` (notificaciones, suscripción),
-  `test/repositories/room/`, `test/service/storage/`.
-- Widgets de suscripción: `test/widgets/subscription/`.
+- Persistencia y servicios: `test/database/` (notificaciones, suscripción,
+  pagos y migraciones hasta la versión 11), `test/repositories/{invoice,motel,
+  payment,room}/`, `test/service/{storage,subscription}/`.
+- Controllers: `test/controllers/{invoice,payment}/`.
+- Rutas: `test/routes/`.
+- Widgets: `test/widgets/{booking,payment,payment_method,subscription}/`.
 
 No hay pruebas de `FirebaseAuthService` ni de `FirestoreUserProfileRepository`
 contra Firebase (ni emulador), ni pruebas de `firestore.rules`. No hay una

@@ -182,7 +182,7 @@ Machuco se encuentra en desarrollo. Antes de modificar significativamente su est
 
 1. Acordar la arquitectura y la solución de estado global.
 2. Integrar Firebase, Supabase (API REST) y Floor detrás de servicios y repositorios, y definir sus contratos de datos.
-3. Desplegar `firestore.rules` y extender la autorización por roles a cada colección nueva (ver [docs/firebase.md](docs/firebase.md)).
+3. Extender la autorización por roles de `firestore.rules` a cada colección nueva y volver a desplegarlas (ver [docs/firebase.md](docs/firebase.md)).
 4. Establecer navegación, entornos y gestión de secretos.
 5. Configurar pruebas automatizadas y CI/CD.
 6. Implementar la interfaz conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md).
@@ -191,10 +191,9 @@ Machuco se encuentra en desarrollo. Antes de modificar significativamente su est
 
 La app usa Firebase Authentication (correo y contraseña) mediante `firebase_auth`. Firebase se inicializa en `lib/main.dart` con `lib/firebase_options.dart`, generado por FlutterFire CLI (`flutterfire configure`). En la consola de Firebase debe estar habilitado el proveedor **Correo electrónico/contraseña** (`Authentication > Sign-in method`).
 
-El perfil, el rol (`admin`, `owner` o `client`) y el estado de la cuenta se guardan en **Cloud Firestore**, en `users/{uid}`, protegidos por `firestore.rules` (referenciado en `firebase.json`). El registro público solo crea clientes (activos) y propietarios (pendientes de aprobación); los administradores se crean manualmente en la consola. Un usuario sin perfil entra como Cliente. Para que funcione hay que:
+El perfil, el rol (`admin`, `owner` o `client`) y el estado de la cuenta se guardan en **Cloud Firestore**, en `users/{uid}`, protegidos por `firestore.rules` (referenciado en `firebase.json`). El registro público solo crea clientes (activos) y propietarios (pendientes de aprobación); los administradores se crean manualmente en la consola. Un usuario sin perfil entra como Cliente. La contraseña exige un mínimo de 8 caracteres.
 
-1. Crear la base de datos Cloud Firestore en la consola de Firebase.
-2. Desplegar las reglas con `firebase deploy --only firestore:rules` (pendiente al 2026-10-27).
+Estado del proyecto Firebase `machuco`: la base Cloud Firestore existe (ubicación `nam5`) y las reglas están desplegadas (2026-10-27). `.firebaserc` fija el proyecto por defecto del CLI. Cada cambio en `firestore.rules` se despliega con `firebase deploy --only firestore:rules`.
 
 Cómo usar el usuario autenticado y agregar colecciones con sus reglas: [docs/firebase.md](docs/firebase.md).
 

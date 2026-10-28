@@ -129,7 +129,10 @@ Google Cloud Console (`APIs y servicios > Credenciales`) por aplicación
 subas credenciales de cuenta de servicio (`private_key`, archivos de
 Admin SDK).
 
-Estado al 2026-10-27: **las reglas aún no se han desplegado** y la base de
-datos no se ha creado en la consola; hasta entonces las escrituras en
-Firestore fallan. Coordina el despliegue con el equipo, porque el archivo de
-reglas es único y compartido por todas las ramas.
+Estado al 2026-10-28: la base de datos Cloud Firestore `(default)` existe
+(modo nativo, ubicación `nam5`) y las reglas de `firestore.rules` se
+desplegaron el 2026-10-27. `.firebaserc` fija `machuco` como proyecto por
+defecto del CLI. Cada cambio en `firestore.rules` debe volver a
+desplegarse; coordina el despliegue con el equipo, porque el archivo de
+reglas es único y compartido por todas las ramas y desplegar reemplaza todas
+las reglas publicadas.

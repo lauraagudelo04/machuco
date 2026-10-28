@@ -123,10 +123,14 @@ Referenciadas en `firebase.json`. Para `users/{uid}`:
 
 ## Qué falta o es provisional
 
-- **Reglas no desplegadas:** falta crear la base de datos Firestore en la
-  consola y ejecutar `firebase deploy --only firestore:rules`. Sin eso, el
-  registro falla al guardar el perfil (y revierte la cuenta).
-- Habilitar el proveedor Correo/contraseña en Firebase Authentication.
+- Confirmar en la consola que el proveedor Correo/contraseña está
+  habilitado en Firebase Authentication (no se puede verificar desde el
+  CLI). La base Firestore ya existe y las reglas están desplegadas
+  (2026-10-27).
+- Contraseña: login y registro exigen solo un mínimo de 8 caracteres
+  (`_passwordMinLength` en `login_page.dart`), sin reglas de complejidad,
+  mientras el proyecto esté en desarrollo. El contexto de la rama propone
+  endurecerla antes de producción.
 - Pantalla "Cuenta en revisión": hoy el propietario pendiente solo ve un
   mensaje en el login (`TODO(auth)` en `FirebaseAuthService`).
 - Administradores: se crean manualmente en la consola (cuenta en Auth +
