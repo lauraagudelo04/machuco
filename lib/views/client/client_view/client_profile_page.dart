@@ -1,11 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/client/client_controller.dart';
-import 'package:machuco/core/design_system/components/app_button.dart';
-import 'package:machuco/core/design_system/components/app_card.dart';
-import 'package:machuco/core/design_system/tokens/app_radius.dart';
-import 'package:machuco/core/design_system/tokens/app_spacing.dart';
-import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
-import 'package:machuco/models/client/client.dart';
+import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/client/client_model.dart';
 import 'package:machuco/routes/routes.dart';
 
 class ClientProfilePage extends StatelessWidget {
@@ -13,57 +9,91 @@ class ClientProfilePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final client = ClientController.currentClient;
-
     return Scaffold(
       appBar: AppBar(title: const Text('Mi perfil')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            _buildHeader(context, client),
-            const SizedBox(height: AppSpacing.s6),
-            _DetailSection(
-              title: 'Información personal',
+        child: ListenableBuilder(
+          listenable: ClientController.instance,
+          builder: (context, _) {
+            final controller = ClientController.instance;
+
+            if (controller.isLoading && controller.currentClient == null) {
+              return ListView(
+                padding: const EdgeInsets.all(AppSpacing.screen),
+                children: const [
+                  AppSkeleton(height: 180),
+                  SizedBox(height: AppSpacing.s6),
+                  AppSkeleton(height: 300),
+                ],
+              );
+            }
+
+            if (controller.errorMessage != null && controller.currentClient == null) {
+              return AppErrorState(
+                message: controller.errorMessage!,
+                onRetry: controller.loadData,
+              );
+            }
+
+            final client = controller.currentClient;
+            if (client == null) {
+              return AppEmptyState(
+                icon: Icons.person_off_outlined,
+                title: 'Perfil no encontrado',
+                message: 'No hay datos de perfil guardados en este dispositivo.',
+                actionLabel: 'Recargar',
+                onAction: controller.loadData,
+              );
+            }
+
+            return ListView(
+              padding: const EdgeInsets.all(AppSpacing.screen),
               children: [
-                _InfoRow(
-                  icon: Icons.person_outline,
-                  label: 'Nombre',
-                  value: client.name,
+                _buildHeader(context, client),
+                const SizedBox(height: AppSpacing.s6),
+                _DetailSection(
+                  title: 'Información personal',
+                  children: [
+                    _InfoRow(
+                      icon: Icons.person_outline,
+                      label: 'Nombre',
+                      value: client.name,
+                    ),
+                    _InfoRow(
+                      icon: Icons.phone_outlined,
+                      label: 'Teléfono',
+                      value: '${client.countryCode} ${client.phone}',
+                    ),
+                    _InfoRow(
+                      icon: Icons.email_outlined,
+                      label: 'Correo electrónico',
+                      value: client.email,
+                    ),
+                    _InfoRow(
+                      icon: Icons.lock_outline,
+                      label: 'Contraseña',
+                      value: client.maskedPassword,
+                    ),
+                  ],
                 ),
-                _InfoRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Teléfono',
-                  value: client.phone,
-                ),
-                _InfoRow(
-                  icon: Icons.email_outlined,
-                  label: 'Correo electrónico',
-                  value: client.email,
-                ),
-                _InfoRow(
-                  icon: Icons.lock_outline,
-                  label: 'Contraseña',
-                  value: client.maskedPassword,
+                const SizedBox(height: AppSpacing.s6),
+                AppButton(
+                  label: 'Editar perfil',
+                  icon: Icons.edit_outlined,
+                  variant: AppButtonVariant.secondary,
+                  onPressed: () {
+                    Navigator.pushNamed(context, AppRoutes.clientProfileEdit);
+                  },
                 ),
               ],
-            ),
-            const SizedBox(height: AppSpacing.s6),
-            AppButton(
-              label: 'Editar perfil',
-              icon: Icons.edit_outlined,
-              variant: AppButtonVariant.secondary,
-              onPressed: () {
-                Navigator.pushNamed(context, AppRoutes.clientProfileEdit);
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context, Client client) {
+  Widget _buildHeader(BuildContext context, ClientModel client) {
     return AppCard(
       child: Column(
         children: [
@@ -71,9 +101,7 @@ class ClientProfilePage extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .10),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.xl),
             ),
             alignment: Alignment.center,
@@ -106,7 +134,6 @@ class ClientProfilePage extends StatelessWidget {
 
 class _DetailSection extends StatelessWidget {
   const _DetailSection({required this.title, required this.children});
-
   final String title;
   final List<Widget> children;
 
@@ -139,7 +166,6 @@ class _InfoRow extends StatelessWidget {
     required this.label,
     required this.value,
   });
-
   final IconData icon;
   final String label;
   final String value;
@@ -157,9 +183,7 @@ class _InfoRow extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .10),
+              color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(
@@ -182,9 +206,9 @@ class _InfoRow extends StatelessWidget {
                 const SizedBox(height: AppSpacing.s1),
                 Text(
                   value,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),

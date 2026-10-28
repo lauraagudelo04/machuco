@@ -40,6 +40,8 @@ dependencies:
   floor: ^1.5.0
   sqflite: ^2.4.4+2
   sqflite_common_ffi_web: ^0.4.5+4
+  pdf: ^3.13.1
+  printing: ^5.15.1
 
 dev_dependencies:
   flutter_test:

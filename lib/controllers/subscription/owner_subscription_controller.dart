@@ -2,17 +2,21 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/service/subscription/subscription_preferences_service.dart';
 
 /// Consulta la suscripción y registra exclusivamente sus propios pagos.
 class OwnerSubscriptionController extends ChangeNotifier {
   OwnerSubscriptionController({
     SubscriptionRepository? repository,
+    SubscriptionPreferencesService? preferences,
     this.subscriptionId,
-  }) : _repository = repository ?? SubscriptionRepository() {
+  }) : _repository = repository ?? SubscriptionRepository(),
+       _preferences = preferences ?? SubscriptionPreferencesService() {
     ready = load();
   }
 
   final SubscriptionRepository _repository;
+  final SubscriptionPreferencesService _preferences;
   final int? subscriptionId;
   late final Future<void> ready;
   SubscriptionDetails? _subscription;
@@ -39,10 +43,12 @@ class OwnerSubscriptionController extends ChangeNotifier {
     _notify();
     try {
       _plans = await _repository.findPlans();
-      final subscription = await _repository.findSubscription(
-        subscriptionId,
-        plans: _plans,
-      );
+      final subscription = subscriptionId == null
+          ? await _repository.findSubscriptionByEmail(
+              await _preferences.getUserEmail(),
+              plans: _plans,
+            )
+          : await _repository.findSubscription(subscriptionId, plans: _plans);
       final payments = subscription == null
           ? <SubscriptionPayment>[]
           : await _repository.findPayments(subscription.id!);
