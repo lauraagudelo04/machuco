@@ -458,7 +458,16 @@ void main() {
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
-      expect(await raw.query(name), previousData[name], reason: name);
+      final migratedRows = await raw.query(name);
+      if (name == 'subscriptions') {
+        // La migraciÃ³n 8->9 puede agregar la suscripciÃ³n de prueba, pero
+        // nunca debe eliminar la suscripciÃ³n que ya existÃ­a.
+        for (final previousRow in previousData[name]!) {
+          expect(migratedRows, contains(previousRow), reason: name);
+        }
+      } else {
+        expect(migratedRows, previousData[name], reason: name);
+      }
       expect(
         await raw.rawQuery('SELECT sql FROM sqlite_master WHERE name = ?', [
           name,
