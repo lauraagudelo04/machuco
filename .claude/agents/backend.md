@@ -14,8 +14,11 @@ de `lib/models`, `lib/controllers`, `lib/service`, `lib/data` y
 `lib/repository`. No construyes widgets ni decides estilos: eso corresponde
 al agente `frontend`.
 
-Backend real, base de datos, proveedor de autenticación y pasarela de pagos
-**todavía no están decididos** en el proyecto. Tu trabajo mientras tanto es:
+El proyecto está en la **segunda etapa**. Ya están decididos: Firebase como
+base de datos, Supabase para los datos maestros (consultados por API REST),
+Firebase Authentication como autenticación (reemplaza a Auth0), Floor/SQLite
+para almacenamiento local y `shared_preferences` para datos locales no
+sensibles. La pasarela de pagos **todavía no está decidida**. Tu trabajo es:
 
 1. Invoca `feature-context` para saber qué funcionalidad/dominio te
    corresponde en la rama activa.

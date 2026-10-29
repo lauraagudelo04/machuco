@@ -4,8 +4,11 @@ import 'dart:async';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
+import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
+import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
@@ -31,7 +34,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 10,
+  version: 11,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -41,11 +44,12 @@ part 'app_database.g.dart';
     PaymentRecord,
     ClientEntry,
     PhoneCountryCode,
-    OwnerEntry,
+    MotelEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
+  AuthCatalogDao? _authCatalogDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
@@ -57,6 +61,11 @@ abstract class AppDatabase extends FloorDatabase {
 
   ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
+
+  AuthCatalogDao get authCatalogDao => _authCatalogDao ??= AuthCatalogDao(
+    () async => database as sqflite.Database,
+  );
+  MotelDao get motelDao;
 }
 
 class AppDatabaseProvider {
@@ -81,16 +90,25 @@ class AppDatabaseProvider {
         migration7To8,
         migration8To9,
         migration9To10,
+        migration10To11,
       ])
       .addCallback(
         Callback(
           onCreate: (database, version) async {
-            await _createRoomSchema(database, version);
+            await _createManualSchemas(database, version);
             await seedSubscriptionTestOwner(database);
           },
         ),
       )
       .build();
+}
+
+Future<void> _createManualSchemas(
+  sqflite.Database database,
+  int version,
+) async {
+  await _createRoomSchema(database, version);
+  await _createAuthCatalogSchema(database);
 }
 
 Future<void> _createRoomSchema(sqflite.Database database, int _) async {
@@ -260,29 +278,32 @@ final migration8To9 = Migration(8, 9, (database) async {
   await seedSubscriptionTestOwner(database);
 });
 
-/// Agrega la tabla de propietarios del módulo de administración de dueños.
-///
-/// Debe coincidir con el esquema que genera Floor para `OwnerEntry`.
 final migration9To10 = Migration(9, 10, (database) async {
-  await _createOwnerSchema(database);
+  await _createMotelSchema(database);
 });
 
-Future<void> _createOwnerSchema(sqflite.Database database) async {
+/// Moteles del propietario (caché local).
+Future<void> _createMotelSchema(sqflite.DatabaseExecutor database) async {
   await database.execute('''
-    CREATE TABLE IF NOT EXISTS owners (
-      id TEXT NOT NULL PRIMARY KEY,
-      fullName TEXT NOT NULL,
-      documentType TEXT NOT NULL,
-      documentNumber TEXT NOT NULL,
+    CREATE TABLE IF NOT EXISTS motels (
+      id TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      name TEXT NOT NULL,
       email TEXT NOT NULL,
+      room_count INTEGER NOT NULL,
+      nit TEXT NOT NULL,
+      address TEXT NOT NULL,
       phone TEXT NOT NULL,
-      address TEXT,
-      isActive INTEGER NOT NULL,
-      synchronized INTEGER NOT NULL,
-      createdAt INTEGER NOT NULL,
-      updatedAt INTEGER NOT NULL
+      description TEXT,
+      general_location TEXT,
+      payment_methods_json TEXT NOT NULL,
+      image_urls_json TEXT NOT NULL,
+      is_available INTEGER NOT NULL
     )
   ''');
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_motels_nit ON motels (nit)',
+  );
 }
 
 Future<void> _createPaymentSchema(sqflite.Database database) async {
@@ -327,3 +348,28 @@ Future<void> _createClientSchema(sqflite.Database database) async {
     '`active` INTEGER NOT NULL)',
   );
 }
+
+/// Maestros del módulo de autenticación (caché local de Supabase).
+Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS country_phone_codes (
+      id INTEGER PRIMARY KEY,
+      iso_code TEXT NOT NULL UNIQUE,
+      country_name TEXT NOT NULL,
+      dial_code TEXT NOT NULL,
+      flag_emoji TEXT,
+      phone_min_length INTEGER NOT NULL,
+      phone_max_length INTEGER NOT NULL,
+      is_active INTEGER NOT NULL CHECK (is_active IN (0, 1)),
+      sort_order INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Ambas ramas publicaron una versión 10 distinta: develop creó `motels` y la
+/// rama de autenticación creó `country_phone_codes`. Completa la tabla que
+/// falte según de dónde venga la base; todo usa `IF NOT EXISTS`.
+final migration10To11 = Migration(10, 11, (database) async {
+  await _createAuthCatalogSchema(database);
+  await _createMotelSchema(database);
+});
