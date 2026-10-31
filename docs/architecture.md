@@ -18,15 +18,31 @@ lib/
 ├── models/                 # Entidades de dominio, por feature
 ├── controllers/            # Estado de presentación (ChangeNotifier), por feature y rol
 ├── routes/routes.dart      # Registro único de rutas nombradas
-├── service/auth/            # Integración con Auth0 y directorio de usuarios
+├── service/
+│   ├── auth/                # Firebase Authentication, preferencias y directorio de usuarios
+│   ├── firebase/            # Nombres de colecciones Firestore y usuario actual
+│   ├── invoice/             # Generación de facturas en PDF (pdf/printing)
+│   ├── phone_country_code/  # Configuración de Supabase para indicativos y moteles
+│   ├── room/                # Configuración de Supabase (--dart-define)
+│   ├── storage/             # Preferencias locales (shared_preferences)
+│   └── subscription/        # Preferencias de suscripción
+├── database/
+│   ├── app_database.dart    # Base Floor/SQLite común, versión 11 (+ .g.dart generado)
+│   ├── migrations/          # Seeds de migración (suscripcion)
+│   ├── model/               # Entidades Floor (client, motel, notification, phone_country_code, suscripcion)
+│   └── repository/          # Repositorios y DAO por feature (auth, client, invoice, motel,
+│                            #   notification, phone_country_code, room, suscripcion)
+├── repositories/payment/    # Repositorio y DAO de pagos (fuera de database/, ver nota)
 ├── utils/                   # Formateadores y excepciones específicas de un dominio
-└── main.dart
+├── firebase_options.dart    # Generado por FlutterFire CLI
+└── main.dart                # Inicializa Firebase y la base SQLite antes de runApp
 ```
 
 Esta lista refleja los directorios que existen realmente en el repositorio.
-`GUIA_MACHUCO.md#estructura-provisional-del-proyecto` también describe
-`data/` y `repository/`; **ninguno de los dos existe todavía**. Ver
-"Inconsistencia: capa de datos" más abajo.
+`GUIA_MACHUCO.md#estructura-provisional-del-proyecto` describe `data/` y
+`repository/` como directorios de primer nivel; en el código la capa de
+acceso a datos vive en `lib/database/` (con `repository/` dentro) y no existe
+`data/`. Ver "`data` y `repository`" más abajo.
 
 ## Qué hay implementado en cada capa
 
@@ -73,9 +89,10 @@ una decisión deliberada mientras no exista backend.
 Entidades de dominio por feature (`booking/booking.dart`,
 `auth/registered_user.dart`, `room/room_models.dart`, etc.), en línea con
 `GUIA_MACHUCO.md`. Algunos modelos incluyen `fromJson`/`toJson` pensados
-para un backend HTTP futuro (por ejemplo `RegisteredUser`), aunque hoy solo
-se usan contra datos en memoria o, en el caso del directorio de usuarios,
-opcionalmente contra un API HTTP real (ver
+para un backend HTTP (por ejemplo `RegisteredUser`, usado en memoria o,
+opcionalmente, contra un API HTTP externo). `UserProfile` usa
+`fromFirestore`/`toFirestore` para `users/{uid}` y `CountryPhoneCode`
+acepta tanto la respuesta REST de Supabase como una fila SQLite (ver
 [modules/auth.md](modules/auth.md)).
 
 ### `routes`
@@ -89,26 +106,72 @@ recomienda `README_DISENO_FLUTTER.md#11-navegación`.
 
 ### `service`
 
-Solo existe `service/auth/`, con la integración de autenticación:
-`Auth0AuthService` (Auth0 real), `HardcodedAuthService` (cuentas de prueba
-locales) y el directorio de usuarios (`RegisteredUserDirectory`,
-`InMemoryRegisteredUserDirectory`, `BackendRegisteredUserDirectory`). No hay
-otros servicios externos implementados (pagos, imágenes, notificaciones
-push, etc.). Detalle completo en [modules/auth.md](modules/auth.md).
+- `service/auth/`: `FirebaseAuthService` (Firebase Authentication + perfil en
+  Firestore), `HardcodedAuthService` (cuentas de prueba locales, apagado por
+  defecto), el contrato transitorio `AuthService`, `AuthConfig`
+  (`--dart-define`), `AuthPreferences` (correo actual y otros datos no
+  sensibles) y el directorio de usuarios (`RegisteredUserDirectory`,
+  `InMemoryRegisteredUserDirectory`, `BackendRegisteredUserDirectory`).
+  Detalle en [modules/auth.md](modules/auth.md).
+- `service/firebase/`: `FirestoreCollections` (nombres de colecciones) y
+  `CurrentUser` (uid/correo de la sesión; identifica, no autoriza). Guía de uso
+  para otras ramas en [firebase.md](firebase.md).
+- `service/room/`: `SupabaseRoomConfig` (URL y clave anónima de Supabase por
+  `--dart-define`).
+- `service/phone_country_code/`: `SupabasePhoneCountryCodeConfig`, que usan
+  los repositorios de indicativos y de moteles de la rama de moteles.
+- `service/invoice/`: `InvoicePdfService` (facturas en PDF con `pdf` y
+  `printing`).
+- `service/subscription/`: preferencias locales de suscripción.
+- `service/storage/`: `LocalPreferencesService` y su implementación sobre
+  `shared_preferences` (ver [shared_preferences.md](shared_preferences.md)).
+
+No hay servicios de pasarela de pagos, imágenes ni notificaciones push.
 
 ### `data` y `repository`
 
-**No existen como directorios en el proyecto.** La responsabilidad que
-`GUIA_MACHUCO.md` les asigna (abstraer el origen de la información para que
-las vistas no dependan de él directamente) hoy está cubierta de forma
-parcial e inconsistente:
+No existe `lib/data/` ni `lib/repository/` de primer nivel. La capa de acceso
+a datos vive en `lib/database/`:
 
-- En `service/auth/`, sí existe una abstracción real
-  (`RegisteredUserDirectory`) con dos implementaciones intercambiables.
-- En el resto de features (`booking`, `room`, `payment`, etc.), los
-  controladores contienen los datos de ejemplo directamente (por ejemplo
-  `controllers/room/room_mock_data.dart`, o las listas `static` dentro de
-  cada `*Controller`), sin una interfaz de repositorio intermedia.
+- `app_database.dart`: base Floor/SQLite común (`AppDatabase`,
+  `AppDatabaseProvider`, **versión 11**) con DAO de suscripción,
+  notificaciones, pagos, habitaciones, clientes, indicativos
+  (`phoneCountryCodeDao`), moteles y maestros de autenticación
+  (`authCatalogDao`). Migraciones relevantes: 9 → 10 crea `motels` (rama de
+  moteles) y 10 → 11 crea `country_phone_codes` y completa `motels` si falta
+  (ambas ramas habían publicado una versión 10). Las ramas deben acordar el
+  siguiente número de versión antes de crear una migración.
+- `database/model/`: entidades Floor de `client`, `motel`, `notification`,
+  `phone_country_code` y `suscripcion`.
+- `database/migrations/suscripcion/`: seed de la suscripción de prueba.
+- `database/repository/auth/`: `AuthCatalogRepository` + `AuthCatalogDao`
+  (indicativos telefónicos desde Supabase REST con caché SQLite) y
+  `UserProfileRepository` (interfaz) + `FirestoreUserProfileRepository`
+  (perfiles en Cloud Firestore, `users/{uid}`).
+- `database/repository/room/`: `RoomServiceRepository` (Supabase) y
+  `RoomDao`.
+- `database/repository/notification/` y `database/repository/suscripcion/`:
+  repositorios sobre SQLite (suscripción también consulta un catálogo en
+  Supabase).
+- `database/repository/motel/`: `MotelRepository` (Supabase REST con caché
+  en SQLite), `MotelDao` y un repositorio de indicativos. Ver
+  [motels_persistence.md](motels_persistence.md).
+- `database/repository/phone_country_code/` y `database/repository/client/`:
+  maestro `phone_country_codes` y clientes (rama de clientes). Hay dos
+  maestros de indicativos en paralelo (`phone_country_codes` y
+  `country_phone_codes` de autenticación); está pendiente unificarlos.
+- `database/repository/invoice/`: facturas.
+- `lib/repositories/payment/`: repositorio y DAO de pagos. Está fuera de
+  `lib/database/`, a diferencia del resto; ver
+  [payment_persistence.md](payment_persistence.md).
+
+Fuera de estas features, los controladores (`booking`, `pqrs`, etc.) siguen
+conteniendo datos de ejemplo directamente (por ejemplo
+`controllers/room/room_mock_data.dart`, o listas `static` en cada
+`*Controller`), sin repositorio intermedio. `UserProfileRepository` es la
+única interfaz de repositorio con implementación intercambiable; los demás
+repositorios son clases concretas. El directorio de usuarios
+(`RegisteredUserDirectory`) sigue en `service/auth/`.
 
 ### `utils`
 
@@ -128,7 +191,10 @@ línea con la convención de nombres de
 ## Flujo real de datos
 
 ```text
-Controller (ChangeNotifier, datos en memoria o servicio HTTP puntual)
+Firebase Auth / Cloud Firestore / Supabase REST / SQLite (Floor) / shared_preferences
+    │  (FirebaseAuthService, *Repository, AuthPreferences)
+    ▼
+Controller (ChangeNotifier; en features sin persistencia, datos en memoria)
     │  notifyListeners()
     ▼
 View (StatefulWidget: addListener + setState)
@@ -140,15 +206,41 @@ Widgets de dominio (widgets/<feature>) y componentes App* (core/design_system)
 AppRoutes.onGenerateRoute (Navigator, argumentos tipados)
 ```
 
-No hay una capa de red genérica ni un cliente HTTP compartido: el único uso
-de `package:http` hoy es `BackendRegisteredUserDirectory` (ver
-[modules/auth.md](modules/auth.md)). El resto de la aplicación opera sobre
-datos de ejemplo en memoria, sin persistencia real.
+`main.dart` inicializa Firebase (`Firebase.initializeApp` con
+`DefaultFirebaseOptions.currentPlatform`) y abre la base SQLite antes de
+`runApp`. En autenticación, la sesión la mantiene Firebase Auth y el rol y el
+estado de la cuenta se leen de Cloud Firestore (`users/{uid}`), cuya
+autorización real vive en `firestore.rules` (ver [firebase.md](firebase.md)).
+Los maestros (indicativos, servicios de habitación, planes) se consultan por
+REST a Supabase con caché en SQLite.
+
+No hay un cliente HTTP compartido: `package:http` se usa en los repositorios
+de Supabase y en `BackendRegisteredUserDirectory`. Las features sin
+repositorio (reservas, PQRS, etc.) siguen operando sobre datos de ejemplo en
+memoria.
+
+Las dependencias se construyen en la vista: `LoginPage` crea el
+`FirebaseAuthService` (o `HardcodedAuthService`), el directorio de usuarios y
+`AuthCatalogRepository.fromEnvironment` y se los pasa al `LoginController`.
+La vista no consulta datos por sí misma, pero sí decide las implementaciones;
+no hay inyección de dependencias.
 
 ## Pruebas
 
-Existen pruebas de controlador y de widget para el feature `booking`
-(`test/controllers/booking/**`, `test/widgets/booking/**`), más un
-`test/widget_test.dart` genérico. No se observó una prueba por cada feature
-listada en `README.md#alcance-funcional`; la cobertura real está
-concentrada en reservas.
+- Reservas: `test/controllers/booking/**`, `test/widgets/booking/**`.
+- Autenticación: `test/controllers/auth/` (preferencias del
+  `LoginController`), `test/repositories/auth/` (`AuthCatalogRepository`,
+  `UserProfile`, reglas puras de registro y un fake de
+  `UserProfileRepository` sin red) y `test/widget_test.dart` (rol al
+  registrar, redirección por rol, logout, usuarios quemados; con servicios
+  falsos, sin Firebase real).
+- Persistencia y servicios: `test/database/` (notificaciones, suscripción,
+  pagos y migraciones hasta la versión 11), `test/repositories/{invoice,motel,
+  payment,room}/`, `test/service/{storage,subscription}/`.
+- Controllers: `test/controllers/{invoice,payment}/`.
+- Rutas: `test/routes/`.
+- Widgets: `test/widgets/{booking,payment,payment_method,subscription}/`.
+
+No hay pruebas de `FirebaseAuthService` ni de `FirestoreUserProfileRepository`
+contra Firebase (ni emulador), ni pruebas de `firestore.rules`. No hay una
+prueba por cada feature de `README.md#alcance-funcional`.

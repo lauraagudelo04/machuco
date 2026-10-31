@@ -7,10 +7,7 @@ import '../../models/product/product.dart';
 import 'product_detail_page.dart';
 
 class ProductListView extends StatelessWidget {
-  const ProductListView({
-    super.key,
-    required this.motelId,
-  });
+  const ProductListView({super.key, required this.motelId});
 
   final String motelId;
 
@@ -29,70 +26,109 @@ class ProductListView extends StatelessWidget {
     return '\$${buffer.toString()}';
   }
 
-  // ---------------------------------------------------------
-  // CREAR
-  // ---------------------------------------------------------
+  @override
+  Widget build(BuildContext context) {
+    return _ProductListViewBody(motelId: motelId, formatPrice: _formatPrice);
+  }
+}
 
-  void _openCreateView(BuildContext context) {
+class _ProductListViewBody extends StatefulWidget {
+  const _ProductListViewBody({
+    required this.motelId,
+    required this.formatPrice,
+  });
+
+  final String motelId;
+  final String Function(double value) formatPrice;
+
+  @override
+  State<_ProductListViewBody> createState() => _ProductListViewBodyState();
+}
+
+class _ProductListViewBodyState extends State<_ProductListViewBody> {
+  late final ProductController _controller;
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = ProductController();
+    _loadProducts();
+  }
+
+  Future<void> _loadProducts() async {
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await _controller.loadProducts();
+    } catch (error) {
+      _error = 'No fue posible cargar los productos.';
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  void _openDetailView(Product product) {
     Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ProductFormView(
-          motelId: motelId,
-        ),
-      ),
+      MaterialPageRoute(builder: (_) => ProductDetailView(product: product)),
     );
   }
 
-  // ---------------------------------------------------------
-  // VER DETALLE
-  // ---------------------------------------------------------
-
-  void _openDetailView(
-      BuildContext context,
-      Product product,
-      ) {
-    Navigator.of(context).push(
+  Future<void> _openCreateView() async {
+    final created = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
-        builder: (_) => ProductDetailView(
-          product: product,
-        ),
+        builder: (_) => ProductFormView(motelId: widget.motelId),
       ),
     );
+    if (created == null) return;
+    try {
+      await _controller.restCreateProduct(created);
+      if (!mounted) return;
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
-  // ---------------------------------------------------------
-  // EDITAR
-  // ---------------------------------------------------------
-
-  Future<void> _openEditView(
-      BuildContext context,
-      Product product,
-      ) async {
-    await Navigator.of(context).push<Product>(
+  Future<void> _openEditView(Product product) async {
+    final edited = await Navigator.of(context).push<Product>(
       MaterialPageRoute(
-        builder: (_) => ProductFormView(
-          motelId: product.motelId,
-          product: product,
-        ),
+        builder: (_) =>
+            ProductFormView(motelId: product.motelId, product: product),
       ),
     );
+    if (edited == null) return;
+    try {
+      await _controller.restUpdateProduct(product.id, edited);
+      if (!mounted) return;
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
-  // ---------------------------------------------------------
-  // ELIMINAR
-  // ---------------------------------------------------------
-
-  Future<void> _confirmDelete(
-      BuildContext context,
-      Product product,
-      ) async {
+  Future<void> _confirmDelete(Product product) async {
     final shouldDelete = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         title: const Text('Eliminar producto'),
-        content: Text(
-          '¿Deseas eliminar “${product.name}” del catálogo?',
-        ),
+        content: Text('¿Deseas eliminar “${product.name}” del catálogo?'),
         actions: [
           TextButton(
             onPressed: () {
@@ -115,35 +151,46 @@ class ProductListView extends StatelessWidget {
 
     if (shouldDelete != true) return;
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Eliminación de "${product.name}" pendiente de implementación.',
-        ),
-      ),
-    );
+    try {
+      await _controller.restDeleteProduct(product.id);
+      if (!mounted) return;
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
+  }
+
+  Future<void> _toggleAvailability(Product product) async {
+    try {
+      await _controller.restPatchAvailability(
+        id: product.id,
+        isAvailable: !product.isAvailable,
+      );
+      if (!mounted) return;
+      setState(() {});
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // Controller con los datos quemados.
-    final controller = ProductController();
-
-    // Obtiene solamente los productos pertenecientes
-    // al motel que abrió esta pantalla.
-    final products = controller.getProductsByMotel(motelId);
+    final products = _controller.getProductsByMotel(widget.motelId);
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Productos'),
-      ),
+      appBar: AppBar(title: const Text('Productos')),
 
       // ---------------------------------------------------------
       // BOTÓN CREAR PRODUCTO
       // ---------------------------------------------------------
-
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _openCreateView(context),
+        onPressed: _openCreateView,
         icon: const Icon(Icons.add),
         label: const Text('Crear producto'),
       ),
@@ -155,12 +202,23 @@ class ProductListView extends StatelessWidget {
                 ? AppSpacing.screenCompact
                 : AppSpacing.screen;
 
+            if (_isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            if (_error != null) {
+              return AppEmptyState(
+                icon: Icons.error_outline,
+                title: 'Error al cargar productos',
+                message: _error!,
+              );
+            }
+
             if (products.isEmpty) {
               return AppEmptyState(
                 icon: Icons.inventory_2_outlined,
                 title: 'No hay productos',
-                message:
-                'Este motel no tiene productos registrados.',
+                message: 'Este motel no tiene productos registrados.',
               );
             }
 
@@ -172,33 +230,23 @@ class ProductListView extends StatelessWidget {
                 AppSpacing.s12,
               ),
               itemCount: products.length,
-              separatorBuilder: (_, __) => const SizedBox(
-                height: AppSpacing.s3,
-              ),
+              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
               itemBuilder: (context, index) {
                 final product = products[index];
 
                 return _ProductCard(
                   product: product,
-                  priceText: _formatPrice(product.price),
+                  priceText: widget.formatPrice(product.price),
 
                   // Ver detalle
-                  onTap: () => _openDetailView(
-                    context,
-                    product,
-                  ),
+                  onTap: () => _openDetailView(product),
 
                   // Editar
-                  onEdit: () => _openEditView(
-                    context,
-                    product,
-                  ),
+                  onEdit: () => _openEditView(product),
 
                   // Eliminar
-                  onDelete: () => _confirmDelete(
-                    context,
-                    product,
-                  ),
+                  onDelete: () => _confirmDelete(product),
+                  onToggleAvailability: () => _toggleAvailability(product),
                 );
               },
             );
@@ -220,6 +268,7 @@ class _ProductCard extends StatelessWidget {
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
+    required this.onToggleAvailability,
   });
 
   final Product product;
@@ -228,6 +277,7 @@ class _ProductCard extends StatelessWidget {
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final VoidCallback onToggleAvailability;
 
   @override
   Widget build(BuildContext context) {
@@ -244,15 +294,12 @@ class _ProductCard extends StatelessWidget {
             // ------------------------------------------------
             // ICONO DEL PRODUCTO
             // ------------------------------------------------
-
             Container(
               width: 64,
               height: 64,
               decoration: BoxDecoration(
                 color: context.appColors.mediaFallback,
-                borderRadius: BorderRadius.circular(
-                  AppRadius.md,
-                ),
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
               alignment: Alignment.center,
               child: Icon(
@@ -266,7 +313,6 @@ class _ProductCard extends StatelessWidget {
             // ------------------------------------------------
             // INFORMACIÓN
             // ------------------------------------------------
-
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,9 +323,7 @@ class _ProductCard extends StatelessWidget {
                       Expanded(
                         child: Text(
                           product.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                       ),
 
@@ -294,28 +338,19 @@ class _ProductCard extends StatelessWidget {
 
                   // Descripción
                   if (product.description.isNotEmpty) ...[
-                    const SizedBox(
-                      height: AppSpacing.s1,
-                    ),
+                    const SizedBox(height: AppSpacing.s1),
 
                     Text(
                       product.description,
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context)
-                          .textTheme
-                          .bodySmall
-                          ?.copyWith(
-                        color: context
-                            .appColors
-                            .textSecondary,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.appColors.textSecondary,
                       ),
                     ),
                   ],
 
-                  const SizedBox(
-                    height: AppSpacing.s2,
-                  ),
+                  const SizedBox(height: AppSpacing.s2),
 
                   // Precio + stock
                   Wrap(
@@ -324,57 +359,52 @@ class _ProductCard extends StatelessWidget {
                     children: [
                       Text(
                         priceText,
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleSmall
-                            ?.copyWith(
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
                       ),
 
                       Text(
                         'Stock: ${product.stock}',
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodySmall
-                            ?.copyWith(
-                          color: context
-                              .appColors
-                              .textMuted,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.appColors.textMuted,
                         ),
                       ),
                     ],
                   ),
 
-                  const SizedBox(
-                    height: AppSpacing.s3,
-                  ),
+                  const SizedBox(height: AppSpacing.s3),
 
                   // ------------------------------------------------
                   // BOTONES
                   // ------------------------------------------------
-
                   Row(
-                    mainAxisAlignment:
-                    MainAxisAlignment.end,
+                    mainAxisAlignment: MainAxisAlignment.end,
                     children: [
                       AppIconButton(
+                        icon: product.isAvailable
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        tooltip: product.isAvailable
+                            ? 'Desactivar ${product.name}'
+                            : 'Activar ${product.name}',
+                        onPressed: onToggleAvailability,
+                      ),
+
+                      const SizedBox(width: AppSpacing.s2),
+
+                      AppIconButton(
                         icon: Icons.edit_outlined,
-                        tooltip:
-                        'Editar ${product.name}',
+                        tooltip: 'Editar ${product.name}',
                         onPressed: onEdit,
                       ),
 
-                      const SizedBox(
-                        width: AppSpacing.s2,
-                      ),
+                      const SizedBox(width: AppSpacing.s2),
 
                       AppIconButton(
                         icon: Icons.delete_outline,
-                        tooltip:
-                        'Eliminar ${product.name}',
-                        variant:
-                        AppIconButtonVariant.destructive,
+                        tooltip: 'Eliminar ${product.name}',
+                        variant: AppIconButtonVariant.destructive,
                         onPressed: onDelete,
                       ),
                     ],

@@ -12,7 +12,7 @@
 - Entidad: `lib/database/model/motel/motel_entity.dart` (`@Entity(tableName: 'motels')`)
 - Columnas: `id`, `owner_id`, `name`, `email`, `room_count`, `nit`, `address`, `phone`, `description`, `general_location`, `payment_methods_json`, `image_urls_json`, `is_available` (INTEGER 0/1)
 - DAO: `lib/database/repository/motel/motel_dao.dart` (`findAll`, `findById`, `upsert`, `upsertAll`, `deleteAll`, `replaceAll`)
-- `AppDatabase` versión 10 con `MotelEntity`, `MotelDao`, `migration9To10`
+- `AppDatabase` con `MotelEntity` y `MotelDao`. `migration9To10` crea `motels`; como la rama de autenticación también publicó una versión 10, `migration10To11` la completa si falta (versión actual: 11).
 
 ## Comportamiento offline
 - `MotelRepository.getMotels()`: intenta red primero, guarda en caché con `replaceAll`. Si falla o hay error de Supabase, devuelve caché. Si no hay caché, lanza `MotelRepositoryException`.

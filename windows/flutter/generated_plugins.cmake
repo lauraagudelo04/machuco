@@ -3,7 +3,9 @@
 #
 
 list(APPEND FLUTTER_PLUGIN_LIST
-  auth0_flutter
+  cloud_firestore
+  firebase_auth
+  firebase_core
   printing
 )
 
