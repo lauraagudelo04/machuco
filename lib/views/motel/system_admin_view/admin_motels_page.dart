@@ -284,7 +284,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 Text('Gestión de Establecimientos', style: Theme.of(context).textTheme.headlineSmall),
                 Chip(
                   label: Text(currentOwnerName.split(' ').first, style: const TextStyle(fontSize: 12)),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 ),
               ],
             ),
@@ -305,7 +305,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                       ? const Center(child: Text('No se encontraron establecimientos registrados para este propietario.'))
                       : ListView.separated(
                           itemCount: filteredMotels.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
+                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
                           itemBuilder: (context, index) {
                             final motel = filteredMotels[index];
                             return _AdminMotelCard(
