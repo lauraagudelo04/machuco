@@ -3,6 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/motel_controller.dart';
 import '../../../controllers/motel/phone_country_code_controller.dart';
+import '../../../utils/motel_form_validators.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
   const OwnerMotelFormPage({
@@ -21,8 +22,10 @@ class OwnerMotelFormPage extends StatefulWidget {
 }
 
 class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
+  final _formKey = GlobalKey<FormState>();
   final MotelController _motelController = MotelController.persistent();
   bool _isSaving = false;
+  bool _showPaymentMethodsError = false;
 
   /// Maestro de indicativos telefónicos (Supabase + caché SQLite).
   final PhoneCountryCodeController _phoneCodeController =
@@ -39,7 +42,12 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
   final _generalLocationController = TextEditingController();
 
   final List<String> _selectedPaymentMethods = [];
-  final List<String> _availablePaymentMethods = ['Efectivo', 'Tarjeta Crédito/Débito', 'Transferencia', 'Nequi / Daviplata'];
+  final List<String> _availablePaymentMethods = [
+    'Efectivo',
+    'Tarjeta Crédito/Débito',
+    'Transferencia',
+    'Nequi / Daviplata',
+  ];
 
   List<String> _imageUrls = [];
 
@@ -96,15 +104,26 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       } else {
         _selectedPaymentMethods.add(method);
       }
+      if (_selectedPaymentMethods.isNotEmpty) {
+        _showPaymentMethodsError = false;
+      }
     });
   }
 
   Future<void> _onSave() async {
     if (_isSaving) return;
 
+    final isFormValid = _formKey.currentState?.validate() ?? false;
+    final paymentMethodsError = MotelFormValidators.validatePaymentMethods(
+      _selectedPaymentMethods,
+    );
+    setState(() => _showPaymentMethodsError = paymentMethodsError != null);
+
+    if (!isFormValid || paymentMethodsError != null) return;
+
     setState(() => _isSaving = true);
 
-    final int roomCountParsed = int.tryParse(_roomsController.text.trim()) ?? 0;
+    final int roomCountParsed = int.parse(_roomsController.text.trim());
 
     final Motel motelToSave = Motel(
       id: widget.isEditing && widget.motel != null
@@ -124,8 +143,12 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
           ? null
           : _generalLocationController.text.trim(),
       paymentMethods: _selectedPaymentMethods,
-      imageUrls: _imageUrls.isEmpty ? ['https://via.placeholder.com/400'] : _imageUrls,
-      isAvailable: widget.isEditing && widget.motel != null ? widget.motel!.isAvailable : true,
+      imageUrls: _imageUrls.isEmpty
+          ? ['https://via.placeholder.com/400']
+          : _imageUrls,
+      isAvailable: widget.isEditing && widget.motel != null
+          ? widget.motel!.isAvailable
+          : true,
     );
 
     try {
@@ -141,135 +164,172 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isSaving = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.toString())));
       }
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final paymentMethodsError = _showPaymentMethodsError
+        ? MotelFormValidators.validatePaymentMethods(_selectedPaymentMethods)
+        : null;
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.isEditing ? 'Editar Motel' : 'Agregar Motel'),
         centerTitle: true,
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(AppSpacing.s4),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: AppSpacing.s2),
-            _buildTextField(
-              controller: _nameController,
-              label: 'Nombre del establecimiento',
-              keyboardType: TextInputType.name,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            _buildTextField(
-              controller: _descriptionController,
-              label: 'Descripción',
-              keyboardType: TextInputType.multiline,
-              maxLines: 3,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            _buildTextField(
-              controller: _emailController,
-              label: 'Correo',
-              keyboardType: TextInputType.emailAddress,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            _buildPhoneField(),
-            const SizedBox(height: AppSpacing.s3),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildTextField(
-                    controller: _roomsController,
-                    label: '# Habitaciones',
-                    keyboardType: TextInputType.number,
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(AppSpacing.s4),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const SizedBox(height: AppSpacing.s2),
+              _buildTextField(
+                controller: _nameController,
+                label: 'Nombre del establecimiento',
+                keyboardType: TextInputType.name,
+                validator: MotelFormValidators.validateName,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              _buildTextField(
+                controller: _descriptionController,
+                label: 'Descripción',
+                keyboardType: TextInputType.multiline,
+                maxLines: 3,
+                validator: MotelFormValidators.validateDescription,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              _buildTextField(
+                controller: _emailController,
+                label: 'Correo',
+                keyboardType: TextInputType.emailAddress,
+                validator: MotelFormValidators.validateEmail,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              _buildPhoneField(),
+              const SizedBox(height: AppSpacing.s3),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _roomsController,
+                      label: '# Habitaciones',
+                      keyboardType: TextInputType.number,
+                      validator: MotelFormValidators.validateRoomCount,
+                    ),
+                  ),
+                  const SizedBox(width: AppSpacing.s3),
+                  Expanded(
+                    child: _buildTextField(
+                      controller: _nitController,
+                      label: 'NIT',
+                      keyboardType: TextInputType.text,
+                      validator: MotelFormValidators.validateNit,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              _buildTextField(
+                controller: _generalLocationController,
+                label: 'Ubicación general (Ej: Norte, Centro)',
+                keyboardType: TextInputType.text,
+                validator: MotelFormValidators.validateGeneralLocation,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              _buildTextField(
+                controller: _addressController,
+                label: 'Dirección exacta',
+                keyboardType: TextInputType.streetAddress,
+                validator: MotelFormValidators.validateAddress,
+              ),
+              const SizedBox(height: AppSpacing.s5),
+              Text(
+                'Métodos de pago',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.s2),
+              Wrap(
+                spacing: AppSpacing.s2,
+                runSpacing: AppSpacing.s2,
+                children: _availablePaymentMethods.map((method) {
+                  final isSelected = _selectedPaymentMethods.contains(method);
+                  return FilterChip(
+                    label: Text(method),
+                    selected: isSelected,
+                    onSelected: (_) => _togglePaymentMethod(method),
+                    selectedColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
+                    checkmarkColor: Theme.of(
+                      context,
+                    ).colorScheme.onPrimaryContainer,
+                  );
+                }).toList(),
+              ),
+              if (paymentMethodsError != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.s1),
+                  child: Text(
+                    paymentMethodsError,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.s3),
-                Expanded(
-                  child: _buildTextField(
-                    controller: _nitController,
-                    label: 'NIT',
-                    keyboardType: TextInputType.text,
+              const SizedBox(height: AppSpacing.s5),
+              Text('Imágenes', style: Theme.of(context).textTheme.titleMedium),
+              const SizedBox(height: AppSpacing.s2),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _imageUrls.add(
+                      'https://images.unsplash.com/photo-1566073771259-6a8506099945',
+                    );
+                  });
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  height: 120,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: context.appColors.mediaFallback,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: context.appColors.border,
+                      style: BorderStyle.solid,
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            _buildTextField(
-              controller: _generalLocationController,
-              label: 'Ubicación general (Ej: Norte, Centro)',
-              keyboardType: TextInputType.text,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            _buildTextField(
-              controller: _addressController,
-              label: 'Dirección exacta',
-              keyboardType: TextInputType.streetAddress,
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            Text('Métodos de pago', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.s2),
-            Wrap(
-              spacing: AppSpacing.s2,
-              runSpacing: AppSpacing.s2,
-              children: _availablePaymentMethods.map((method) {
-                final isSelected = _selectedPaymentMethods.contains(method);
-                return FilterChip(
-                  label: Text(method),
-                  selected: isSelected,
-                  onSelected: (_) => _togglePaymentMethod(method),
-                  selectedColor: Theme.of(context).colorScheme.primaryContainer,
-                  checkmarkColor: Theme.of(context).colorScheme.onPrimaryContainer,
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            Text('Imágenes', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: AppSpacing.s2),
-            InkWell(
-              onTap: () {
-                setState(() {
-                  _imageUrls.add('https://images.unsplash.com/photo-1566073771259-6a8506099945');
-                });
-              },
-              borderRadius: BorderRadius.circular(12),
-              child: Container(
-                height: 120,
-                width: double.infinity,
-                decoration: BoxDecoration(
-                  color: context.appColors.mediaFallback,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(
-                    color: context.appColors.border,
-                    style: BorderStyle.solid,
-                  ),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.add_photo_alternate_outlined, size: 40, color: context.appColors.textSecondary),
-                    const SizedBox(height: AppSpacing.s1),
-                    Text(
-                      _imageUrls.isNotEmpty
-                          ? '${_imageUrls.length} imagen(es) cargada(s)'
-                          : 'Toca para agregar imágenes',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 40,
                         color: context.appColors.textSecondary,
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: AppSpacing.s1),
+                      Text(
+                        _imageUrls.isNotEmpty
+                            ? '${_imageUrls.length} imagen(es) cargada(s)'
+                            : 'Toca para agregar imágenes',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: context.appColors.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: AppSpacing.s6),
-          ],
+              const SizedBox(height: AppSpacing.s6),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -290,8 +350,9 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       listenable: _phoneCodeController,
       builder: (context, _) {
         final codes = _phoneCodeController.countryCodes;
-        final hasSelected =
-            codes.any((c) => c.callingCode == _selectedCallingCode);
+        final hasSelected = codes.any(
+          (c) => c.callingCode == _selectedCallingCode,
+        );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +374,9 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                           ),
                         )
                       : DropdownButtonFormField<String>(
-                          value: hasSelected ? _selectedCallingCode : null,
+                          initialValue: hasSelected
+                              ? _selectedCallingCode
+                              : null,
                           isExpanded: true,
                           decoration: InputDecoration(
                             labelText: 'Indicativo',
@@ -325,9 +388,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                               vertical: 12,
                             ),
                           ),
-                          selectedItemBuilder: (context) => codes
-                              .map((c) => Text(c.callingCode))
-                              .toList(),
+                          selectedItemBuilder: (context) =>
+                              codes.map((c) => Text(c.callingCode)).toList(),
                           items: codes
                               .map(
                                 (c) => DropdownMenuItem(
@@ -351,6 +413,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                     controller: _phoneController,
                     label: 'Teléfono',
                     keyboardType: TextInputType.phone,
+                    validator: MotelFormValidators.validatePhone,
                   ),
                 ),
               ],
@@ -383,18 +446,21 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     required String label,
     required TextInputType keyboardType,
     int maxLines = 1,
+    FormFieldValidator<String>? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       maxLines: maxLines,
+      validator: validator,
       decoration: InputDecoration(
         labelText: label,
         alignLabelWithHint: maxLines > 1,
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8.0),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     );
   }
