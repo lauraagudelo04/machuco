@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/subscription/owner_subscription_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/suscripcion/subscription_firestore_repository.dart';
 import 'package:machuco/widgets/subscription/add_payment_sheet.dart';
 import 'package:machuco/widgets/subscription/subscription_detail_card.dart';
 import 'package:machuco/widgets/subscription/subscription_payment_card.dart';
@@ -13,7 +14,9 @@ class OwnerSubscriptionPage extends StatefulWidget {
 }
 
 class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
-  final OwnerSubscriptionController _controller = OwnerSubscriptionController();
+  late final OwnerSubscriptionController _controller = OwnerSubscriptionController(
+    firestoreRepository: SubscriptionFirestoreRepository(),
+  );
 
   @override
   void dispose() {
