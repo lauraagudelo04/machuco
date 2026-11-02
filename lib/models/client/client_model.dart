@@ -1,6 +1,7 @@
 class ClientModel {
   const ClientModel({
     this.id,
+    this.uid,
     required this.name,
     required this.phone,
     required this.email,
@@ -8,6 +9,7 @@ class ClientModel {
   });
 
   final int? id;
+  final String? uid;
   final String name;
   final String phone;
   final String email;
@@ -24,6 +26,7 @@ class ClientModel {
 
   ClientModel copyWith({
     int? id,
+    String? uid,
     String? name,
     String? phone,
     String? email,
@@ -31,6 +34,7 @@ class ClientModel {
   }) {
     return ClientModel(
       id: id ?? this.id,
+      uid: uid ?? this.uid,
       name: name ?? this.name,
       phone: phone ?? this.phone,
       email: email ?? this.email,
