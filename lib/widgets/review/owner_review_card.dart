@@ -6,10 +6,12 @@ class OwnerReviewCard extends StatelessWidget {
   const OwnerReviewCard({
     super.key,
     required this.review,
+    required this.motelName,
     required this.onReply,
   });
 
   final Review review;
+  final String motelName;
   final VoidCallback onReply;
 
   @override
@@ -39,7 +41,7 @@ class OwnerReviewCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${review.motelId} · ${_formatDate(review.date)}',
+                      '$motelName · ${_formatDate(review.date)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.appColors.textSecondary,
                       ),

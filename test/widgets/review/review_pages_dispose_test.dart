@@ -82,4 +82,22 @@ void main() {
     _expectStillAlive(controller, () => controller.setQuery('motel'));
     expect(controller.isLoading, isFalse);
   });
+
+  testWidgets('la tarjeta del propietario muestra el nombre del motel', (
+    tester,
+  ) async {
+    final controller = OwnerReviewController(
+      motelController: _FakeMotelController([
+        _motel('1', 'Motel Paraíso Élite'),
+      ]),
+      repository: InMemoryReviewRepository(),
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_wrap(OwnerReviewPage(controller: controller)));
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Motel Paraíso Élite · 10/7/2026'), findsOneWidget);
+    expect(find.textContaining('1 · 10/7/2026'), findsNothing);
+  });
 }

@@ -118,6 +118,7 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: OwnerReviewCard(
                 review: review,
+                motelName: _controller.getMotelName(review.motelId),
                 onReply: () => _openReplySheet(review),
               ),
             ),

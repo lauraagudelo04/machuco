@@ -203,3 +203,4 @@ resuelve.
 | 2026-11-02 | `014ef47` | Token `AppColors.rating`, `dispose` en páginas, se borra `review_type.dart`. | 4, 6 |
 | 2026-11-02 | `483d164` | Autor real: `ReviewAuthorProvider` (`lib/service/review/`) toma `uid` de Firebase Auth y nombre del perfil en Firestore; sin sesión no se guarda. | 3 |
 | 2026-11-02 | (ver git log) | El repositorio pasa a `lib/database/repository/review/`, donde el equipo guarda los repositorios (guía de Firebase, punto 10). | — |
+| 2026-11-02 | (ver git log) | QA en emulador: las reseñas de ejemplo apuntaban a moteles inexistentes (`5db2ebf`); la tarjeta del propietario muestra el nombre del motel y no su id. | — (bugs del QA) |
