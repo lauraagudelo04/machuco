@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
+// Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
+// dominio del mismo nombre dentro de la clase.
 import 'package:machuco/repositories/review/review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
@@ -54,33 +56,32 @@ class ReviewAdministrationController extends ChangeNotifier {
 
   List<Review> get reviews {
     final normalizedQuery = _query.trim().toLowerCase();
-    return _reviews.where((review) {
-      final matchesFilter = switch (_filter) {
-        ReviewFilter.all => true,
-        ReviewFilter.visible =>
-          review.status == ReviewModerationStatus.visible,
-        ReviewFilter.hidden => review.status == ReviewModerationStatus.hidden,
-        ReviewFilter.reported =>
-          review.status == ReviewModerationStatus.reported,
-      };
-      if (!matchesFilter) return false;
-      if (normalizedQuery.isEmpty) return true;
-      return review.authorName.toLowerCase().contains(normalizedQuery) ||
-          review.title.toLowerCase().contains(normalizedQuery) ||
-          review.body.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return _reviews
+        .where((review) {
+          final matchesFilter = switch (_filter) {
+            ReviewFilter.all => true,
+            ReviewFilter.visible =>
+              review.status == ReviewModerationStatus.visible,
+            ReviewFilter.hidden =>
+              review.status == ReviewModerationStatus.hidden,
+            ReviewFilter.reported =>
+              review.status == ReviewModerationStatus.reported,
+          };
+          if (!matchesFilter) return false;
+          if (normalizedQuery.isEmpty) return true;
+          return review.authorName.toLowerCase().contains(normalizedQuery) ||
+              review.title.toLowerCase().contains(normalizedQuery) ||
+              review.body.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   int get totalCount => _reviews.length;
 
-  int get reportedCount => _reviews
-      .where((r) => r.status == ReviewModerationStatus.reported)
-      .length;
+  int get reportedCount =>
+      _reviews.where((r) => r.status == ReviewModerationStatus.reported).length;
 
-  double get averageRating => _reviews.isEmpty
-      ? 0
-      : _reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-          _reviews.length;
+  double get averageRating => averageRatingOf(_reviews);
 
   void setFilter(ReviewFilter filter) {
     _filter = filter;

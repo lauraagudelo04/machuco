@@ -256,4 +256,79 @@ void main() {
       expect(owner.errorMessage, isNull);
     });
   });
+
+  group('Reglas de dominio', () {
+    test('averageRatingOf promedia y devuelve 0 sin reseñas', () {
+      expect(averageRatingOf([_review(rating: 5), _review(rating: 2)]), 3.5);
+      expect(averageRatingOf(const []), 0);
+    });
+
+    test('ReviewRules valida calificación y textos', () {
+      expect(ReviewRules.isValidRating(0), isFalse);
+      expect(ReviewRules.isValidRating(1), isTrue);
+      expect(ReviewRules.isValidRating(5), isTrue);
+      expect(ReviewRules.isValidRating(6), isFalse);
+      expect(ReviewRules.isValidText('   '), isFalse);
+      expect(ReviewRules.isValidText(' a '), isTrue);
+    });
+  });
+
+  group('ReviewsController.submitReview', () {
+    test('crea la reseña con autor, fecha e id y la guarda', () async {
+      final controller = ReviewsController(
+        repository: repository,
+        authorId: 'user-7',
+        authorName: 'Ana',
+      );
+      final before = DateTime.now();
+
+      final saved = await controller.submitReview('motel-sol', (
+        type: ReviewType.room,
+        roomId: 'room-3',
+        rating: 4,
+        title: '  Bien  ',
+        body: ' Limpio ',
+      ));
+
+      expect(saved, isTrue);
+      final review = (await repository.getAll()).first;
+      expect(review.id, startsWith('review-client-'));
+      expect(review.authorId, 'user-7');
+      expect(review.authorName, 'Ana');
+      expect(review.motelId, 'motel-sol');
+      expect(review.roomId, 'room-3');
+      expect(review.type, ReviewType.room);
+      expect(review.rating, 4);
+      expect(review.title, 'Bien');
+      expect(review.body, 'Limpio');
+      expect(review.status, ReviewModerationStatus.visible);
+      expect(review.date.isBefore(before), isFalse);
+      expect(controller.getReviewsByMotelId('motel-sol').first.id, review.id);
+    });
+
+    for (final (label, rating, title, body) in [
+      ('calificación 0', 0, 'T', 'B'),
+      ('calificación 6', 6, 'T', 'B'),
+      ('título vacío', 3, '  ', 'B'),
+      ('texto vacío', 3, 'T', ''),
+    ]) {
+      test('rechaza $label sin guardar ni notificar', () async {
+        final controller = ReviewsController(repository: repository);
+        var notified = 0;
+        controller.addListener(() => notified++);
+
+        final saved = await controller.submitReview('motel-sol', (
+          type: ReviewType.motel,
+          roomId: null,
+          rating: rating,
+          title: title,
+          body: body,
+        ));
+
+        expect(saved, isFalse);
+        expect(notified, 0);
+        expect(await repository.getAll(), hasLength(6));
+      });
+    }
+  });
 }

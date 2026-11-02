@@ -6,15 +6,6 @@ import 'package:machuco/repositories/review/review_repository.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
-/// Borrador de una reseña a medio escribir en el formulario.
-typedef ReviewDraft = ({
-  ReviewType type,
-  String? roomId,
-  int rating,
-  String title,
-  String body,
-});
-
 /// Controlador de reseñas para el cliente.
 ///
 /// Lee y guarda las reseñas a través de [ReviewRepository]; al enviar una
@@ -24,11 +15,19 @@ class ReviewsController extends ChangeNotifier {
   ReviewsController({
     LocalPreferencesService? preferences,
     ReviewRepository? repository,
+    this.authorId = 'user-current',
+    this.authorName = 'Tú',
   }) : _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
        _repository = repository ?? InMemoryReviewRepository.shared;
 
   static const _draftKey = 'addReviewDraft';
+
+  /// Autor de las reseñas creadas desde este controlador.
+  ///
+  /// Temporal: el autor real vendrá de Firebase Auth (fuera de alcance).
+  final String authorId;
+  final String authorName;
 
   final LocalPreferencesService _preferences;
   final ReviewRepository _repository;
@@ -37,39 +36,54 @@ class ReviewsController extends ChangeNotifier {
 
   int get totalCount => _reviews.length;
 
-  int get visibleCount => _reviews
-      .where((r) => r.status == ReviewModerationStatus.visible)
-      .length;
+  int get visibleCount =>
+      _reviews.where((r) => r.status == ReviewModerationStatus.visible).length;
 
-  double get overallAverage => _reviews.isEmpty
-      ? 0.0
-      : _reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-          _reviews.length;
+  double get overallAverage => averageRatingOf(_reviews);
 
   List<Review> getReviewsByMotelId(String motelId) {
-    return _reviews
-        .where((r) => r.motelId == motelId)
-        .toList(growable: false);
+    return _reviews.where((r) => r.motelId == motelId).toList(growable: false);
   }
 
-  double getAverageByMotelId(String motelId) {
-    final filtered = getReviewsByMotelId(motelId);
-    if (filtered.isEmpty) return 0.0;
-    final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
-    return total / filtered.length;
-  }
+  double getAverageByMotelId(String motelId) =>
+      averageRatingOf(getReviewsByMotelId(motelId));
 
   List<Review> getReviewsByRoomId(String roomId) {
-    return _reviews
-        .where((r) => r.roomId == roomId)
-        .toList(growable: false);
+    return _reviews.where((r) => r.roomId == roomId).toList(growable: false);
   }
 
-  double getAverageByRoomId(String roomId) {
-    final filtered = getReviewsByRoomId(roomId);
-    if (filtered.isEmpty) return 0.0;
-    final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
-    return total / filtered.length;
+  double getAverageByRoomId(String roomId) =>
+      averageRatingOf(getReviewsByRoomId(roomId));
+
+  /// Crea y guarda la reseña descrita por [draft].
+  ///
+  /// Devuelve `false` sin tocar el repositorio ni notificar si la calificación
+  /// está fuera de rango o si el título o el texto quedan vacíos al recortar.
+  Future<bool> submitReview(String motelId, ReviewDraft draft) async {
+    final title = draft.title.trim();
+    final body = draft.body.trim();
+    if (!ReviewRules.isValidRating(draft.rating) ||
+        !ReviewRules.isValidText(title) ||
+        !ReviewRules.isValidText(body)) {
+      return false;
+    }
+
+    await addReview(
+      Review(
+        id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
+        authorId: authorId,
+        authorName: authorName,
+        title: title,
+        body: body,
+        rating: draft.rating,
+        date: DateTime.now(),
+        motelId: motelId,
+        roomId: draft.roomId,
+        type: draft.type,
+        status: ReviewModerationStatus.visible,
+      ),
+    );
+    return true;
   }
 
   Future<void> addReview(Review review) async {

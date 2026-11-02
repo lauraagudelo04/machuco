@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
+// Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
+// dominio del mismo nombre dentro de la clase.
 import 'package:machuco/repositories/review/review_repository.dart';
 
 /// Controlador de reseñas desde la perspectiva del propietario.
@@ -51,24 +53,22 @@ class OwnerReviewController extends ChangeNotifier {
 
   List<Review> get reviews {
     final normalizedQuery = _query.trim().toLowerCase();
-    return _reviews.where((review) {
-      if (_selectedMotelId != null && review.motelId != _selectedMotelId) {
-        return false;
-      }
-      if (normalizedQuery.isEmpty) return true;
-      return review.authorName.toLowerCase().contains(normalizedQuery) ||
-          review.title.toLowerCase().contains(normalizedQuery) ||
-          review.body.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return _reviews
+        .where((review) {
+          if (_selectedMotelId != null && review.motelId != _selectedMotelId) {
+            return false;
+          }
+          if (normalizedQuery.isEmpty) return true;
+          return review.authorName.toLowerCase().contains(normalizedQuery) ||
+              review.title.toLowerCase().contains(normalizedQuery) ||
+              review.body.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   int get totalCount => reviews.length;
 
-  double get averageRating {
-    if (reviews.isEmpty) return 0;
-    return reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-        reviews.length;
-  }
+  double get averageRating => averageRatingOf(reviews);
 
   void selectMotel(String? motelId) {
     _selectedMotelId = motelId;

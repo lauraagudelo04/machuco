@@ -71,23 +71,27 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                 Text(
                   'Reseñas',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
                 const SizedBox(width: AppSpacing.s2),
-                const Icon(Icons.star_rounded, color: Color(0xFFFFB300), size: 20),
+                const Icon(
+                  Icons.star_rounded,
+                  color: Color(0xFFFFB300),
+                  size: 20,
+                ),
                 const SizedBox(width: AppSpacing.s1),
                 Text(
                   average.toStringAsFixed(1),
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
                 ),
                 Text(
                   ' (${reviews.length})',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        color: context.appColors.textMuted,
-                      ),
+                    color: context.appColors.textMuted,
+                  ),
                 ),
               ],
             ),
@@ -98,14 +102,20 @@ class _ReviewsSectionState extends State<ReviewsSection> {
               icon: Icons.rate_review_outlined,
               onPressed: widget.isComplete
                   ? () => AddReviewSheet.show(
-                        context,
-                        motelId: widget.motel.id,
-                        motelName: widget.motel.name,
-                        rooms: widget.rooms ?? buildRoomMockData().where((room) => room.motelId == widget.motel.id).toList(),
-                        onSave: (review) => _controller.addReview(review),
-                        loadDraft: () => _controller.loadDraft(widget.motel.id),
-                        onDraftChanged: (draft) => _controller.saveDraft(widget.motel.id, draft),
-                      )
+                      context,
+                      motelId: widget.motel.id,
+                      motelName: widget.motel.name,
+                      rooms:
+                          widget.rooms ??
+                          buildRoomMockData()
+                              .where((room) => room.motelId == widget.motel.id)
+                              .toList(),
+                      onSave: (draft) =>
+                          _controller.submitReview(widget.motel.id, draft),
+                      loadDraft: () => _controller.loadDraft(widget.motel.id),
+                      onDraftChanged: (draft) =>
+                          _controller.saveDraft(widget.motel.id, draft),
+                    )
                   : null,
             ),
             const SizedBox(height: AppSpacing.s4),

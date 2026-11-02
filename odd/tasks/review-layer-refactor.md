@@ -29,8 +29,8 @@ connecting Supabase/Firebase. No external storage in this feature.
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
 | T1 | S1, S2 | inline | done | 549096c |
-| T2 | S3, S5 | inline | done | PENDING_SHA |
-| T3 | S4 | inline | pending | — |
+| T2 | S3, S5 | inline | done | cb211df |
+| T3 | S4 | worker | done | PENDING_SHA |
 | T4 | S6 | inline | pending | — |
 
 ## Log
