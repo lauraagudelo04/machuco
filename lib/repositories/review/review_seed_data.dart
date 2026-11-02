@@ -1,14 +1,10 @@
 import 'package:machuco/models/review/review.dart';
 
-/// Fuente compartida de datos mock para el módulo de reseñas.
+/// Reseñas de ejemplo con las que arranca [InMemoryReviewRepository].
 ///
-/// Los tres controladores (administración, propietario y cliente) deben
-/// consumir sus datos de aquí para evitar islas de información. Cuando
-/// el backend esté listo, este archivo se reemplaza por una llamada a
-/// [ReviewRepository] (pendiente de decisión del equipo).
-class ReviewData {
-  /// Todas las reseñas mock (sin filtrar).
-  static List<Review> all() => [
+/// Solo el repositorio en memoria las usa; los controladores nunca las leen
+/// directamente.
+List<Review> reviewSeedData() => [
     // --- Admin ---
     Review(
       id: 'review-1',
@@ -87,19 +83,4 @@ class ReviewData {
       motelId: 'motel-eclipse',
       type: ReviewType.motel,
     ),
-  ];
-
-  /// Reseñas filtradas por motel.
-  static List<Review> byMotelId(String motelId) =>
-      all().where((r) => r.motelId == motelId).toList();
-
-  /// Promedio de rating para un motel.
-  static double averageForMotelId(String motelId) {
-    final reviews = byMotelId(motelId);
-    if (reviews.isEmpty) return 0;
-    return reviews
-            .map((r) => r.rating)
-            .reduce((a, b) => a + b) /
-        reviews.length;
-  }
-}
+];

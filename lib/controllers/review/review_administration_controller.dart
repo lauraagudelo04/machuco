@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_data.dart';
+import 'package:machuco/repositories/review/review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
 enum ReviewFilter { all, visible, hidden, reported }
@@ -20,6 +20,10 @@ extension ReviewFilterData on ReviewFilter {
 /// [AdminReviewEntry] porque todos los campos de moderación viven ahora
 /// en el modelo mismo.
 class ReviewAdministrationController extends ChangeNotifier {
+  ReviewAdministrationController({ReviewRepository? repository})
+    : _repository = repository ?? InMemoryReviewRepository.shared;
+
+  final ReviewRepository _repository;
   final List<Review> _reviews = [];
   ReviewFilter _filter = ReviewFilter.all;
   String _query = '';
@@ -31,17 +35,15 @@ class ReviewAdministrationController extends ChangeNotifier {
   ReviewFilter get filter => _filter;
   String get query => _query;
 
-  /// TODO: reemplazar la carga de ejemplo por la fuente real de reseñas
-  /// (repositorio/backend) cuando el equipo la tenga lista.
   Future<void> loadReviews() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      if (_reviews.isEmpty) {
-        _reviews.addAll(ReviewData.all());
-      }
+      final reviews = await _repository.getAll();
+      _reviews
+        ..clear()
+        ..addAll(reviews);
     } catch (_) {
       _errorMessage = 'No fue posible cargar las reseñas.';
     } finally {
@@ -90,35 +92,48 @@ class ReviewAdministrationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleVisibility(String reviewId) {
-    final review = _reviews.firstWhere((r) => r.id == reviewId);
-    _reviews[_reviews.indexOf(review)] = review.copyWith(
+  Future<void> toggleVisibility(String reviewId) => _updateWhere(
+    reviewId,
+    (review) => review.copyWith(
       status: review.status == ReviewModerationStatus.hidden
           ? ReviewModerationStatus.visible
           : ReviewModerationStatus.hidden,
-    );
-    notifyListeners();
-  }
+    ),
+  );
 
-  void dismissReport(String reviewId) {
-    final review = _reviews.firstWhere((r) => r.id == reviewId);
-    _reviews[_reviews.indexOf(review)] = review.copyWith(
+  Future<void> dismissReport(String reviewId) => _updateWhere(
+    reviewId,
+    (review) => review.copyWith(
       status: ReviewModerationStatus.visible,
       clearReportReason: true,
-    );
-    notifyListeners();
-  }
+    ),
+  );
 
-  void reply(String reviewId, String message) {
+  Future<void> reply(String reviewId, String message) async {
     final trimmed = message.trim();
     if (trimmed.isEmpty) return;
-    final review = _reviews.firstWhere((r) => r.id == reviewId);
-    _reviews[_reviews.indexOf(review)] = review.copyWith(adminReply: trimmed);
+    await _updateWhere(
+      reviewId,
+      (review) => review.copyWith(adminReply: trimmed),
+    );
+  }
+
+  Future<void> delete(String reviewId) async {
+    await _repository.delete(reviewId);
+    _reviews.removeWhere((r) => r.id == reviewId);
     notifyListeners();
   }
 
-  void delete(String reviewId) {
-    _reviews.removeWhere((r) => r.id == reviewId);
+  /// Aplica [change] a la reseña [reviewId]; ignora ids desconocidos.
+  Future<void> _updateWhere(
+    String reviewId,
+    Review Function(Review review) change,
+  ) async {
+    final index = _reviews.indexWhere((r) => r.id == reviewId);
+    if (index == -1) return;
+    final updated = change(_reviews[index]);
+    await _repository.update(updated);
+    _reviews[index] = updated;
     notifyListeners();
   }
 }

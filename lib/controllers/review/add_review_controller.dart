@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_data.dart';
+import 'package:machuco/repositories/review/review_repository.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
@@ -17,18 +17,21 @@ typedef ReviewDraft = ({
 
 /// Controlador de reseñas para el cliente.
 ///
-/// Mantiene una lista mutable de reseñas del cliente para que, al enviar
-/// una nueva reseña desde [AddReviewSheet], se refleje inmediatamente en la
-/// UI a través de [ListenableBuilder].  En el futuro este controlador
-/// delegará en un [ReviewRepository] para persistir en el backend.
+/// Lee y guarda las reseñas a través de [ReviewRepository]; al enviar una
+/// reseña nueva desde [AddReviewSheet] se refleja en la UI mediante
+/// [ListenableBuilder].
 class ReviewsController extends ChangeNotifier {
-  ReviewsController({LocalPreferencesService? preferences})
-    : _preferences =
-          preferences ?? SharedPreferencesLocalService(namespace: 'reviews');
+  ReviewsController({
+    LocalPreferencesService? preferences,
+    ReviewRepository? repository,
+  }) : _preferences =
+           preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
+       _repository = repository ?? InMemoryReviewRepository.shared;
 
   static const _draftKey = 'addReviewDraft';
 
   final LocalPreferencesService _preferences;
+  final ReviewRepository _repository;
 
   final List<Review> _reviews = [];
 
@@ -69,10 +72,11 @@ class ReviewsController extends ChangeNotifier {
     return total / filtered.length;
   }
 
-  void addReview(Review review) {
+  Future<void> addReview(Review review) async {
+    await _repository.add(review);
     _reviews.insert(0, review);
     notifyListeners();
-    clearDraft();
+    await clearDraft();
   }
 
   /// Devuelve el borrador guardado para [motelId], o `null` si no hay uno o
@@ -126,12 +130,11 @@ class ReviewsController extends ChangeNotifier {
     }
   }
 
-  /// TODO: reemplazar por carga desde el backend cuando el repositorio
-  /// de reseñas esté disponible.
-  void seedReviews() {
-    if (_reviews.isEmpty) {
-      _reviews.addAll(ReviewData.all());
-      notifyListeners();
-    }
+  Future<void> loadReviews() async {
+    final reviews = await _repository.getAll();
+    _reviews
+      ..clear()
+      ..addAll(reviews);
+    notifyListeners();
   }
 }

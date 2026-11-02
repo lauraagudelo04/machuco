@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
 import 'package:machuco/controllers/room/room_mock_data.dart';
@@ -41,7 +43,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? ReviewsController();
     if (_ownsController) {
-      _controller.seedReviews();
+      unawaited(_controller.loadReviews());
     }
   }
 

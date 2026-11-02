@@ -28,8 +28,8 @@ connecting Supabase/Firebase. No external storage in this feature.
 
 | ID | Specs | Route | Status | Commit |
 |---|---|---|---|---|
-| T1 | S1, S2 | inline | done | (this commit) |
-| T2 | S3, S5 | inline | pending | — |
+| T1 | S1, S2 | inline | done | 549096c |
+| T2 | S3, S5 | inline | done | PENDING_SHA |
 | T3 | S4 | inline | pending | — |
 | T4 | S6 | inline | pending | — |
 

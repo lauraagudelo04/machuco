@@ -5,6 +5,7 @@ import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/repositories/review/review_repository.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Motel _motel(String id, String name) => Motel(
@@ -48,11 +49,17 @@ Review _review({
 );
 
 void main() {
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  late InMemoryReviewRepository repository;
+
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    repository = InMemoryReviewRepository();
+  });
 
   group('ReviewsController (cliente)', () {
-    test('seedReviews carga las reseñas del motel y su promedio', () {
-      final controller = ReviewsController()..seedReviews();
+    test('loadReviews carga las reseñas del motel y su promedio', () async {
+      final controller = ReviewsController(repository: repository);
+      await controller.loadReviews();
 
       final reviews = controller.getReviewsByMotelId('motel-eclipse');
       expect(reviews.map((r) => r.id), [
@@ -65,12 +72,13 @@ void main() {
       expect(controller.getAverageByMotelId('motel-sin-resenas'), 0.0);
     });
 
-    test('addReview la pone de primera y notifica', () {
-      final controller = ReviewsController()..seedReviews();
+    test('addReview la pone de primera y notifica', () async {
+      final controller = ReviewsController(repository: repository);
+      await controller.loadReviews();
       var notified = 0;
       controller.addListener(() => notified++);
 
-      controller.addReview(_review(roomId: 'room-1', rating: 2));
+      await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
       expect(controller.getReviewsByMotelId('motel-eclipse').first.id,
           'review-new');
@@ -80,7 +88,7 @@ void main() {
     });
 
     test('el borrador se guarda por motel y se borra al publicar', () async {
-      final controller = ReviewsController();
+      final controller = ReviewsController(repository: repository);
       await controller.saveDraft('motel-eclipse', (
         type: ReviewType.room,
         roomId: 'room-1',
@@ -97,8 +105,7 @@ void main() {
       expect(draft?.body, 'Texto');
       expect(await controller.loadDraft('otro-motel'), isNull);
 
-      controller.addReview(_review());
-      await Future<void>.delayed(Duration.zero);
+      await controller.addReview(_review());
       expect(await controller.loadDraft('motel-eclipse'), isNull);
     });
   });
@@ -112,6 +119,7 @@ void main() {
           _motel('motel-sol', 'Sol'),
           _motel('motel-luna', 'Luna'),
         ]),
+        repository: repository,
       );
       await controller.loadReviews();
     });
@@ -134,9 +142,9 @@ void main() {
       expect(controller.reviews.single.id, 'review-owner-1');
     });
 
-    test('responde con texto recortado e ignora respuestas vacías', () {
-      controller.reply('review-owner-1', '  Gracias  ');
-      controller.reply('review-owner-2', '   ');
+    test('responde con texto recortado e ignora respuestas vacías', () async {
+      await controller.reply('review-owner-1', '  Gracias  ');
+      await controller.reply('review-owner-2', '   ');
 
       final byId = {for (final r in controller.reviews) r.id: r};
       expect(byId['review-owner-1']!.ownerReply, 'Gracias');
@@ -148,7 +156,7 @@ void main() {
     late ReviewAdministrationController controller;
 
     setUp(() async {
-      controller = ReviewAdministrationController();
+      controller = ReviewAdministrationController(repository: repository);
       await controller.loadReviews();
     });
 
@@ -171,29 +179,81 @@ void main() {
       expect(controller.reviews.single.id, 'review-owner-2');
     });
 
-    test('oculta y vuelve a mostrar una reseña', () {
-      controller.toggleVisibility('review-1');
+    test('oculta y vuelve a mostrar una reseña', () async {
+      await controller.toggleVisibility('review-1');
       expect(byId('review-1').status, ReviewModerationStatus.hidden);
 
-      controller.toggleVisibility('review-1');
+      await controller.toggleVisibility('review-1');
       expect(byId('review-1').status, ReviewModerationStatus.visible);
     });
 
-    test('descartar reporte la deja visible y sin motivo', () {
-      controller.dismissReport('review-2');
+    test('descartar reporte la deja visible y sin motivo', () async {
+      await controller.dismissReport('review-2');
 
       expect(byId('review-2').status, ReviewModerationStatus.visible);
       expect(byId('review-2').reportReason, isNull);
       expect(controller.reportedCount, 0);
     });
 
-    test('responde y elimina', () {
-      controller.reply('review-1', ' Gracias ');
+    test('responde y elimina', () async {
+      await controller.reply('review-1', ' Gracias ');
       expect(byId('review-1').adminReply, 'Gracias');
 
-      controller.delete('review-1');
+      await controller.delete('review-1');
       expect(controller.reviews.any((r) => r.id == 'review-1'), isFalse);
       expect(controller.totalCount, 5);
+    });
+  });
+
+  group('Repositorio compartido entre roles', () {
+    test('lo que hace un rol lo ven los demás', () async {
+      final client = ReviewsController(repository: repository);
+      final owner = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('motel-sol', 'Sol')]),
+        repository: repository,
+      );
+      final admin = ReviewAdministrationController(repository: repository);
+
+      await client.addReview(_review(id: 'review-nueva', motelId: 'motel-sol'));
+      await owner.loadReviews();
+      await owner.reply('review-nueva', 'Gracias por venir');
+      await admin.loadReviews();
+
+      final seenByAdmin =
+          admin.reviews.firstWhere((r) => r.id == 'review-nueva');
+      expect(seenByAdmin.ownerReply, 'Gracias por venir');
+      expect(admin.totalCount, 7);
+    });
+  });
+
+  group('Entradas inválidas no rompen la app', () {
+    test('ids desconocidos no cambian nada ni notifican', () async {
+      final admin = ReviewAdministrationController(repository: repository);
+      await admin.loadReviews();
+      var notified = 0;
+      admin.addListener(() => notified++);
+
+      await admin.toggleVisibility('no-existe');
+      await admin.dismissReport('no-existe');
+      await admin.reply('no-existe', 'Hola');
+
+      expect(notified, 0);
+      expect(admin.totalCount, 6);
+      expect(await repository.getAll(), hasLength(6));
+    });
+
+    test('propietario sin moteles no tiene reseñas y no falla', () async {
+      final owner = OwnerReviewController(
+        motelController: _FakeMotelController(const []),
+        repository: repository,
+      );
+      await owner.loadReviews();
+
+      expect(owner.reviews, isEmpty);
+      expect(owner.averageRating, 0);
+      expect(owner.getMotelName('motel-sol'), 'motel-sol');
+      await owner.reply('review-owner-1', 'Hola');
+      expect(owner.errorMessage, isNull);
     });
   });
 }
