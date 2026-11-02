@@ -33,7 +33,9 @@ class AdminReviewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _AuthorAvatar(
-                initial: review.authorName.isNotEmpty ? review.authorName[0] : '?',
+                initial: review.authorName.isNotEmpty
+                    ? review.authorName[0]
+                    : '?',
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
@@ -42,8 +44,9 @@ class AdminReviewCard extends StatelessWidget {
                   children: [
                     Text(
                       review.authorName,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -115,9 +118,9 @@ class AdminReviewCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.s3),
           Text(
             review.body,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           if (isReported && review.reportReason != null) ...[
             const SizedBox(height: AppSpacing.s3),
@@ -240,9 +243,9 @@ class _InlineNote extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     text,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: context.appColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -268,9 +271,7 @@ class _StarRow extends StatelessWidget {
         (i) => Icon(
           i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
           size: 16,
-          color: i < rating
-              ? const Color(0xFFFFB300)
-              : context.appColors.textMuted,
+          color: i < rating ? AppColors.rating : context.appColors.textMuted,
         ),
       ),
     );
@@ -294,9 +295,10 @@ class _AuthorAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         initial.toUpperCase(),
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

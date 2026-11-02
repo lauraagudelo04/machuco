@@ -80,8 +80,10 @@ void main() {
 
       await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
-      expect(controller.getReviewsByMotelId('motel-eclipse').first.id,
-          'review-new');
+      expect(
+        controller.getReviewsByMotelId('motel-eclipse').first.id,
+        'review-new',
+      );
       expect(controller.getReviewsByRoomId('room-1').single.id, 'review-new');
       expect(controller.getAverageByRoomId('room-1'), 2.0);
       expect(notified, 1);
@@ -125,8 +127,10 @@ void main() {
     });
 
     test('solo muestra reseñas de los moteles del propietario', () {
-      expect(controller.reviews.map((r) => r.id),
-          ['review-owner-1', 'review-owner-2']);
+      expect(controller.reviews.map((r) => r.id), [
+        'review-owner-1',
+        'review-owner-2',
+      ]);
       expect(controller.averageRating, 4.0);
       expect(controller.getMotelName('motel-luna'), 'Luna');
       expect(controller.errorMessage, isNull);
@@ -160,8 +164,7 @@ void main() {
       await controller.loadReviews();
     });
 
-    Review byId(String id) =>
-        controller.reviews.firstWhere((r) => r.id == id);
+    Review byId(String id) => controller.reviews.firstWhere((r) => r.id == id);
 
     test('carga todas las reseñas con sus métricas', () {
       expect(controller.totalCount, 6);
@@ -219,8 +222,9 @@ void main() {
       await owner.reply('review-nueva', 'Gracias por venir');
       await admin.loadReviews();
 
-      final seenByAdmin =
-          admin.reviews.firstWhere((r) => r.id == 'review-nueva');
+      final seenByAdmin = admin.reviews.firstWhere(
+        (r) => r.id == 'review-nueva',
+      );
       expect(seenByAdmin.ownerReply, 'Gracias por venir');
       expect(admin.totalCount, 7);
     });

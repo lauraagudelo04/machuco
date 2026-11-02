@@ -77,7 +77,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                 const SizedBox(width: AppSpacing.s2),
                 const Icon(
                   Icons.star_rounded,
-                  color: Color(0xFFFFB300),
+                  color: AppColors.rating,
                   size: 20,
                 ),
                 const SizedBox(width: AppSpacing.s1),
