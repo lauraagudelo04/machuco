@@ -54,7 +54,6 @@ class ClientController extends ChangeNotifier {
         phone: entry.phone,
         email: entry.email,
         countryCode: entry.countryCode,
-        password: entry.password,
       )).toList();
 
       final prefs = await SharedPreferences.getInstance();
@@ -67,7 +66,6 @@ class ClientController extends ChangeNotifier {
           name: data['name'] as String,
           phone: data['phone'] as String,
           email: data['email'] as String,
-          password: data['password'] as String,
           countryCode: (data['countryCode'] ?? data['country_code'] ?? '+57') as String,
         );
         _syncToDirectory(_currentClient!);
@@ -79,7 +77,6 @@ class ClientController extends ChangeNotifier {
           name: 'Usuario de Prueba',
           phone: '3001234567',
           email: 'prueba@machuco.com',
-          password: 'password123',
           countryCode: '+57',
         );
       }
@@ -109,7 +106,6 @@ class ClientController extends ChangeNotifier {
       final updatedClientModel = _currentClient!.copyWith(
         name: name,
         phone: phone,
-        password: password,
         countryCode: countryCode,
       );
 
@@ -120,7 +116,6 @@ class ClientController extends ChangeNotifier {
          'phone': updatedClientModel.phone,
          'email': updatedClientModel.email,
          'countryCode': updatedClientModel.countryCode,
-         'password': updatedClientModel.password,
       }));
 
       if (!success) throw Exception('Error guardando en SharedPreferences');
@@ -131,7 +126,6 @@ class ClientController extends ChangeNotifier {
         phone: updatedClientModel.phone,
         email: updatedClientModel.email,
         countryCode: updatedClientModel.countryCode,
-        password: updatedClientModel.password,
       );
       await _clientRepo.updateClient(entryToUpdate);
 
@@ -183,7 +177,6 @@ class ClientController extends ChangeNotifier {
         phone: client.phone,
         email: client.email,
         countryCode: client.countryCode,
-        password: client.password,
     );
     await _clientRepo.removeClient(entryToDelete);
 

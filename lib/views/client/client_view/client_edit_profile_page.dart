@@ -29,7 +29,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     final client = ClientController.instance.currentClient;
     _nameController = TextEditingController(text: client?.name ?? '');
     _phoneController = TextEditingController(text: client?.phone ?? '');
-    _passwordController = TextEditingController(text: client?.password ?? '');
+    _passwordController = TextEditingController(text: '********');
     _selectedCountryCode = client?.countryCode ?? '+57';
   }
 

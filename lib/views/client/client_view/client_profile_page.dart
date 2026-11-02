@@ -69,11 +69,6 @@ class ClientProfilePage extends StatelessWidget {
                       label: 'Correo electrónico',
                       value: client.email,
                     ),
-                    _InfoRow(
-                      icon: Icons.lock_outline,
-                      label: 'Contraseña',
-                      value: client.maskedPassword,
-                    ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.s6),
