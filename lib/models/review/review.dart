@@ -74,9 +74,13 @@ class Review {
   });
 
   /// Copia inmutable con campos actualizados.
+  ///
+  /// Pasar `null` no borra un campo opcional; para quitar el motivo del
+  /// reporte usa [clearReportReason].
   Review copyWith({
     ReviewModerationStatus? status,
     String? reportReason,
+    bool clearReportReason = false,
     String? adminReply,
     String? ownerReply,
   }) {
@@ -92,7 +96,8 @@ class Review {
       roomId: roomId,
       type: type,
       status: status ?? this.status,
-      reportReason: reportReason ?? this.reportReason,
+      reportReason:
+          clearReportReason ? null : reportReason ?? this.reportReason,
       adminReply: adminReply ?? this.adminReply,
       ownerReply: ownerReply ?? this.ownerReply,
     );

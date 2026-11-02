@@ -104,7 +104,7 @@ class ReviewAdministrationController extends ChangeNotifier {
     final review = _reviews.firstWhere((r) => r.id == reviewId);
     _reviews[_reviews.indexOf(review)] = review.copyWith(
       status: ReviewModerationStatus.visible,
-      reportReason: null,
+      clearReportReason: true,
     );
     notifyListeners();
   }
