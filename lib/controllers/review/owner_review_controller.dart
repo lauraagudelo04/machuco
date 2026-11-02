@@ -4,7 +4,7 @@ import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
 // Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
 // dominio del mismo nombre dentro de la clase.
-import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
 
 /// Controlador de reseñas desde la perspectiva del propietario.
 ///

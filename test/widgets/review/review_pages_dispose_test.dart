@@ -5,7 +5,7 @@ import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/motel/motel_model.dart';
-import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
 

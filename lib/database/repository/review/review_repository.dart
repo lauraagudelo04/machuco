@@ -1,5 +1,5 @@
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/repositories/review/review_seed_data.dart';
+import 'package:machuco/database/repository/review/review_seed_data.dart';
 
 /// Contrato de acceso a las reseñas, independiente del origen de datos.
 ///

@@ -202,3 +202,4 @@ resuelve.
 | 2026-11-02 | `f09611f` | `ReviewRules`, `averageRatingOf` y `submitReview`: el formulario ya no crea la reseña. | 3 (parcial: autor en un solo lugar) |
 | 2026-11-02 | `014ef47` | Token `AppColors.rating`, `dispose` en páginas, se borra `review_type.dart`. | 4, 6 |
 | 2026-11-02 | `483d164` | Autor real: `ReviewAuthorProvider` (`lib/service/review/`) toma `uid` de Firebase Auth y nombre del perfil en Firestore; sin sesión no se guarda. | 3 |
+| 2026-11-02 | (ver git log) | El repositorio pasa a `lib/database/repository/review/`, donde el equipo guarda los repositorios (guía de Firebase, punto 10). | — |

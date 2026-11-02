@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';

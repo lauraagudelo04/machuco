@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
 // Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
 // dominio del mismo nombre dentro de la clase.
-import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
 enum ReviewFilter { all, visible, hidden, reported }
