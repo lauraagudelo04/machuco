@@ -199,11 +199,7 @@ Verificado contra el código de `develop` (`33743ec`):
   - Controladores inyectables, sin singletons.
   - Borrador local con `shared_preferences`.
   - Las respuestas del propietario y del administrador son públicas: las ve el cliente en la tarjeta de la reseña (decisión del 2026-11-02).
-- **Decisión pendiente (validar con el equipo y registrar en
-  `docs/decisions_log.md`)**:
-  - Dónde se guardan las reseñas. Propuesta: **Supabase + caché en Floor**,
-    el mismo patrón que moteles (`docs/motels_persistence.md`), porque la
-    reseña cuelga de un motel o habitación que ya vive en Supabase.
+- **Almacenamiento (decidido por el equipo):** las reseñas van en **Cloud Firestore**, como indica la guía "Firebase para el equipo MACHUCO" (28 oct 2026: los datos propios de una funcionalidad, como las reseñas, van a Firestore). Pendiente: implementar el repositorio de Firestore siguiendo `docs/firebase.md` (nombre de la colección en `FirestoreCollections`, `fromFirestore`/`toFirestore` y regla en `firestore.rules`). El contrato `ReviewRepository` ya permite cambiar solo la implementación.
 
 ## Registro de implementación (rama `feature_quiroz`)
 
