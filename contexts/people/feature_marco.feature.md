@@ -7,6 +7,8 @@
 
 | Fecha | Quién | Qué pasó |
 |---|---|---|
+| 2026-08-18 | Juan José | Primera versión del formulario de reseñas, con el autor fijo en "Tú". |
+| 2026-08-25 | Juan José | Separa la pantalla en controlador, widget y vista; el autor fijo se mantiene. |
 | 2026-09-08 a 09-12 | Marco (`marcojr282`) | Construye las vistas de propietario y administración de reseñas (PR #99). Juan José aporta etiquetas y ajustes en la lista del cliente. |
 | 2026-09-16 | Cristian | Recibe la funcionalidad y audita el código (ver "Estado recibido"). |
 | 2026-09-29 | Cristian (`cquiroz6211`) | Refactor sobre un modelo `Review` único (commit `7c1a28f`). |
@@ -65,9 +67,11 @@ Verificado contra el código de `develop` (`33743ec`):
    modifica por su cuenta. Si el propietario responde, el administrador no ve
    la respuesta. Falta un repositorio compartido.
 2. **No hay persistencia.** Todo vive en memoria; se pierde al cerrar la app.
-3. **El autor sigue fijo.** `add_review_sheet.dart:126-127` usa
-   `authorId: 'user-current'` y `authorName: 'Tú'`. Debe venir del usuario
-   autenticado (Firebase Auth, ver `lib/service/firebase/current_user.dart`).
+3. **El autor estaba fijo.** `add_review_sheet.dart` usaba
+   `authorId: 'user-current'` y `authorName: 'Tú'` (ese valor viene de la
+   primera versión del formulario, escrita por Juan José el 18 de agosto de
+   2026). **Resuelto el 2 de noviembre:** sale del usuario autenticado
+   (`CurrentUser.uid` + perfil en Firestore), ver `ReviewAuthorProvider`.
 4. **`ReviewType` duplicado.** Existe en `lib/models/review/review.dart` (el
    que se usa) y en `lib/models/review/review_type.dart` (nadie lo importa).
    Borrar el segundo.
