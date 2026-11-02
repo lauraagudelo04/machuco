@@ -42,7 +42,7 @@ class _FakeMotelController extends MotelController {
 
 Review _review({
   String id = 'review-new',
-  String motelId = 'motel-eclipse',
+  String motelId = '3',
   String? roomId,
   int rating = 4,
 }) => Review(
@@ -71,14 +71,14 @@ void main() {
       final controller = ReviewsController(repository: repository);
       await controller.loadReviews();
 
-      final reviews = controller.getReviewsByMotelId('motel-eclipse');
+      final reviews = controller.getReviewsByMotelId('3');
       expect(reviews.map((r) => r.id), [
         'review-1',
         'review-2',
         'review-client-1',
         'review-client-2',
       ]);
-      expect(controller.getAverageByMotelId('motel-eclipse'), 3.5);
+      expect(controller.getAverageByMotelId('3'), 3.5);
       expect(controller.getAverageByMotelId('motel-sin-resenas'), 0.0);
     });
 
@@ -91,7 +91,7 @@ void main() {
       await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
       expect(
-        controller.getReviewsByMotelId('motel-eclipse').first.id,
+        controller.getReviewsByMotelId('3').first.id,
         'review-new',
       );
       expect(controller.getReviewsByRoomId('room-1').single.id, 'review-new');
@@ -101,7 +101,7 @@ void main() {
 
     test('el borrador se guarda por motel y se borra al publicar', () async {
       final controller = ReviewsController(repository: repository);
-      await controller.saveDraft('motel-eclipse', (
+      await controller.saveDraft('3', (
         type: ReviewType.room,
         roomId: 'room-1',
         rating: 4,
@@ -109,7 +109,7 @@ void main() {
         body: 'Texto',
       ));
 
-      final draft = await controller.loadDraft('motel-eclipse');
+      final draft = await controller.loadDraft('3');
       expect(draft?.type, ReviewType.room);
       expect(draft?.roomId, 'room-1');
       expect(draft?.rating, 4);
@@ -118,7 +118,7 @@ void main() {
       expect(await controller.loadDraft('otro-motel'), isNull);
 
       await controller.addReview(_review());
-      expect(await controller.loadDraft('motel-eclipse'), isNull);
+      expect(await controller.loadDraft('3'), isNull);
     });
   });
 
@@ -128,8 +128,8 @@ void main() {
     setUp(() async {
       controller = OwnerReviewController(
         motelController: _FakeMotelController([
-          _motel('motel-sol', 'Sol'),
-          _motel('motel-luna', 'Luna'),
+          _motel('1', 'Sol'),
+          _motel('2', 'Luna'),
         ]),
         repository: repository,
       );
@@ -142,12 +142,12 @@ void main() {
         'review-owner-2',
       ]);
       expect(controller.averageRating, 4.0);
-      expect(controller.getMotelName('motel-luna'), 'Luna');
+      expect(controller.getMotelName('2'), 'Luna');
       expect(controller.errorMessage, isNull);
     });
 
     test('filtra por motel y por texto', () {
-      controller.selectMotel('motel-luna');
+      controller.selectMotel('2');
       expect(controller.reviews.single.id, 'review-owner-2');
 
       controller
@@ -222,12 +222,12 @@ void main() {
     test('lo que hace un rol lo ven los demás', () async {
       final client = ReviewsController(repository: repository);
       final owner = OwnerReviewController(
-        motelController: _FakeMotelController([_motel('motel-sol', 'Sol')]),
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
         repository: repository,
       );
       final admin = ReviewAdministrationController(repository: repository);
 
-      await client.addReview(_review(id: 'review-nueva', motelId: 'motel-sol'));
+      await client.addReview(_review(id: 'review-nueva', motelId: '1'));
       await owner.loadReviews();
       await owner.reply('review-nueva', 'Gracias por venir');
       await admin.loadReviews();
@@ -265,7 +265,7 @@ void main() {
 
       expect(owner.reviews, isEmpty);
       expect(owner.averageRating, 0);
-      expect(owner.getMotelName('motel-sol'), 'motel-sol');
+      expect(owner.getMotelName('1'), '1');
       await owner.reply('review-owner-1', 'Hola');
       expect(owner.errorMessage, isNull);
     });
@@ -295,7 +295,7 @@ void main() {
       );
       final before = DateTime.now();
 
-      final saved = await controller.submitReview('motel-sol', (
+      final saved = await controller.submitReview('1', (
         type: ReviewType.room,
         roomId: 'room-3',
         rating: 4,
@@ -308,7 +308,7 @@ void main() {
       expect(review.id, startsWith('review-client-'));
       expect(review.authorId, 'user-7');
       expect(review.authorName, 'Ana');
-      expect(review.motelId, 'motel-sol');
+      expect(review.motelId, '1');
       expect(review.roomId, 'room-3');
       expect(review.type, ReviewType.room);
       expect(review.rating, 4);
@@ -316,7 +316,7 @@ void main() {
       expect(review.body, 'Limpio');
       expect(review.status, ReviewModerationStatus.visible);
       expect(review.date.isBefore(before), isFalse);
-      expect(controller.getReviewsByMotelId('motel-sol').first.id, review.id);
+      expect(controller.getReviewsByMotelId('1').first.id, review.id);
     });
 
     test('sin sesión no guarda ni notifica', () async {
@@ -327,7 +327,7 @@ void main() {
       var notified = 0;
       controller.addListener(() => notified++);
 
-      final saved = await controller.submitReview('motel-sol', (
+      final saved = await controller.submitReview('1', (
         type: ReviewType.motel,
         roomId: null,
         rating: 5,
@@ -351,7 +351,7 @@ void main() {
         var notified = 0;
         controller.addListener(() => notified++);
 
-        final saved = await controller.submitReview('motel-sol', (
+        final saved = await controller.submitReview('1', (
           type: ReviewType.motel,
           roomId: null,
           rating: rating,

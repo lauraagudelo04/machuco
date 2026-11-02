@@ -49,7 +49,7 @@ void main() {
   ) async {
     final controller = OwnerReviewController(
       motelController: _FakeMotelController([
-        _motel('motel-eclipse', 'Motel Eclipse'),
+        _motel('3', 'Motel Eclipse'),
       ]),
       repository: InMemoryReviewRepository(),
     );

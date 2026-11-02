@@ -15,7 +15,7 @@ List<Review> reviewSeedData() => [
           'Las habitaciones estaban limpias y el personal fue muy amable.',
       rating: 5,
       date: DateTime(2026, 7, 20),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
     ),
     Review(
@@ -27,7 +27,7 @@ List<Review> reviewSeedData() => [
           'Contiene lenguaje ofensivo y datos personales expuestos.',
       rating: 1,
       date: DateTime(2026, 8, 2),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
       status: ReviewModerationStatus.reported,
       reportReason:
@@ -43,7 +43,7 @@ List<Review> reviewSeedData() => [
           'El personal fue muy amable y la habitación estaba impecable.',
       rating: 5,
       date: DateTime(2026, 7, 10),
-      motelId: 'motel-sol',
+      motelId: '1',
       type: ReviewType.motel,
     ),
     Review(
@@ -55,7 +55,7 @@ List<Review> reviewSeedData() => [
           'Todo bien excepto el aire, que casi no funcionaba.',
       rating: 3,
       date: DateTime(2026, 7, 28),
-      motelId: 'motel-luna',
+      motelId: '2',
       type: ReviewType.motel,
     ),
     // --- Client (motel detail) ---
@@ -68,7 +68,7 @@ List<Review> reviewSeedData() => [
           'Superó las expectativas. Volveremos sin duda.',
       rating: 5,
       date: DateTime(2026, 8, 15),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.room,
     ),
     Review(
@@ -80,7 +80,7 @@ List<Review> reviewSeedData() => [
           'La ubicación es buena, pero el desayuno podría mejorar.',
       rating: 3,
       date: DateTime(2026, 8, 20),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
     ),
 ];
