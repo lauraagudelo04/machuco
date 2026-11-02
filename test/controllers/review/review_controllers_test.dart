@@ -6,6 +6,7 @@ import 'package:machuco/controllers/review/review_administration_controller.dart
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 Motel _motel(String id, String name) => Motel(
@@ -20,6 +21,15 @@ Motel _motel(String id, String name) => Motel(
   paymentMethods: const [],
   imageUrls: const [],
 );
+
+class _FakeAuthorProvider implements ReviewAuthorProvider {
+  _FakeAuthorProvider(this.author);
+
+  final ReviewAuthor? author;
+
+  @override
+  Future<ReviewAuthor?> currentAuthor() async => author;
+}
 
 class _FakeMotelController extends MotelController {
   _FakeMotelController(this.motels);
@@ -281,8 +291,7 @@ void main() {
     test('crea la reseña con autor, fecha e id y la guarda', () async {
       final controller = ReviewsController(
         repository: repository,
-        authorId: 'user-7',
-        authorName: 'Ana',
+        authorProvider: _FakeAuthorProvider((id: 'user-7', name: 'Ana')),
       );
       final before = DateTime.now();
 
@@ -308,6 +317,27 @@ void main() {
       expect(review.status, ReviewModerationStatus.visible);
       expect(review.date.isBefore(before), isFalse);
       expect(controller.getReviewsByMotelId('motel-sol').first.id, review.id);
+    });
+
+    test('sin sesión no guarda ni notifica', () async {
+      final controller = ReviewsController(
+        repository: repository,
+        authorProvider: _FakeAuthorProvider(null),
+      );
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      final saved = await controller.submitReview('motel-sol', (
+        type: ReviewType.motel,
+        roomId: null,
+        rating: 5,
+        title: 'Bien',
+        body: 'Limpio',
+      ));
+
+      expect(saved, isFalse);
+      expect(notified, 0);
+      expect(await repository.getAll(), hasLength(6));
     });
 
     for (final (label, rating, title, body) in [

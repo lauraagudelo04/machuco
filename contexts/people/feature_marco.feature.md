@@ -201,3 +201,4 @@ resuelve.
 | 2026-11-02 | `cb211df` | `ReviewRepository` compartido (`lib/repositories/review/`); los datos de ejemplo salen de `models/`. | 1, 5 (parcial) |
 | 2026-11-02 | `f09611f` | `ReviewRules`, `averageRatingOf` y `submitReview`: el formulario ya no crea la reseña. | 3 (parcial: autor en un solo lugar) |
 | 2026-11-02 | `014ef47` | Token `AppColors.rating`, `dispose` en páginas, se borra `review_type.dart`. | 4, 6 |
+| 2026-11-02 | (este commit) | Autor real: `ReviewAuthorProvider` (`lib/service/review/`) toma `uid` de Firebase Auth y nombre del perfil en Firestore; sin sesión no se guarda. | 3 |

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/repositories/review/review_repository.dart';
+import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
@@ -15,22 +16,17 @@ class ReviewsController extends ChangeNotifier {
   ReviewsController({
     LocalPreferencesService? preferences,
     ReviewRepository? repository,
-    this.authorId = 'user-current',
-    this.authorName = 'Tú',
+    ReviewAuthorProvider? authorProvider,
   }) : _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
-       _repository = repository ?? InMemoryReviewRepository.shared;
+       _repository = repository ?? InMemoryReviewRepository.shared,
+       _authorProvider = authorProvider ?? FirebaseReviewAuthorProvider();
 
   static const _draftKey = 'addReviewDraft';
 
-  /// Autor de las reseñas creadas desde este controlador.
-  ///
-  /// Temporal: el autor real vendrá de Firebase Auth (fuera de alcance).
-  final String authorId;
-  final String authorName;
-
   final LocalPreferencesService _preferences;
   final ReviewRepository _repository;
+  final ReviewAuthorProvider _authorProvider;
 
   final List<Review> _reviews = [];
 
@@ -58,7 +54,8 @@ class ReviewsController extends ChangeNotifier {
   /// Crea y guarda la reseña descrita por [draft].
   ///
   /// Devuelve `false` sin tocar el repositorio ni notificar si la calificación
-  /// está fuera de rango o si el título o el texto quedan vacíos al recortar.
+  /// está fuera de rango, si el título o el texto quedan vacíos al recortar
+  /// o si no hay una sesión con autor.
   Future<bool> submitReview(String motelId, ReviewDraft draft) async {
     final title = draft.title.trim();
     final body = draft.body.trim();
@@ -67,12 +64,14 @@ class ReviewsController extends ChangeNotifier {
         !ReviewRules.isValidText(body)) {
       return false;
     }
+    final author = await _authorProvider.currentAuthor();
+    if (author == null) return false;
 
     await addReview(
       Review(
         id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
-        authorId: authorId,
-        authorName: authorName,
+        authorId: author.id,
+        authorName: author.name,
         title: title,
         body: body,
         rating: draft.rating,
