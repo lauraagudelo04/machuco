@@ -37,15 +37,19 @@ class ReviewsController extends ChangeNotifier {
 
   double get overallAverage => averageRatingOf(_reviews);
 
+  /// Reseñas que el cliente puede ver: las ocultas por el administrador no.
+  Iterable<Review> get _publicReviews =>
+      _reviews.where((r) => r.status != ReviewModerationStatus.hidden);
+
   List<Review> getReviewsByMotelId(String motelId) {
-    return _reviews.where((r) => r.motelId == motelId).toList(growable: false);
+    return _publicReviews.where((r) => r.motelId == motelId).toList(growable: false);
   }
 
   double getAverageByMotelId(String motelId) =>
       averageRatingOf(getReviewsByMotelId(motelId));
 
   List<Review> getReviewsByRoomId(String roomId) {
-    return _reviews.where((r) => r.roomId == roomId).toList(growable: false);
+    return _publicReviews.where((r) => r.roomId == roomId).toList(growable: false);
   }
 
   double getAverageByRoomId(String roomId) =>

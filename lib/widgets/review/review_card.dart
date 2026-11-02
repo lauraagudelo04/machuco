@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/widgets/review/review_note.dart';
 import '../../core/design_system/design_system.dart';
 
 class ReviewCard extends StatelessWidget {
@@ -94,6 +95,24 @@ class ReviewCard extends StatelessWidget {
                 color: context.appColors.textSecondary,
               ),
             ),
+            if (review.ownerReply != null) ...[
+              const SizedBox(height: AppSpacing.s3),
+              ReviewNote(
+                icon: Icons.storefront_outlined,
+                color: AppColors.violet,
+                label: 'Respuesta del propietario',
+                text: review.ownerReply!,
+              ),
+            ],
+            if (review.adminReply != null) ...[
+              const SizedBox(height: AppSpacing.s3),
+              ReviewNote(
+                icon: Icons.support_agent_outlined,
+                color: AppColors.violet,
+                label: 'Respuesta del administrador',
+                text: review.adminReply!,
+              ),
+            ],
           ],
         ),
       ),

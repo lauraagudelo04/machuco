@@ -107,6 +107,16 @@ Verificado contra el código de `develop` (`33743ec`):
     When cierra el formulario y lo vuelve a abrir para el mismo motel
     Then recupera el borrador guardado localmente
 
+  Scenario: Cliente lee las respuestas de una reseña
+    Given una reseña con "Respuesta del propietario" o "Respuesta del administrador"
+    When el cliente abre la sección de reseñas del motel
+    Then ve cada respuesta debajo del texto de la reseña
+
+  Scenario: Cliente no ve reseñas ocultas
+    Given una reseña que el administrador marcó como "Oculta"
+    When el cliente abre la sección de reseñas del motel
+    Then la reseña no aparece y no cuenta en el promedio
+
 ## Feature: Leer y responder reseñas (Propietario)
 
   Scenario: Propietario consulta las reseñas de sus moteles
@@ -132,6 +142,11 @@ Verificado contra el código de `develop` (`33743ec`):
     Given un administrador en el panel de reseñas
     When elige un filtro ("Todas", "Visibles", "Ocultas" o "Reportadas") o busca por texto
     Then la lista muestra solo las reseñas que cumplen el filtro
+
+  Scenario: Administrador ve la respuesta del propietario
+    Given una reseña que el propietario ya respondió
+    When el administrador la ve en el panel
+    Then la tarjeta muestra "Respuesta del propietario"
 
   Scenario: Administrador oculta o muestra una reseña
     Given un administrador viendo una reseña
@@ -183,6 +198,7 @@ Verificado contra el código de `develop` (`33743ec`):
   - Un solo modelo `Review` inmutable; nada de wrappers por rol.
   - Controladores inyectables, sin singletons.
   - Borrador local con `shared_preferences`.
+  - Las respuestas del propietario y del administrador son públicas: las ve el cliente en la tarjeta de la reseña (decisión del 2026-11-02).
 - **Decisión pendiente (validar con el equipo y registrar en
   `docs/decisions_log.md`)**:
   - Dónde se guardan las reseñas. Propuesta: **Supabase + caché en Floor**,
@@ -204,3 +220,4 @@ resuelve.
 | 2026-11-02 | `483d164` | Autor real: `ReviewAuthorProvider` (`lib/service/review/`) toma `uid` de Firebase Auth y nombre del perfil en Firestore; sin sesión no se guarda. | 3 |
 | 2026-11-02 | (ver git log) | El repositorio pasa a `lib/database/repository/review/`, donde el equipo guarda los repositorios (guía de Firebase, punto 10). | — |
 | 2026-11-02 | (ver git log) | QA en emulador: las reseñas de ejemplo apuntaban a moteles inexistentes (`5db2ebf`); la tarjeta del propietario muestra el nombre del motel y no su id. | — (bugs del QA) |
+| 2026-11-02 | (ver git log) | Las respuestas se muestran al cliente y al administrador (`ReviewNote` compartido); el cliente ya no ve reseñas ocultas. | — (hallazgos del QA) |

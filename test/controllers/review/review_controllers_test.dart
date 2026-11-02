@@ -365,4 +365,20 @@ void main() {
       });
     }
   });
+
+  test('el cliente no ve reseñas ocultas ni cuentan en el promedio', () async {
+    final admin = ReviewAdministrationController(repository: repository);
+    await admin.loadReviews();
+    await admin.toggleVisibility('review-1');
+
+    final client = ReviewsController(repository: repository);
+    await client.loadReviews();
+
+    expect(client.getReviewsByMotelId('3').map((r) => r.id), [
+      'review-2',
+      'review-client-1',
+      'review-client-2',
+    ]);
+    expect(client.getAverageByMotelId('3'), 3.0);
+  });
 }
