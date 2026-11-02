@@ -197,3 +197,7 @@ resuelve.
 | Fecha | Commit | Qué se hizo | Deuda resuelta |
 |---|---|---|---|
 | 2026-11-02 | — | Creación de este documento de traspaso. | — |
+| 2026-11-02 | `549096c` | Pruebas de los 3 controladores; "Descartar reporte" ahora borra el motivo. | — (bug nuevo) |
+| 2026-11-02 | `cb211df` | `ReviewRepository` compartido (`lib/repositories/review/`); los datos de ejemplo salen de `models/`. | 1, 5 (parcial) |
+| 2026-11-02 | `f09611f` | `ReviewRules`, `averageRatingOf` y `submitReview`: el formulario ya no crea la reseña. | 3 (parcial: autor en un solo lugar) |
+| 2026-11-02 | `014ef47` | Token `AppColors.rating`, `dispose` en páginas, se borra `review_type.dart`. | 4, 6 |

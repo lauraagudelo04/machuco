@@ -30,8 +30,8 @@ connecting Supabase/Firebase. No external storage in this feature.
 |---|---|---|---|---|
 | T1 | S1, S2 | inline | done | 549096c |
 | T2 | S3, S5 | inline | done | cb211df |
-| T3 | S4 | worker | done | PENDING_SHA |
-| T4 | S6 | inline | pending | — |
+| T3 | S4 | worker | done | f09611f |
+| T4 | S6 | worker | done | 014ef47 |
 
 ## Log
 
@@ -40,3 +40,6 @@ connecting Supabase/Firebase. No external storage in this feature.
   de marco desde el domain hasta el controller por todo el flujo este
   separado." → audit; then "si, hagamoslo" approving the 4-step plan (tests
   first, ReviewRepository, domain rules, cleanup).
+- L2 (close, 2026-11-02): all tasks done. Full suite: 290 passed, 1 skipped.
+  Not done (S7): real author from Firebase Auth, storage backend, pages
+  still call loadReviews on injected controllers.
