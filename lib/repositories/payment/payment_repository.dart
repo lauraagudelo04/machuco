@@ -153,20 +153,10 @@ class PaymentRepository {
   Future<List<PaymentCatalogEntry>> findCachedPaymentMethods() =>
       _withDao((dao) => dao.findCatalogEntries());
 
-  /// Opt-in del modo de demostración; no importa registros de otros moteles.
-  Future<void> seedDemoPayments({
-    required String motelId,
-    required List<PaymentRecord> payments,
-  }) {
-    final id = _requiredId(motelId);
-    final examples = payments
-        .where((payment) => payment.motelId == id)
-        .toList();
-    for (final payment in examples) {
-      _validatePayment(payment);
-    }
-    return _withDao((dao) => dao.insertMissingDemoPayments(examples));
-  }
+  /// One-time-compatible cleanup. It is intentionally idempotent so devices
+  /// that imported old fixtures cannot upload them to the shared Firestore.
+  Future<void> deleteLegacyDemoPayments() =>
+      _withDao((dao) => dao.deleteLegacyDemoPayments());
 
   Future<PaymentRecord?> findPayment(String id) {
     final paymentId = _requiredId(id);
@@ -181,6 +171,25 @@ class PaymentRepository {
   Future<List<PaymentRecord>> findPaymentsByMotel(String motelId) {
     final id = _requiredId(motelId);
     return _withDao((dao) => dao.findByMotel(id));
+  }
+
+  /// Merges records already authorized and decoded by the cloud repository.
+  /// Terminal local states are never regressed to an older remote state.
+  Future<void> mergeRemotePayments({
+    required String motelId,
+    required List<PaymentRecord> payments,
+  }) async {
+    final id = _requiredId(motelId);
+    for (final payment in payments) {
+      _validatePayment(payment);
+      if (payment.motelId != id) {
+        throw const PaymentRepositoryException(
+          PaymentRepositoryError.invalidPayment,
+          'Firebase devolvió un pago que no pertenece a este motel.',
+        );
+      }
+    }
+    await _withDao((dao) => dao.mergeRemotePayments(payments));
   }
 
   /// Inserta solamente; no sobrescribe un pago ni confirma su recepción.

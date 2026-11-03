@@ -453,6 +453,29 @@ class _$PaymentDao extends PaymentDao {
             'payment_method_catalog',
             (PaymentCatalogEntry item) =>
                 <String, Object?>{'id': item.id, 'name': item.name}),
+        _paymentRecordUpdateAdapter = UpdateAdapter(
+            database,
+            'payments',
+            ['id'],
+            (PaymentRecord item) => <String, Object?>{
+                  'id': item.id,
+                  'bookingId': item.bookingId,
+                  'bookingReference': item.bookingReference,
+                  'clientId': item.clientId,
+                  'client': item.client,
+                  'motelId': item.motelId,
+                  'motel': item.motel,
+                  'roomId': item.roomId,
+                  'room': item.room,
+                  'reservationDate':
+                      _subscriptionDateConverter.encode(item.reservationDate),
+                  'amount': item.amount,
+                  'status': _paymentStatusConverter.encode(item.status),
+                  'method': _paymentMethodConverter.encode(item.method),
+                  'paymentMethodId': item.paymentMethodId,
+                  'paidAt': _paymentOptionalDateConverter.encode(item.paidAt),
+                  'receiptNumber': item.receiptNumber
+                }),
         _paymentCatalogEntryUpdateAdapter = UpdateAdapter(
             database,
             'payment_method_catalog',
@@ -470,6 +493,8 @@ class _$PaymentDao extends PaymentDao {
 
   final InsertionAdapter<PaymentCatalogEntry>
       _paymentCatalogEntryInsertionAdapter;
+
+  final UpdateAdapter<PaymentRecord> _paymentRecordUpdateAdapter;
 
   final UpdateAdapter<PaymentCatalogEntry> _paymentCatalogEntryUpdateAdapter;
 
@@ -538,6 +563,12 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
+  Future<void> deleteLegacyDemoPayments() async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM payments WHERE id IN (\'pay-001\', \'pay-002\', \'pay-003\', \'owner-pay-001\', \'owner-pay-002\', \'owner-pay-003\')');
+  }
+
+  @override
   Future<List<PaymentCatalogEntry>> findCatalogEntries() async {
     return _queryAdapter.queryList(
         'SELECT * FROM payment_method_catalog ORDER BY id',
@@ -577,15 +608,14 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
-  Future<void> insertMissingDemoPayments(List<PaymentRecord> payments) async {
-    await _paymentRecordInsertionAdapter.insertList(
-        payments, OnConflictStrategy.ignore);
-  }
-
-  @override
   Future<void> insertCatalogEntries(List<PaymentCatalogEntry> entries) async {
     await _paymentCatalogEntryInsertionAdapter.insertList(
         entries, OnConflictStrategy.ignore);
+  }
+
+  @override
+  Future<void> updatePayment(PaymentRecord payment) async {
+    await _paymentRecordUpdateAdapter.update(payment, OnConflictStrategy.abort);
   }
 
   @override
@@ -626,6 +656,20 @@ class _$PaymentDao extends PaymentDao {
           ..database = transaction;
         return transactionDatabase.paymentDao.registerLocalPayment(
             id, motelId, paymentMethodId, paidAt, receiptNumber);
+      });
+    }
+  }
+
+  @override
+  Future<void> mergeRemotePayments(List<PaymentRecord> payments) async {
+    if (database is sqflite.Transaction) {
+      await super.mergeRemotePayments(payments);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.paymentDao.mergeRemotePayments(payments);
       });
     }
   }

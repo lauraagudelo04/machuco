@@ -258,7 +258,6 @@ void main() {
       final controller = OwnerPaymentController(
         motelId: 'motel-1',
         repository: repository,
-        useDemoData: false,
       );
       addTearDown(controller.dispose);
       await controller.ready;
@@ -301,7 +300,6 @@ void main() {
     final controller = OwnerPaymentController(
       motelId: 'motel-1',
       repository: repository,
-      useDemoData: false,
     );
     addTearDown(controller.dispose);
     await controller.ready;
@@ -329,6 +327,20 @@ class _PageRepository extends PaymentRepository {
   _PageRepository(this.records);
   final List<PaymentRecord> records;
   bool failLoad = false;
+
+  @override
+  Future<void> deleteLegacyDemoPayments() async {
+    records.removeWhere(
+      (payment) => const {
+        'pay-001',
+        'pay-002',
+        'pay-003',
+        'owner-pay-001',
+        'owner-pay-002',
+        'owner-pay-003',
+      }.contains(payment.id),
+    );
+  }
 
   @override
   Future<List<PaymentRecord>> findPaymentsByMotel(String motelId) async {

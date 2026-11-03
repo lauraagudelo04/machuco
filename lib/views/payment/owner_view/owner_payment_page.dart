@@ -56,7 +56,10 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
           IconButton(
             tooltip: 'Actualizar pagos',
             icon: const Icon(Icons.refresh),
-            onPressed: _controller.isLoading || _controller.isSaving
+            onPressed:
+                _controller.isLoading ||
+                    _controller.isSaving ||
+                    _controller.isSyncing
                 ? null
                 : _controller.load,
           ),
@@ -82,16 +85,36 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                       ),
                       const SizedBox(height: AppSpacing.s2),
                       Text(
-                        'Resumen de pagos guardados en este dispositivo.',
+                        'Pagos guardados en este dispositivo y sincronizados '
+                        'con Firebase.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                           color: context.appColors.textSecondary,
                         ),
                       ),
-                      if (_controller.useDemoData) ...[
+                      if (_controller.isSyncing) ...[
                         const SizedBox(height: AppSpacing.s3),
-                        const AppCard(
-                          child: Text(
-                            'Modo demostración: estos ejemplos locales no provienen de reservas reales.',
+                        const LinearProgressIndicator(
+                          semanticsLabel: 'Sincronizando pagos con Firebase',
+                        ),
+                      ],
+                      if (_controller.syncWarningMessage != null) ...[
+                        const SizedBox(height: AppSpacing.s3),
+                        AppCard(
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Icon(
+                                Icons.cloud_off_outlined,
+                                color: Theme.of(context).colorScheme.error,
+                              ),
+                              const SizedBox(width: AppSpacing.s3),
+                              Expanded(
+                                child: Text(
+                                  _controller.syncWarningMessage!,
+                                  key: const ValueKey('payment-sync-warning'),
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
