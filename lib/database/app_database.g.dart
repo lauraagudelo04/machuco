@@ -90,7 +90,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 11,
+      version: 12,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -118,7 +118,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `bookingId` TEXT NOT NULL, `bookingReference` TEXT NOT NULL, `clientId` TEXT NOT NULL, `client` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motel` TEXT NOT NULL, `roomId` TEXT NOT NULL, `room` TEXT NOT NULL, `reservationDate` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `status` TEXT NOT NULL, `method` TEXT, `paymentMethodId` INTEGER, `paidAt` INTEGER, `receiptNumber` TEXT, FOREIGN KEY (`paymentMethodId`) REFERENCES `payment_method_catalog` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
+            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -688,8 +688,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 }),
         _clientEntryUpdateAdapter = UpdateAdapter(
             database,
@@ -700,8 +699,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 }),
         _clientEntryDeletionAdapter = DeletionAdapter(
             database,
@@ -712,8 +710,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -736,8 +733,7 @@ class _$ClientDao extends ClientDao {
             name: row['name'] as String,
             phone: row['phone'] as String,
             email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String),
+            countryCode: row['country_code'] as String),
         arguments: [id]);
   }
 
@@ -749,8 +745,7 @@ class _$ClientDao extends ClientDao {
             name: row['name'] as String,
             phone: row['phone'] as String,
             email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String));
+            countryCode: row['country_code'] as String));
   }
 
   @override
