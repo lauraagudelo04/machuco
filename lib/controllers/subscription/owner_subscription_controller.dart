@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/repository/suscripcion/subscription_firestore_repository.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:machuco/service/subscription/subscription_preferences_service.dart';
 
@@ -8,14 +9,17 @@ import 'package:machuco/service/subscription/subscription_preferences_service.da
 class OwnerSubscriptionController extends ChangeNotifier {
   OwnerSubscriptionController({
     SubscriptionRepository? repository,
+    SubscriptionFirestoreRepository? firestoreRepository,
     SubscriptionPreferencesService? preferences,
     this.subscriptionId,
   }) : _repository = repository ?? SubscriptionRepository(),
+       _firestoreRepository = firestoreRepository,
        _preferences = preferences ?? SubscriptionPreferencesService() {
     ready = load();
   }
 
   final SubscriptionRepository _repository;
+  final SubscriptionFirestoreRepository? _firestoreRepository;
   final SubscriptionPreferencesService _preferences;
   final int? subscriptionId;
   late final Future<void> ready;
@@ -54,6 +58,9 @@ class OwnerSubscriptionController extends ChangeNotifier {
           : await _repository.findPayments(subscription.id!);
       _subscription = subscription;
       _payments = payments;
+      if (subscription != null && _firestoreRepository != null) {
+        await _syncToFirestore(subscription, payments);
+      }
     } on SubscriptionRepositoryException catch (error) {
       _errorMessage = error.message;
     } catch (_) {
@@ -97,9 +104,28 @@ class OwnerSubscriptionController extends ChangeNotifier {
       final savedPayment = await _repository.savePayment(payment);
       // Actualiza el historial solo después de confirmar la escritura en SQLite.
       _payments = [savedPayment, ..._payments];
+      if (_firestoreRepository != null) {
+        await _syncToFirestore(subscription, _payments);
+      }
     } finally {
       _isSaving = false;
       _notify();
+    }
+  }
+
+  Future<void> _syncToFirestore(
+    SubscriptionDetails subscription,
+    List<SubscriptionPayment> payments,
+  ) async {
+    try {
+      await _firestoreRepository!.sync(
+        subscription: subscription,
+        payments: payments,
+      );
+    } catch (error) {
+      // La copia local ya está confirmada. Firestore puede reintentar sus
+      // escrituras cuando vuelva la conexión.
+      debugPrint('No se pudo sincronizar con Firestore: $error');
     }
   }
 

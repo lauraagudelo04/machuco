@@ -1,14 +1,10 @@
 import 'package:machuco/models/review/review.dart';
 
-/// Fuente compartida de datos mock para el módulo de reseñas.
+/// Reseñas de ejemplo con las que arranca [InMemoryReviewRepository].
 ///
-/// Los tres controladores (administración, propietario y cliente) deben
-/// consumir sus datos de aquí para evitar islas de información. Cuando
-/// el backend esté listo, este archivo se reemplaza por una llamada a
-/// [ReviewRepository] (pendiente de decisión del equipo).
-class ReviewData {
-  /// Todas las reseñas mock (sin filtrar).
-  static List<Review> all() => [
+/// Solo el repositorio en memoria las usa; los controladores nunca las leen
+/// directamente.
+List<Review> reviewSeedData() => [
     // --- Admin ---
     Review(
       id: 'review-1',
@@ -19,7 +15,7 @@ class ReviewData {
           'Las habitaciones estaban limpias y el personal fue muy amable.',
       rating: 5,
       date: DateTime(2026, 7, 20),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
     ),
     Review(
@@ -31,7 +27,7 @@ class ReviewData {
           'Contiene lenguaje ofensivo y datos personales expuestos.',
       rating: 1,
       date: DateTime(2026, 8, 2),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
       status: ReviewModerationStatus.reported,
       reportReason:
@@ -47,7 +43,7 @@ class ReviewData {
           'El personal fue muy amable y la habitación estaba impecable.',
       rating: 5,
       date: DateTime(2026, 7, 10),
-      motelId: 'motel-sol',
+      motelId: '1',
       type: ReviewType.motel,
     ),
     Review(
@@ -59,7 +55,7 @@ class ReviewData {
           'Todo bien excepto el aire, que casi no funcionaba.',
       rating: 3,
       date: DateTime(2026, 7, 28),
-      motelId: 'motel-luna',
+      motelId: '2',
       type: ReviewType.motel,
     ),
     // --- Client (motel detail) ---
@@ -72,7 +68,7 @@ class ReviewData {
           'Superó las expectativas. Volveremos sin duda.',
       rating: 5,
       date: DateTime(2026, 8, 15),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.room,
     ),
     Review(
@@ -84,22 +80,7 @@ class ReviewData {
           'La ubicación es buena, pero el desayuno podría mejorar.',
       rating: 3,
       date: DateTime(2026, 8, 20),
-      motelId: 'motel-eclipse',
+      motelId: '3',
       type: ReviewType.motel,
     ),
-  ];
-
-  /// Reseñas filtradas por motel.
-  static List<Review> byMotelId(String motelId) =>
-      all().where((r) => r.motelId == motelId).toList();
-
-  /// Promedio de rating para un motel.
-  static double averageForMotelId(String motelId) {
-    final reviews = byMotelId(motelId);
-    if (reviews.isEmpty) return 0;
-    return reviews
-            .map((r) => r.rating)
-            .reduce((a, b) => a + b) /
-        reviews.length;
-  }
-}
+];

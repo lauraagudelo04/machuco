@@ -2,77 +2,98 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_data.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
-/// Borrador de una reseña a medio escribir en el formulario.
-typedef ReviewDraft = ({
-  ReviewType type,
-  String? roomId,
-  int rating,
-  String title,
-  String body,
-});
-
 /// Controlador de reseñas para el cliente.
 ///
-/// Mantiene una lista mutable de reseñas del cliente para que, al enviar
-/// una nueva reseña desde [AddReviewSheet], se refleje inmediatamente en la
-/// UI a través de [ListenableBuilder].  En el futuro este controlador
-/// delegará en un [ReviewRepository] para persistir en el backend.
+/// Lee y guarda las reseñas a través de [ReviewRepository]; al enviar una
+/// reseña nueva desde [AddReviewSheet] se refleja en la UI mediante
+/// [ListenableBuilder].
 class ReviewsController extends ChangeNotifier {
-  ReviewsController({LocalPreferencesService? preferences})
-    : _preferences =
-          preferences ?? SharedPreferencesLocalService(namespace: 'reviews');
+  ReviewsController({
+    LocalPreferencesService? preferences,
+    ReviewRepository? repository,
+    ReviewAuthorProvider? authorProvider,
+  }) : _preferences =
+           preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
+       _repository = repository ?? InMemoryReviewRepository.shared,
+       _authorProvider = authorProvider ?? FirebaseReviewAuthorProvider();
 
   static const _draftKey = 'addReviewDraft';
 
   final LocalPreferencesService _preferences;
+  final ReviewRepository _repository;
+  final ReviewAuthorProvider _authorProvider;
 
   final List<Review> _reviews = [];
 
   int get totalCount => _reviews.length;
 
-  int get visibleCount => _reviews
-      .where((r) => r.status == ReviewModerationStatus.visible)
-      .length;
+  int get visibleCount =>
+      _reviews.where((r) => r.status == ReviewModerationStatus.visible).length;
 
-  double get overallAverage => _reviews.isEmpty
-      ? 0.0
-      : _reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-          _reviews.length;
+  double get overallAverage => averageRatingOf(_reviews);
+
+  /// Reseñas que el cliente puede ver: las ocultas por el administrador no.
+  Iterable<Review> get _publicReviews =>
+      _reviews.where((r) => r.status != ReviewModerationStatus.hidden);
 
   List<Review> getReviewsByMotelId(String motelId) {
-    return _reviews
-        .where((r) => r.motelId == motelId)
-        .toList(growable: false);
+    return _publicReviews.where((r) => r.motelId == motelId).toList(growable: false);
   }
 
-  double getAverageByMotelId(String motelId) {
-    final filtered = getReviewsByMotelId(motelId);
-    if (filtered.isEmpty) return 0.0;
-    final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
-    return total / filtered.length;
-  }
+  double getAverageByMotelId(String motelId) =>
+      averageRatingOf(getReviewsByMotelId(motelId));
 
   List<Review> getReviewsByRoomId(String roomId) {
-    return _reviews
-        .where((r) => r.roomId == roomId)
-        .toList(growable: false);
+    return _publicReviews.where((r) => r.roomId == roomId).toList(growable: false);
   }
 
-  double getAverageByRoomId(String roomId) {
-    final filtered = getReviewsByRoomId(roomId);
-    if (filtered.isEmpty) return 0.0;
-    final total = filtered.map((r) => r.rating).reduce((a, b) => a + b);
-    return total / filtered.length;
+  double getAverageByRoomId(String roomId) =>
+      averageRatingOf(getReviewsByRoomId(roomId));
+
+  /// Crea y guarda la reseña descrita por [draft].
+  ///
+  /// Devuelve `false` sin tocar el repositorio ni notificar si la calificación
+  /// está fuera de rango, si el título o el texto quedan vacíos al recortar
+  /// o si no hay una sesión con autor.
+  Future<bool> submitReview(String motelId, ReviewDraft draft) async {
+    final title = draft.title.trim();
+    final body = draft.body.trim();
+    if (!ReviewRules.isValidRating(draft.rating) ||
+        !ReviewRules.isValidText(title) ||
+        !ReviewRules.isValidText(body)) {
+      return false;
+    }
+    final author = await _authorProvider.currentAuthor();
+    if (author == null) return false;
+
+    await addReview(
+      Review(
+        id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
+        authorId: author.id,
+        authorName: author.name,
+        title: title,
+        body: body,
+        rating: draft.rating,
+        date: DateTime.now(),
+        motelId: motelId,
+        roomId: draft.roomId,
+        type: draft.type,
+        status: ReviewModerationStatus.visible,
+      ),
+    );
+    return true;
   }
 
-  void addReview(Review review) {
+  Future<void> addReview(Review review) async {
+    await _repository.add(review);
     _reviews.insert(0, review);
     notifyListeners();
-    clearDraft();
+    await clearDraft();
   }
 
   /// Devuelve el borrador guardado para [motelId], o `null` si no hay uno o
@@ -126,12 +147,11 @@ class ReviewsController extends ChangeNotifier {
     }
   }
 
-  /// TODO: reemplazar por carga desde el backend cuando el repositorio
-  /// de reseñas esté disponible.
-  void seedReviews() {
-    if (_reviews.isEmpty) {
-      _reviews.addAll(ReviewData.all());
-      notifyListeners();
-    }
+  Future<void> loadReviews() async {
+    final reviews = await _repository.getAll();
+    _reviews
+      ..clear()
+      ..addAll(reviews);
+    notifyListeners();
   }
 }

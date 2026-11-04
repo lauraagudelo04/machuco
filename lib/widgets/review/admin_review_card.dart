@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/widgets/review/review_note.dart';
 
 /// Tarjeta de una reseña dentro del panel de administración.
 /// Solo pinta lo que recibe; toda decisión (ocultar, eliminar, etc.) se
@@ -33,7 +34,9 @@ class AdminReviewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _AuthorAvatar(
-                initial: review.authorName.isNotEmpty ? review.authorName[0] : '?',
+                initial: review.authorName.isNotEmpty
+                    ? review.authorName[0]
+                    : '?',
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
@@ -42,8 +45,9 @@ class AdminReviewCard extends StatelessWidget {
                   children: [
                     Text(
                       review.authorName,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -115,22 +119,31 @@ class AdminReviewCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.s3),
           Text(
             review.body,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           if (isReported && review.reportReason != null) ...[
             const SizedBox(height: AppSpacing.s3),
-            _InlineNote(
+            ReviewNote(
               icon: Icons.flag_outlined,
               color: AppColors.maintenance,
               label: 'Motivo del reporte',
               text: review.reportReason!,
             ),
           ],
+          if (review.ownerReply != null) ...[
+            const SizedBox(height: AppSpacing.s3),
+            ReviewNote(
+              icon: Icons.storefront_outlined,
+              color: AppColors.violet,
+              label: 'Respuesta del propietario',
+              text: review.ownerReply!,
+            ),
+          ],
           if (review.adminReply != null) ...[
             const SizedBox(height: AppSpacing.s3),
-            _InlineNote(
+            ReviewNote(
               icon: Icons.support_agent_outlined,
               color: AppColors.violet,
               label: 'Respuesta del administrador',
@@ -198,61 +211,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-class _InlineNote extends StatelessWidget {
-  const _InlineNote({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.text,
-  });
-
-  final IconData icon;
-  final Color color;
-  final String label;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .08),
-        borderRadius: BorderRadius.circular(AppRadius.md),
-        border: Border.all(color: color.withValues(alpha: .24)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s3),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: AppSpacing.s2),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                      color: color,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    text,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: context.appColors.textSecondary),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
 
 class _StarRow extends StatelessWidget {
   const _StarRow({required this.rating});
@@ -268,9 +226,7 @@ class _StarRow extends StatelessWidget {
         (i) => Icon(
           i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
           size: 16,
-          color: i < rating
-              ? const Color(0xFFFFB300)
-              : context.appColors.textMuted,
+          color: i < rating ? AppColors.rating : context.appColors.textMuted,
         ),
       ),
     );
@@ -294,9 +250,10 @@ class _AuthorAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         initial.toUpperCase(),
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

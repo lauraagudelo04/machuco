@@ -46,10 +46,14 @@ class _StarRatingSelectorState extends State<StarRatingSelector> {
                 child: AnimatedSwitcher(
                   duration: AppMotion.fast,
                   child: Icon(
-                    isSelected ? Icons.star_rounded : Icons.star_outline_rounded,
+                    isSelected
+                        ? Icons.star_rounded
+                        : Icons.star_outline_rounded,
                     key: ValueKey('$star-$isSelected'),
                     size: 38,
-                    color: isSelected ? const Color(0xFFFFB300) : context.appColors.textMuted,
+                    color: isSelected
+                        ? AppColors.rating
+                        : context.appColors.textMuted,
                   ),
                 ),
               ),
