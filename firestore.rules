@@ -59,6 +59,25 @@ service cloud.firestore {
           && hasValidContactFields(request.resource.data));
 
       allow delete: if false;
+
+      match /subscriptions/{subscriptionId} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly([
+            'localId', 'userEmail', 'planId', 'planName', 'motelName',
+            'amount', 'billingPeriod', 'nextBillingDate', 'status',
+            'features', 'updatedAt']);
+        allow delete: if false;
+
+        match /payments/{paymentId} {
+          allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+          allow create, update: if isSignedIn() && request.auth.uid == uid
+            && request.resource.data.keys().hasOnly([
+              'localId', 'subscriptionLocalId', 'date', 'amount',
+              'paymentMethod', 'reference', 'status', 'updatedAt']);
+          allow delete: if false;
+        }
+      }
     }
 
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
