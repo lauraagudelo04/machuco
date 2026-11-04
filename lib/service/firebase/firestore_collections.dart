@@ -8,5 +8,7 @@ abstract final class FirestoreCollections {
   static const users = 'users';
 
   static const subscriptions = 'subscriptions';
+
+  /// Payment records synchronized from the owner's local SQLite database.
   static const payments = 'payments';
 }

@@ -6,10 +6,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:machuco/controllers/payment/owner_view/owner_payment_controller.dart';
-import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
+import 'package:machuco/repositories/payment/payment_cloud_repository.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -75,28 +75,32 @@ void main() {
     status: status,
   );
 
-  Future<OwnerPaymentController> controller({
-    bool useDemoData = false,
-    PaymentStore? store,
-  }) async {
+  Future<OwnerPaymentController> controller() async {
     final result = OwnerPaymentController(
       motelId: 'motel-1',
       repository: repository,
-      useDemoData: useDemoData,
-      store: store,
     );
     controllers.add(result);
     await result.ready;
     return result;
   }
 
-  test('no importa ejemplos sin habilitar el modo de demostración', () async {
-    final owner = await controller(
-      store: PaymentStore.seeded(payments: [payment()]),
+  test('elimina fixtures legados antes de sincronizar pagos reales', () async {
+    await repository.createPayment(payment(id: 'pay-001'));
+    await repository.createPayment(payment(id: 'real-payment'));
+    final cloud = _FakePaymentCloudRepository();
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
     );
-    expect(owner.payments, isEmpty);
-    expect(await repository.findAllPayments(), isEmpty);
-    expect(requests, 0);
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(await repository.findPayment('pay-001'), isNull);
+    expect(owner.payments.single.id, 'real-payment');
+    expect(cloud.saved.map((record) => record.payment.id), ['real-payment']);
   });
 
   test(
@@ -112,6 +116,79 @@ void main() {
       expect(requests, 0);
     },
   );
+
+  test('sincroniza SQLite y Firebase filtrando propietario y motel', () async {
+    await repository.findPaymentMethods();
+    await repository.createPayment(
+      payment(id: 'local-pay', status: PaymentStatus.paid).copyWith(
+        paymentMethodId: 1,
+        paidAt: paidAt,
+        receiptNumber: 'LOCAL-local-pay',
+      ),
+    );
+    final cloud = _FakePaymentCloudRepository(
+      remotePayments: [payment(id: 'remote-pay')],
+    );
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(cloud.saved.map((record) => record.payment.id), ['local-pay']);
+    expect(cloud.saved.single.paymentMethodName, 'Efectivo');
+    expect(cloud.requestedOwnerId, 'firebase-owner');
+    expect(cloud.requestedMotelId, 'motel-1');
+    expect(owner.payments.map((record) => record.id).toSet(), {
+      'local-pay',
+      'remote-pay',
+    });
+    expect(owner.syncWarningMessage, isNull);
+  });
+
+  test(
+    'un fallo de Firebase no elimina ni invalida los pagos locales',
+    () async {
+      await repository.createPayment(payment());
+      final cloud = _FakePaymentCloudRepository(failSave: true);
+      final owner = OwnerPaymentController(
+        motelId: 'motel-1',
+        repository: repository,
+        cloudRepository: cloud,
+        currentUserId: () => 'firebase-owner',
+      );
+      controllers.add(owner);
+      await owner.ready;
+
+      expect(owner.payments.single.id, 'pay-1');
+      expect(owner.syncWarningMessage, contains('Sin conexión'));
+      expect(
+        (await repository.findPayment('pay-1'))!.status,
+        PaymentStatus.pending,
+      );
+    },
+  );
+
+  test('sin sesión conserva SQLite y no consulta Firebase', () async {
+    await repository.createPayment(payment());
+    final cloud = _FakePaymentCloudRepository();
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => null,
+    );
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(owner.payments, hasLength(1));
+    expect(cloud.saved, isEmpty);
+    expect(cloud.requestedOwnerId, isNull);
+    expect(owner.syncWarningMessage, contains('Inicia sesión'));
+  });
 
   test('descarga el maestro al solicitarlo y conserva sus nombres', () async {
     await repository.createPayment(payment());
@@ -148,36 +225,6 @@ void main() {
       expect(owner.frequentClients.single.totalPaid, 120000);
     },
   );
-
-  test('los ejemplos no recrean pendientes al reabrir la base', () async {
-    final store = PaymentStore.seeded(
-      payments: [
-        payment(),
-        payment(id: 'other', motelId: 'motel-2'),
-      ],
-    );
-    final first = await controller(useDemoData: true, store: store);
-    expect(first.payments, hasLength(1));
-    await first.loadPaymentMethods();
-    await first.registerLocalPayment(paymentId: 'pay-1', paymentMethodId: 2);
-    await first.load();
-    expect(first.pendingPayments, isEmpty);
-
-    first.dispose();
-    controllers.remove(first);
-    await database.close();
-    database = await AppDatabaseProvider.open(name: path);
-    repository = _ControlledRepository(database, client, paidAt);
-    final restored = await controller(useDemoData: true, store: store);
-    expect(restored.pendingPayments, isEmpty);
-    expect(restored.completedPayments.single.receiptNumber, 'LOCAL-pay-1');
-    expect(
-      restored.methodName(restored.completedPayments.single),
-      'Tarjeta de crédito',
-    );
-    expect(await repository.findPaymentsByMotel('motel-2'), isEmpty);
-    expect(store.payments.first.status, PaymentStatus.pending);
-  });
 
   test('un error al guardar no mueve el pago ni altera los totales', () async {
     await repository.createPayment(payment());
@@ -333,5 +380,51 @@ class _ControlledRepository extends PaymentRepository {
       motelId: motelId,
       paymentMethodId: paymentMethodId,
     );
+  }
+}
+
+class _SavedCloudPayment {
+  const _SavedCloudPayment(this.ownerId, this.payment, this.paymentMethodName);
+
+  final String ownerId;
+  final PaymentRecord payment;
+  final String? paymentMethodName;
+}
+
+class _FakePaymentCloudRepository implements PaymentCloudRepository {
+  _FakePaymentCloudRepository({
+    this.remotePayments = const [],
+    this.failSave = false,
+  });
+
+  final List<PaymentRecord> remotePayments;
+  final bool failSave;
+  final List<_SavedCloudPayment> saved = [];
+  String? requestedOwnerId;
+  String? requestedMotelId;
+
+  @override
+  Future<void> savePayment({
+    required String ownerId,
+    required PaymentRecord payment,
+    String? paymentMethodName,
+  }) async {
+    if (failSave) {
+      throw const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.network,
+        'Sin conexión: el pago permanece guardado en este dispositivo.',
+      );
+    }
+    saved.add(_SavedCloudPayment(ownerId, payment, paymentMethodName));
+  }
+
+  @override
+  Future<List<PaymentRecord>> listForOwnerAndMotel({
+    required String ownerId,
+    required String motelId,
+  }) async {
+    requestedOwnerId = ownerId;
+    requestedMotelId = motelId;
+    return remotePayments;
   }
 }

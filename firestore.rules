@@ -12,6 +12,63 @@ service cloud.firestore {
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
+    function isActiveOwner() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    function hasValidPaymentFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
+          'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
+          'status', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
+          'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
+          'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
+          'paymentMethodName', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.bookingId is string && data.bookingId.size() > 0
+        && data.bookingReference is string && data.bookingReference.size() > 0
+        && data.clientId is string && data.clientId.size() > 0
+        && data.client is string && data.client.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.motel is string && data.motel.size() > 0
+        && data.roomId is string && data.roomId.size() > 0
+        && data.room is string && data.room.size() > 0
+        && data.reservationDate is timestamp
+        && data.amount is int && data.amount > 0
+        && data.status in ['pending', 'paid', 'refunded', 'cancelled']
+        && (!('method' in data) || data.method in ['online', 'cash'])
+        && (!('paymentMethodId' in data)
+          || (data.paymentMethodId is int && data.paymentMethodId > 0))
+        && (!('paymentMethodName' in data)
+          || (data.paymentMethodName is string
+            && data.paymentMethodName.size() > 0
+            && data.paymentMethodName.size() <= 100))
+        && (!('paymentMethodId' in data) || 'paymentMethodName' in data)
+        && (!('paidAt' in data) || data.paidAt is timestamp)
+        && (!('receiptNumber' in data)
+          || (data.receiptNumber is string && data.receiptNumber.size() > 0))
+        && data.updatedAt == request.time;
+    }
+
+    function isValidPaymentTransition(previous, next) {
+      return previous == next
+        || (previous == 'pending' && next in ['paid', 'cancelled'])
+        || (previous == 'paid' && next == 'refunded');
+    }
+
+    function isLegacyDemoPaymentId(paymentId) {
+      return paymentId in [
+        'pay-001', 'pay-002', 'pay-003',
+        'owner-pay-001', 'owner-pay-002', 'owner-pay-003'
+      ];
+    }
+
     // Nombre y celular con tipo y largo acotados (mismos limites que la app).
     function hasValidContactFields(data) {
       return data.fullName is string
@@ -78,6 +135,34 @@ service cloud.firestore {
           allow delete: if false;
         }
       }
+    }
+
+    // Pagos locales del propietario sincronizados con Cloud Firestore. El
+    // cliente no tiene historial de Payment en la aplicacion final.
+    match /payments/{paymentId} {
+      allow read: if isAdmin()
+        || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if isActiveOwner()
+        && !isLegacyDemoPaymentId(paymentId)
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidPaymentFields(request.resource.data);
+
+      allow update: if isActiveOwner()
+        && !isLegacyDemoPaymentId(paymentId)
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
+          'paymentMethodName', 'updatedAt'
+        ])
+        && isValidPaymentTransition(
+          resource.data.status,
+          request.resource.data.status
+        )
+        && hasValidPaymentFields(request.resource.data);
+
+      allow delete: if false;
     }
 
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
