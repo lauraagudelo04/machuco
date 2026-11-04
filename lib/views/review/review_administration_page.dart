@@ -24,10 +24,12 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
   final TextEditingController _searchController = TextEditingController();
 
   late final ReviewAdministrationController _controller;
+  bool _ownsController = false;
 
   @override
   void initState() {
     super.initState();
+    _ownsController = widget.controller == null;
     _controller = widget.controller ?? ReviewAdministrationController();
     unawaited(_controller.loadReviews());
   }
@@ -74,6 +76,9 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -140,7 +145,8 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: AdminReviewCard(
                 review: review,
-                onToggleVisibility: () => _controller.toggleVisibility(review.id),
+                onToggleVisibility: () =>
+                    _controller.toggleVisibility(review.id),
                 onDismissReport: () => _controller.dismissReport(review.id),
                 onReply: () => _openReplySheet(review),
                 onDelete: () => _confirmDelete(review),
@@ -162,7 +168,6 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
         const SizedBox(height: AppSpacing.s1),
         Text('Reseñas', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: AppSpacing.s2),
-      
       ],
     );
   }
@@ -242,13 +247,16 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: AppSpacing.s3),
-            Text('No hay reseñas', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'No hay reseñas',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: AppSpacing.s2),
             Text(
               'No encontramos reseñas que coincidan con la búsqueda o el filtro.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
           ],
