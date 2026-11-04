@@ -18,6 +18,32 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
     }
 
+    function isActiveClient() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    // Pago que un cliente registra al finalizar su reserva: en el local queda
+    // pendiente y sin metodo (lo confirma el propietario); con tarjeta nace
+    // pagado, con su metodo y fecha de pago.
+    function isClientPaymentCreate(data) {
+      return isActiveClient()
+        && data.clientId == request.auth.uid
+        && data.ownerId != request.auth.uid
+        && (
+          (data.status == 'pending'
+            && !('method' in data)
+            && !('paymentMethodId' in data)
+            && !('paidAt' in data)
+            && !('receiptNumber' in data))
+          ||
+          (data.status == 'paid'
+            && 'paymentMethodId' in data
+            && 'paidAt' in data)
+        );
+    }
+
     function hasValidPaymentFields(data) {
       return data.keys().hasAll([
           'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
@@ -137,16 +163,20 @@ service cloud.firestore {
       }
     }
 
-    // Pagos locales del propietario sincronizados con Cloud Firestore. El
-    // cliente no tiene historial de Payment en la aplicacion final.
+    // Pagos sincronizados con Cloud Firestore. El propietario los lee y los
+    // confirma; el cliente solo puede crear los suyos (ver
+    // isClientPaymentCreate) y no tiene historial de Payment en la app final.
     match /payments/{paymentId} {
       allow read: if isAdmin()
         || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
 
-      allow create: if isActiveOwner()
-        && !isLegacyDemoPaymentId(paymentId)
-        && request.resource.data.ownerId == request.auth.uid
-        && hasValidPaymentFields(request.resource.data);
+      allow create: if !isLegacyDemoPaymentId(paymentId)
+        && hasValidPaymentFields(request.resource.data)
+        && (
+          (isActiveOwner()
+            && request.resource.data.ownerId == request.auth.uid)
+          || isClientPaymentCreate(request.resource.data)
+        );
 
       allow update: if isActiveOwner()
         && !isLegacyDemoPaymentId(paymentId)
