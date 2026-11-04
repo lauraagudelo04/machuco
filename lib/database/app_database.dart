@@ -373,7 +373,8 @@ final migration10To11 = Migration(10, 11, (database) async {
 
 final migration11To12 = Migration(11, 12, (database) async {
   final columns = await database.rawQuery("PRAGMA table_info(clients)");
-  final hasPasswordColumn = columns.any((column) => column['name'] == 'password');
+  final hasPasswordColumn =
+      columns.any((column) => column['name'] == 'password');
 
   if (hasPasswordColumn) {
     await database.execute('ALTER TABLE clients DROP COLUMN password');
