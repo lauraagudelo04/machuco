@@ -203,7 +203,10 @@ Verificado contra el código de `develop` (`33743ec`):
   - Controladores inyectables, sin singletons.
   - Borrador local con `shared_preferences`.
   - Las respuestas del propietario y del administrador son públicas: las ve el cliente en la tarjeta de la reseña (decisión del 2026-11-02).
-- **Almacenamiento (decidido por el equipo):** las reseñas van en **Cloud Firestore**, como indica la guía "Firebase para el equipo MACHUCO" (28 oct 2026: los datos propios de una funcionalidad, como las reseñas, van a Firestore). Pendiente: implementar el repositorio de Firestore siguiendo `docs/firebase.md` (nombre de la colección en `FirestoreCollections`, `fromFirestore`/`toFirestore` y regla en `firestore.rules`). El contrato `ReviewRepository` ya permite cambiar solo la implementación.
+- **Almacenamiento (decidido por el equipo):** las reseñas van en **Cloud Firestore**, como indica la guía "Firebase para el equipo MACHUCO" (28 oct 2026: los datos propios de una funcionalidad, como las reseñas, van a Firestore). Ya implementado (2026-11-02): `Review.fromFirestore`/`toFirestore`, `FirestoreCollections.reviews` y `FirestoreReviewRepository` (`lib/database/repository/review/`). Pendiente de coordinar con el equipo:
+  - **Publicar la regla** `match /reviews/{reviewId}` de `firestore.rules` (reemplaza todas las reglas: avisar en el grupo y traer `develop` antes).
+  - **Activar el repositorio por defecto:** los controladores siguen usando `InMemoryReviewRepository.shared`; cuando la regla esté publicada, se reemplaza por `FirestoreReviewRepository()`.
+  - **Limitaciones anotadas en la regla:** (a) una reseña oculta sigue siendo legible por un usuario con sesión, porque ocultar es regla de presentación; (b) no se puede verificar que quien responde sea el dueño del motel, porque los moteles viven en Supabase; la regla solo permite cambiar `ownerReply`. Un chequeo real requiere mover la propiedad del motel a Firestore o validarlo en backend.
 
 ## Registro de implementación (rama `feature_quiroz`)
 
@@ -221,3 +224,4 @@ resuelve.
 | 2026-11-02 | (ver git log) | El repositorio pasa a `lib/database/repository/review/`, donde el equipo guarda los repositorios (guía de Firebase, punto 10). | — |
 | 2026-11-02 | (ver git log) | QA en emulador: las reseñas de ejemplo apuntaban a moteles inexistentes (`5db2ebf`); la tarjeta del propietario muestra el nombre del motel y no su id. | — (bugs del QA) |
 | 2026-11-02 | (ver git log) | Las respuestas se muestran al cliente y al administrador (`ReviewNote` compartido); el cliente ya no ve reseñas ocultas. | — (hallazgos del QA) |
+| 2026-11-02 | (ver git log) | Almacenamiento en Firestore listo: conversión del modelo, repositorio y regla de seguridad (sin publicar). | 2 |

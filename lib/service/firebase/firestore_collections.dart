@@ -9,4 +9,10 @@ abstract final class FirestoreCollections {
 
   static const subscriptions = 'subscriptions';
   static const payments = 'payments';
+
+  /// Reseñas de clientes a moteles o habitaciones (`reviews/{reviewId}`).
+  ///
+  /// El id del documento es el id de la reseña; la fecha vive en el campo
+  /// `date` (Timestamp) para poder ordenar la lista.
+  static const reviews = 'reviews';
 }

@@ -80,6 +80,56 @@ service cloud.firestore {
       }
     }
 
+    // Reseñas de cliente (colección `reviews`, ver FirestoreCollections).
+    //
+    // Las reseñas ocultas siguen siendo legibles para cualquier usuario
+    // autenticado: "oculta" es una regla de presentación (no aparece ni
+    // cuenta en el promedio), no un control de acceso. Filtrar por estado
+    // aquí rompería la lista completa del administrador, porque una consulta
+    // no se puede filtrar documento por documento: la consulta fallaría
+    // entera si un solo documento no cumple la regla.
+    //
+    // El autor no se puede comprobar contra el motel: los moteles y su
+    // propietario viven en Supabase, no en Firestore, así que `isAdmin()` es
+    // el único rol verificable aquí. La relación reseña-propietario se valida
+    // en la capa de Supabase.
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+
+      // Solo el propio autor crea, siempre como visible y con los campos
+      // acotados: nace visible y sin respuesta, y se modera después.
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.status == 'visible'
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 1
+        && request.resource.data.title.size() <= 1000
+        && request.resource.data.body is string
+        && request.resource.data.body.size() >= 1
+        && request.resource.data.body.size() <= 1000
+        && request.resource.data.motelId is string
+        && request.resource.data.keys().hasOnly([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'roomId', 'type', 'status', 'reportReason',
+          'adminReply', 'ownerReply']);
+
+      // El administrador modera y responde todo; el autor solo puede
+      // escribir la respuesta del propietario (y nunca cambiar autoría,
+      // calificación ni estado). Un propietario no se puede distinguir de
+      // otro usuario autenticado sin los moteles de Supabase.
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['ownerReply'])
+          && request.resource.data.ownerReply is string
+          && request.resource.data.ownerReply.size() <= 1000);
+
+      allow delete: if isAdmin();
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {
