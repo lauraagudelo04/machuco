@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import '../../../utils/motel_form_validators.dart';
+import '../../../widgets/motel/phone_number_field.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
   const OwnerMotelFormPage({
@@ -41,6 +42,9 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
   List<String> _imageUrls = [];
   bool _showPaymentMethodsError = false;
 
+  /// Indicativo telefónico elegido; se concatena al número al guardar.
+  String _selectedCallingCode = '+57';
+
   @override
   void initState() {
     super.initState();
@@ -50,13 +54,25 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       _roomsController.text = widget.motel!.roomCount.toString();
       _nitController.text = widget.motel!.nit;
       _addressController.text = widget.motel!.address;
-      _phoneController.text = widget.motel!.phone;
+      _setPhoneFromSaved(widget.motel!.phone);
       _descriptionController.text = widget.motel!.description ?? '';
       _generalLocationController.text = widget.motel!.generalLocation ?? '';
       _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
       _imageUrls = List.from(widget.motel!.imageUrls);
     } else {
       _selectedPaymentMethods.add('Efectivo');
+    }
+  }
+
+  /// Separa el indicativo del número cuando el teléfono se guardó
+  /// como `+57 3001234567`. Si no trae indicativo, se deja +57.
+  void _setPhoneFromSaved(String phone) {
+    final spaceIndex = phone.indexOf(' ');
+    if (phone.startsWith('+') && spaceIndex > 0) {
+      _selectedCallingCode = phone.substring(0, spaceIndex);
+      _phoneController.text = phone.substring(spaceIndex + 1);
+    } else {
+      _phoneController.text = phone;
     }
   }
 
@@ -107,7 +123,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       roomCount: roomCountParsed,
       nit: _nitController.text.trim(),
       address: _addressController.text.trim(),
-      phone: _phoneController.text.trim(),
+      phone: '$_selectedCallingCode ${_phoneController.text.trim()}',
       description: _descriptionController.text.trim(),
       generalLocation: _generalLocationController.text.trim(),
       paymentMethods: _selectedPaymentMethods,
@@ -163,11 +179,11 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 validator: MotelFormValidators.validateEmail,
               ),
               const SizedBox(height: AppSpacing.s3),
-              _buildTextField(
+              PhoneNumberField(
                 controller: _phoneController,
-                label: 'Teléfono',
-                keyboardType: TextInputType.phone,
-                validator: MotelFormValidators.validatePhone,
+                initialCallingCode: _selectedCallingCode,
+                onCallingCodeChanged: (value) =>
+                    setState(() => _selectedCallingCode = value),
               ),
               const SizedBox(height: AppSpacing.s3),
               Row(

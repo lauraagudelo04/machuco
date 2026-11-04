@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/motel_controller.dart';
-import '../../../controllers/motel/phone_country_code_controller.dart';
 import '../../../utils/motel_form_validators.dart';
+import '../../../widgets/motel/phone_number_field.dart';
 
 class OwnerMotelFormPage extends StatefulWidget {
   const OwnerMotelFormPage({
@@ -27,9 +27,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
   bool _isSaving = false;
   bool _showPaymentMethodsError = false;
 
-  /// Maestro de indicativos telefónicos (Supabase + caché SQLite).
-  final PhoneCountryCodeController _phoneCodeController =
-      PhoneCountryCodeController.fromEnvironment();
+  /// Indicativo telefónico elegido; se concatena al número al guardar.
   String _selectedCallingCode = '+57';
 
   final _emailController = TextEditingController();
@@ -54,7 +52,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
   @override
   void initState() {
     super.initState();
-    _phoneCodeController.load();
     if (widget.isEditing && widget.motel != null) {
       _emailController.text = widget.motel!.email;
       _nameController.text = widget.motel!.name;
@@ -81,7 +78,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     _phoneController.dispose();
     _descriptionController.dispose();
     _generalLocationController.dispose();
-    _phoneCodeController.dispose();
     super.dispose();
   }
 
@@ -212,7 +208,12 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                 validator: MotelFormValidators.validateEmail,
               ),
               const SizedBox(height: AppSpacing.s3),
-              _buildPhoneField(),
+              PhoneNumberField(
+                controller: _phoneController,
+                initialCallingCode: _selectedCallingCode,
+                onCallingCodeChanged: (value) =>
+                    setState(() => _selectedCallingCode = value),
+              ),
               const SizedBox(height: AppSpacing.s3),
               Row(
                 children: [
@@ -341,103 +342,6 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
           ),
         ),
       ),
-    );
-  }
-
-  /// Selector de indicativo + campo del número.
-  Widget _buildPhoneField() {
-    return ListenableBuilder(
-      listenable: _phoneCodeController,
-      builder: (context, _) {
-        final codes = _phoneCodeController.countryCodes;
-        final hasSelected = codes.any(
-          (c) => c.callingCode == _selectedCallingCode,
-        );
-
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SizedBox(
-                  width: 120,
-                  child: _phoneCodeController.isLoading
-                      ? const Center(
-                          child: Padding(
-                            padding: EdgeInsets.all(12),
-                            child: SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            ),
-                          ),
-                        )
-                      : DropdownButtonFormField<String>(
-                          initialValue: hasSelected
-                              ? _selectedCallingCode
-                              : null,
-                          isExpanded: true,
-                          decoration: InputDecoration(
-                            labelText: 'Indicativo',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(8.0),
-                            ),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 12,
-                            ),
-                          ),
-                          selectedItemBuilder: (context) =>
-                              codes.map((c) => Text(c.callingCode)).toList(),
-                          items: codes
-                              .map(
-                                (c) => DropdownMenuItem(
-                                  value: c.callingCode,
-                                  child: Text(
-                                    '${c.countryName}  ${c.callingCode}',
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _selectedCallingCode = value);
-                            }
-                          },
-                        ),
-                ),
-                const SizedBox(width: AppSpacing.s3),
-                Expanded(
-                  child: _buildTextField(
-                    controller: _phoneController,
-                    label: 'Teléfono',
-                    keyboardType: TextInputType.phone,
-                    validator: MotelFormValidators.validatePhone,
-                  ),
-                ),
-              ],
-            ),
-            if (_phoneCodeController.error != null && codes.isEmpty)
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      _phoneCodeController.error!,
-                      style: TextStyle(
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ),
-                  TextButton(
-                    onPressed: _phoneCodeController.refresh,
-                    child: const Text('Reintentar'),
-                  ),
-                ],
-              ),
-          ],
-        );
-      },
     );
   }
 
