@@ -38,11 +38,16 @@ class PaymentRepository {
     DateTime Function()? now,
   }) : _database = database == null ? null : Future.value(database),
        _get = client?.get ?? http.get,
-       _supabaseUrl =
-           supabaseUrl ?? const String.fromEnvironment('SUPABASE_URL'),
-       _publishableKey =
-           publishableKey ??
-           const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY'),
+       _supabaseUrl = supabaseUrl ??
+           const String.fromEnvironment(
+             'SUPABASE_URL',
+             defaultValue: 'https://ogrbbuwtsyezegkpwtsl.supabase.co',
+           ),
+       _publishableKey = publishableKey ??
+           const String.fromEnvironment(
+             'SUPABASE_PUBLISHABLE_KEY',
+             defaultValue: 'sb_publishable_Wv16MVxsTzA89lBeocarLQ_YL33Ya_E',
+           ),
        _requestTimeout = requestTimeout,
        _now = now ?? DateTime.now {
     if (requestTimeout <= Duration.zero) {
