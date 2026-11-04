@@ -200,9 +200,10 @@ Cómo usar el usuario autenticado y agregar colecciones con sus reglas: [docs/fi
 Parámetros opcionales (`--dart-define`):
 
 - `AUTH_USE_BACKEND_USERS=true` junto con `AUTH_USERS_API_BASE_URL` (y opcionalmente `AUTH_USERS_API_PATH`, por defecto `/users`) para que el directorio de usuarios de la app consulte un API HTTP externo en vez de los datos de ejemplo en memoria. Esta integración es parcial y no reemplaza una decisión de backend acordada por el equipo; ver [docs/decisions_log.md](docs/decisions_log.md).
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_PUBLISHABLE_KEY`: apuntan por defecto al proyecto Supabase de desarrollo, de modo que `flutter run` no requiere argumentos. Sobrescríbalos para otro entorno. La clave publicable no es `service_role` y no reemplaza las políticas RLS.
 
 El ingreso con Google y GitHub está definido pero todavía no implementado.
 
 ### Modo de usuarios de prueba (sin Firebase)
 
-Definiendo `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=true` la app autentica contra un conjunto fijo de cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), en vez de contra Firebase. Está pensado únicamente para desarrollo local y QA; no debe activarse en builds distribuidos. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.
+Por defecto la app arranca con las cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), de modo que `flutter run` funciona sin argumentos adicionales. El modo se controla con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=<true|false>` y está pensado únicamente para desarrollo local y QA; en builds distribuidos debe desactivarse con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.
