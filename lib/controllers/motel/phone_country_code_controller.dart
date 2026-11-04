@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
-import 'package:machuco/database/repository/motel/phone_country_code_repository.dart';
+import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
 import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 /// Conecta la presentación del maestro de códigos telefónicos de país con su
