@@ -304,11 +304,7 @@ void main() {
 
   for (final hasPayments in [true, false]) {
     test(
-<<<<<<< HEAD
-      'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v10 sin perder datos',
-=======
       'migra v7 de ${hasPayments ? 'Payment' : 'clientes'} a v11 sin perder datos',
->>>>>>> 33743ec381032058a11a68ee8e15c5f0e70274cc
       () async {
         var raw = database.database as sqflite.Database;
         final freshSchema = await _moduleSchema(raw);
@@ -327,7 +323,6 @@ void main() {
               phone: '3001234567',
               email: 'client@example.com',
               countryCode: 'CO',
-              password: 'fixture-only',
             ),
           );
           await database.phoneCountryCodeDao.insertCountryCodes([
@@ -357,11 +352,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-<<<<<<< HEAD
-        expect(await raw.getVersion(), 10);
-=======
-        expect(await raw.getVersion(), 11);
->>>>>>> 33743ec381032058a11a68ee8e15c5f0e70274cc
+        expect(await raw.getVersion(), 12);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
@@ -383,11 +374,7 @@ void main() {
     );
   }
 
-<<<<<<< HEAD
-  test('migra de v6 a v10 conservando los otros módulos y el esquema', () async {
-=======
   test('migra de v6 a v11 conservando los otros módulos y el esquema', () async {
->>>>>>> 33743ec381032058a11a68ee8e15c5f0e70274cc
     var raw = database.database as sqflite.Database;
     final freshSchema = await _moduleSchema(raw);
 
@@ -475,11 +462,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-<<<<<<< HEAD
-    expect(await raw.getVersion(), 10);
-=======
-    expect(await raw.getVersion(), 11);
->>>>>>> 33743ec381032058a11a68ee8e15c5f0e70274cc
+    expect(await raw.getVersion(), 12);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
@@ -539,7 +522,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 11);
+    expect(await raw.getVersion(), 12);
     expect(await _columnNames(raw, 'motels'), motelsColumns);
     expect(await raw.query('country_phone_codes'), hasLength(1));
   });

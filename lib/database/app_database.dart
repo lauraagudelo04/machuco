@@ -34,7 +34,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 11,
+  version: 12,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -91,6 +91,7 @@ class AppDatabaseProvider {
         migration8To9,
         migration9To10,
         migration10To11,
+        migration11To12,
       ])
       .addCallback(
         Callback(
@@ -336,8 +337,7 @@ Future<void> _createClientSchema(sqflite.Database database) async {
     '`name` TEXT NOT NULL, '
     '`phone` TEXT NOT NULL, '
     '`email` TEXT NOT NULL, '
-    '`country_code` TEXT NOT NULL, '
-    '`password` TEXT NOT NULL)',
+    '`country_code` TEXT NOT NULL)',
   );
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `phone_country_codes` ('
@@ -372,4 +372,14 @@ Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
 final migration10To11 = Migration(10, 11, (database) async {
   await _createAuthCatalogSchema(database);
   await _createMotelSchema(database);
+});
+
+final migration11To12 = Migration(11, 12, (database) async {
+  final columns = await database.rawQuery("PRAGMA table_info(clients)");
+  final hasPasswordColumn =
+      columns.any((column) => column['name'] == 'password');
+
+  if (hasPasswordColumn) {
+    await database.execute('ALTER TABLE clients DROP COLUMN password');
+  }
 });

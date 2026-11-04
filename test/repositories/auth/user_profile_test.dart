@@ -110,4 +110,12 @@ final class _FakeUserProfileRepository implements UserProfileRepository {
 
   @override
   Future<UserProfile?> getProfile(String uid) async => _profiles[uid];
+
+  @override
+  Future<void> updateProfile({
+    required String uid,
+    required String fullName,
+    required String phoneNumber,
+  }) async {
+  }
 }

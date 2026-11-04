@@ -3,7 +3,6 @@ import 'package:machuco/views/review/review_administration_page.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart'; 
 import '../../../models/owner_management/owner.dart';
-import '../../../models/owner_management/document_type.dart';
 import '../../../controllers/motel/motel_controller.dart'; 
 import '../../../controllers/owner_management/owner_controller.dart'; 
 import './../../../routes/routes.dart';
@@ -169,20 +168,18 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   }
 
   Widget _buildMotelsContent() {
-    final currentOwnerName = widget.initialOwnerName ??
-        _owners
-            .firstWhere(
-              (o) => o.id == _currentOwnerId,
-              orElse: () => Owner(
-                id: _currentOwnerId,
-                fullName: 'Propietario',
-                documentType: DocumentType.citizenshipCard,
-                documentNumber: '',
-                email: '',
-                phone: '',
-              ),
-            )
-            .fullName;
+    // Nombre del propietario por id, para no mostrar `owner-<id>` en la ficha.
+    // `initialOwnerName` cubre propietarios recién registrados que aún no
+    // forman parte del catálogo en memoria de este controlador.
+    final ownerNamesById = <String, String>{
+      for (final owner in _owners) owner.id: owner.fullName,
+    };
+    if (widget.initialOwnerName != null) {
+      ownerNamesById[widget.initialOwnerId ?? _currentOwnerId] =
+          widget.initialOwnerName!;
+    }
+
+    final currentOwnerName = ownerNamesById[_currentOwnerId] ?? 'Propietario';
 
     final filteredMotels = _motels.where((motel) {
       final nameLower = motel.name.toLowerCase();
@@ -287,7 +284,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                 Text('Gestión de Establecimientos', style: Theme.of(context).textTheme.headlineSmall),
                 Chip(
                   label: Text(currentOwnerName.split(' ').first, style: const TextStyle(fontSize: 12)),
-                  backgroundColor: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 ),
               ],
             ),
@@ -308,11 +305,14 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
                       ? const Center(child: Text('No se encontraron establecimientos registrados para este propietario.'))
                       : ListView.separated(
                           itemCount: filteredMotels.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
+                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.s3),
                           itemBuilder: (context, index) {
                             final motel = filteredMotels[index];
                             return _AdminMotelCard(
                               motel: motel,
+                              ownerName:
+                                  ownerNamesById[motel.ownerId] ??
+                                  'Propietario',
                               activeReservations: 3, 
                               onToggleStatus: () => _toggleMotelStatus(index),
                               onEdit: () => _showMotelFormModal(motelToEdit: motel), 
@@ -335,12 +335,14 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
 class _AdminMotelCard extends StatelessWidget {
   const _AdminMotelCard({
     required this.motel,
+    required this.ownerName,
     required this.activeReservations,
     required this.onToggleStatus,
     required this.onEdit,
   });
 
   final Motel motel;
+  final String ownerName;
   final int activeReservations;
   final VoidCallback onToggleStatus;
   final VoidCallback onEdit;
@@ -413,7 +415,7 @@ class _AdminMotelCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s1),
                 Text(
-                  '$activeReservations reservas • Dueño ID: ${motel.ownerId.substring(0, 8)}...',
+                  '$activeReservations reservas • Dueño: $ownerName',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.appColors.textSecondary,
                   ),

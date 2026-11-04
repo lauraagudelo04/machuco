@@ -3,9 +3,11 @@
 ## Alcance de esta etapa
 
 `PaymentRepository` coordina el DAO de Payment y el maestro de Supabase.
-No depende de la feature `payment_method`, no escribe en Supabase ni procesa
-cobros bancarios. `OwnerPaymentController` y «Finanzas de mi motel» ya consultan
-SQLite y permiten registrar el pago recibido con un método del maestro.
+`FirestorePaymentCloudRepository` sincroniza los registros locales del
+propietario con Cloud Firestore. Payment no depende de la feature
+`payment_method`, no escribe en Supabase ni procesa cobros bancarios.
+`OwnerPaymentController` y «Finanzas de mi motel» consultan primero SQLite,
+permiten registrar el pago recibido y después sincronizan con Firebase.
 El administrador aún utiliza `PaymentStore` en memoria: su migración
 y la integración con Reservas quedan pendientes. El historial «Mis pagos»
 del cliente y su controlador se eliminaron por decisión del usuario, junto con
@@ -20,8 +22,11 @@ selección de método de pago de Reservas ni los registros compartidos de SQLite
 3. El propietario elige cómo recibió el dinero y pulsa «Confirmar pago».
 4. Durante la escritura se bloquean el doble envío y el cierre del formulario.
    Si falla, conserva la selección, muestra el error y permite reintentar.
-5. Solo después de guardar, el pago pasa a «Pagos realizados» y muestra el
-   método, fecha y comprobante. Cancelados y reembolsados van en «Otros estados».
+5. Solo después de guardar en SQLite, el pago pasa a «Pagos realizados» y
+   muestra el método, fecha y comprobante. Cancelados y reembolsados van en
+   «Otros estados».
+6. El guardado local no se revierte si Firebase no está disponible. La pantalla
+   informa el problema y el botón de actualización permite reintentar.
 
 Ingresos, cantidad recibida, pendiente y clientes frecuentes se calculan con
 los registros locales, no con los totales fijos anteriores. El resumen no se
@@ -83,6 +88,41 @@ La respuesta esperada es HTTP 200 con una lista JSON no vacía:
   duplicadas, incluso simultáneas. Un pago cancelado o reembolsado no se confirma.
 - No se guardan números de tarjetas, CVV, claves bancarias ni tokens de pago.
 
+## Cloud Firestore
+
+- Colección: `payments`, declarada una sola vez en
+  `FirestoreCollections.payments`.
+- El ID del documento es el ID estable del pago; las escrituras repetidas son
+  idempotentes y no crean comprobantes ni documentos duplicados.
+- Cada documento incluye `ownerId` con el UID de Firebase Auth, `motelId`, los
+  datos necesarios para reconstruir `PaymentRecord` y `updatedAt` asignado por
+  el servidor. Cuando existe `paymentMethodId`, también guarda
+  `paymentMethodName` como copia legible del maestro: Firestore no realiza joins
+  con Supabase y el ID se conserva para mantener la identidad referencial. No
+  contiene credenciales ni datos bancarios.
+- La vista no importa Firebase. `OwnerPaymentController` depende de la interfaz
+  `PaymentCloudRepository` y la implementación Firestore traduce errores a
+  mensajes seguros en español.
+- Al cargar Finanzas se muestran primero los registros de SQLite. Después se
+  suben los registros locales, se consultan los documentos del propietario y
+  motel actuales y se incorporan a SQLite.
+- Firestore mantiene su propia cola persistente de escrituras sin conexión; por
+  eso Payment no agrega otra tabla ni cambia la versión compartida de Floor.
+- Al mezclar datos no se permite que una copia remota pendiente haga retroceder
+  un pago local ya procesado. Se acepta `pending` → estado procesado y
+  `paid` → `refunded`, además de actualizaciones del mismo estado.
+- Para importar un pago con `paymentMethodId`, el maestro de Supabase debe estar
+  disponible o existir en la caché SQLite, porque conserva su llave foránea.
+
+### Seguridad
+
+`firestore.rules` permite leer y crear pagos únicamente al propietario
+autenticado cuyo perfil `users/{uid}` tenga `role: owner` y
+`accountStatus: active`; el administrador puede leerlos. `ownerId` y los datos
+de reserva no se pueden cambiar después de crear el documento. Las transiciones
+de estado permitidas impiden que una copia antigua cambie `paid` a `pending`.
+El cliente no recibe acceso al historial de Payment.
+
 ## Configuración en Android
 
 Payment recibe `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` mediante
@@ -95,10 +135,11 @@ $env:SUPABASE_URL = 'https://ogrbbuwtsyezegkpwtsl.supabase.co'
 $env:SUPABASE_PUBLISHABLE_KEY = 'PEGA_AQUI_LA_CLAVE_PUBLICABLE'
 ```
 
-Después ejecuta:
+Después ejecuta con una sesión Firebase real (sin el flag de usuarios
+hardcodeados):
 
 ```powershell
-flutter run -d emulator-5554 --dart-define=AUTH_USE_HARDCODED_AUTH_USERS=true "--dart-define=SUPABASE_URL=$env:SUPABASE_URL" "--dart-define=SUPABASE_PUBLISHABLE_KEY=$env:SUPABASE_PUBLISHABLE_KEY"
+flutter run -d emulator-5554 "--dart-define=SUPABASE_URL=$env:SUPABASE_URL" "--dart-define=SUPABASE_PUBLISHABLE_KEY=$env:SUPABASE_PUBLISHABLE_KEY"
 ```
 
 La URL debe ser una base HTTPS sin usuario, query ni fragmento. Tras cambiar
@@ -106,30 +147,25 @@ La URL debe ser una base HTTPS sin usuario, query ni fragmento. Tras cambiar
 La clave publicable se puede distribuir con una app cliente; no sustituye RLS
 ni debe confundirse con un secreto del servidor.
 
-### Probar con los pagos de Carlos y Ana
+### Datos reales
 
-Los pagos de la captura eran ejemplos en memoria, no reservas reales.
-Para cargarlos explícitamente en SQLite, añade al comando anterior:
-
-```text
---dart-define=PAYMENT_USE_DEMO_DATA=true
-```
-
-La vista muestra un aviso de demostración. Solo importa ejemplos del motel
-actual, usando INSERT OR IGNORE: volver a abrirla no revierte pagos registrados
-ni cambia sus métodos. Sin esa opción no se crean ejemplos automáticamente;
-una base sin pagos muestra «Sin pagos guardados». Los ejemplos ya importados
-permanecen guardados aunque luego se desactive la opción.
+Payment ya no importa fixtures mediante `PAYMENT_USE_DEMO_DATA`. Al abrir
+Finanzas elimina de SQLite los IDs históricos `pay-001` a `pay-003` y
+`owner-pay-001` a `owner-pay-003` antes de sincronizar, evitando que datos de
+presentación regresen a Firestore. Una base sin pagos reales muestra
+«Sin pagos guardados». El siguiente origen real pendiente es la creación del
+pago desde Booking; hasta integrar ese contrato no se inventan transacciones.
 
 ## Pruebas
 
 ```powershell
-flutter test --no-pub test/database/payment_database_test.dart test/repositories/payment/payment_repository_test.dart test/controllers/payment/owner_view/owner_payment_controller_test.dart test/widgets/payment/owner_payment_page_test.dart
+flutter test --no-pub test/models/payment/payment_firestore_document_test.dart test/database/payment_database_test.dart test/repositories/payment/payment_repository_test.dart test/controllers/payment/owner_view/owner_payment_controller_test.dart test/widgets/payment/owner_payment_page_test.dart
 ```
 
-Las pruebas del repositorio inyectan `http.Client` y usan SQLite real aislado.
-Comprueban el contrato HTTP, la recuperación local y el registro de pagos sin
-escribir datos en el proyecto Supabase.
+Las pruebas inyectan `http.Client`, repositorios Firebase falsos y usan SQLite
+real aislado. Comprueban el contrato HTTP, la recuperación local, la conversión
+de documentos Firestore y la sincronización sin escribir en Supabase ni en el
+proyecto Firebase real.
 Los widget tests verifican selección explícita, carga y errores del maestro,
 cancelación, reintento de guardado, bloqueo del doble envío y texto al 200 %.
 Por preferencia del usuario, las validaciones se ejecutan mediante un subagente

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/widgets/review/review_note.dart';
 import '../../core/design_system/design_system.dart';
 
 class ReviewCard extends StatelessWidget {
@@ -17,7 +18,11 @@ class ReviewCard extends StatelessWidget {
           children: [
             Row(
               children: [
-                _AuthorAvatar(initial: review.authorName.isNotEmpty ? review.authorName[0] : '?'),
+                _AuthorAvatar(
+                  initial: review.authorName.isNotEmpty
+                      ? review.authorName[0]
+                      : '?',
+                ),
                 const SizedBox(width: AppSpacing.s3),
                 Expanded(
                   child: Column(
@@ -26,15 +31,14 @@ class ReviewCard extends StatelessWidget {
                       Text(
                         review.authorName,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: FontWeight.w700,
-                            ),
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         '${review.date.day}/${review.date.month}/${review.date.year}',
-                        style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                              color: context.appColors.textMuted,
-                            ),
+                        style: Theme.of(context).textTheme.labelMedium
+                            ?.copyWith(color: context.appColors.textMuted),
                       ),
                     ],
                   ),
@@ -69,9 +73,9 @@ class ReviewCard extends StatelessWidget {
                   Text(
                     review.type.label,
                     style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: AppColors.violet,
-                          fontWeight: FontWeight.w700,
-                        ),
+                      color: AppColors.violet,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                 ],
               ),
@@ -80,17 +84,35 @@ class ReviewCard extends StatelessWidget {
 
             Text(
               review.title,
-              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: AppSpacing.s1),
             Text(
               review.body,
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+                color: context.appColors.textSecondary,
+              ),
             ),
+            if (review.ownerReply != null) ...[
+              const SizedBox(height: AppSpacing.s3),
+              ReviewNote(
+                icon: Icons.storefront_outlined,
+                color: AppColors.violet,
+                label: 'Respuesta del propietario',
+                text: review.ownerReply!,
+              ),
+            ],
+            if (review.adminReply != null) ...[
+              const SizedBox(height: AppSpacing.s3),
+              ReviewNote(
+                icon: Icons.support_agent_outlined,
+                color: AppColors.violet,
+                label: 'Respuesta del administrador',
+                text: review.adminReply!,
+              ),
+            ],
           ],
         ),
       ),
@@ -113,7 +135,7 @@ class _StarRow extends StatelessWidget {
         (i) => Icon(
           i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
           size: size,
-          color: i < rating ? const Color(0xFFFFB300) : context.appColors.textMuted,
+          color: i < rating ? AppColors.rating : context.appColors.textMuted,
         ),
       ),
     );
@@ -138,9 +160,9 @@ class _AuthorAvatar extends StatelessWidget {
       child: Text(
         initial.toUpperCase(),
         style: Theme.of(context).textTheme.labelLarge?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.w700,
-            ),
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

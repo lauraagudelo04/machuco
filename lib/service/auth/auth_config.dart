@@ -22,11 +22,14 @@ abstract final class AuthConfig {
   );
 
   /// When `true`, the app authenticates against the fixed, in-app test
-  /// accounts in `hardcoded_auth_service.dart` instead of Firebase. Intended
-  /// only for local development and QA; off by default.
+  /// accounts in `hardcoded_auth_service.dart` instead of Firebase.
+  ///
+  /// Enabled by default so `flutter run` works without extra arguments.
+  /// Intended only for local development and QA: disable it in distributed
+  /// builds with `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`.
   static const useHardcodedAuthUsers = bool.fromEnvironment(
     'AUTH_USE_HARDCODED_AUTH_USERS',
-    defaultValue: false,
+    defaultValue: true,
   );
 
   /// Whether [usersApiBaseUrl] was provided, i.e. whether
