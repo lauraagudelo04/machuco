@@ -323,7 +323,6 @@ void main() {
               phone: '3001234567',
               email: 'client@example.com',
               countryCode: 'CO',
-              password: 'fixture-only',
             ),
           );
           await database.phoneCountryCodeDao.insertCountryCodes([
