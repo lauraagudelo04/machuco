@@ -5,29 +5,36 @@ import '../../../core/design_system/theme/app_theme_extensions.dart';
 import '../../../core/design_system/tokens/app_colors.dart';
 import '../../../core/design_system/tokens/app_radius.dart';
 import '../../../core/design_system/tokens/app_spacing.dart';
-import '../../../models/notification/notification_model.dart';
 import '../../../widgets/notification/notification_card.dart';
 
 class ClientNotificationView extends StatefulWidget {
-  const ClientNotificationView({super.key});
+  const ClientNotificationView({
+    super.key,
+    this.recipientUser = NotificationController.demoClientUser,
+    this.title = 'Notificaciones',
+  });
+
+  final String recipientUser;
+  final String title;
 
   @override
   State<ClientNotificationView> createState() => _ClientNotificationViewState();
 }
 
 class _ClientNotificationViewState extends State<ClientNotificationView> {
-  final NotificationController _controller = NotificationController();
-  NotificationType? _filter;
+  late final NotificationController _controller;
 
   @override
   void initState() {
     super.initState();
+    _controller = NotificationController(recipientUser: widget.recipientUser);
     _controller.addListener(_onControllerChanged);
   }
 
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -39,17 +46,17 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
 
   @override
   Widget build(BuildContext context) {
-    final visibleNotifications = _controller.getFilteredNotifications(_filter);
+    final visibleNotifications = _controller.filteredNotifications;
     final unreadCount = _controller.unreadCount;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones Cliente'),
+        title: Text(widget.title),
         actions: [
           if (unreadCount > 0)
             IconButton(
               tooltip: 'Marcar todas como leídas',
-              onPressed: () => _controller.markAllRead(),
+              onPressed: _controller.markAllRead,
               icon: const Icon(Icons.done_all),
             ),
         ],
@@ -108,8 +115,8 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
               child: Text(
                 'Aquí verás las novedades de tus reservas, pagos y más.',
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                  color: context.appColors.textSecondary,
+                ),
               ),
             ),
             if (unreadCount > 0) ...[
@@ -125,10 +132,9 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
                 ),
                 child: Text(
                   '$unreadCount sin leer',
-                  style: Theme.of(context)
-                      .textTheme
-                      .labelMedium
-                      ?.copyWith(color: AppColors.violet),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: AppColors.violet),
                 ),
               ),
             ],
@@ -139,9 +145,9 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
   }
 
   Widget _buildFilters(BuildContext context) {
-    final options = <(NotificationType?, String)>[
+    final options = <(int?, String)>[
       (null, 'Todas'),
-      for (final type in NotificationType.values) (type, type.label),
+      for (final type in _controller.types) (type.id, type.name),
     ];
     return SizedBox(
       height: 42,
@@ -152,11 +158,11 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
         separatorBuilder: (context, index) =>
             const SizedBox(width: AppSpacing.s2),
         itemBuilder: (context, index) {
-          final (type, label) = options[index];
+          final (typeId, label) = options[index];
           return ChoiceChip(
             label: Text(label),
-            selected: _filter == type,
-            onSelected: (_) => setState(() => _filter = type),
+            selected: _controller.selectedTypeId == typeId,
+            onSelected: (_) => _controller.selectType(typeId),
           );
         },
       ),
@@ -164,7 +170,7 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
   }
 
   Widget _buildEmptyState() {
-    final hasFilter = _filter != null;
+    final hasFilter = _controller.selectedTypeId != null;
     return AppEmptyState(
       icon: Icons.notifications_none_outlined,
       title: hasFilter ? 'Sin notificaciones de este tipo' : 'Estás al día',

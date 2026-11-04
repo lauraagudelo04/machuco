@@ -1,11 +1,25 @@
 import 'package:machuco/models/auth/registered_user.dart';
 
+/// Contract for listing and creating/updating MACHUCO application users,
+/// independent of where that data actually lives.
+///
+/// This is the seam the app uses to defer the backend/database decision
+/// noted as pending in README.md#estado-y-decisiones-pendientes: today it
+/// is satisfied either by [InMemoryRegisteredUserDirectory] (seed/demo
+/// data) or by `BackendRegisteredUserDirectory` (a real HTTP users API),
+/// selected via [AuthConfig.useBackendUsers].
 abstract interface class RegisteredUserDirectory {
   Future<List<RegisteredUser>> listUsers({String? accessToken});
 
   Future<void> upsertUser(RegisteredUser user);
 }
 
+/// [RegisteredUserDirectory] implementation that keeps users only in
+/// process memory, seeded with example accounts.
+///
+/// Data does not persist across app restarts and is not shared between
+/// devices; it exists to support development and demos before a real
+/// backend/database is agreed on.
 final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
   InMemoryRegisteredUserDirectory({List<RegisteredUser>? initialUsers})
     : _users = List<RegisteredUser>.from(initialUsers ?? _seededUsers);
@@ -26,7 +40,7 @@ final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
       fullName: 'Simón Restrepo Vélez',
       email: 'simon.restrepo@machuco.com',
       phoneNumber: '+57 311 987 6543',
-      role: RegisteredUserRole.finalUser,
+      role: RegisteredUserRole.client,
       createdAt: DateTime.utc(2026, 2, 15, 9, 45),
     ),
     RegisteredUser(
@@ -34,7 +48,7 @@ final class InMemoryRegisteredUserDirectory implements RegisteredUserDirectory {
       fullName: 'Inversiones Machuco S.A.S.',
       email: 'contacto@inversionesmachuco.com',
       phoneNumber: '+57 604 444 5566',
-      role: RegisteredUserRole.administrator,
+      role: RegisteredUserRole.admin,
       createdAt: DateTime.utc(2026, 3, 20, 16, 30),
     ),
   ];

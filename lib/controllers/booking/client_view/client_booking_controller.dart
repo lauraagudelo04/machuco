@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/date_formatter.dart';
+
+export 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 
 /// Franja bloqueada que no vive en el mock de este controlador, por ejemplo
 /// reservas de otras funcionalidades ya mockeadas en `RoomVisualData`
@@ -51,9 +56,14 @@ enum ReservationSortField { checkIn, createdAt, total }
 /// `ClientReservationsPage` sin depender de un backend ni de un paquete de
 /// gestión de estado adicional.
 class ClientBookingController extends ChangeNotifier {
-  ClientBookingController({this.userId = demoUserId});
+  ClientBookingController({
+    this.userId = demoUserId,
+    MotelController? motelController,
+  }) : _motelController = motelController ?? MotelController();
 
   static const String demoUserId = 'user-demo-001';
+
+  final MotelController _motelController;
 
   /// Tiempo de preparación obligatorio que se bloquea automáticamente
   /// después de cada reserva (si una reserva termina a las 18:00, el
@@ -173,6 +183,15 @@ class ClientBookingController extends ChangeNotifier {
     return null;
   }
 
+  /// Motel completo asociado a una reserva. El widget de reseñas
+  /// (`ReviewsSection`, del contexto `lib/views/review`) requiere el objeto
+  /// `Motel` completo -no solo `motelId`- así que se delega en
+  /// `MotelController` en vez de que la vista consulte otro contexto
+  /// directamente.
+  Future<Motel?> getMotelForReservation(Reservation reservation) {
+    return _motelController.getMotelById(reservation.motelId);
+  }
+
   /// Indica si la franja `[start, end)` está disponible para `roomId`,
   /// teniendo en cuenta tanto las reservas de este controlador como el
   /// bloqueo de 1 hora de preparación posterior a cada una, y cualquier
@@ -202,32 +221,6 @@ class ClientBookingController extends ChangeNotifier {
       return start.isBefore(blockedEnd) && end.isAfter(range.start);
     });
     return !overlapsExternal;
-  }
-
-  /// Un día se resalta como "con disponibilidad" si existe al menos una
-  /// hora libre dentro de él.
-  bool isDayAvailable(
-    String roomId,
-    DateTime day, {
-    List<BlockedRange> externalBlocked = const [],
-  }) {
-    final dayStart = DateTime(day.year, day.month, day.day);
-    final dayEnd = dayStart.add(const Duration(days: 1));
-    for (
-      var hour = dayStart;
-      hour.isBefore(dayEnd);
-      hour = hour.add(const Duration(hours: 1))
-    ) {
-      if (isSlotAvailable(
-        roomId,
-        hour,
-        hour.add(const Duration(hours: 1)),
-        externalBlocked: externalBlocked,
-      )) {
-        return true;
-      }
-    }
-    return false;
   }
 
   /// Explica por qué una franja específica está bloqueada, para mostrarlo
@@ -380,6 +373,45 @@ class ClientBookingController extends ChangeNotifier {
     return true;
   }
 
+  /// Cancela una reserva del cliente desde el detalle. Solo permitido si el
+  /// estado actual es `pending` o `upcoming`; en cualquier otro caso (o si
+  /// el motivo viene vacío, o si el id no existe) lanza
+  /// [ReservationCancellationException], mismo contrato que usa Propietario,
+  /// para que la UI pueda mostrar un mensaje preciso.
+  Future<void> cancelReservation(String id, String reason) async {
+    if (reason.trim().isEmpty) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.reasonRequired,
+      );
+    }
+
+    _expirePendingReservations();
+    final index = _reservations.indexWhere((r) => r.id == id);
+    if (index == -1) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.notFound,
+      );
+    }
+
+    final reservation = _reservations[index];
+    final cancellable =
+        reservation.status == ReservationStatus.pending ||
+        reservation.status == ReservationStatus.upcoming;
+    if (!cancellable) {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.invalidStatus,
+      );
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    _reservations[index] = reservation.copyWith(
+      status: ReservationStatus.cancelled,
+      cancellationReason: reason.trim(),
+    );
+    notifyListeners();
+  }
+
   /// Minutos restantes antes de que una reserva `pending` se cancele
   /// automáticamente por abandono de pago. `null` si ya no aplica.
   Duration? remainingPendingTime(String reservationId) {
@@ -424,7 +456,10 @@ List<Reservation> _seedReservations() {
     Reservation(
       id: 'reservation-seed-completed',
       requestId: 'seed-completed',
-      motelId: 'motel-eclipse',
+      // id real de "Motel Eclipse" en MotelController: sin esto,
+      // getMotelForReservation no encuentra el motel y no hay reseñas que
+      // mostrar en el detalle de la reserva.
+      motelId: '3',
       motelName: 'Motel Eclipse',
       roomId: 'room-101',
       roomName: 'Suite Aurora',
@@ -449,8 +484,11 @@ List<Reservation> _seedReservations() {
     Reservation(
       id: 'reservation-seed-cancelled',
       requestId: 'seed-cancelled',
-      motelId: 'motel-nova',
-      motelName: 'Motel Nova',
+      // Alineado con el id real de "Motel El Edén" en MotelController (no
+      // existe un motel "Nova" en ese mock) para que la reseña ya mockeada
+      // con parentId "2" en ReviewsController pueda mostrarse en el detalle.
+      motelId: '2',
+      motelName: 'Motel El Edén',
       roomId: 'room-201',
       roomName: 'Suite Nova',
       roomNumber: '201',

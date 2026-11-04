@@ -1,9 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
+import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
 import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
-import 'package:machuco/views/booking/client_view/create_booking_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_cash_payment_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_reservation_detail_page.dart';
+import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
+import 'package:machuco/views/booking/system_admin_view/admin_motel_reservation_dashboard_page.dart';
+import 'package:machuco/views/booking/system_admin_view/admin_motel_reservations_list_page.dart';
 import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
@@ -13,30 +19,42 @@ import 'package:machuco/views/additional_service/system_admin_view/additional_se
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
-import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
+import 'package:machuco/controllers/payment/payment_store.dart';
+import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
+import 'package:machuco/views/invoice/invoice_page.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/views/pqrs/PqrsPage.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
 import 'package:machuco/views/product/product_list_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
+import 'package:machuco/views/client/client_view/client_profile_page.dart';
+import 'package:machuco/views/client/client_view/client_edit_profile_page.dart';
+import 'package:machuco/views/room/client_view/room_client_page.dart';
+import 'package:machuco/views/room/owner_view/room_owner_page.dart';
+import 'package:machuco/views/room/system_admin_view/room_admin_page.dart';
 
-import 'package:machuco/views/notification/Notification.dart';
 import 'package:machuco/views/home/temporal_home_page.dart';
 
+/// Central registry of named routes for the app.
+///
+/// Every screen reachable via [Navigator.pushNamed] must have its path
+/// declared here and resolved in [onGenerateRoute]; this is the single
+/// source of truth for navigation described in
+/// GUIA_MACHUCO.md#estructura-provisional-del-proyecto. The app currently
+/// navigates with `Navigator` and named routes rather than a routing
+/// package such as `go_router`.
 abstract final class AppRoutes {
   static const home = '/';
+
   static const temporalHome = '/temporal';
-  static const notifications = '/notifications';
-  static const clientNotifications = '/notifications/client';
-  static const ownerNotifications = '/notifications/owner';
-  static const adminNotifications = '/notifications/admin';
-  static const paymentConfirmation = '/payment/client/confirmation';
-  static const clientPayments = '/payment/client/history';
+
+  static const paymentMethod = '/payment/payment-method';
   static const ownerPayments = '/payment/owner';
   static const ownerSubscription = '/subscription/owner';
   static const adminPayments = '/payment/admin';
@@ -51,7 +69,9 @@ abstract final class AppRoutes {
   static const clientMotelDetail = '/motels/client/detail';
   static const ownerMotels = '/motels/owner';
   static const ownerMotelDetail = '/motels/owner/detail';
-  static const adminMotels = '/motels/admin';
+  static const clientRooms = '/rooms/client';
+  static const ownerRooms = '/rooms/owner';
+  static const adminRooms = '/rooms/admin';
   static const ownerProducts = '/products/owner';
   static const ownerReviews = '/reviews/owner';
   static const adminReviews = '/reviews/admin';
@@ -59,27 +79,54 @@ abstract final class AppRoutes {
   static const clientCreateBooking = '/bookings/client/new';
   static const clientBookingCheckout = '/bookings/client/checkout';
   static const clientReservationDetail = '/bookings/client/detail';
+  static const ownerReservations = '/bookings/owner';
+  static const ownerReservationDetail = '/bookings/owner/detail';
+  static const ownerCashPayment = '/bookings/owner/cash-payment';
+  static const adminMotelReservationsList = '/bookings/admin/motels';
+  static const adminMotelReservationDashboard = '/bookings/admin/dashboard';
+  static const clientProfile = '/client/profile';
+  static const clientProfileEdit = '/client/profile/edit';
+  static const invoice = '/invoice';
 
-  /// Alias conservado para los enlaces existentes desde las reservas.
-  static const payment = clientPayments;
-
+  /// Resolves a [RouteSettings.name] to its screen and wraps it in a
+  /// [MaterialPageRoute].
+  ///
+  /// Several routes require a specific argument type (e.g. a `Motel`, a
+  /// reservation id) and throw an [Exception] immediately when the
+  /// argument is missing or of the wrong type, instead of rendering a
+  /// broken screen. An unrecognized route name falls back to
+  /// `_UnknownRoutePage`.
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     final Widget page = switch (settings.name) {
       home => const TemporalHomePage(),
       temporalHome => const TemporalHomePage(),
-      notifications => const NotificationPage(),
-      clientNotifications => const ClientNotificationView(),
-      ownerNotifications => const OwnerNotificationView(),
-      adminNotifications => const SystemAdminNotificationView(),
-      clientPayments => const ClientPaymentsPage(),
-      ownerPayments => const OwnerPaymentsPage(),
+      paymentMethod =>
+        settings.arguments is Reservation
+            ? PaymentMethodSelectionPage(
+                reservation: settings.arguments! as Reservation,
+              )
+            : const PaymentMethodSelectionPage(),
+      ownerPayments =>
+        settings.arguments is Motel
+            ? OwnerPaymentsPage(
+                motelId: (settings.arguments! as Motel).id,
+                motelName: (settings.arguments! as Motel).name,
+              )
+            : const OwnerPaymentsPage(
+                motelId: PaymentStore.fallbackMotelId,
+                motelName: 'Motel Paraíso Élite',
+              ),
       ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
       adminAdditionalServices => AdditionalServiceSystemAdministratorPage(
-        motelId: settings.arguments is int ? settings.arguments! as int : 1,
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : '1',
       ),
       createAdminAdditionalService => AdditionalServiceAdminFormPage(
-        motelId: settings.arguments is int ? settings.arguments! as int : 1,
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : '1',
       ),
       ownerManagement => const OwnerPage(),
       pqrs => const PqrsPage(),
@@ -112,7 +159,18 @@ abstract final class AppRoutes {
             ? settings.arguments! as Motel
             : null,
       ),
-      adminMotels => const AdminMotelsPage(),
+      clientRooms =>
+        settings.arguments is Motel
+            ? RoomClientPage(motel: settings.arguments! as Motel)
+            : const ClientMotelsPage(),
+      ownerRooms =>
+        settings.arguments is Motel
+            ? RoomOwnerPage(motel: settings.arguments! as Motel)
+            : const OwnerMotelsPage(),
+      adminRooms =>
+        settings.arguments is Motel
+            ? RoomAdminPage(motel: settings.arguments! as Motel)
+            : const AdminMotelsPage(),
 
       clientReservations => const ClientReservationsPage(),
       clientCreateBooking => CreateBookingPage(
@@ -137,6 +195,57 @@ abstract final class AppRoutes {
               ),
       ),
 
+      ownerReservations => const OwnerReservationsPage(),
+      ownerReservationDetail => OwnerReservationDetailPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+      ownerCashPayment => OwnerCashPaymentPage(
+        reservationId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id de la reserva como argumento a esta ruta.',
+              ),
+      ),
+
+      adminMotelReservationsList => AdminMotelReservationsListPage(
+        ownerId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id del propietario como argumento a esta ruta.',
+              ),
+      ),
+      adminMotelReservationDashboard => AdminMotelReservationDashboardPage(
+        motelId: settings.arguments is String
+            ? settings.arguments! as String
+            : throw Exception(
+                'Error: Se requiere pasar el id del motel como argumento a esta ruta.',
+              ),
+      ),
+
+      clientProfile => const ClientProfilePage(),
+      clientProfileEdit => const ClientEditProfilePage(),
+      invoice => () {
+        final args = settings.arguments;
+        if (args is Reservation) return InvoicePage(reservation: args);
+        if (args is Map) {
+          final res = args['reservation'] is Reservation
+              ? args['reservation'] as Reservation
+              : null;
+          final pm = args['paymentMethod'] is PaymentMethodModel
+              ? args['paymentMethod'] as PaymentMethodModel
+              : null;
+          if (res != null) {
+            return InvoicePage(reservation: res, paymentMethod: pm);
+          }
+        }
+        throw Exception(
+          'Se requiere un objeto Reservation para abrir la factura.',
+        );
+      }(),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);

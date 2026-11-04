@@ -20,6 +20,15 @@ extension ReservationStatusLabel on ReservationStatus {
   };
 }
 
+/// Estado del acceso a la factura de una reserva.
+///
+/// La generación real de facturas está fuera de alcance del módulo de
+/// reservas (ver nota en `Alcance técnico` del feature de Propietario): este
+/// campo solo permite reflejar que un cobro (p. ej. en efectivo) ya se
+/// registró y el acceso a la factura queda pendiente por implementar, en vez
+/// de mostrarla de inmediato.
+enum InvoiceAccessStatus { notApplicable, pending, available }
+
 /// Las dos modalidades permitidas para definir la estancia de una reserva.
 enum StayMode { dateTimeRange, dateWithHourBlock }
 
@@ -72,6 +81,10 @@ class Reservation {
     required this.total,
     required this.status,
     required this.createdAt,
+    this.guestId = '',
+    this.guestName = '',
+    this.cancellationReason,
+    this.invoiceAccessStatus = InvoiceAccessStatus.notApplicable,
   });
 
   final String id;
@@ -102,13 +115,32 @@ class Reservation {
   final ReservationStatus status;
   final DateTime createdAt;
 
+  /// Identificador y nombre del huésped/cliente que hizo la reserva. Vacíos
+  /// por defecto porque el flujo de Cliente conoce implícitamente al
+  /// huésped (es el usuario autenticado); Propietario y Administrador sí
+  /// necesitan mostrarlos y filtrar por ellos.
+  final String guestId;
+  final String guestName;
+
+  /// Motivo de cancelación, capturado la primera vez que la reserva pasa a
+  /// `cancelled` mediante un flujo que lo exige (Propietario o Cliente).
+  /// Queda visible de forma permanente en el detalle una vez existe.
+  final String? cancellationReason;
+
+  /// Estado del acceso a la factura. Ver [InvoiceAccessStatus].
+  final InvoiceAccessStatus invoiceAccessStatus;
+
   Duration get stayDuration => checkOut.difference(checkIn);
 
   int get servicesTotal => services.fold(0, (sum, item) => sum + item.subtotal);
 
   int get productsTotal => products.fold(0, (sum, item) => sum + item.subtotal);
 
-  Reservation copyWith({ReservationStatus? status}) {
+  Reservation copyWith({
+    ReservationStatus? status,
+    String? cancellationReason,
+    InvoiceAccessStatus? invoiceAccessStatus,
+  }) {
     return Reservation(
       id: id,
       requestId: requestId,
@@ -127,6 +159,10 @@ class Reservation {
       total: total,
       status: status ?? this.status,
       createdAt: createdAt,
+      guestId: guestId,
+      guestName: guestName,
+      cancellationReason: cancellationReason ?? this.cancellationReason,
+      invoiceAccessStatus: invoiceAccessStatus ?? this.invoiceAccessStatus,
     );
   }
 }

@@ -3,8 +3,11 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import './../../../routes/routes.dart';
+import '../../login/logout_navigation.dart';
 import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
+import '../../notification/client_view/client_notification_view.dart';
+import '../../../controllers/client/client_controller.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key});
@@ -69,6 +72,10 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
     );
   }
 
+  Future<void> _logout() async {
+    await logoutAndGoToLogin(context);
+  }
+
   Widget _buildMotelsContent() {
     return Scaffold(
       appBar: AppBar(
@@ -81,17 +88,36 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
             icon: Icons.notifications_none_outlined,
             tooltip: 'Notificaciones',
             onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.clientNotifications);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const ClientNotificationView(),
+                ),
+              );
             },
           ),
         ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
-            child: AppIconButton(
-              icon: Icons.person_outline,
-              tooltip: 'Perfil',
-              onPressed: () {},
+            child: Row(
+              children: [
+                AppIconButton(
+                  icon: Icons.person_outline,
+                  tooltip: 'Perfil',
+                  onPressed: () {
+                    ClientController.instance.loadData();
+                    Navigator.pushNamed(context, AppRoutes.clientProfile);
+                  }
+                      
+                ),
+                const SizedBox(width: AppSpacing.s2),
+                AppIconButton(
+                  icon: Icons.logout,
+                  tooltip: 'Cerrar sesión',
+                  onPressed: _logout,
+                ),
+              ],
             ),
           ),
         ],
@@ -103,11 +129,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           children: [
             const SizedBox(height: AppSpacing.s2),
             AppSearchField(
-              label: 'Buscar moteles, zonas o servicios...',
+              label: 'Buscar moteles o zonas...',
               controller: _searchController,
-              onChanged: (value) {},
+              onChanged: (value) {
+                setState(() {});
+              },
               onClear: () {
                 _searchController.clear();
+                setState(() {});
               },
             ),
             const SizedBox(height: AppSpacing.s5),
@@ -124,22 +153,41 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(child: Text('Error al cargar: ${snapshot.error}'));
+                    return Center(
+                      child: Text('Error al cargar: ${snapshot.error}'),
+                    );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(child: Text('No hay moteles disponibles en este momento.'));
+                    return const Center(
+                      child: Text(
+                        'No hay moteles disponibles en este momento.',
+                      ),
+                    );
                   }
 
-                  final motels = snapshot.data!;
+                  final allMotels = snapshot.data!;
+                  final query = _searchController.text.toLowerCase();
+
+                  final filteredMotels = allMotels.where((motel) {
+                    final matchName = motel.name.toLowerCase().contains(query);
+                    final matchLocation = motel.address.toLowerCase().contains(query);
+                    
+                    return matchName || matchLocation; 
+                  }).toList();
+
+                  if (filteredMotels.isEmpty) {
+                    return const Center(child: Text('No se encontraron resultados para tu búsqueda.'));
+                  }
+
                   return ListView.separated(
-                    itemCount: motels.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: AppSpacing.s4),
+                    itemCount: filteredMotels.length,
+                    separatorBuilder: (context, index) =>
+                        const SizedBox(height: AppSpacing.s4),
                     itemBuilder: (context, index) {
-                      final motel = motels[index];
+                      final motel = filteredMotels[index];
                       return _ClientMotelCard(
                         name: motel.name,
                         location: motel.address,
-                        price: '\$${motel.basePrice.toStringAsFixed(0)} / 4 horas',
                         isAvailable: motel.isAvailable,
                         onTap: () {
                           Navigator.pushNamed(
@@ -165,14 +213,12 @@ class _ClientMotelCard extends StatelessWidget {
   const _ClientMotelCard({
     required this.name,
     required this.location,
-    required this.price,
     required this.isAvailable,
     required this.onTap,
   });
 
   final String name;
   final String location;
-  final String price;
   final bool isAvailable;
   final VoidCallback onTap;
 
@@ -224,13 +270,6 @@ class _ClientMotelCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                price,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.bold,
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-              ),
               AppButton(
                 label: 'Ver más',
                 size: AppButtonSize.medium,

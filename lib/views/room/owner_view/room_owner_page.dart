@@ -1,1033 +1,975 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_controller.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
+import 'package:machuco/controllers/room/room_owner_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/views/room/room_status_badge.dart';
+import 'package:machuco/widgets/layout/responsive_content.dart';
 
 class RoomOwnerPage extends StatefulWidget {
-  const RoomOwnerPage({
-    super.key,
-    this.rooms,
-    this.motelName = 'Motel Eclipse',
-  });
-
+  const RoomOwnerPage({super.key, required this.motel, this.rooms, this.types});
+  final Motel motel;
   final List<RoomVisualData>? rooms;
-  final String motelName;
-
+  final List<RoomTypeData>? types;
   @override
   State<RoomOwnerPage> createState() => _RoomOwnerPageState();
 }
 
 class _RoomOwnerPageState extends State<RoomOwnerPage> {
-  static final DateTime _initialPickerDate = DateTime(2026, 8, 19, 18);
-
-  final TextEditingController _searchController = TextEditingController();
-  late List<RoomVisualData> _rooms;
+  final _searchController = TextEditingController();
+  late RoomOwnerController _controller;
+  late final RoomController _dataController;
+  final Set<String> _expandedTypeIds = <String>{};
+  bool _isLoadingLocalData = true;
+  String? _localDataError;
 
   @override
   void initState() {
     super.initState();
-    _rooms = List<RoomVisualData>.from(
-      widget.rooms ?? buildMockRooms(motelName: widget.motelName),
+    _controller = RoomOwnerController(
+      motelId: widget.motel.id,
+      seedRooms: widget.rooms,
+      seedTypes: widget.types,
     );
-  }
-
-  List<RoomVisualData> get _filteredRooms {
-    final query = _searchController.text.trim().toLowerCase();
-    return _rooms.where((room) {
-      final matchesSearch = query.isEmpty ||
-          room.name.toLowerCase().contains(query) ||
-          room.roomNumber.toLowerCase().contains(query) ||
-          room.includedServices.any(
-            (service) => service.toLowerCase().contains(query),
-          );
-      return matchesSearch;
-    }).toList();
+    _dataController = RoomController.fromEnvironment();
+    _dataController.addListener(_onDataChanged);
+    _initializeData();
   }
 
   @override
   void dispose() {
+    _dataController.removeListener(_onDataChanged);
     _searchController.dispose();
     super.dispose();
   }
 
+  void _onDataChanged() {
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _initializeData() async {
+    try {
+      await _dataController.loadLocalData();
+      if (_dataController.rooms.isEmpty && _dataController.roomTypes.isEmpty) {
+        await _dataController.saveRoomTypes(_controller.allTypes);
+        await _dataController.saveRooms(_controller.allRooms);
+      } else {
+        _controller = RoomOwnerController(
+          motelId: widget.motel.id,
+          seedRooms: _dataController.rooms,
+          seedTypes: _dataController.roomTypes,
+        );
+      }
+    } catch (_) {
+      _localDataError = 'No fue posible abrir la base SQLite local.';
+    } finally {
+      if (mounted) setState(() => _isLoadingLocalData = false);
+    }
+    await _dataController.loadIncludedServices(forceRefresh: true);
+  }
+
   @override
   Widget build(BuildContext context) {
+    final types = _controller.roomTypes;
     return Scaffold(
       appBar: AppBar(title: const Text('Habitaciones')),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            _OwnerHeader(motelName: widget.motelName),
-            const SizedBox(height: AppSpacing.s5),
-            _OwnerStatsCard(total: _rooms.length),
-            const SizedBox(height: AppSpacing.s5),
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final stacked = constraints.maxWidth < 720;
-                if (stacked) {
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      AppTextField(
-                        label: 'Buscar habitacion',
-                        controller: _searchController,
-                        hint: 'Nombre, numero o servicio',
-                        prefixIcon: const Icon(Icons.search),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      const SizedBox(height: AppSpacing.s3),
-                      AppButton(
-                        label: 'Agregar habitacion',
-                        icon: Icons.add,
-                        onPressed: _createRoom,
-                      ),
-                    ],
-                  );
-                }
-
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Expanded(
-                      child: AppTextField(
-                        label: 'Buscar habitacion',
-                        controller: _searchController,
-                        hint: 'Nombre, numero o servicio',
-                        prefixIcon: const Icon(Icons.search),
-                        onChanged: (_) => setState(() {}),
-                      ),
-                    ),
-                    const SizedBox(width: AppSpacing.s3),
-                    AppButton(
-                      label: 'Agregar habitacion',
-                      icon: Icons.add,
-                      expanded: false,
-                      onPressed: _createRoom,
-                    ),
-                  ],
-                );
-              },
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            if (_rooms.isEmpty)
-              const _OwnerEmptyState(
-                icon: Icons.meeting_room_outlined,
-                title: 'Aun no hay habitaciones',
-                description:
-                    'Crea la primera habitacion del motel y completa sus servicios e imagenes dummy.',
-              )
-            else if (_filteredRooms.isEmpty)
-              const _OwnerEmptyState(
-                icon: Icons.search_off_outlined,
-                title: 'No hay coincidencias',
-                description:
-                    'Prueba otra busqueda por nombre, numero o servicio.',
-              )
-            else
-              ..._filteredRooms.map(
-                (room) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: _OwnerRoomCard(
-                    room: room,
-                    onTap: () => _openDetail(room),
-                    onEdit: () => _editRoom(room),
-                    onChangeStatus: () => _changeRoomStatus(room),
-                    onReviews: () => _showStub('Ver resenas de ${room.name}'),
-                    onCalendar: () => _openDetail(room, focusCalendar: true),
-                  ),
-                ),
-              ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _createRoom() async {
-    final created = await _openRoomForm();
-    if (created == null) {
-      return;
-    }
-
-    setState(() => _rooms = [..._rooms, created]);
-  }
-
-  Future<void> _editRoom(RoomVisualData room) async {
-    final edited = await _openRoomForm(room: room);
-    if (edited == null) {
-      return;
-    }
-
-    setState(() {
-      _rooms = _rooms
-          .map((item) => item.id == room.id ? edited.copyWith(id: room.id) : item)
-          .toList();
-    });
-  }
-
-  Future<void> _changeRoomStatus(RoomVisualData room) async {
-    var selectedStatus = RoomOperationalStatus.maintenance;
-    DateTime startDateTime = DateTime(2026, 8, 19, 19);
-    DateTime endDateTime = startDateTime.add(const Duration(hours: 2));
-    final noteController = TextEditingController();
-
-    final createdSchedule = await showModalBottomSheet<RoomStatusSchedule>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: SafeArea(
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppSpacing.s5),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Cambiar estado',
-                        style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: AppSpacing.s2),
-                      Text(
-                        'Programa un estado operativo con inicio y fin. Se guardara localmente para ${room.name}.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: context.appColors.textSecondary,
-                            ),
-                      ),
-                      const SizedBox(height: AppSpacing.s4),
-                      DropdownButtonFormField<RoomOperationalStatus>(
-                        initialValue: selectedStatus,
-                        decoration: const InputDecoration(
-                          labelText: 'Estado',
-                        ),
-                        items: roomOperationalStatusCatalog
-                            .map(
-                              (status) => DropdownMenuItem(
-                                value: status,
-                                child: Text(status.label),
-                              ),
-                            )
-                            .toList(),
-                        onChanged: (value) {
-                          if (value != null) {
-                            setModalState(() => selectedStatus = value);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.s3),
-                      _DateTimeField(
-                        label: 'Inicio',
-                        value: formatDateTime(startDateTime),
-                        icon: Icons.schedule_outlined,
-                        onTap: () async {
-                          final selected = await _pickDateTime(
-                            initial: startDateTime,
-                          );
-                          if (selected != null) {
-                            setModalState(() {
-                              startDateTime = selected;
-                              if (!startDateTime.isBefore(endDateTime)) {
-                                endDateTime =
-                                    startDateTime.add(const Duration(hours: 2));
-                              }
-                            });
-                          }
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.s3),
-                      _DateTimeField(
-                        label: 'Fin',
-                        value: formatDateTime(endDateTime),
-                        icon: Icons.event_available_outlined,
-                        onTap: () async {
-                          final selected = await _pickDateTime(
-                            initial: endDateTime,
-                            firstDate: startDateTime,
-                          );
-                          if (selected != null) {
-                            setModalState(() => endDateTime = selected);
-                          }
-                        },
-                      ),
-                      const SizedBox(height: AppSpacing.s3),
-                      AppTextField(
-                        label: 'Nota de apoyo',
-                        controller: noteController,
-                        hint: 'Ej: limpieza profunda antes del siguiente turno',
-                        maxLines: 2,
-                        prefixIcon: const Icon(Icons.notes_outlined),
-                      ),
-                      const SizedBox(height: AppSpacing.s4),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: AppButton(
-                              label: 'Cancelar',
-                              variant: AppButtonVariant.secondary,
-                              onPressed: () => Navigator.of(context).pop(),
-                            ),
-                          ),
-                          const SizedBox(width: AppSpacing.s3),
-                          Expanded(
-                            child: AppButton(
-                              label: 'Guardar estado',
-                              onPressed: () {
-                                if (!startDateTime.isBefore(endDateTime)) {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text(
-                                        'El inicio debe ser anterior al fin.',
-                                      ),
-                                    ),
-                                  );
-                                  return;
-                                }
-
-                                Navigator.of(context).pop(
-                                  RoomStatusSchedule(
-                                    status: selectedStatus,
-                                    startDateTime: startDateTime,
-                                    endDateTime: endDateTime,
-                                    supportingText:
-                                        noteController.text.trim().isEmpty
-                                            ? null
-                                            : noteController.text.trim(),
-                                  ),
-                                );
-                              },
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    if (createdSchedule == null) {
-      return;
-    }
-
-    setState(() {
-      _rooms = _rooms.map((item) {
-        if (item.id != room.id) {
-          return item;
-        }
-        final nextSchedules = [...item.statusSchedules, createdSchedule]
-          ..sort((a, b) => a.startDateTime.compareTo(b.startDateTime));
-        return item.copyWith(statusSchedules: nextSchedules);
-      }).toList();
-    });
-  }
-
-  Future<RoomVisualData?> _openRoomForm({RoomVisualData? room}) {
-    final isEdit = room != null;
-    final nameController = TextEditingController(text: room?.name ?? '');
-    final descriptionController = TextEditingController(
-      text: room?.description ?? '',
-    );
-    final priceController = TextEditingController(
-      text: room == null ? '' : '${room.pricePerHour}',
-    );
-    final roomNumberController = TextEditingController(
-      text: room?.roomNumber ?? '',
-    );
-    final capacityController = TextEditingController(
-      text: room == null ? '' : '${room.capacity}',
-    );
-    var selectedServices = List<String>.from(room?.includedServices ?? const []);
-    final imageControllers = (room?.imageUrls ?? const [''])
-        .map((entry) => TextEditingController(text: entry))
-        .toList();
-
-    return showModalBottomSheet<RoomVisualData>(
-      context: context,
-      isScrollControlled: true,
-      showDragHandle: true,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(context).viewInsets.bottom,
-              ),
-              child: FractionallySizedBox(
-                heightFactor: .94,
-                child: SafeArea(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(AppSpacing.s5),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isEdit ? 'Editar habitacion' : 'Agregar habitacion',
-                          style: Theme.of(context).textTheme.headlineSmall,
-                        ),
-                        const SizedBox(height: AppSpacing.s2),
-                        Text(
-                          'El mismo formulario se usa para crear o actualizar informacion base, servicios e imagenes dummy.',
-                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                color: context.appColors.textSecondary,
-                              ),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        AppTextField(
-                          label: 'Nombre',
-                          controller: nameController,
-                          hint: 'Suite Aurora',
-                          prefixIcon: const Icon(Icons.title_outlined),
-                        ),
-                        const SizedBox(height: AppSpacing.s3),
-                        AppTextField(
-                          label: 'Descripcion',
-                          controller: descriptionController,
-                          hint: 'Describe la propuesta visual de la habitacion',
-                          maxLines: 3,
-                          prefixIcon: const Icon(Icons.description_outlined),
-                        ),
-                        const SizedBox(height: AppSpacing.s3),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final stacked = constraints.maxWidth < 640;
-                            final priceField = AppTextField(
-                              label: 'Precio por hora',
-                              controller: priceController,
-                              hint: '68000',
-                              keyboardType: TextInputType.number,
-                              prefixIcon:
-                                  const Icon(Icons.attach_money_outlined),
-                            );
-                            final roomField = AppTextField(
-                              label: 'Numero de habitacion',
-                              controller: roomNumberController,
-                              hint: '101',
-                              prefixIcon: const Icon(Icons.pin_outlined),
-                            );
-                            if (stacked) {
-                              return Column(
-                                children: [
-                                  priceField,
-                                  const SizedBox(height: AppSpacing.s3),
-                                  roomField,
-                                ],
-                              );
-                            }
-                            return Row(
-                              children: [
-                                Expanded(child: priceField),
-                                const SizedBox(width: AppSpacing.s3),
-                                Expanded(child: roomField),
-                              ],
-                            );
-                          },
-                        ),
-                        const SizedBox(height: AppSpacing.s3),
-                        AppTextField(
-                          label: 'Capacidad maxima',
-                          controller: capacityController,
-                          hint: '2',
-                          keyboardType: TextInputType.number,
-                          prefixIcon: const Icon(Icons.people_outline),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(AppSpacing.s3),
-                          decoration: BoxDecoration(
-                            color: context.appColors.elevated,
-                            borderRadius: BorderRadius.circular(AppRadius.lg),
-                          ),
-                          child: Text(
-                            'El estado activa/inactiva se maneja desde "Cambiar estado" con rangos programados, no desde este formulario.',
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        Text(
-                          'Servicios incluidos',
-                          style: Theme.of(context).textTheme.titleMedium,
-                        ),
-                        const SizedBox(height: AppSpacing.s2),
-                        Wrap(
-                          spacing: AppSpacing.s2,
-                          runSpacing: AppSpacing.s2,
-                          children: roomIncludedServiceCatalog.map((service) {
-                            final selected = selectedServices.contains(service);
-                            return FilterChip(
-                              label: Text(service),
-                              selected: selected,
-                              onSelected: (_) {
-                                setModalState(() {
-                                  if (selected) {
-                                    selectedServices.remove(service);
-                                  } else {
-                                    selectedServices = [
-                                      ...selectedServices,
-                                      service,
-                                    ];
-                                  }
-                                });
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: AppSpacing.s4),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                'Imagenes dummy',
-                                style: Theme.of(context).textTheme.titleMedium,
-                              ),
-                            ),
-                            TextButton.icon(
-                              onPressed: () => setModalState(
-                                () => imageControllers.add(
-                                  TextEditingController(),
-                                ),
-                              ),
-                              icon:
-                                  const Icon(Icons.add_photo_alternate_outlined),
-                              label: const Text('Agregar imagen'),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.s2),
-                        ...List.generate(imageControllers.length, (index) {
-                          final controller = imageControllers[index];
-                          return Padding(
-                            padding:
-                                const EdgeInsets.only(bottom: AppSpacing.s3),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Expanded(
-                                  child: AppTextField(
-                                    label: 'Referencia visual ${index + 1}',
-                                    controller: controller,
-                                    hint: 'ej: aurora-jacuzzi',
-                                    prefixIcon:
-                                        const Icon(Icons.image_outlined),
-                                  ),
-                                ),
-                                const SizedBox(width: AppSpacing.s2),
-                                IconButton(
-                                  tooltip: 'Eliminar imagen',
-                                  onPressed: imageControllers.length == 1
-                                      ? null
-                                      : () {
-                                          final removedController =
-                                              imageControllers[index];
-                                          setModalState(
-                                            () => imageControllers.removeAt(index),
-                                          );
-                                          WidgetsBinding.instance
-                                              .addPostFrameCallback((_) {
-                                            removedController.dispose();
-                                          });
-                                        },
-                                  icon: const Icon(Icons.delete_outline),
-                                ),
-                              ],
-                            ),
-                          );
-                        }),
-                        const SizedBox(height: AppSpacing.s3),
-                        Row(
-                          children: [
-                            Expanded(
-                              child: AppButton(
-                                label: 'Cancelar',
-                                variant: AppButtonVariant.secondary,
-                                onPressed: () => Navigator.of(context).pop(),
-                              ),
-                            ),
-                            const SizedBox(width: AppSpacing.s3),
-                            Expanded(
-                              child: AppButton(
-                                label: isEdit
-                                    ? 'Guardar cambios'
-                                    : 'Crear habitacion',
-                                onPressed: () {
-                                  final name = nameController.text.trim();
-                                  final description =
-                                      descriptionController.text.trim();
-                                  final price =
-                                      int.tryParse(priceController.text.trim()) ??
-                                          0;
-                                  final roomNumber =
-                                      roomNumberController.text.trim();
-                                  final capacity = int.tryParse(
-                                        capacityController.text.trim(),
-                                      ) ??
-                                      0;
-                                  final cleanedImages = imageControllers
-                                      .map((controller) => controller.text.trim())
-                                      .where((entry) => entry.isNotEmpty)
-                                      .toList();
-
-                                  if (name.isEmpty ||
-                                      description.isEmpty ||
-                                      roomNumber.isEmpty ||
-                                      price <= 0 ||
-                                      capacity <= 0) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      const SnackBar(
-                                        content: Text(
-                                          'Completa todos los campos principales.',
-                                        ),
-                                      ),
-                                    );
-                                    return;
-                                  }
-
-                                  Navigator.of(context).pop(
-                                    RoomVisualData(
-                                      id: room?.id ??
-                                          'room-${DateTime.now().millisecondsSinceEpoch}',
-                                      motelId: room?.motelId ?? 'motel-eclipse',
-                                      motelName: widget.motelName,
-                                      name: name,
-                                      description: description,
-                                      pricePerHour: price,
-                                      roomNumber: roomNumber,
-                                      capacity: capacity,
-                                      imageUrls: cleanedImages,
-                                      isActive: room?.isActive ?? true,
-                                      includedServices: selectedServices,
-                                      reservations:
-                                          room?.reservations ?? const [],
-                                      statusSchedules:
-                                          room?.statusSchedules ?? const [],
-                                      reviewCount: room?.reviewCount ?? 0,
-                                      reviewSummary: room?.reviewSummary ??
-                                          'Sin resenas todavia',
-                                    ),
-                                  );
-                                },
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: AppSpacing.s5),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Future<DateTime?> _pickDateTime({
-    required DateTime initial,
-    DateTime? firstDate,
-  }) async {
-    final minimumDate = firstDate ?? _initialPickerDate;
-    final pickedDate = await showDatePicker(
-      context: context,
-      initialDate: initial.isBefore(minimumDate) ? minimumDate : initial,
-      firstDate: DateTime(minimumDate.year, minimumDate.month, minimumDate.day),
-      lastDate: DateTime(2027, 12, 31),
-    );
-    if (pickedDate == null || !mounted) {
-      return null;
-    }
-
-    final pickedTime = await showTimePicker(
-      context: context,
-      initialTime: TimeOfDay.fromDateTime(initial),
-    );
-    if (pickedTime == null || !mounted) {
-      return null;
-    }
-
-    return DateTime(
-      pickedDate.year,
-      pickedDate.month,
-      pickedDate.day,
-      pickedTime.hour,
-      pickedTime.minute,
-    );
-  }
-
-  void _openDetail(RoomVisualData room, {bool focusCalendar = false}) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoomDetailPage(
-          room: room,
-          role: RoomPageRole.owner,
-          highlightOwnerCalendar: focusCalendar,
-        ),
-      ),
-    );
-  }
-
-  void _showStub(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message)),
-    );
-  }
-}
-
-class _OwnerHeader extends StatelessWidget {
-  const _OwnerHeader({required this.motelName});
-
-  final String motelName;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Owner',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.s1),
-          Text(
-            'Gestion de habitaciones',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: AppSpacing.s2),
-          Text(
-            'Administra inventario, consulta reservas proximas y programa estados operativos por rango de fecha y hora.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s3,
-              vertical: AppSpacing.s2,
-            ),
-            decoration: BoxDecoration(
-              color: context.appColors.elevated,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-            ),
-            child: Text(motelName),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OwnerStatsCard extends StatelessWidget {
-  const _OwnerStatsCard({required this.total});
-
-  final int total;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            Icons.meeting_room_outlined,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-          const SizedBox(height: AppSpacing.s4),
-          Text('$total', style: Theme.of(context).textTheme.headlineMedium),
-          const SizedBox(height: AppSpacing.s1),
-          Text(
-            'Total de habitaciones',
-            style: Theme.of(context).textTheme.titleMedium,
-          ),
-          const SizedBox(height: AppSpacing.s2),
-          Text(
-            'Inventario cargado localmente para gestion owner.',
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _OwnerRoomCard extends StatelessWidget {
-  const _OwnerRoomCard({
-    required this.room,
-    required this.onTap,
-    required this.onEdit,
-    required this.onChangeStatus,
-    required this.onReviews,
-    required this.onCalendar,
-  });
-
-  final RoomVisualData room;
-  final VoidCallback onTap;
-  final VoidCallback onEdit;
-  final VoidCallback onChangeStatus;
-  final VoidCallback onReviews;
-  final VoidCallback onCalendar;
-
-  @override
-  Widget build(BuildContext context) {
-    final effective = resolveRoomEffectiveState(room);
-
-    return AppCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        child: ResponsiveContent(
+          child: ListView(
+            padding: EdgeInsets.zero,
             children: [
-              Expanded(
+              AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(room.name, style: Theme.of(context).textTheme.titleLarge),
+                    Text(
+                      'Propietario',
+                      style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
                     const SizedBox(height: AppSpacing.s1),
                     Text(
-                      'Habitacion ${room.roomNumber} · ${room.motelName}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                      'Tipos y habitaciones',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: AppSpacing.s2),
+                    Text(
+                      'Administra los tipos del motel y la información de cada habitación. Reservas controla horarios y disponibilidad.',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: context.appColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                    DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: context.appColors.elevated,
+                        borderRadius: BorderRadius.circular(AppRadius.pill),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.s3,
+                          vertical: AppSpacing.s2,
+                        ),
+                        child: Text(widget.motel.name),
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                    _PersistenceStatus(
+                      isLoading:
+                          _isLoadingLocalData ||
+                          _dataController.isLoadingServices,
+                      localError: _localDataError,
+                      serviceError: _dataController.servicesError,
+                      serviceCount: _dataController.includedServices.length,
+                      onRetry: () => _dataController.loadIncludedServices(
+                        forceRefresh: true,
+                      ),
                     ),
                   ],
                 ),
               ),
-              _StateBadge(
-                label: effective.status.label,
-                color: roomOperationalColor(effective.status),
+              const SizedBox(height: AppSpacing.s5),
+              _ResponsiveSectionHeader(
+                title: 'Tipos de habitación',
+                actionLabel: 'Agregar tipo',
+                onAction: _createType,
               ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            room.description,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
+              const SizedBox(height: AppSpacing.s3),
+              if (types.isEmpty)
+                const _EmptyState(
+                  message: 'Crea un tipo antes de agregar habitaciones.',
+                )
+              else ...[
+                AppTextField(
+                  label: 'Buscar habitación',
+                  controller: _searchController,
+                  hint: 'Nombre, número o servicio',
+                  prefixIcon: const Icon(Icons.search),
+                  onChanged: (_) => setState(() {}),
                 ),
+                const SizedBox(height: AppSpacing.s4),
+                ...types.map((type) {
+                  final rooms = _controller.roomsForType(
+                    type.id,
+                    _searchController.text,
+                  );
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _OwnerTypeCard(
+                      type: type,
+                      expanded: _expandedTypeIds.contains(type.id),
+                      rooms: rooms,
+                      totalRoomCount: _controller.roomCountForType(type.id),
+                      hasSearchQuery: _searchController.text.trim().isNotEmpty,
+                      onToggle: () => setState(() {
+                        if (!_expandedTypeIds.add(type.id)) {
+                          _expandedTypeIds.remove(type.id);
+                        }
+                      }),
+                      onAddRoom: () => _openRoomForm(type: type),
+                      onEdit: () => _editType(type),
+                      onDelete: () => _deleteType(type),
+                      onRoomEdit: (room) =>
+                          _openRoomForm(room: room, type: type),
+                      onRoomTap: (room) => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => RoomDetailPage(
+                            room: room,
+                            role: RoomPageRole.owner,
+                            typeName: type.name,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ],
+            ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          Wrap(
-            spacing: AppSpacing.s3,
-            runSpacing: AppSpacing.s2,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createType() async {
+    final name = await _openTypeForm();
+    if (name == null) return;
+    final type = RoomTypeData(
+      id: 'type-${DateTime.now().millisecondsSinceEpoch}',
+      motelId: widget.motel.id,
+      name: name,
+    );
+    setState(() {
+      _controller.addType(type);
+      _expandedTypeIds.add(type.id);
+    });
+    await _persist(() => _dataController.upsertRoomType(type));
+  }
+
+  Future<void> _editType(RoomTypeData type) async {
+    final name = await _openTypeForm(
+      initialName: type.name,
+      excludingTypeId: type.id,
+    );
+    if (name != null) {
+      setState(() => _controller.updateType(type.id, name));
+      await _persist(
+        () => _dataController.upsertRoomType(type.copyWith(name: name)),
+      );
+    }
+  }
+
+  Future<String?> _openTypeForm({
+    String initialName = '',
+    String? excludingTypeId,
+  }) {
+    final controller = TextEditingController(text: initialName);
+    String? feedbackMessage;
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: AppSpacing.s5,
+            right: AppSpacing.s5,
+            top: AppSpacing.s3,
+            bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.s5,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MetaChip(
-                icon: Icons.payments_outlined,
-                text: formatPricePerHour(room.pricePerHour),
+              Text(
+                initialName.isEmpty ? 'Agregar tipo' : 'Editar tipo',
+                style: Theme.of(context).textTheme.headlineSmall,
               ),
-              _MetaChip(
-                icon: Icons.people_alt_outlined,
-                text: '${room.capacity} personas',
+              if (feedbackMessage != null) ...[
+                const SizedBox(height: AppSpacing.s3),
+                _FormFeedback(message: feedbackMessage!),
+              ],
+              const SizedBox(height: AppSpacing.s4),
+              AppTextField(
+                label: 'Nombre',
+                controller: controller,
+                hint: 'Suite',
               ),
-              _MetaChip(
-                icon: Icons.photo_library_outlined,
-                text: '${room.imageUrls.length} imagenes',
+              const SizedBox(height: AppSpacing.s4),
+              AppButton(
+                label: 'Guardar',
+                onPressed: () {
+                  final name = controller.text.trim();
+                  if (name.isEmpty) return;
+                  if (_controller.isTypeNameDuplicate(
+                    name,
+                    excludingTypeId: excludingTypeId,
+                  )) {
+                    setModalState(
+                      () => feedbackMessage =
+                          'Ya existe un tipo de habitación con este nombre.',
+                    );
+                    return;
+                  }
+                  Navigator.of(context).pop(name);
+                },
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            roomServiceSummary(room),
-            style: Theme.of(context).textTheme.labelMedium,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _deleteType(RoomTypeData type) async {
+    final count = _controller.roomCountForType(type.id);
+    if (count > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          backgroundColor: AppColors.rose,
+          content: _SnackBarMessage(
+            icon: Icons.block_outlined,
+            message:
+                'No puedes eliminar ${type.name}: tiene $count habitaciones asociadas.',
           ),
-          const SizedBox(height: AppSpacing.s4),
-          Wrap(
-            spacing: AppSpacing.s2,
-            runSpacing: AppSpacing.s2,
-            children: [
-              _ActionChip(
-                icon: Icons.edit_outlined,
-                label: 'Editar',
-                onTap: onEdit,
-              ),
-              _ActionChip(
-                icon: Icons.toggle_on_outlined,
-                label: 'Cambiar estado',
-                onTap: onChangeStatus,
-              ),
-              _ActionChip(
-                icon: Icons.reviews_outlined,
-                label: 'Ver resenas',
-                onTap: onReviews,
-              ),
-              _ActionChip(
-                icon: Icons.calendar_month_outlined,
-                label: 'Calendario',
-                onTap: onCalendar,
-              ),
-            ],
+        ),
+      );
+      return;
+    }
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar tipo'),
+        content: Text('¿Eliminar ${type.name}?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Eliminar'),
           ),
         ],
       ),
     );
+    if (confirmed == true) {
+      setState(() {
+        _controller.deleteType(type.id);
+        _expandedTypeIds.remove(type.id);
+      });
+      await _persist(() => _dataController.deleteRoomType(type.id));
+    }
   }
-}
 
-class _DateTimeField extends StatelessWidget {
-  const _DateTimeField({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.onTap,
-  });
-
-  final String label;
-  final String value;
-  final IconData icon;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      onTap: onTap,
-      padding: const EdgeInsets.all(AppSpacing.s3),
-      child: Row(
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary),
-          const SizedBox(width: AppSpacing.s3),
-          Expanded(
+  Future<void> _openRoomForm({
+    RoomVisualData? room,
+    required RoomTypeData type,
+  }) async {
+    final name = TextEditingController(text: room?.name ?? '');
+    final description = TextEditingController(text: room?.description ?? '');
+    final price = TextEditingController(
+      text: room == null ? '' : '${room.pricePerHour}',
+    );
+    final number = TextEditingController(text: room?.roomNumber ?? '');
+    final capacity = TextEditingController(
+      text: room == null ? '' : '${room.capacity}',
+    );
+    final imageControllers = (room?.imageUrls ?? const [''])
+        .map((image) => TextEditingController(text: image))
+        .toList();
+    var selectedTypeId = room?.idType ?? type.id;
+    var isActive = room?.isActive ?? true;
+    var services = List<String>.of(room?.includedServices ?? const []);
+    String? feedbackMessage;
+    var feedbackIsError = false;
+    final remoteServices = _dataController.includedServices
+        .map((service) => service.name)
+        .toList(growable: false);
+    final serviceCatalog = remoteServices.isEmpty
+        ? roomIncludedServiceCatalog
+        : remoteServices;
+    final saved = await showModalBottomSheet<RoomVisualData>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(
+            left: AppSpacing.s5,
+            right: AppSpacing.s5,
+            top: AppSpacing.s3,
+            bottom: MediaQuery.of(context).viewInsets.bottom + AppSpacing.s5,
+          ),
+          child: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(label, style: Theme.of(context).textTheme.labelLarge),
-                const SizedBox(height: AppSpacing.s1),
-                Text(value, style: Theme.of(context).textTheme.bodyMedium),
+                Text(
+                  room == null ? 'Agregar habitación' : 'Editar habitación',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                if (feedbackMessage != null) ...[
+                  const SizedBox(height: AppSpacing.s3),
+                  _FormFeedback(
+                    message: feedbackMessage!,
+                    isError: feedbackIsError,
+                  ),
+                ],
+                const SizedBox(height: AppSpacing.s4),
+                AppTextField(
+                  label: 'Nombre',
+                  controller: name,
+                  hint: 'Suite Aurora',
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                AppTextField(
+                  label: 'Descripción',
+                  controller: description,
+                  hint: 'Descripción de la habitación',
+                  maxLines: 2,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                AppTextField(
+                  label: 'Precio por hora',
+                  controller: price,
+                  hint: '68000',
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                AppTextField(label: 'Número', controller: number, hint: '101'),
+                const SizedBox(height: AppSpacing.s3),
+                AppTextField(
+                  label: 'Capacidad',
+                  controller: capacity,
+                  hint: '2',
+                  keyboardType: TextInputType.number,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedTypeId,
+                  decoration: const InputDecoration(labelText: 'Tipo'),
+                  items: _controller.roomTypes
+                      .map(
+                        (roomType) => DropdownMenuItem(
+                          value: roomType.id,
+                          child: Text(roomType.name),
+                        ),
+                      )
+                      .toList(),
+                  onChanged: (value) {
+                    if (value != null) {
+                      setModalState(() => selectedTypeId = value);
+                    }
+                  },
+                ),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Habitación activa'),
+                  subtitle: const Text('Visible para Reservas'),
+                  value: isActive,
+                  onChanged: (value) => setModalState(() => isActive = value),
+                ),
+                Text(
+                  'Servicios incluidos',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
+                Wrap(
+                  spacing: AppSpacing.s2,
+                  runSpacing: AppSpacing.s2,
+                  children: serviceCatalog
+                      .map(
+                        (service) => FilterChip(
+                          label: Text(service),
+                          selected: services.contains(service),
+                          onSelected: (selected) => setModalState(
+                            () => selected
+                                ? services.add(service)
+                                : services.remove(service),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
+                const SizedBox(height: AppSpacing.s4),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Imágenes',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setModalState(
+                        () => imageControllers.add(TextEditingController()),
+                      ),
+                      icon: const Icon(Icons.add_photo_alternate_outlined),
+                      label: const Text('Agregar imagen'),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                ...List.generate(imageControllers.length, (index) {
+                  final imageController = imageControllers[index];
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: AppTextField(
+                            label: 'Referencia visual ${index + 1}',
+                            controller: imageController,
+                            hint: 'ej: suite-aurora-1',
+                            prefixIcon: const Icon(Icons.image_outlined),
+                          ),
+                        ),
+                        const SizedBox(width: AppSpacing.s2),
+                        IconButton(
+                          tooltip: 'Eliminar imagen',
+                          onPressed: imageControllers.length == 1
+                              ? null
+                              : () => setModalState(
+                                  () => imageControllers.removeAt(index),
+                                ),
+                          icon: const Icon(Icons.delete_outline),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+                const SizedBox(height: AppSpacing.s2),
+                AppButton(
+                  label: 'Guardar',
+                  onPressed: () {
+                    final parsedPrice = int.tryParse(price.text.trim()) ?? 0;
+                    final parsedCapacity =
+                        int.tryParse(capacity.text.trim()) ?? 0;
+                    final images = imageControllers
+                        .map((controller) => controller.text.trim())
+                        .where((reference) => reference.isNotEmpty)
+                        .toList();
+                    if (name.text.trim().isEmpty ||
+                        description.text.trim().isEmpty ||
+                        number.text.trim().isEmpty ||
+                        parsedPrice <= 0 ||
+                        parsedCapacity <= 0) {
+                      setModalState(() {
+                        feedbackIsError = true;
+                        feedbackMessage =
+                            'Completa todos los campos principales.';
+                      });
+                      return;
+                    }
+                    if (_controller.isRoomNumberDuplicate(
+                      number.text,
+                      excludingRoomId: room?.id,
+                    )) {
+                      setModalState(() {
+                        feedbackIsError = false;
+                        feedbackMessage =
+                            'Ya existe una habitación con este número.';
+                      });
+                      return;
+                    }
+                    Navigator.of(context).pop(
+                      RoomVisualData(
+                        id:
+                            room?.id ??
+                            'room-${DateTime.now().millisecondsSinceEpoch}',
+                        motelId: widget.motel.id,
+                        name: name.text.trim(),
+                        description: description.text.trim(),
+                        idType: selectedTypeId,
+                        pricePerHour: parsedPrice,
+                        roomNumber: number.text.trim(),
+                        capacity: parsedCapacity,
+                        imageUrls: images,
+                        isActive: isActive,
+                        includedServices: services,
+                      ),
+                    );
+                  },
+                ),
               ],
             ),
           ),
-        ],
+        ),
       ),
     );
+    if (saved != null) {
+      setState(() {
+        if (room == null) {
+          _controller.addRoom(saved);
+        } else {
+          _controller.updateRoom(room.id, saved);
+        }
+        _expandedTypeIds.add(saved.idType);
+      });
+      await _persist(() => _dataController.upsertRoom(saved));
+    }
+  }
+
+  Future<void> _persist(Future<void> Function() action) async {
+    try {
+      await action();
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: AppColors.rose,
+          content: _SnackBarMessage(
+            icon: Icons.storage_outlined,
+            message: 'No fue posible guardar el cambio en SQLite.',
+          ),
+        ),
+      );
+    }
   }
 }
 
-class _ActionChip extends StatelessWidget {
-  const _ActionChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
+class _PersistenceStatus extends StatelessWidget {
+  const _PersistenceStatus({
+    required this.isLoading,
+    required this.localError,
+    required this.serviceError,
+    required this.serviceCount,
+    required this.onRetry,
   });
 
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
+  final bool isLoading;
+  final String? localError;
+  final String? serviceError;
+  final int serviceCount;
+  final VoidCallback onRetry;
 
   @override
   Widget build(BuildContext context) {
-    return ActionChip(
-      avatar: Icon(icon, size: 18),
-      label: Text(label),
-      onPressed: onTap,
-    );
-  }
-}
+    if (isLoading) {
+      return const Row(
+        children: [
+          SizedBox.square(
+            dimension: AppSpacing.s4,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          ),
+          SizedBox(width: AppSpacing.s2),
+          Expanded(child: Text('Sincronizando datos locales y servicios...')),
+        ],
+      );
+    }
 
-class _MetaChip extends StatelessWidget {
-  const _MetaChip({
-    required this.icon,
-    required this.text,
-  });
+    final error = localError ?? serviceError;
+    if (error != null) {
+      return Row(
+        children: [
+          const Icon(Icons.warning_amber_rounded, color: AppColors.maintenance),
+          const SizedBox(width: AppSpacing.s2),
+          Expanded(child: Text(error)),
+          if (localError == null)
+            IconButton(
+              tooltip: 'Reintentar',
+              onPressed: onRetry,
+              icon: const Icon(Icons.refresh),
+            ),
+        ],
+      );
+    }
 
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
     return Row(
-      mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 18, color: context.appColors.textSecondary),
+        const Icon(Icons.cloud_done_outlined, color: AppColors.available),
         const SizedBox(width: AppSpacing.s2),
-        Text(text, style: Theme.of(context).textTheme.labelMedium),
+        Expanded(
+          child: Text('SQLite activo · $serviceCount servicios sincronizados'),
+        ),
       ],
     );
   }
 }
 
-class _StateBadge extends StatelessWidget {
-  const _StateBadge({
-    required this.label,
-    required this.color,
-  });
+class _FormFeedback extends StatelessWidget {
+  const _FormFeedback({required this.message, this.isError = false});
 
-  final String label;
-  final Color color;
+  final String message;
+  final bool isError;
 
   @override
   Widget build(BuildContext context) {
+    final color = isError ? AppColors.rose : AppColors.maintenance;
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: color.withValues(alpha: .16),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
+        color: color.withValues(alpha: .25),
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        border: Border.all(color: color),
       ),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s3,
-          vertical: AppSpacing.s2,
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
-        ),
-      ),
-    );
-  }
-}
-
-class _OwnerEmptyState extends StatelessWidget {
-  const _OwnerEmptyState({
-    required this.icon,
-    required this.title,
-    required this.description,
-  });
-
-  final IconData icon;
-  final String title;
-  final String description;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s5),
-        child: Column(
+        padding: const EdgeInsets.all(AppSpacing.s3),
+        child: Row(
           children: [
-            Icon(icon, size: 48, color: Theme.of(context).colorScheme.primary),
-            const SizedBox(height: AppSpacing.s3),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
+            Icon(
+              isError ? Icons.error_outline : Icons.warning_amber_rounded,
+              color: Colors.black87,
+            ),
+            const SizedBox(width: AppSpacing.s2),
+            Expanded(
+              child: Text(
+                message,
+                style: Theme.of(
+                  context,
+                ).textTheme.bodyMedium?.copyWith(color: Colors.black87),
+              ),
             ),
           ],
         ),
       ),
     );
   }
+}
+
+class _SnackBarMessage extends StatelessWidget {
+  const _SnackBarMessage({required this.icon, required this.message});
+
+  final IconData icon;
+  final String message;
+
+  @override
+  Widget build(BuildContext context) => Row(
+    children: [
+      Icon(icon, color: Colors.white),
+      const SizedBox(width: AppSpacing.s2),
+      Expanded(child: Text(message)),
+    ],
+  );
+}
+
+class _ResponsiveSectionHeader extends StatelessWidget {
+  const _ResponsiveSectionHeader({
+    required this.title,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  final String title;
+  final String actionLabel;
+  final VoidCallback onAction;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final action = AppButton(
+        label: actionLabel,
+        icon: Icons.add,
+        expanded: constraints.maxWidth < 560,
+        onPressed: onAction,
+      );
+      if (constraints.maxWidth < 560) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(title, style: Theme.of(context).textTheme.titleLarge),
+            const SizedBox(height: AppSpacing.s3),
+            action,
+          ],
+        );
+      }
+      return Row(
+        children: [
+          Expanded(
+            child: Text(title, style: Theme.of(context).textTheme.titleLarge),
+          ),
+          action,
+        ],
+      );
+    },
+  );
+}
+
+class _OwnerTypeCard extends StatelessWidget {
+  const _OwnerTypeCard({
+    required this.type,
+    required this.expanded,
+    required this.rooms,
+    required this.totalRoomCount,
+    required this.hasSearchQuery,
+    required this.onToggle,
+    required this.onAddRoom,
+    required this.onEdit,
+    required this.onDelete,
+    required this.onRoomEdit,
+    required this.onRoomTap,
+  });
+
+  final RoomTypeData type;
+  final bool expanded;
+  final List<RoomVisualData> rooms;
+  final int totalRoomCount;
+  final bool hasSearchQuery;
+  final VoidCallback onToggle;
+  final VoidCallback onAddRoom;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+  final ValueChanged<RoomVisualData> onRoomEdit;
+  final ValueChanged<RoomVisualData> onRoomTap;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+    onTap: onToggle,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        final details = Row(
+          children: [
+            Icon(
+              Icons.bedroom_parent_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: AppSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    type.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    '$totalRoomCount ${totalRoomCount == 1 ? 'habitación' : 'habitaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              size: 24,
+              color: context.appColors.textSecondary,
+            ),
+          ],
+        );
+        final actions = Wrap(
+          spacing: AppSpacing.s2,
+          children: [
+            TextButton.icon(
+              onPressed: onEdit,
+              icon: const Icon(Icons.edit_outlined),
+              label: const Text('Editar'),
+            ),
+            TextButton.icon(
+              onPressed: onDelete,
+              icon: const Icon(Icons.delete_outline),
+              label: const Text('Eliminar'),
+            ),
+          ],
+        );
+        final header = constraints.maxWidth < 420
+            ? Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  details,
+                  const SizedBox(height: AppSpacing.s2),
+                  actions,
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(child: details),
+                  actions,
+                ],
+              );
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            header,
+            if (expanded) ...[
+              const SizedBox(height: AppSpacing.s3),
+              const Divider(),
+              const SizedBox(height: AppSpacing.s3),
+              Text(
+                'Habitaciones de ${type.name}',
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: AppSpacing.s1),
+              Text(
+                'Toca una habitación para ver el detalle o usa Editar para modificarla.',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: context.appColors.textSecondary,
+                ),
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              AppButton(
+                label: 'Agregar habitación',
+                icon: Icons.add,
+                expanded: true,
+                onPressed: onAddRoom,
+              ),
+              const SizedBox(height: AppSpacing.s3),
+              if (rooms.isEmpty)
+                _EmptyState(
+                  message: hasSearchQuery
+                      ? 'No hay habitaciones que coincidan con la búsqueda.'
+                      : 'No hay habitaciones para este tipo.',
+                )
+              else
+                ...rooms.map(
+                  (room) => Padding(
+                    padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                    child: _OwnerRoomCard(
+                      room: room,
+                      typeName: type.name,
+                      onEdit: () => onRoomEdit(room),
+                      onTap: () => onRoomTap(room),
+                    ),
+                  ),
+                ),
+            ],
+          ],
+        );
+      },
+    ),
+  );
+}
+
+class _OwnerRoomCard extends StatelessWidget {
+  const _OwnerRoomCard({
+    required this.room,
+    required this.typeName,
+    required this.onEdit,
+    required this.onTap,
+  });
+  final RoomVisualData room;
+  final String typeName;
+  final VoidCallback onEdit;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) => AppCard(
+    onTap: onTap,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                room.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            RoomStatusBadge(isActive: room.isActive),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.s1),
+        Text(
+          '$typeName · Habitación ${room.roomNumber}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        Text(room.description),
+        const SizedBox(height: AppSpacing.s3),
+        Text(
+          '${formatPricePerHour(room.pricePerHour)} · ${room.capacity} personas',
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        TextButton.icon(
+          onPressed: onEdit,
+          icon: const Icon(Icons.edit_outlined),
+          label: const Text('Editar'),
+        ),
+      ],
+    ),
+  );
+}
+
+class _EmptyState extends StatelessWidget {
+  const _EmptyState({required this.message});
+  final String message;
+  @override
+  Widget build(BuildContext context) => AppCard(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.s4),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: context.appColors.textSecondary,
+        ),
+      ),
+    ),
+  );
 }

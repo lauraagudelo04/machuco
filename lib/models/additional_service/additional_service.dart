@@ -9,8 +9,8 @@ class AdditionalService {
     required this.active,
   });
 
-  final int id;
-  final int motelId;
+  final String id;
+  final String motelId;
   final String name;
   final String description;
   final String category;

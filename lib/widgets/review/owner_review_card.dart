@@ -1,20 +1,21 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 
 class OwnerReviewCard extends StatelessWidget {
   const OwnerReviewCard({
     super.key,
-    required this.entry,
+    required this.review,
+    required this.motelName,
     required this.onReply,
   });
 
-  final OwnerReviewEntry entry;
+  final Review review;
+  final String motelName;
   final VoidCallback onReply;
 
   @override
   Widget build(BuildContext context) {
-    final review = entry.review;
     return AppCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -23,7 +24,9 @@ class OwnerReviewCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _AuthorAvatar(
-                initial: review.author.isNotEmpty ? review.author[0] : '?',
+                initial: review.authorName.isNotEmpty
+                    ? review.authorName[0]
+                    : '?',
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
@@ -31,13 +34,14 @@ class OwnerReviewCard extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      review.author,
-                      style: Theme.of(context).textTheme.titleMedium
-                          ?.copyWith(fontWeight: FontWeight.w700),
+                      review.authorName,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${entry.motelName} · ${_formatDate(review.date)}',
+                      '$motelName · ${_formatDate(review.date)}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: context.appColors.textSecondary,
                       ),
@@ -58,17 +62,17 @@ class OwnerReviewCard extends StatelessWidget {
           const SizedBox(height: AppSpacing.s1),
           Text(
             review.body,
-            style: Theme.of(
-              context,
-            ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
-          if (entry.ownerReply != null) ...[
+          if (review.ownerReply != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNote(
               icon: Icons.storefront_outlined,
               color: AppColors.violet,
               label: 'Tu respuesta',
-              text: entry.ownerReply!,
+              text: review.ownerReply!,
             ),
           ],
           const SizedBox(height: AppSpacing.s3),
@@ -78,7 +82,7 @@ class OwnerReviewCard extends StatelessWidget {
               onPressed: onReply,
               icon: const Icon(Icons.reply_outlined, size: 18),
               label: Text(
-                entry.ownerReply == null ? 'Responder' : 'Editar respuesta',
+                review.ownerReply == null ? 'Responder' : 'Editar respuesta',
               ),
             ),
           ),
@@ -130,9 +134,9 @@ class _InlineNote extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     text,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: context.appColors.textSecondary),
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                 ],
               ),
@@ -158,9 +162,7 @@ class _StarRow extends StatelessWidget {
         (i) => Icon(
           i < rating ? Icons.star_rounded : Icons.star_outline_rounded,
           size: 16,
-          color: i < rating
-              ? const Color(0xFFFFB300)
-              : context.appColors.textMuted,
+          color: i < rating ? AppColors.rating : context.appColors.textMuted,
         ),
       ),
     );
@@ -184,9 +186,10 @@ class _AuthorAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         initial.toUpperCase(),
-        style: Theme.of(
-          context,
-        ).textTheme.labelLarge?.copyWith(color: Colors.white, fontWeight: FontWeight.w700),
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+          color: Theme.of(context).colorScheme.onPrimary,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }

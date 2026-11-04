@@ -1,17 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_type.dart';
-
-/// Estado de moderación asignado por el administrador a una reseña.
-enum ReviewModerationStatus { visible, hidden, reported }
-
-extension ReviewModerationStatusData on ReviewModerationStatus {
-  String get label => switch (this) {
-    ReviewModerationStatus.visible => 'Visible',
-    ReviewModerationStatus.hidden => 'Oculta',
-    ReviewModerationStatus.reported => 'Reportada',
-  };
-}
+// Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
+// dominio del mismo nombre dentro de la clase.
+import 'package:machuco/database/repository/review/review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
 enum ReviewFilter { all, visible, hidden, reported }
@@ -25,27 +16,17 @@ extension ReviewFilterData on ReviewFilter {
   };
 }
 
-class AdminReviewEntry {
-  AdminReviewEntry({
-    required this.review,
-    this.status = ReviewModerationStatus.visible,
-    this.reportReason,
-    this.adminReply,
-  });
-
-  final Review review;
-  ReviewModerationStatus status;
-  String? reportReason;
-  String? adminReply;
-}
-
+/// Controlador del panel de administración de reseñas.
+///
+/// Opera directamente sobre el modelo [Review]; ya no usa wrappers
+/// [AdminReviewEntry] porque todos los campos de moderación viven ahora
+/// en el modelo mismo.
 class ReviewAdministrationController extends ChangeNotifier {
-  ReviewAdministrationController();
+  ReviewAdministrationController({ReviewRepository? repository})
+    : _repository = repository ?? InMemoryReviewRepository.shared;
 
-  static final ReviewAdministrationController instance =
-      ReviewAdministrationController();
-
-  List<AdminReviewEntry> _entries = [];
+  final ReviewRepository _repository;
+  final List<Review> _reviews = [];
   ReviewFilter _filter = ReviewFilter.all;
   String _query = '';
   bool _isLoading = false;
@@ -56,17 +37,15 @@ class ReviewAdministrationController extends ChangeNotifier {
   ReviewFilter get filter => _filter;
   String get query => _query;
 
-  /// TODO: reemplazar la carga de ejemplo por la fuente real de reseñas
-  /// (repositorio/backend) cuando el equipo la tenga lista.
   Future<void> loadReviews() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 250));
-      if (_entries.isEmpty) {
-        _entries = _seedEntries();
-      }
+      final reviews = await _repository.getAll();
+      _reviews
+        ..clear()
+        ..addAll(reviews);
     } catch (_) {
       _errorMessage = 'No fue posible cargar las reseñas.';
     } finally {
@@ -75,35 +54,34 @@ class ReviewAdministrationController extends ChangeNotifier {
     }
   }
 
-  List<AdminReviewEntry> get entries {
+  List<Review> get reviews {
     final normalizedQuery = _query.trim().toLowerCase();
-    return _entries.where((entry) {
-      final matchesFilter = switch (_filter) {
-        ReviewFilter.all => true,
-        ReviewFilter.visible =>
-          entry.status == ReviewModerationStatus.visible,
-        ReviewFilter.hidden => entry.status == ReviewModerationStatus.hidden,
-        ReviewFilter.reported =>
-          entry.status == ReviewModerationStatus.reported,
-      };
-      if (!matchesFilter) return false;
-      if (normalizedQuery.isEmpty) return true;
-      return entry.review.author.toLowerCase().contains(normalizedQuery) ||
-          entry.review.title.toLowerCase().contains(normalizedQuery) ||
-          entry.review.body.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return _reviews
+        .where((review) {
+          final matchesFilter = switch (_filter) {
+            ReviewFilter.all => true,
+            ReviewFilter.visible =>
+              review.status == ReviewModerationStatus.visible,
+            ReviewFilter.hidden =>
+              review.status == ReviewModerationStatus.hidden,
+            ReviewFilter.reported =>
+              review.status == ReviewModerationStatus.reported,
+          };
+          if (!matchesFilter) return false;
+          if (normalizedQuery.isEmpty) return true;
+          return review.authorName.toLowerCase().contains(normalizedQuery) ||
+              review.title.toLowerCase().contains(normalizedQuery) ||
+              review.body.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
-  int get totalCount => _entries.length;
+  int get totalCount => _reviews.length;
 
-  int get reportedCount => _entries
-      .where((e) => e.status == ReviewModerationStatus.reported)
-      .length;
+  int get reportedCount =>
+      _reviews.where((r) => r.status == ReviewModerationStatus.reported).length;
 
-  double get averageRating => _entries.isEmpty
-      ? 0
-      : _entries.map((e) => e.review.rating).reduce((a, b) => a + b) /
-            _entries.length;
+  double get averageRating => averageRatingOf(_reviews);
 
   void setFilter(ReviewFilter filter) {
     _filter = filter;
@@ -115,54 +93,48 @@ class ReviewAdministrationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void toggleVisibility(AdminReviewEntry entry) {
-    entry.status = entry.status == ReviewModerationStatus.hidden
-        ? ReviewModerationStatus.visible
-        : ReviewModerationStatus.hidden;
-    notifyListeners();
-  }
+  Future<void> toggleVisibility(String reviewId) => _updateWhere(
+    reviewId,
+    (review) => review.copyWith(
+      status: review.status == ReviewModerationStatus.hidden
+          ? ReviewModerationStatus.visible
+          : ReviewModerationStatus.hidden,
+    ),
+  );
 
-  void dismissReport(AdminReviewEntry entry) {
-    entry.status = ReviewModerationStatus.visible;
-    entry.reportReason = null;
-    notifyListeners();
-  }
+  Future<void> dismissReport(String reviewId) => _updateWhere(
+    reviewId,
+    (review) => review.copyWith(
+      status: ReviewModerationStatus.visible,
+      clearReportReason: true,
+    ),
+  );
 
-  void reply(AdminReviewEntry entry, String message) {
+  Future<void> reply(String reviewId, String message) async {
     final trimmed = message.trim();
     if (trimmed.isEmpty) return;
-    entry.adminReply = trimmed;
+    await _updateWhere(
+      reviewId,
+      (review) => review.copyWith(adminReply: trimmed),
+    );
+  }
+
+  Future<void> delete(String reviewId) async {
+    await _repository.delete(reviewId);
+    _reviews.removeWhere((r) => r.id == reviewId);
     notifyListeners();
   }
 
-  void delete(AdminReviewEntry entry) {
-    _entries.removeWhere((e) => e.review == entry.review);
+  /// Aplica [change] a la reseña [reviewId]; ignora ids desconocidos.
+  Future<void> _updateWhere(
+    String reviewId,
+    Review Function(Review review) change,
+  ) async {
+    final index = _reviews.indexWhere((r) => r.id == reviewId);
+    if (index == -1) return;
+    final updated = change(_reviews[index]);
+    await _repository.update(updated);
+    _reviews[index] = updated;
     notifyListeners();
   }
-
-  List<AdminReviewEntry> _seedEntries() => [
-    AdminReviewEntry(
-      review: Review(
-        author: 'Carlos M.',
-        title: 'Muy cómodo y tranquilo',
-        body:
-            'Las habitaciones estaban limpias y el personal fue muy amable.',
-        rating: 5,
-        date: DateTime(2026, 7, 20),
-        type: ReviewType.motel,
-      ),
-    ),
-    AdminReviewEntry(
-      review: Review(
-        author: 'Roberto V.',
-        title: 'Comentario inapropiado',
-        body: 'Contiene lenguaje ofensivo y datos personales expuestos.',
-        rating: 1,
-        date: DateTime(2026, 8, 2),
-        type: ReviewType.motel,
-      ),
-      status: ReviewModerationStatus.reported,
-      reportReason: 'Lenguaje inapropiado y datos personales expuestos',
-    ),
-  ];
 }

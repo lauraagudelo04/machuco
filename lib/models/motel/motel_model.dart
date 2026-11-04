@@ -11,7 +11,6 @@ class Motel {
   final String? generalLocation;
   final List<String> paymentMethods;
   final List<String> imageUrls;
-  final double basePrice;
   final bool isAvailable;
 
   const Motel({
@@ -27,7 +26,6 @@ class Motel {
     this.generalLocation,
     required this.paymentMethods,
     required this.imageUrls,
-    required this.basePrice,
     this.isAvailable = true,
   });
 
@@ -44,7 +42,6 @@ class Motel {
     String? generalLocation,
     List<String>? paymentMethods,
     List<String>? imageUrls,
-    double? basePrice,
     bool? isAvailable,
   }) {
     return Motel(
@@ -60,7 +57,6 @@ class Motel {
       generalLocation: generalLocation ?? this.generalLocation,
       paymentMethods: paymentMethods ?? this.paymentMethods,
       imageUrls: imageUrls ?? this.imageUrls,
-      basePrice: basePrice ?? this.basePrice,
       isAvailable: isAvailable ?? this.isAvailable,
     );
   }

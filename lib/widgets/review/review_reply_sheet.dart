@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/review/review.dart';
 
 class ReviewReplySheet extends StatefulWidget {
-  const ReviewReplySheet({super.key, required this.entry, required this.onSubmit});
+  const ReviewReplySheet({super.key, required this.review, required this.onSubmit});
 
-  final AdminReviewEntry entry;
+  final Review review;
   final ValueChanged<String> onSubmit;
 
   @override
@@ -19,7 +19,7 @@ class _ReviewReplySheetState extends State<ReviewReplySheet> {
   void initState() {
     super.initState();
     _replyController = TextEditingController(
-      text: widget.entry.adminReply ?? '',
+      text: widget.review.adminReply ?? '',
     );
   }
 
@@ -57,7 +57,7 @@ class _ReviewReplySheetState extends State<ReviewReplySheet> {
             ),
             const SizedBox(height: AppSpacing.s2),
             Text(
-              'Tu respuesta será visible públicamente para ${widget.entry.review.author}.',
+              'Tu respuesta será visible públicamente para ${widget.review.authorName}.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: context.appColors.textSecondary,
               ),

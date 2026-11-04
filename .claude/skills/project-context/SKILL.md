@@ -14,10 +14,16 @@ App Flutter (Android/iOS) para consultar, reservar y administrar moteles.
 - **Administrador**: supervisa propietarios, moteles, finanzas, reservas,
   PQRS, servicios y habitaciones de toda la plataforma.
 
-Tecnologías fijas: Flutter, Dart, Android Studio, Git. **Todavía no están
-decididos**: backend, base de datos, autenticación, pasarela de pagos,
-almacenamiento de imágenes, gestor de estado, navegación definitiva ni
-plataforma de despliegue — no los fijes por tu cuenta dentro de una rama.
+Etapa actual: **segunda etapa** (elementos funcionales: maestros por API
+REST, servicios SQL locales y `shared_preferences`).
+
+Tecnologías fijas: Flutter, Dart, Android Studio, Git, **Firebase** (base de
+datos), **Supabase** (datos maestros vía API REST), **Firebase
+Authentication** (autenticación; reemplaza a Auth0), Floor/SQLite
+(almacenamiento local) y `shared_preferences` (datos locales no sensibles).
+**Todavía no están decididos**: pasarela de pagos, almacenamiento de
+imágenes, gestor de estado, navegación definitiva ni plataforma de
+despliegue — no los fijes por tu cuenta dentro de una rama.
 
 ## Cuándo profundizar (no cargues estos archivos si no los necesitas)
 

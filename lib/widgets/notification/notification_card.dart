@@ -5,6 +5,7 @@ import '../../core/design_system/tokens/app_colors.dart';
 import '../../core/design_system/tokens/app_radius.dart';
 import '../../core/design_system/tokens/app_spacing.dart';
 import '../../models/notification/notification_model.dart';
+import '../../utils/date_formatter.dart';
 
 class NotificationCard extends StatelessWidget {
   const NotificationCard({
@@ -18,7 +19,8 @@ class NotificationCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = notification.type.color;
+    final color = notification.type?.color ?? AppColors.violet;
+    final icon = notification.type?.icon ?? Icons.notifications_outlined;
     return AppCard(
       onTap: onTap,
       padding: const EdgeInsets.all(AppSpacing.s4),
@@ -32,7 +34,7 @@ class NotificationCard extends StatelessWidget {
               color: color.withValues(alpha: .12),
               borderRadius: BorderRadius.circular(AppRadius.md),
             ),
-            child: Icon(notification.type.icon, color: color, size: 22),
+            child: Icon(icon, color: color, size: 22),
           ),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
@@ -46,10 +48,10 @@ class NotificationCard extends StatelessWidget {
                       child: Text(
                         notification.title,
                         style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                              fontWeight: notification.isUnread
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
+                          fontWeight: notification.isUnread
+                              ? FontWeight.w700
+                              : FontWeight.w500,
+                        ),
                       ),
                     ),
                     if (notification.isUnread) ...[
@@ -66,19 +68,29 @@ class NotificationCard extends StatelessWidget {
                     ],
                   ],
                 ),
+                if (notification.type case final type?) ...[
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    type.name,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.s1),
                 Text(
                   notification.message,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: AppSpacing.s2),
                 Text(
-                  notification.time,
+                  formatDateTimeLabel(notification.sentAt),
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                        color: context.appColors.textMuted,
-                      ),
+                    color: context.appColors.textMuted,
+                  ),
                 ),
               ],
             ),

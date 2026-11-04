@@ -5,7 +5,6 @@ import '../../../core/design_system/theme/app_theme_extensions.dart';
 import '../../../core/design_system/tokens/app_colors.dart';
 import '../../../core/design_system/tokens/app_radius.dart';
 import '../../../core/design_system/tokens/app_spacing.dart';
-import '../../../routes/routes.dart';
 import '../../../widgets/notification/admin_notification_card.dart';
 import '../../../widgets/notification/create_notification_sheet.dart';
 
@@ -30,6 +29,7 @@ class _SystemAdminNotificationViewState
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -44,19 +44,8 @@ class _SystemAdminNotificationViewState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const CreateNotificationSheet(),
+      builder: (context) => CreateNotificationSheet(controller: _controller),
     );
-  }
-
-  void _goBackToAdminHome() {
-    if (Navigator.of(context).canPop()) {
-      Navigator.of(context).pop();
-    } else {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.adminMotels,
-        (route) => false,
-      );
-    }
   }
 
   @override
@@ -65,14 +54,12 @@ class _SystemAdminNotificationViewState
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notificaciones Admin'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.home_outlined),
-            tooltip: 'Volver al Inicio (Admin)',
-            onPressed: _goBackToAdminHome,
-          ),
-        ],
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Volver',
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Administrador de Notificaciones'),
       ),
       body: SafeArea(
         child: Column(
@@ -104,17 +91,13 @@ class _SystemAdminNotificationViewState
                         children: [
                           Text(
                             'Panel de Emisión (System Admin)',
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
+                            style: Theme.of(context).textTheme.titleMedium
                                 ?.copyWith(fontWeight: FontWeight.bold),
                           ),
                           const SizedBox(height: 2),
                           Text(
-                            'Toca el botón flotante abajo a la derecha para enviar un anuncio o alerta masiva/individual.',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
+                            'Usa el botón inferior para enviar un anuncio o alerta masiva/individual.',
+                            style: Theme.of(context).textTheme.bodySmall
                                 ?.copyWith(
                                   color: context.appColors.textSecondary,
                                 ),
@@ -136,9 +119,9 @@ class _SystemAdminNotificationViewState
                   Text(
                     'Historial de Notificaciones Emitidas',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                          color: context.appColors.textSecondary,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      color: context.appColors.textSecondary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   Chip(
                     label: Text('${notifications.length} enviadas'),

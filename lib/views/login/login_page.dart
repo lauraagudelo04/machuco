@@ -1,27 +1,24 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/service/auth/auth0_auth_service.dart';
-import 'package:machuco/service/auth/auth0_config.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
+import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/auth_config.dart';
+import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/backend_registered_user_directory.dart';
+import 'package:machuco/service/auth/firebase_auth_service.dart';
+import 'package:machuco/service/auth/hardcoded_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
-import 'package:machuco/views/motel/client_view/client_motels_page.dart';
-import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
-import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
+import 'package:machuco/widgets/form/app_phone_field.dart';
 
 enum AuthTab { login, register }
 
-enum UserProfileType { administrator, finalUser, owner }
-
-const _registerPasswordMinLength = 15;
-
-extension on UserProfileType {
-  String get metadataValue => switch (this) {
-    UserProfileType.administrator => 'administrator',
-    UserProfileType.finalUser => 'final_user',
-    UserProfileType.owner => 'owner',
-  };
-}
+// Mínimo de la contraseña en login y registro. En desarrollo solo exige
+// longitud, sin reglas de complejidad (mayúsculas, números o símbolos).
+// Endurecer antes de producción.
+const _passwordMinLength = 8;
 
 class LoginPage extends StatefulWidget {
   const LoginPage({
@@ -32,7 +29,7 @@ class LoginPage extends StatefulWidget {
   });
 
   final AuthTab initialTab;
-  final Auth0AuthService? authService;
+  final AuthService? authService;
   final LoginController? controller;
 
   @override
@@ -51,7 +48,7 @@ class _LoginPageState extends State<LoginPage> {
   final _confirmPasswordController = TextEditingController();
 
   late AuthTab _selectedTab;
-  UserProfileType _selectedProfileType = UserProfileType.finalUser;
+  RegisteredUserRole _selectedProfileType = RegisteredUserRole.client;
   bool _loginPasswordVisible = false;
   bool _registerPasswordVisible = false;
   bool _registerConfirmVisible = false;
@@ -70,25 +67,48 @@ class _LoginPageState extends State<LoginPage> {
       _controller = providedController;
       _ownsController = false;
     } else {
-      final authService =
-          widget.authService ?? Auth0AuthService.fromEnvironment();
+      final authService = widget.authService ?? _resolveAuthService();
       final RegisteredUserDirectory userDirectory;
-      if (Auth0Config.useBackendUsers && Auth0Config.hasUsersApiConfigured) {
+      if (AuthConfig.useBackendUsers && AuthConfig.hasUsersApiConfigured) {
         userDirectory = BackendRegisteredUserDirectory(
-          baseUrl: Auth0Config.usersApiBaseUrl,
-          usersPath: Auth0Config.usersApiPath,
+          baseUrl: AuthConfig.usersApiBaseUrl,
+          usersPath: AuthConfig.usersApiPath,
         );
       } else {
         userDirectory = InMemoryRegisteredUserDirectory();
       }
+      final preferences = AuthPreferences();
       _controller = LoginController(
         authService: authService,
         userDirectory: userDirectory,
+        preferences: preferences,
+        catalogRepository: AuthCatalogRepository.fromEnvironment(
+          preferences: preferences,
+        ),
       );
       _ownsController = true;
     }
     _controller.addListener(_onControllerChanged);
+    if (_selectedTab == AuthTab.register) {
+      _ensureCountryPhoneCodesLoaded();
+    }
     _bootstrap();
+  }
+
+  void _selectTab(AuthTab tab) {
+    setState(() => _selectedTab = tab);
+    if (tab == AuthTab.register) {
+      _ensureCountryPhoneCodesLoaded();
+    }
+  }
+
+  /// Los indicativos se cargan al abrir "Registrarse", no al iniciar la app.
+  void _ensureCountryPhoneCodesLoaded() {
+    if (_controller.countryPhoneCodes.isNotEmpty ||
+        _controller.isLoadingCountryPhoneCodes) {
+      return;
+    }
+    _controller.loadCountryPhoneCodes();
   }
 
   @override
@@ -114,17 +134,29 @@ class _LoginPageState extends State<LoginPage> {
     setState(() {});
   }
 
+  AuthService _resolveAuthService() {
+    if (AuthConfig.useHardcodedAuthUsers) {
+      return HardcodedAuthService();
+    }
+    return FirebaseAuthService();
+  }
+
   Future<void> _bootstrap() async {
+    await _controller.loadCurrentUserEmail();
     await _refreshRegisteredUsers();
     if (!_controller.isAuthConfigured) {
       return;
     }
     try {
-      await _controller.restoreSession();
+      final restoredSession = await _controller.restoreSession();
       if (!mounted) {
         return;
       }
       await _refreshRegisteredUsers(showError: false);
+      if (!mounted || restoredSession == null) {
+        return;
+      }
+      _goToRoleHome(restoredSession);
     } catch (_) {
       if (!mounted) {
         return;
@@ -142,7 +174,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     if (!_controller.isAuthConfigured) {
-      _showAuth0NotConfigured();
+      _showAuthNotConfigured();
       return;
     }
 
@@ -156,7 +188,7 @@ class _LoginPageState extends State<LoginPage> {
       }
       await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
-      _goToMainMenu();
+      _goToRoleHome(session);
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
@@ -174,7 +206,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     if (!_controller.isAuthConfigured) {
-      _showAuth0NotConfigured();
+      _showAuthNotConfigured();
       return;
     }
 
@@ -184,7 +216,7 @@ class _LoginPageState extends State<LoginPage> {
         email: _registerEmailController.text.trim(),
         phoneNumber: _phoneController.text.trim(),
         password: _registerPasswordController.text,
-        profileType: _selectedProfileType.metadataValue,
+        role: _selectedProfileType,
       );
       if (!mounted) {
         return;
@@ -192,9 +224,7 @@ class _LoginPageState extends State<LoginPage> {
 
       _loginEmailController.text = _registerEmailController.text.trim();
       _loginPasswordController.text = _registerPasswordController.text;
-      _showSnack(
-        message: 'Cuenta creada correctamente en Auth0. Ahora inicia sesión.',
-      );
+      _showSnack(message: 'Cuenta creada correctamente. Ahora inicia sesión.');
       setState(() => _selectedTab = AuthTab.login);
     } on AuthFailure catch (failure) {
       if (!mounted) {
@@ -209,7 +239,7 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     if (!_controller.isAuthConfigured) {
-      _showAuth0NotConfigured();
+      _showAuthNotConfigured();
       return;
     }
 
@@ -223,7 +253,7 @@ class _LoginPageState extends State<LoginPage> {
       await _refreshRegisteredUsers(showError: false);
       _showSnack(message: 'Bienvenido, ${session.name}.');
       setState(() => _selectedTab = AuthTab.login);
-      _goToMainMenu();
+      _goToRoleHome(session);
     } on AuthFailure catch (failure) {
       if (!mounted) {
         return;
@@ -249,16 +279,16 @@ class _LoginPageState extends State<LoginPage> {
       await _controller.listRegisteredUsers();
     } on AuthFailure catch (failure) {
       if (!mounted || !showError) {
-      return;
+        return;
       }
       _showSnack(message: failure.message, isError: true);
     } on Exception {
       if (!mounted || !showError) {
-      return;
+        return;
       }
       _showSnack(
-      message: 'No fue posible actualizar el listado de usuarios.',
-      isError: true,
+        message: 'No fue posible actualizar el listado de usuarios.',
+        isError: true,
       );
     }
   }
@@ -266,7 +296,7 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _showForgotPasswordMessage() async {
     final email = _loginEmailController.text.trim();
     if (!_controller.isAuthConfigured) {
-      _showAuth0NotConfigured();
+      _showAuthNotConfigured();
       return;
     }
     if (_validateEmail(email) != null) {
@@ -282,7 +312,7 @@ class _LoginPageState extends State<LoginPage> {
         return;
       }
       _showSnack(
-        message: 'Te enviamos un correo para restablecer la contraseña.',
+        message: 'Si el correo está registrado, recibirás instrucciones.',
       );
     } on AuthFailure catch (failure) {
       if (!mounted) {
@@ -300,25 +330,16 @@ class _LoginPageState extends State<LoginPage> {
     _showSnack(message: 'Sesión cerrada.');
   }
 
-  void _showAuth0NotConfigured() {
+  void _showAuthNotConfigured() {
     _showSnack(
       isError: true,
-      message:
-          'Auth0 no está configurado. Define AUTH0_DOMAIN y AUTH0_CLIENT_ID.',
+      message: 'La autenticación no está disponible en este momento.',
     );
   }
 
-  void _goToMainMenu() {
-    final Widget targetPage = switch (_selectedProfileType) {
-      UserProfileType.administrator => const AdminMotelsPage(),
-      UserProfileType.owner => const OwnerMotelsPage(),
-      UserProfileType.finalUser => const ClientMotelsPage(),
-    };
-
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute<void>(builder: (_) => targetPage),
-      (_) => false,
-    );
+  void _goToRoleHome(AuthSession session) {
+    final targetRoute = _controller.resolvePostLoginRoute(session);
+    Navigator.of(context).pushNamedAndRemoveUntil(targetRoute, (_) => false);
   }
 
   String? _validateEmail(String? value) {
@@ -338,8 +359,8 @@ class _LoginPageState extends State<LoginPage> {
     if (password.isEmpty) {
       return 'Ingresa tu contraseña.';
     }
-    if (password.length < 6) {
-      return 'Debe tener mínimo 6 caracteres.';
+    if (password.length < _passwordMinLength) {
+      return 'Debe tener mínimo $_passwordMinLength caracteres.';
     }
     return null;
   }
@@ -349,8 +370,8 @@ class _LoginPageState extends State<LoginPage> {
     if (password.isEmpty) {
       return 'Ingresa tu contraseña.';
     }
-    if (password.length < _registerPasswordMinLength) {
-      return 'Debe tener mínimo $_registerPasswordMinLength caracteres.';
+    if (password.length < _passwordMinLength) {
+      return 'Debe tener mínimo $_passwordMinLength caracteres.';
     }
     return null;
   }
@@ -382,12 +403,9 @@ class _LoginPageState extends State<LoginPage> {
                         title: 'Machuco',
                         subtitle: 'Inicia sesión o crea tu cuenta',
                       ),
-                      if (!_controller.isAuthConfigured) ...[
+                      if (AuthConfig.useHardcodedAuthUsers) ...[
                         const SizedBox(height: AppSpacing.s4),
-                        _Auth0SetupAlert(
-                          message:
-                              'Falta configuración de Auth0. Ejecuta con --dart-define=AUTH0_DOMAIN=... --dart-define=AUTH0_CLIENT_ID=...',
-                        ),
+                        _HardcodedUsersAlert(users: hardcodedAuthUsers),
                       ],
                       if (_session != null) ...[
                         const SizedBox(height: AppSpacing.s4),
@@ -399,7 +417,7 @@ class _LoginPageState extends State<LoginPage> {
                       const SizedBox(height: AppSpacing.s6),
                       _AuthTabSwitcher(
                         selectedTab: _selectedTab,
-                        onChanged: (tab) => setState(() => _selectedTab = tab),
+                        onChanged: _selectTab,
                       ),
                       const SizedBox(height: AppSpacing.s6),
                       AnimatedSwitcher(
@@ -425,9 +443,8 @@ class _LoginPageState extends State<LoginPage> {
                                   onGoogleTap: () {
                                     _submitGoogleAuth(preferSignup: false);
                                   },
-                                  onRegisterTap: () => setState(
-                                    () => _selectedTab = AuthTab.register,
-                                  ),
+                                  onRegisterTap: () =>
+                                      _selectTab(AuthTab.register),
                                   validateEmail: _validateEmail,
                                   validatePassword: _validateLoginPassword,
                                 ),
@@ -437,6 +454,24 @@ class _LoginPageState extends State<LoginPage> {
                                 child: _RegisterForm(
                                   fullNameController: _fullNameController,
                                   phoneController: _phoneController,
+                                  countryPhoneCodes:
+                                      _controller.countryPhoneCodes,
+                                  selectedCountryPhoneCode:
+                                      _controller.selectedCountryPhoneCode,
+                                  loadingCountryPhoneCodes:
+                                      _controller.isLoadingCountryPhoneCodes,
+                                  countryPhoneCodesError:
+                                      _controller.countryPhoneCodesError,
+                                  onCountryPhoneCodeSelected: (code) {
+                                    _controller.selectCountryPhoneCode(code);
+                                  },
+                                  onRetryCountryPhoneCodes: () {
+                                    _controller.loadCountryPhoneCodes(
+                                      forceRefresh: true,
+                                    );
+                                  },
+                                  validatePhone:
+                                      _controller.validatePhoneNumber,
                                   emailController: _registerEmailController,
                                   passwordController:
                                       _registerPasswordController,
@@ -446,7 +481,7 @@ class _LoginPageState extends State<LoginPage> {
                                   passwordVisible: _registerPasswordVisible,
                                   confirmVisible: _registerConfirmVisible,
                                   submitting: _isSubmitting,
-                                  onProfileSelected: (profile) => setState(
+                                  onRoleSelected: (profile) => setState(
                                     () => _selectedProfileType = profile,
                                   ),
                                   onTogglePassword: () => setState(
@@ -463,9 +498,7 @@ class _LoginPageState extends State<LoginPage> {
                                   onGoogleTap: () {
                                     _submitGoogleAuth(preferSignup: true);
                                   },
-                                  onLoginTap: () => setState(
-                                    () => _selectedTab = AuthTab.login,
-                                  ),
+                                  onLoginTap: () => _selectTab(AuthTab.login),
                                   validateEmail: _validateEmail,
                                   validatePassword: _validateRegisterPassword,
                                 ),
@@ -491,27 +524,30 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-class _Auth0SetupAlert extends StatelessWidget {
-  const _Auth0SetupAlert({required this.message});
+class _HardcodedUsersAlert extends StatelessWidget {
+  const _HardcodedUsersAlert({required this.users});
 
-  final String message;
+  final List<HardcodedAuthUser> users;
 
   @override
   Widget build(BuildContext context) {
     return AppCard(
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.info_outline_rounded,
-            color: Theme.of(context).colorScheme.primary,
+          Text(
+            'Modo pruebas activo (usuarios quemados)',
+            style: Theme.of(
+              context,
+            ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w700),
           ),
-          const SizedBox(width: AppSpacing.s2),
-          Expanded(
-            child: Text(
-              message,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: context.appColors.textSecondary,
+          const SizedBox(height: AppSpacing.s2),
+          ...users.map(
+            (user) => Padding(
+              padding: const EdgeInsets.only(bottom: AppSpacing.s1),
+              child: Text(
+                '${user.role.metadataValue}: ${user.email} / ${user.password}',
+                style: Theme.of(context).textTheme.bodySmall,
               ),
             ),
           ),
@@ -793,6 +829,13 @@ class _RegisterForm extends StatelessWidget {
   const _RegisterForm({
     required this.fullNameController,
     required this.phoneController,
+    required this.countryPhoneCodes,
+    required this.selectedCountryPhoneCode,
+    required this.loadingCountryPhoneCodes,
+    required this.countryPhoneCodesError,
+    required this.onCountryPhoneCodeSelected,
+    required this.onRetryCountryPhoneCodes,
+    required this.validatePhone,
     required this.emailController,
     required this.passwordController,
     required this.confirmPasswordController,
@@ -800,7 +843,7 @@ class _RegisterForm extends StatelessWidget {
     required this.passwordVisible,
     required this.confirmVisible,
     required this.submitting,
-    required this.onProfileSelected,
+    required this.onRoleSelected,
     required this.onTogglePassword,
     required this.onToggleConfirm,
     required this.onSubmit,
@@ -812,14 +855,21 @@ class _RegisterForm extends StatelessWidget {
 
   final TextEditingController fullNameController;
   final TextEditingController phoneController;
+  final List<CountryPhoneCode> countryPhoneCodes;
+  final CountryPhoneCode? selectedCountryPhoneCode;
+  final bool loadingCountryPhoneCodes;
+  final String? countryPhoneCodesError;
+  final ValueChanged<CountryPhoneCode> onCountryPhoneCodeSelected;
+  final VoidCallback onRetryCountryPhoneCodes;
+  final FormFieldValidator<String> validatePhone;
   final TextEditingController emailController;
   final TextEditingController passwordController;
   final TextEditingController confirmPasswordController;
-  final UserProfileType selectedProfileType;
+  final RegisteredUserRole selectedProfileType;
   final bool passwordVisible;
   final bool confirmVisible;
   final bool submitting;
-  final ValueChanged<UserProfileType> onProfileSelected;
+  final ValueChanged<RegisteredUserRole> onRoleSelected;
   final VoidCallback onTogglePassword;
   final VoidCallback onToggleConfirm;
   final VoidCallback onSubmit;
@@ -836,16 +886,9 @@ class _RegisterForm extends StatelessWidget {
     if (name.length < 3) {
       return 'El nombre es demasiado corto.';
     }
-    return null;
-  }
-
-  String? _validatePhone(String? value) {
-    final digits = value?.replaceAll(RegExp(r'\D'), '') ?? '';
-    if (digits.isEmpty) {
-      return 'Ingresa tu número de celular.';
-    }
-    if (digits.length < 10) {
-      return 'Ingresa un número válido de 10 dígitos.';
+    // Mismo límite que `firestore.rules`.
+    if (name.length > 100) {
+      return 'El nombre es demasiado largo.';
     }
     return null;
   }
@@ -884,44 +927,22 @@ class _RegisterForm extends StatelessWidget {
             style: Theme.of(context).textTheme.bodyLarge,
           ),
           const SizedBox(height: AppSpacing.s2),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                height: 52,
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
-                decoration: BoxDecoration(
-                  color: context.appColors.elevated,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                  border: Border.all(color: context.appColors.border),
-                ),
-                alignment: Alignment.center,
-                child: Text(
-                  'CO +57',
-                  style: Theme.of(context).textTheme.bodyLarge,
-                ),
-              ),
-              const SizedBox(width: AppSpacing.s2),
-              Expanded(
-                child: AppTextField(
-                  label: 'Celular',
-                  hint: '300 123 4567',
-                  controller: phoneController,
-                  keyboardType: TextInputType.phone,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.telephoneNumber],
-                  validator: _validatePhone,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                ),
-              ),
-            ],
+          AppPhoneField(
+            countryCodes: countryPhoneCodes,
+            selectedCountryCode: selectedCountryPhoneCode,
+            onCountryCodeSelected: onCountryPhoneCodeSelected,
+            phoneController: phoneController,
+            loading: loadingCountryPhoneCodes,
+            errorMessage: countryPhoneCodesError,
+            onRetry: onRetryCountryPhoneCodes,
+            validator: validatePhone,
           ),
           const SizedBox(height: AppSpacing.s4),
           Text('Tipo de perfil', style: Theme.of(context).textTheme.bodyLarge),
           const SizedBox(height: AppSpacing.s2),
           _ProfileTypeSelector(
             selectedType: selectedProfileType,
-            onSelected: onProfileSelected,
+            onSelected: onRoleSelected,
             compact: compact,
           ),
           const SizedBox(height: AppSpacing.s4),
@@ -938,7 +959,7 @@ class _RegisterForm extends StatelessWidget {
           const SizedBox(height: AppSpacing.s4),
           AppTextField(
             label: 'Contraseña',
-            hint: 'Mínimo 15 caracteres',
+            hint: 'Mínimo $_passwordMinLength caracteres',
             controller: passwordController,
             obscureText: !passwordVisible,
             textInputAction: TextInputAction.next,
@@ -982,7 +1003,7 @@ class _RegisterForm extends StatelessWidget {
           AppButton(
             label: 'Crear cuenta',
             loading: submitting,
-            onPressed: onSubmit,
+            onPressed: selectedCountryPhoneCode == null ? null : onSubmit,
           ),
           const SizedBox(height: AppSpacing.s3),
           AppButton(
@@ -1028,30 +1049,31 @@ class _ProfileTypeSelector extends StatelessWidget {
     required this.compact,
   });
 
-  final UserProfileType selectedType;
-  final ValueChanged<UserProfileType> onSelected;
+  final RegisteredUserRole selectedType;
+  final ValueChanged<RegisteredUserRole> onSelected;
   final bool compact;
 
   @override
   Widget build(BuildContext context) {
     final profiles =
         <
-          ({UserProfileType type, IconData icon, String title, String subtitle})
+          ({
+            RegisteredUserRole type,
+            IconData icon,
+            String title,
+            String subtitle,
+          })
         >[
+          // El registro público no ofrece Administrador: solo otro
+          // administrador puede crearlo (ver firestore.rules).
           (
-            type: UserProfileType.administrator,
-            icon: Icons.security_rounded,
-            title: 'Administrador',
-            subtitle: 'Gestión total del sistema',
-          ),
-          (
-            type: UserProfileType.finalUser,
+            type: RegisteredUserRole.client,
             icon: Icons.person_rounded,
-            title: 'Usuario final',
+            title: 'Cliente',
             subtitle: 'Realiza y consulta reservas',
           ),
           (
-            type: UserProfileType.owner,
+            type: RegisteredUserRole.owner,
             icon: Icons.home_work_rounded,
             title: 'Propietario',
             subtitle: 'Gestiona sus propiedades',

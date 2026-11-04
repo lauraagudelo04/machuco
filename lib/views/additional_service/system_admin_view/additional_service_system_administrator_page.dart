@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
-import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
 
 const _serviceIconExtent = 52.0;
@@ -15,7 +13,7 @@ class AdditionalServiceSystemAdministratorPage extends StatefulWidget {
     this.controller,
   });
 
-  final int? motelId;
+  final String? motelId;
 
   final AdditionalServiceSystemAdministratorController? controller;
 
@@ -46,7 +44,8 @@ class _AdditionalServiceSystemAdministratorPageState
     _controller =
         widget.controller ??
         AdditionalServiceSystemAdministratorController(
-          motelId: widget.motelId ?? (routeArgument is int ? routeArgument : 1),
+          motelId:
+              widget.motelId ?? (routeArgument is String ? routeArgument : '1'),
         );
     _controllerInitialized = true;
     _controller.addListener(_refresh);
@@ -109,19 +108,7 @@ class _AdditionalServiceSystemAdministratorPageState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: Padding(
-          padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: AppIconButton(
-            icon: Icons.notifications_active_outlined,
-            tooltip: 'Notificaciones Admin',
-            onPressed: () {
-              Navigator.pushNamed(context, AppRoutes.adminNotifications);
-            },
-          ),
-        ),
-        title: const Text('Servicios adicionales (Admin)'),
-      ),
+      appBar: AppBar(title: const Text('Servicios adicionales')),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(

@@ -15,8 +15,10 @@ Este documento presenta el contexto general y el estado del proyecto. Las reglas
 4. [Alcance funcional](#alcance-funcional)
 5. [Tecnologías](#tecnologías)
 6. [Estructura actual](#estructura-actual)
-7. [Estado y decisiones pendientes](#estado-y-decisiones-pendientes)
-8. [Próximos pasos](#próximos-pasos)
+7. [Etapa actual: segunda etapa](#etapa-actual-segunda-etapa)
+8. [Decisiones tomadas](#decisiones-tomadas)
+9. [Estado y decisiones pendientes](#estado-y-decisiones-pendientes)
+10. [Próximos pasos](#próximos-pasos)
 
 ## Descripción
 
@@ -106,37 +108,72 @@ Este alcance describe el producto; todavía no determina la implementación téc
 - Dart.
 - Android Studio.
 - Git.
+- **Firebase** como base de datos principal en la nube (decisión del equipo, ver [docs/decisions_log.md](docs/decisions_log.md)).
+- **Firebase Authentication** (`firebase_auth`) como sistema de autenticación (ver [Configuración de la autenticación](#configuración-de-la-autenticación)).
+- **Supabase** para los datos maestros (catálogos y listas de referencia), consultados mediante API REST.
+- `http`, para consumir las API REST (maestros de Supabase y el directorio de usuarios externo).
+- Floor sobre SQLite (`floor`, `sqflite`) para los servicios SQL de almacenamiento local de datos (`lib/database/`).
+- `shared_preferences`, adoptado por el equipo para guardar o compartir datos locales no sensibles, como correos recordados y preferencias de UI. Ver [docs/shared_preferences.md](docs/shared_preferences.md).
 
-Aún no están definidos el backend, la base de datos, el proveedor de autenticación, la pasarela de pagos, el almacenamiento de imágenes, la administración de estado, la navegación definitiva ni la plataforma de despliegue. Las decisiones aprobadas deberán registrarse en la documentación correspondiente.
+El proyecto ya incluye un sistema de diseño propio construido sobre Material 3 (`lib/core/design_system`, con tokens, tema y componentes `App*`), conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md). Las pantallas navegan con `Navigator` y rutas nombradas centralizadas en `lib/routes/routes.dart`. Los controladores existentes manejan su estado con `ChangeNotifier` nativo de Flutter.
+
+Aún no están definidos de forma acordada por el equipo: la pasarela de pagos, el almacenamiento de imágenes, la administración de estado (más allá del uso puntual de `ChangeNotifier`), la navegación definitiva (más allá del `Navigator` actual, sin `go_router` u otro paquete) ni la plataforma de despliegue. El código ya tomó algunas decisiones parciales en estas áreas (por ejemplo, un directorio de usuarios que puede consultar un API HTTP externo); estos hallazgos están registrados en [docs/decisions_log.md](docs/decisions_log.md) para que el equipo los confirme o los corrija. Las decisiones aprobadas deberán registrarse en la documentación correspondiente.
 
 ## Estructura actual
 
 ```text
 lib/
+├── core/
+│   └── design_system/
 ├── widgets/
 ├── views/
 ├── models/
 ├── controllers/
 ├── routes/
 ├── service/
-├── data/
-├── repository/
+├── database/
+│   ├── model/
+│   └── repository/
 ├── utils/
 └── main.dart
 ```
 
+Esta es la estructura real de `lib/` hoy. No existe `data/`, y los repositorios descritos en [GUIA_MACHUCO.md](GUIA_MACHUCO.md#estructura-provisional-del-proyecto) viven en `lib/database/repository/` (Firestore, Supabase y SQLite) solo para algunas funcionalidades; el resto de controladores sigue usando datos de ejemplo directamente (por ejemplo `controllers/room/room_mock_data.dart`). Este desajuste se detalla en [docs/architecture.md](docs/architecture.md) y debe resolverse como parte de la arquitectura definitiva, no corregirse de forma unilateral en una rama.
+
 La estructura es provisional hasta que el equipo defina la arquitectura definitiva. La responsabilidad y las reglas de cada directorio se detallan en [GUIA_MACHUCO.md](GUIA_MACHUCO.md#estructura-provisional-del-proyecto).
+
+## Etapa actual: segunda etapa
+
+Machuco está en su **segunda etapa**. La primera etapa construyó la interfaz con datos de ejemplo; en esta se implementan elementos funcionales:
+
+- Consulta de datos maestros mediante **API REST** (Supabase).
+- **Servicios SQL** para almacenar datos localmente (Floor sobre SQLite, `lib/database/`).
+- **`shared_preferences`** para guardar o compartir datos locales no sensibles, como correos y preferencias.
+- Persistencia en **Firebase** y autenticación con **Firebase Authentication**.
+
+En esta etapa cada persona puede cambiar de funcionalidad; el alcance vigente de cada rama está en `contexts/people/`.
+
+## Decisiones tomadas
+
+- **Base de datos:** Firebase.
+- **Datos maestros:** Supabase, consultado por API REST.
+- **Autenticación:** Firebase Authentication (reemplaza a Auth0).
+- **Perfiles de usuario y rol:** Cloud Firestore (`users/{uid}`), protegido por reglas de seguridad (`firestore.rules`).
+- **Almacenamiento local de datos:** Floor (SQLite).
+- **Preferencias y datos locales no sensibles:** `shared_preferences`.
+
+Detalle y fechas en [docs/decisions_log.md](docs/decisions_log.md).
 
 ## Estado y decisiones pendientes
 
 Machuco se encuentra en desarrollo. Antes de modificar significativamente su estructura se deben definir y documentar:
 
-- Arquitectura y administración de estado.
-- Backend, base de datos y contratos de API.
-- Autenticación, autorización por roles y sesiones.
+- Arquitectura y administración de estado (el código ya usa `ChangeNotifier` nativo en varios controladores, sin un paquete de estado acordado; ver [docs/decisions_log.md](docs/decisions_log.md)).
+- Contratos de datos entre la app, Firebase y Supabase (colecciones, tablas y formato de las respuestas REST).
+- Autorización por roles y sesiones: el rol de los usuarios ya vive en Cloud Firestore y se valida con `firestore.rules` (ver [docs/firebase.md](docs/firebase.md)); falta que cada funcionalidad agregue las reglas de sus colecciones y definir las políticas de Supabase.
 - Pasarela de pagos y sistema de suscripciones.
-- Almacenamiento de imágenes y persistencia local.
-- Navegación, enlaces profundos y notificaciones.
+- Almacenamiento de imágenes (aún pendiente).
+- Navegación, enlaces profundos y notificaciones (hoy se usa `Navigator` con rutas nombradas centralizadas en `lib/routes/routes.dart`, no la navegación definitiva).
 - Gestión de secretos y entornos.
 - Analítica, monitoreo, CI/CD y alcance de las pruebas automatizadas.
 - Términos de privacidad y tratamiento de datos.
@@ -144,35 +181,29 @@ Machuco se encuentra en desarrollo. Antes de modificar significativamente su est
 ## Próximos pasos
 
 1. Acordar la arquitectura y la solución de estado global.
-2. Definir backend, contratos de datos y persistencia.
-3. Definir autenticación y autorización por roles.
+2. Integrar Firebase, Supabase (API REST) y Floor detrás de servicios y repositorios, y definir sus contratos de datos.
+3. Extender la autorización por roles de `firestore.rules` a cada colección nueva y volver a desplegarlas (ver [docs/firebase.md](docs/firebase.md)).
 4. Establecer navegación, entornos y gestión de secretos.
 5. Configurar pruebas automatizadas y CI/CD.
 6. Implementar la interfaz conforme a [README_DISENO_FLUTTER.md](README_DISENO_FLUTTER.md).
 
-## Configuración de Auth0 para login y registro
+## Configuración de la autenticación
 
-El flujo de autenticación en la app está integrado con Auth0 mediante `auth0_flutter` y usa conexión de base de datos (`Username-Password-Authentication` por defecto).
+La app usa Firebase Authentication (correo y contraseña) mediante `firebase_auth`. Firebase se inicializa en `lib/main.dart` con `lib/firebase_options.dart`, generado por FlutterFire CLI (`flutterfire configure`). En la consola de Firebase debe estar habilitado el proveedor **Correo electrónico/contraseña** (`Authentication > Sign-in method`).
 
-Ejecute la aplicación con:
+El perfil, el rol (`admin`, `owner` o `client`) y el estado de la cuenta se guardan en **Cloud Firestore**, en `users/{uid}`, protegidos por `firestore.rules` (referenciado en `firebase.json`). El registro público solo crea clientes (activos) y propietarios (pendientes de aprobación); los administradores se crean manualmente en la consola. Un usuario sin perfil entra como Cliente. La contraseña exige un mínimo de 8 caracteres.
 
-```bash
-flutter run \
-  --dart-define=AUTH0_DOMAIN=tu-dominio.auth0.com \
-  --dart-define=AUTH0_CLIENT_ID=tu-client-id \
-  --dart-define=AUTH0_CONNECTION=Username-Password-Authentication
-```
+Estado del proyecto Firebase `machuco`: la base Cloud Firestore existe (ubicación `nam5`) y las reglas están desplegadas (2026-10-27). `.firebaserc` fija el proyecto por defecto del CLI. Cada cambio en `firestore.rules` se despliega con `firebase deploy --only firestore:rules`.
 
-Parámetros opcionales:
+Cómo usar el usuario autenticado y agregar colecciones con sus reglas: [docs/firebase.md](docs/firebase.md).
 
-- `AUTH0_AUDIENCE` para solicitar access token de una API concreta.
-- `AUTH0_CONNECTION` si usa una conexión de base de datos distinta en Auth0.
+Parámetros opcionales (`--dart-define`):
 
-### Inicio de sesión con Google
+- `AUTH_USE_BACKEND_USERS=true` junto con `AUTH_USERS_API_BASE_URL` (y opcionalmente `AUTH_USERS_API_PATH`, por defecto `/users`) para que el directorio de usuarios de la app consulte un API HTTP externo en vez de los datos de ejemplo en memoria. Esta integración es parcial y no reemplaza una decisión de backend acordada por el equipo; ver [docs/decisions_log.md](docs/decisions_log.md).
+- `SUPABASE_URL`, `SUPABASE_ANON_KEY` y `SUPABASE_PUBLISHABLE_KEY`: apuntan por defecto al proyecto Supabase de desarrollo, de modo que `flutter run` no requiere argumentos. Sobrescríbalos para otro entorno. La clave publicable no es `service_role` y no reemplaza las políticas RLS.
 
-La pantalla de autenticación incluye botón de **Continuar con Google** para login/registro directo con Auth0.
+El ingreso con Google y GitHub está definido pero todavía no implementado.
 
-En Auth0, habilite:
+### Modo de usuarios de prueba (sin Firebase)
 
-- La conexión social de Google en `Authentication > Social`.
-- La aplicación `Machuco Mobile` dentro de la pestaña `Applications` de esa conexión.
+Por defecto la app arranca con las cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), de modo que `flutter run` funciona sin argumentos adicionales. El modo se controla con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=<true|false>` y está pensado únicamente para desarrollo local y QA; en builds distribuidos debe desactivarse con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.

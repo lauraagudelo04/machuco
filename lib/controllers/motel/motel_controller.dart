@@ -1,8 +1,27 @@
-import '../../models/motel/motel_model.dart';
+import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/motel/motel_repository.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 class MotelController {
-  // Base de datos simulada unificada
-  final List<Motel> _mockDatabase = [
+  MotelController({MotelRepository? repository}) : _repository = repository;
+
+  factory MotelController.persistent() {
+    return MotelController(
+      repository: MotelRepository(
+        baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
+        apiKey: SupabasePhoneCountryCodeConfig.apiKey,
+        daoProvider: () async {
+          final db = await AppDatabaseProvider.database;
+          return db.motelDao;
+        },
+      ),
+    );
+  }
+
+  final MotelRepository? _repository;
+
+  static final List<Motel> _mockDatabase = [
     Motel(
       id: '1',
       ownerId: 'owner-1020304050',
@@ -17,7 +36,6 @@ class MotelController {
       generalLocation: 'Rionegro - Zona Rosa',
       paymentMethods: ['Efectivo', 'Nequi', 'Tarjeta'],
       imageUrls: ['url_imagen_1.jpg'],
-      basePrice: 80000,
       isAvailable: true,
     ),
     Motel(
@@ -34,7 +52,6 @@ class MotelController {
       generalLocation: 'Llanogrande',
       paymentMethods: ['Efectivo', 'Transferencia'],
       imageUrls: ['url_imagen_2.jpg'],
-      basePrice: 95000,
       isAvailable: true,
     ),
     Motel(
@@ -51,59 +68,118 @@ class MotelController {
       generalLocation: 'Rionegro - Centro',
       paymentMethods: ['Efectivo'],
       imageUrls: [],
-      basePrice: 35000,
       isAvailable: true,
     ),
   ];
 
-  // ==========================================
-  // MÉTODOS PARA EL PROPIETARIO (OWNER)
-  // ==========================================
-
-  /// Obtiene los moteles pertenecientes al propietario con sesión activa.
   Future<List<Motel>> getMyMotels() async {
-    await Future.delayed(const Duration(seconds: 1));
-
+    if (_repository == null) {
+      await Future.delayed(const Duration(seconds: 1));
+      const currentLoggedInUserId = 'owner-1020304050';
+      return _mockDatabase
+          .where((motel) => motel.ownerId == currentLoggedInUserId)
+          .toList();
+    }
+    final motels = await _repository.getMotels();
     const currentLoggedInUserId = 'owner-1020304050';
-
-    return _mockDatabase
-        .where((motel) => motel.ownerId == currentLoggedInUserId)
-        .toList();
+    return motels.where((motel) => motel.ownerId == currentLoggedInUserId).toList();
   }
 
-  /// Obtiene los moteles filtrados por un ownerId específico.
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {
-    await Future.delayed(const Duration(milliseconds: 800));
-
-    return _mockDatabase
-        .where((motel) => motel.ownerId == ownerId)
-        .toList();
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 800));
+      return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
+    }
+    final motels = await _repository.getMotels();
+    return motels.where((motel) => motel.ownerId == ownerId).toList();
   }
 
-  // ==========================================
-  // MÉTODOS PARA EL CLIENTE (CLIENT)
-  // ==========================================
-
-  /// Obtiene la lista de moteles recomendados / disponibles para la vista de clientes.
   Future<List<Motel>> getRecommendedMotels() async {
-    await Future.delayed(const Duration(seconds: 1));
-
-    // Filtra únicamente los moteles habilitados/disponibles para clientes
-    return _mockDatabase.where((motel) => motel.isAvailable).toList();
+    if (_repository == null) {
+      await Future.delayed(const Duration(seconds: 1));
+      return _mockDatabase.where((motel) => motel.isAvailable).toList();
+    }
+    final motels = await _repository.getMotels();
+    return motels.where((motel) => motel.isAvailable).toList();
   }
 
-  /// Obtiene el catálogo completo de moteles.
   Future<List<Motel>> getAllMotels() async {
-    await Future.delayed(const Duration(milliseconds: 600));
-    return _mockDatabase;
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 600));
+      return _mockDatabase;
+    }
+    return _repository.getMotels();
   }
 
-  /// Obtiene un motel específico por su ID.
   Future<Motel?> getMotelById(String id) async {
-    await Future.delayed(const Duration(milliseconds: 400));
-    return _mockDatabase.cast<Motel?>().firstWhere(
-          (motel) => motel?.id == id,
-          orElse: () => null,
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      return _mockDatabase.cast<Motel?>().firstWhere(
+            (motel) => motel?.id == id,
+            orElse: () => null,
+          );
+    }
+    final motels = await _repository.getMotels();
+    for (final motel in motels) {
+      if (motel.id == id) return motel;
+    }
+    return null;
+  }
+
+  Future<void> addMotel(Motel newMotel) async {
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      _mockDatabase.add(newMotel);
+      return;
+    }
+    await _repository.addMotel(newMotel);
+  }
+
+  Future<void> updateMotel(Motel updatedMotel) async {
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      final index = _mockDatabase.indexWhere((m) => m.id == updatedMotel.id);
+      if (index != -1) {
+        _mockDatabase[index] = updatedMotel;
+      }
+      return;
+    }
+    await _repository.updateMotel(updatedMotel);
+  }
+
+  Future<void> toggleMotelStatus(String motelId) async {
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      final index = _mockDatabase.indexWhere((m) => m.id == motelId);
+      if (index != -1) {
+        final current = _mockDatabase[index];
+        _mockDatabase[index] = Motel(
+          id: current.id,
+          ownerId: current.ownerId,
+          name: current.name,
+          email: current.email,
+          roomCount: current.roomCount,
+          nit: current.nit,
+          address: current.address,
+          phone: current.phone,
+          description: current.description,
+          generalLocation: current.generalLocation,
+          paymentMethods: current.paymentMethods,
+          imageUrls: current.imageUrls,
+          isAvailable: !current.isAvailable,
         );
+      }
+      return;
+    }
+    final motels = await _repository.getMotels();
+    Motel? current;
+    for (final motel in motels) {
+      if (motel.id == motelId) {
+        current = motel;
+        break;
+      }
+    }
+    if (current == null) return;
+    await _repository.setAvailability(motelId, !current.isAvailable);
   }
 }

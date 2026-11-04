@@ -91,6 +91,10 @@ class PqrsRequest {
 
   final String id;
   final String motelId;
+
+  /// Denormalized display fallback; kept in sync with the real motel name at
+  /// seed time. The authoritative name now comes from `MotelController` via
+  /// `PqrsController.loadMotelsWithRequests`.
   final String motelName;
   final String clientId;
   final String clientName;

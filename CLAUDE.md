@@ -7,12 +7,22 @@ del sistema**. Detalle completo del producto en `README.md`.
 El proyecto está en desarrollo activo, con 17 ramas (una por persona). Cada
 rama tiene su propio archivo de contexto en `contexts/people/`.
 
+**Segunda etapa:** se implementan elementos funcionales — consulta de
+maestros por API REST, servicios SQL (Floor/SQLite) para almacenar datos y
+`shared_preferences` para guardar o compartir datos locales como correos.
+
+**Decisiones tomadas** (ver `docs/decisions_log.md`): Firebase como base de
+datos, Supabase para los datos maestros (vía API REST) y Firebase
+Authentication como sistema de autenticación (reemplaza a Auth0).
+
 ## Reglas no negociables
 
-- No fijar backend, base de datos, gestor de estado, pasarela de pagos ni
-  almacenamiento sin una decisión documentada y acordada por el equipo (ver
-  README.md → "Estado y decisiones pendientes"). No agregues dependencias
-  para resolver esto por tu cuenta.
+- Usar las tecnologías ya decididas (Firebase, Supabase, Firebase
+  Authentication, Floor, `shared_preferences`) y no introducir alternativas.
+  No fijar gestor de estado, pasarela de pagos ni almacenamiento de imágenes
+  sin una decisión documentada y acordada por el equipo (ver README.md →
+  "Estado y decisiones pendientes"). No agregues dependencias para resolver
+  esto por tu cuenta.
 - Nunca hardcodear colores hexadecimales, radios o duraciones en una vista.
   Usar siempre los tokens del design system (ver skill `project-context`).
 - Nombres técnicos (carpetas, archivos, clases, variables) en inglés; textos

@@ -1,0 +1,438 @@
+# Registro de decisiones técnicas a confirmar
+
+`README.md#estado-y-decisiones-pendientes` marca varias decisiones de
+arquitectura como pendientes de acuerdo del equipo. Este documento registra
+hallazgos del código que **ya tomaron un camino de facto** en algunas de esas
+áreas, sin que exista un acuerdo documentado al respecto. No se trata de
+decisiones cerradas: el equipo debe revisarlas y decidir si se confirman,
+se generalizan o se revierten.
+
+No se edita `README.md` para declarar estas decisiones como resueltas; ese
+documento solo referencia este registro.
+
+## 2026-09-15 — Gestión de estado: `ChangeNotifier` nativo, sin paquete de terceros
+
+**Hallazgo:** 18 controladores en `lib/controllers/**` extienden
+`ChangeNotifier` de Flutter (`package:flutter/foundation.dart`). Las vistas
+crean su propia instancia del controlador en `initState`, se suscriben con
+`addListener` y llaman `setState` manualmente en el callback (ver
+`views/booking/client_view/client_reservations_page.dart` como ejemplo
+representativo). No se encontró ningún uso de `flutter_riverpod`,
+`provider`, `bloc` ni paquete equivalente en `pubspec.yaml` ni en el código.
+
+**Por qué importa:** `README_DISENO_FLUTTER.md#3-tecnología-y-librerías-recomendadas`
+recomienda `flutter_riverpod` para el estado de presentación, pero aclara
+"si el proyecto ya adoptó otra solución, no migrar solo por diseño". El
+código no adoptó Riverpod; adoptó `ChangeNotifier` puro y manual, sin
+compartir estado entre pantallas mediante un árbol de providers.
+
+**A confirmar:** ¿se estandariza `ChangeNotifier` + `addListener` manual
+como la solución de estado del proyecto, se introduce un paquete que
+formalice este patrón (por ejemplo exponiendo los controladores mediante
+`ListenableBuilder`/`InheritedNotifier` en vez de `addListener` manual en
+cada `State`), o se migra a Riverpod como sugiere la guía de diseño?
+
+## 2026-09-15 — Persistencia de reservas: estado compartido en memoria vía variables `static`
+
+**Hallazgo:** Varios controladores (por ejemplo `ClientBookingController`)
+guardan su colección de datos en un campo `static`, para que distintas
+instancias del mismo controlador (una por pantalla) lean y escriban la
+misma "base de datos" en memoria sin backend. Esto está documentado en el
+propio archivo como una decisión deliberada y temporal.
+
+**Por qué importa:** es un patrón de persistencia de facto (memoria de
+proceso compartida vía `static`) que no aparece en `README.md` ni en
+`GUIA_MACHUCO.md`, y que no sobrevive a un reinicio de la app ni se
+sincroniza entre dispositivos.
+
+**A confirmar:** si este patrón se mantiene como convención temporal
+explícita para todos los controladores mock del proyecto (documentarlo en
+`GUIA_MACHUCO.md`), o si se reemplaza pronto por una capa `repository`/`data`
+real, tal como esos directorios están previstos en la estructura del
+proyecto pero no implementados (ver [architecture.md](architecture.md)).
+
+## 2026-09-15 — Backend parcial: API HTTP externa para el directorio de usuarios
+
+**Hallazgo:** `lib/service/auth/backend_registered_user_directory.dart`
+usa `package:http` para consultar un API externo de usuarios
+(`GET {baseUrl}{usersPath}`), activable con
+`--dart-define=AUTH_USE_BACKEND_USERS=true` y
+`--dart-define=AUTH_USERS_API_BASE_URL=...`. Es la única dependencia de red
+genérica (`http`) en todo el proyecto fuera de `auth0_flutter`. La URL base
+no está hardcodeada en el repositorio: se inyecta por variable de entorno,
+lo cual es correcto según `GUIA_MACHUCO.md#seguridad-y-privacidad`.
+
+**Por qué importa:** `README.md` presenta "Backend, base de datos y
+contratos de API" como completamente pendiente, pero ya existe un contrato
+de API real (forma de request/response) para al menos un recurso (`users`),
+y una implementación funcional que lo consume.
+
+**A confirmar:** si este contrato de `users` es el punto de partida para el
+backend definitivo, o si se descarta al momento de tomar la decisión de
+backend con el equipo completo. Mientras no se confirme, `useBackendUsers`
+permanece apagado por defecto (`AUTH_USE_BACKEND_USERS=false`).
+
+## 2026-09-15 — Proveedor de autenticación: Auth0 ya integrado (documentado, pero no reflejado como decisión tomada en la lista de pendientes)
+
+**Hallazgo:** `auth0_flutter` está en `pubspec.yaml` y `Auth0AuthService`
+implementa login, login con Google, registro y recuperación de contraseña
+contra Auth0. Esto ya está documentado al final de `README.md`
+("Configuración de Auth0 para login y registro"), pero la sección
+"Estado y decisiones pendientes" seguía listando "Autenticación,
+autorización por roles y sesiones" como un bloque completamente abierto.
+
+**Por qué importa:** el proveedor de autenticación de cliente ya es una
+decisión tomada y en uso, no una decisión pendiente. Lo que sigue sin
+resolver es la **autorización por rol en el backend**: el rol viaja hoy
+como claim del ID token de Auth0 y se interpreta en el cliente
+(`Auth0AuthService._extractRole`), pero no hay evidencia en este
+repositorio de que un backend valide ese rol de forma independiente antes
+de autorizar una operación, como exige
+`GUIA_MACHUCO.md#seguridad-y-privacidad`.
+
+**A confirmar:** que el equipo trate "Auth0 como proveedor" como decisión
+cerrada en `README.md`, y que la autorización por rol en backend se agregue
+explícitamente como pendiente (hoy queda implícita dentro del mismo punto).
+
+*(Superado el 2026-10-27: Auth0 se retiró y lo reemplazó Firebase
+Authentication; ver "Retiro del código de Auth0".)*
+
+## 2026-09-15 — Modo de autenticación con usuarios de prueba embebidos en el código
+
+**Hallazgo:** `lib/service/auth/hardcoded_auth_service.dart` define una
+lista fija de cuentas de prueba (correo, contraseña, nombre y rol) y un
+`HardcodedAuthService` que autentica contra ellas cuando
+`AUTH_USE_HARDCODED_AUTH_USERS=true`. La bandera está apagada por defecto.
+
+**Por qué importa (seguridad):** son credenciales de prueba, identificadas
+como tales por el nombre del archivo y la clase, y protegidas detrás de una
+bandera apagada por defecto, lo cual mitiga el riesgo. Aun así,
+`GUIA_MACHUCO.md#seguridad-y-privacidad` pide no incluir credenciales en el
+repositorio; este documento no las reproduce, y se recomienda que el
+equipo evalúe si esas cuentas deberían moverse a un archivo ignorado por
+Git o a variables de entorno en vez de vivir como código fuente versionado,
+incluso siendo datos de prueba.
+
+**A confirmar:** si este mecanismo se conserva para QA/desarrollo o se
+retira antes de acercarse a producción, y si las credenciales de prueba
+deben dejar de estar en el código fuente versionado.
+
+## 2026-09-15 — Sistema de diseño (`core/design_system`) ya implementado en buena parte
+
+**Hallazgo:** `lib/core/design_system` ya contiene tokens, tema
+claro/oscuro y varios componentes `App*` (`AppButton`, `AppCard`,
+`AppDialog`, `AppFeedback`, `AppIconButton`, `AppNavigationBar`,
+`AppSkeleton`, `AppTextField`, `StatusBadge`), correspondientes a la Fase 1
+y buena parte de la Fase 2 de
+`README_DISENO_FLUTTER.md#17-plan-de-implementación`. `README.md` no
+mencionaba este directorio en su "Estructura actual" antes de esta
+actualización.
+
+**Por qué importa:** no es una decisión pendiente ni contradictoria, sino
+progreso real que `README.md` no reflejaba. Se corrigió en la sección
+"Estructura actual" y "Tecnologías" de `README.md` como parte de esta
+actualización.
+
+**A confirmar:** ninguna acción pendiente del equipo; se deja registrado
+para trazabilidad de cuándo se documentó por primera vez en `README.md`.
+
+## 2026-09-15 — El feature file de Bookings dice "pendiente/vacío" sobre código de Propietario y Administrador que ya está implementado
+
+**Hallazgo:** `contexts/people/feature-juan_pablo.feature.md`, sección
+"Alcance técnico", marca como **pendiente (archivo actualmente vacío, a
+reconstruir)** los directorios `lib/views/booking/owner_view/`,
+`lib/controllers/booking/owner_view/owner_booking_controller.dart`,
+`lib/views/booking/system_admin_view/` y
+`lib/controllers/booking/system_admin_view/system_admin_booking_controller.dart`.
+Esto ya no es cierto: hoy existen y están implementados con datos mock
+funcionales:
+
+- Propietario: `owner_reservations_page.dart`,
+  `owner_reservation_detail_page.dart`, `owner_cash_payment_page.dart` +
+  `owner_booking_controller.dart` (460 líneas), con tests en
+  `test/controllers/booking/owner_view/owner_booking_controller_test.dart`
+  y `test/widgets/booking/owner_reservations_page_test.dart`,
+  `owner_reservation_detail_page_test.dart`.
+- Administrador: `admin_motel_reservations_list_page.dart`,
+  `admin_motel_reservation_dashboard_page.dart` +
+  `system_admin_booking_controller.dart` (500 líneas), con tests en
+  `test/controllers/booking/system_admin_view/system_admin_booking_controller_test.dart`
+  y `test/widgets/booking/admin_motel_reservations_list_page_test.dart`,
+  `admin_motel_reservation_dashboard_page_test.dart`.
+
+Se verificaron como ya implementadas varias reglas que el feature file
+describe como si estuvieran por construir: el filtro de historial de
+reservas por cliente (`OwnerBookingController.reservationsForClient`,
+reutilizado tanto por el filtro de "Reservas generales" como por el futuro
+módulo de Clientes), "Pagar en efectivo" que deja la factura en
+`InvoiceAccessStatus.pending` en vez de generarla de inmediato, y la
+cancelación con motivo obligatorio a través del mismo widget compartido
+`lib/widgets/booking/cancellation_reason_sheet.dart` que usa también el
+Cliente.
+
+**Por qué importa (es el hallazgo más grave del reporte de QA):** el propio
+feature file explica en "Notas para el agente" que estas vistas existieron
+antes, se borraron deliberadamente en un commit previo a `dd71f74` para
+"reconstruirlas ahora vía agentes/skills", y que el código viejo usaba un
+modelo `Booking`/`BookingStatus` distinto al vigente. Si un agente confía en
+la sección "Alcance técnico" sin releer el árbol real de `lib/`, hay riesgo
+real de que reconstruya (o sobrescriba) código funcional, probado y ya
+migrado al modelo `Reservation`/`ReservationStatus` vigente, perdiendo
+trabajo válido.
+
+**A confirmar:** que la persona dueña de `feature-juan_pablo.feature.md`
+actualice la sección "Alcance técnico" para reflejar que Propietario y
+Administrador ya están implementados (no vacíos), y que documente ahí mismo
+los bugs reales pendientes (ver
+[`docs/booking_handoff.md`](booking_handoff.md#3-bugs-conocidos-y-su-impacto))
+en vez de la nota de "a reconstruir". Este documento no edita el feature
+file directamente porque no es de este agente.
+
+## 2026-09-23 — Ratificado: `shared_preferences` para persistencia local de preferencias no sensibles
+
+**Hallazgo:** la rama `feature-juan_pablo` (módulo Bookings) adoptó
+`shared_preferences: ^2.3.0` en `pubspec.yaml` para persistir preferencias de
+UI locales (por ejemplo, el último motel usado para filtrar una lista de
+reservas), usando la API `SharedPreferencesAsync` en vez de la API legada
+`getInstance()`. Se creó `lib/service/storage/` con la interfaz
+`LocalPreferencesService` y la implementación `SharedPreferencesLocalService`,
+siguiendo el mismo patrón de interfaz + implementación ya usado en
+`lib/service/auth/` (`RegisteredUserDirectory`). Detalle completo,
+justificación y advertencias en [`shared_preferences.md`](shared_preferences.md).
+
+**Por qué importa:** `README.md#tecnologías` y `CLAUDE.md` listan
+"almacenamiento" como una decisión que no se debe fijar sin acuerdo del
+equipo completo. Esta adopción resolvió la necesidad puntual de la rama de
+Bookings y quedó, además, **ratificada por el equipo completo** como
+convención transversal (paquete, API y ubicación de la capa de acceso) para
+el resto de las 17 ramas, en lugar de que cada rama resuelva "almacenamiento
+local" de forma distinta. Se refleja como decisión cerrada en
+[`README.md#tecnologías`](../README.md#tecnologías).
+
+**Estado:** cerrado. `shared_preferences` + `SharedPreferencesAsync` +
+`lib/service/storage/` es la convención acordada de persistencia local no
+sensible para todo el proyecto. Esto no cubre almacenamiento de imágenes ni
+persistencia de datos de dominio, que siguen dependiendo de la decisión de
+backend/base de datos, todavía pendiente.
+
+## 2026-09-23 — Cambio: `shared_preferences` pasa a la API clásica y el servicio se vuelve genérico
+
+**Cambio:** se reemplaza `SharedPreferencesAsync` por la **API clásica
+`SharedPreferences.getInstance()`**. No se usan `SharedPreferencesAsync` ni
+`SharedPreferencesWithCache` en ninguna parte del proyecto. Se elimina la
+dev-dependency `shared_preferences_platform_interface`, que solo existía para
+probar la API async; las pruebas usan ahora
+`SharedPreferences.setMockInitialValues`.
+
+Además, `LocalPreferencesService` deja de tener métodos propios de Bookings
+(`getLastFilterMotelId`, etc.) y pasa a ser un contrato clave-valor genérico
+(`getString`/`setString`, `getBool`/`setBool`, `getInt`/`setInt`,
+`getDouble`/`setDouble`, `getStringList`/`setStringList`, `containsKey`,
+`remove`, `clear`). Cada módulo crea su instancia con un namespace de
+funcionalidad: `SharedPreferencesLocalService(namespace: 'bookings')`.
+
+**Por qué importa:** las ramas están asociadas a personas, no a
+funcionalidades, y en la segunda etapa cada persona cambia de funcionalidad.
+Un servicio genérico con namespace por funcionalidad permite que cualquier
+rama lo use sin editar un archivo compartido y sin que las claves queden
+atadas a quien las creó. Detalle en
+[`shared_preferences.md`](shared_preferences.md).
+
+**Estado:** cerrado. Reemplaza el punto "API `SharedPreferencesAsync`" de la
+entrada anterior; el resto de esa decisión (paquete y ubicación en
+`lib/service/storage/`) sigue vigente.
+
+## 2026-10-06 — Floor (SQLite) para persistencia local de datos de dominio
+
+**Hallazgo:** el profesor pidió una base de datos local con esta estructura:
+`lib/database/app_database.dart`, la entidad en `lib/models/`, el DAO en
+`lib/repositories/` y el controlador conectado al repositorio. Su ejemplo
+(`EjemploSQLite`) usa Floor sobre `sqflite`.
+
+**Por qué importa:** `CLAUDE.md` pide una decisión documentada antes de fijar
+la base de datos. Las 17 ramas comparten `AppDatabase`.
+
+**A confirmar:** si el equipo adopta Floor (`floor`, `floor_generator` y
+`build_runner`) para los datos de dominio locales. No cubre el backend
+remoto, las preferencias de interfaz (`shared_preferences`) ni las
+credenciales.
+
+**Estado:** confirmado el 2026-10-27 como parte de la segunda etapa (ver la
+entrada "El proyecto entra en la segunda etapa").
+
+## 2026-10-27 — Decisión tomada: Firebase, Supabase y Firebase Authentication
+
+**Decisión del equipo (cerrada):**
+
+| Necesidad | Tecnología acordada |
+|---|---|
+| Base de datos principal (datos de dominio en la nube: reservas, moteles, habitaciones, pagos, PQRS, etc.) | **Firebase** |
+| Datos maestros (catálogos y listas de referencia, por ejemplo indicativos telefónicos, tipos de documento, ciudades) | **Supabase**, consultado mediante **API REST** |
+| Sistema de autenticación | **Firebase Authentication** (`firebase_auth`) |
+
+**Por qué importa:** `CLAUDE.md` y `README.md#estado-y-decisiones-pendientes`
+exigían una decisión documentada antes de fijar base de datos y
+autenticación. Con esta entrada esas dos decisiones dejan de estar
+pendientes para las 17 ramas.
+
+**Consecuencias:**
+
+- Firebase Authentication reemplaza a Auth0 como proveedor de autenticación
+  acordado. `auth0_flutter` y `Auth0AuthService` siguen en el código hasta
+  que se complete la migración; no se debe construir funcionalidad nueva
+  sobre Auth0. *(Completado el mismo día: ver "Retiro del código de
+  Auth0".)*
+- El acceso a Firebase y a Supabase va siempre detrás de servicios en
+  `lib/service/` y repositorios; ninguna vista los consulta directamente.
+- Las URL, llaves y configuración de Firebase/Supabase se inyectan por
+  entorno (`--dart-define` o archivos de configuración ignorados por Git);
+  nunca se versionan secretos.
+- La autorización por rol sigue validándose en el backend (reglas de
+  seguridad de Firebase / políticas de Supabase), no solo en la UI.
+
+**Estado:** cerrado. Siguen pendientes la pasarela de pagos, el
+almacenamiento de imágenes y la plataforma de despliegue.
+
+## 2026-10-27 — El proyecto entra en la segunda etapa
+
+**Cambio:** el proyecto pasa de la primera etapa (interfaz y datos mock) a la
+**segunda etapa**, en la que se implementan elementos funcionales:
+
+- **Consulta de maestros por API REST** contra Supabase.
+- **Servicios SQL** para almacenar datos localmente (Floor sobre SQLite,
+  `lib/database/app_database.dart`), lo que confirma la entrada
+  "2026-10-06 — Floor (SQLite)" de este registro.
+- **`shared_preferences`** para guardar o compartir datos locales no
+  sensibles, como el último correo usado, preferencias y otros valores
+  simples (ver [`shared_preferences.md`](shared_preferences.md)).
+
+Como se anticipó en la entrada del 2026-09-23, en esta etapa cada persona
+puede cambiar de funcionalidad; cada rama debe revisar su archivo en
+`contexts/people/`.
+
+**Estado:** cerrado.
+
+## 2026-10-27 — Retiro del código de Auth0 (rama `feature-juan_pablo`)
+
+**Cambio:** el login quedó conectado a Firebase Authentication
+(`FirebaseAuthService`) y se eliminó el código de Auth0:
+`auth0_auth_service.dart`, `auth0_config.dart`, la dependencia
+`auth0_flutter` y los `manifestPlaceholders` de Auth0 en
+`android/app/build.gradle.kts`. El contrato transitorio `AuthService` pasó a
+`lib/service/auth/auth_service.dart` y los flags que no eran de Auth0
+(`AUTH_USE_HARDCODED_AUTH_USERS`, `AUTH_USE_BACKEND_USERS`,
+`AUTH_USERS_API_*`) a `AuthConfig` (`auth_config.dart`), con los mismos
+nombres de `--dart-define`.
+
+**Verificación:** `git grep` sobre todas las ramas remotas no encontró
+imports de Auth0 fuera de los archivos propios del módulo de autenticación.
+
+**Pendiente:** asignar el custom claim `role` desde el backend (hoy todo
+usuario entra como Cliente) y definir dónde se guarda el perfil del usuario.
+*(Superado por la entrada siguiente: el rol y el perfil viven en Cloud
+Firestore; ya no se usa custom claim.)*
+
+**Estado:** cerrado.
+
+## 2026-10-27 — Cloud Firestore para perfiles de usuario y rol (rama `feature-juan_pablo`)
+
+**Decisión:** el perfil del usuario se guarda en **Cloud Firestore**, en
+`users/{uid}` (uid de Firebase Auth), y esa es la fuente del rol y del estado
+de la cuenta (reemplaza el custom claim `role`, que exigiría Cloud
+Functions). La autorización se valida en el backend con **reglas de
+seguridad** (`firestore.rules`, referenciadas en `firebase.json`), no en la
+UI.
+
+**Esquema de `users/{uid}`:** `fullName`, `email` (normalizado),
+`phoneNumber` (con indicativo), `role` (`client` | `owner` | `admin`),
+`accountStatus` (`active` | `pending_approval` | `rejected` | `disabled`) y
+`createdAt` (timestamp de servidor). No se guarda documento de identidad.
+
+**Estado inicial por rol:** el registro público solo crea `client`
+(`active`) u `owner` (`pending_approval`); nunca `admin`. El inicio de sesión
+se bloquea con mensaje claro si la cuenta está pendiente, rechazada o
+deshabilitada. Sin documento de perfil se asume cliente (mínimo privilegio).
+Si falla la escritura del perfil al registrarse, se elimina la cuenta recién
+creada. Un error de red al leer el perfil **no** cierra la sesión (el
+usuario puede reintentar). En las reglas, `create` exige
+`keys().hasOnly([...])` sobre los seis campos del esquema, `email` igual al
+del token y `createdAt == request.time`; el `update` propio solo admite
+`affectedKeys().hasOnly(['fullName', 'phoneNumber'])`, de modo que el usuario
+no puede modificar `role`, `accountStatus`, `email` ni `createdAt`. Un admin
+solo puede cambiar `accountStatus` (a `active`, `pending_approval`,
+`rejected` o `disabled`), nunca el rol. `fullName` (3 a 100 caracteres) y
+`phoneNumber` (4 a 20) se validan como texto al crear y al actualizar;
+`delete` está denegado y todo lo demás se deniega por
+defecto (cada rama agrega sus colecciones explícitamente, ver
+[firebase.md](firebase.md)). Los nombres de colecciones están en
+`lib/service/firebase/firestore_collections.dart`.
+
+**Pendiente:** pantalla "Cuenta en revisión" para propietarios; creación de
+administradores (manual en la consola o script, nunca desde la app);
+flujo de aprobación/rechazo de propietarios por el admin. Las reglas se
+desplegaron el 2026-10-27 (`firebase deploy --only firestore:rules`) y la
+base de datos Firestore ya existe; cada cambio en `firestore.rules` debe
+volver a desplegarse.
+
+**Estado:** cerrado.
+
+## 2026-10-20 — Maestro `phone_country_codes` (Supabase → caché SQLite)
+
+**Contexto:** la funcionalidad de administración de moteles necesita el
+maestro de códigos telefónicos de país. Se sigue el mismo patrón que el
+maestro de servicios incluidos de habitaciones (`room_included_services`).
+
+**Decisión:**
+- La tabla remota vive en Supabase y se consulta por REST
+  (`/rest/v1/phone_country_codes?select=*`) con el header `apikey`.
+- Las credenciales se inyectan con `--dart-define`
+  (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), no se escriben en el repositorio.
+- El resultado se cachea en la tabla local `phone_country_codes` (SQLite) y,
+  si falla la red, se devuelve la caché.
+- Se usa `sqflite` con DAO manual (sin `@entity` ni codegen nuevo) y el DAO
+  se expone desde `AppDatabase` junto a los demás, con la migración `6 → 7`.
+- Las carpetas siguen la convención ya usada por el módulo de habitaciones
+  (`lib/database/repository/motel/`), no `lib/repositories/`.
+
+**Nota:** el maestro en Supabase puede estar vacío; en ese caso la lista se
+verá vacía hasta que se inserten filas en la tabla remota.
+
+**Estado:** implementado en `lib/models/phone_country_code/`,
+`lib/service/phone_country_code/`, `lib/database/repository/motel/` y
+`lib/controllers/motel/phone_country_code_controller.dart`.
+
+## 2026-10-28 — Moteles: Supabase + caché SQLite (Floor)
+
+**Decisión:**
+- Tabla remota `public.motels` con RLS (SELECT/INSERT/UPDATE para `anon`), sin DELETE (inhabilitación con `is_available = false`).
+- Credenciales por `--dart-define` vía `SupabasePhoneCountryCodeConfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
+- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10` (la versión actual es 11; ver la entrada "Versión 11 de la base local").
+- `MotelRepository`: red primero con `apikey`, `Prefer: return=representation`, decodificación UTF-8, fallback a caché en errores, excepción clara sin red/caché, 409 por NIT duplicado -> "Ya existe un motel con ese NIT", mapeo snake_case sin modificar `Motel`.
+- `MotelController`: constructor opcional con `MotelRepository`, factory `MotelController.persistent()`; comportamiento mock por defecto preservado para otros módulos y tests.
+
+**Estado:** implementado en `lib/database/model/motel/`, `lib/database/repository/motel/`, `lib/controllers/motel/`, vistas del propietario actualizadas con manejo de errores. Tests en `test/repositories/motel/`. Documentado en `docs/motels_persistence.md`.
+
+## 2026-10-28 — Versión 11 de la base local y ajustes del registro (rama `feature-juan_pablo`)
+
+**Base local:** la rama de moteles (PR #123) y esta rama publicaron cada una
+una migración `9 → 10` distinta (`motels` y `country_phone_codes`). Al
+fusionar se conservó la `9 → 10` de develop sin cambios y se agregó
+`migration10To11`, que crea `country_phone_codes` y completa `motels` con
+`IF NOT EXISTS`, de modo que ninguna base pierde datos venga de una rama o de
+la otra. Versión actual: **11**. Para evitar repetirlo, las ramas deben
+acordar el siguiente número de versión antes de crear una migración.
+
+**Registro público:** se retiró la opción "Administrador" del selector de
+tipo de cuenta (los administradores se crean en la consola de Firebase y las
+reglas ya rechazaban ese registro).
+
+**Contraseña:** login y registro exigen un mínimo de **8 caracteres**, sin
+reglas de complejidad, mientras el proyecto esté en desarrollo
+(`_passwordMinLength` en `lib/views/login/login_page.dart`). Endurecer antes
+de producción.
+
+**Firebase:** la base Firestore `(default)` existe (ubicación `nam5`), las
+reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
+`machuco`.
+
+**Estado:** cerrado.

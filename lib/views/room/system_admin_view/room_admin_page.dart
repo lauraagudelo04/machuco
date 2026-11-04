@@ -1,54 +1,46 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/room/room_admin_controller.dart';
+import 'package:machuco/controllers/room/room_controller_support.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/views/room/room_detail_page.dart';
-import 'package:machuco/views/room/room_view_models.dart';
+import 'package:machuco/views/room/room_status_badge.dart';
 
+/// Consulta de habitaciones para el administrador del sistema.
+/// Los tipos se expanden como en la vista de propietario, sin acciones de edición.
 class RoomAdminPage extends StatefulWidget {
   const RoomAdminPage({
     super.key,
+    required this.motel,
     this.rooms,
-    this.motelName = 'Motel Eclipse',
+    this.types,
   });
-
+  final Motel motel;
   final List<RoomVisualData>? rooms;
-  final String motelName;
+  final List<RoomTypeData>? types;
 
   @override
   State<RoomAdminPage> createState() => _RoomAdminPageState();
 }
 
 class _RoomAdminPageState extends State<RoomAdminPage> {
-  final TextEditingController _searchController = TextEditingController();
-  late final List<RoomVisualData> _rooms;
-  bool _sortAscending = true;
+  final _searchController = TextEditingController();
+  final Set<String> _expandedTypeIds = <String>{};
+  late final RoomAdminController _controller;
 
   @override
   void initState() {
     super.initState();
-    _rooms = List<RoomVisualData>.from(
-      widget.rooms ?? buildMockRooms(motelName: widget.motelName),
+    _controller = RoomAdminController(
+      motelId: widget.motel.id,
+      seedRooms: widget.rooms,
+      seedTypes: widget.types,
     );
-  }
-
-  List<RoomVisualData> get _filteredRooms {
-    final query = _searchController.text.trim().toLowerCase();
-    final filtered = _rooms.where((room) {
-      final matchesSearch = query.isEmpty ||
-          room.name.toLowerCase().contains(query) ||
-          room.roomNumber.toLowerCase().contains(query) ||
-          room.description.toLowerCase().contains(query);
-      return matchesSearch;
-    }).toList()
-      ..sort(
-        (a, b) => _sortAscending
-            ? a.name.toLowerCase().compareTo(b.name.toLowerCase())
-            : b.name.toLowerCase().compareTo(a.name.toLowerCase()),
-      );
-    return filtered;
   }
 
   @override
@@ -59,320 +51,263 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
 
   @override
   Widget build(BuildContext context) {
+    final types = _controller.roomTypes;
     return Scaffold(
       appBar: AppBar(title: const Text('Habitaciones')),
       body: SafeArea(
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screen),
           children: [
-            _AdminHeader(motelName: widget.motelName),
-            const SizedBox(height: AppSpacing.s5),
-            AppTextField(
-              label: 'Buscar habitacion',
-              controller: _searchController,
-              hint: 'Nombre, numero o descripcion',
-              prefixIcon: const Icon(Icons.search),
-              onChanged: (_) => setState(() {}),
-            ),
-            const SizedBox(height: AppSpacing.s4),
-            _AdminSortBar(
-              sortAscending: _sortAscending,
-              onChanged: (value) => setState(() => _sortAscending = value),
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Listado del motel',
-                    style: Theme.of(context).textTheme.headlineSmall,
+            AppCard(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Administración',
+                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
-                ),
-                Text(
-                  '${_filteredRooms.length} habitaciones',
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: context.appColors.textSecondary,
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    'Tipos y habitaciones',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  const SizedBox(height: AppSpacing.s2),
+                  Text(
+                    'Consulta los tipos del motel y despliega sus habitaciones. Esta vista es solo de lectura.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
+                  DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: context.appColors.elevated,
+                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                    ),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: AppSpacing.s3,
+                        vertical: AppSpacing.s2,
                       ),
-                ),
-              ],
+                      child: Text(widget.motel.name),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s5),
+            Text(
+              'Tipos de habitación',
+              style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: AppSpacing.s3),
-            if (_filteredRooms.isEmpty)
+            if (types.isEmpty)
               const _AdminEmptyState(
-                title: 'No hay habitaciones para este filtro',
-                description:
-                    'Prueba con otra busqueda o cambia el orden del listado.',
+                message: 'No hay tipos registrados para este motel.',
               )
-            else
-              ..._filteredRooms.map(
-                (room) => Padding(
+            else ...[
+              AppTextField(
+                label: 'Buscar habitación',
+                controller: _searchController,
+                hint: 'Nombre, número o descripción',
+                prefixIcon: const Icon(Icons.search),
+                onChanged: (_) => setState(() {}),
+              ),
+              const SizedBox(height: AppSpacing.s4),
+              ...types.map(
+                (type) => Padding(
                   padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: _AdminRoomCard(
-                    room: room,
-                    onTap: () => _openDetail(room),
+                  child: _AdminTypeCard(
+                    type: type,
+                    expanded: _expandedTypeIds.contains(type.id),
+                    rooms: _controller.roomsForType(
+                      type.id,
+                      query: _searchController.text,
+                    ),
+                    totalRoomCount: _controller.roomsForType(type.id).length,
+                    hasSearchQuery: _searchController.text.trim().isNotEmpty,
+                    onToggle: () => setState(() {
+                      if (!_expandedTypeIds.add(type.id)) {
+                        _expandedTypeIds.remove(type.id);
+                      }
+                    }),
+                    onRoomTap: (room) => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => RoomDetailPage(
+                          room: room,
+                          role: RoomPageRole.admin,
+                          typeName: type.name,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ),
+            ],
           ],
         ),
       ),
     );
   }
-
-  void _openDetail(RoomVisualData room) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => RoomDetailPage(room: room, role: RoomPageRole.admin),
-      ),
-    );
-  }
 }
 
-class _AdminHeader extends StatelessWidget {
-  const _AdminHeader({required this.motelName});
-
-  final String motelName;
+class _AdminTypeCard extends StatelessWidget {
+  const _AdminTypeCard({
+    required this.type,
+    required this.expanded,
+    required this.rooms,
+    required this.totalRoomCount,
+    required this.hasSearchQuery,
+    required this.onToggle,
+    required this.onRoomTap,
+  });
+  final RoomTypeData type;
+  final bool expanded;
+  final List<RoomVisualData> rooms;
+  final int totalRoomCount;
+  final bool hasSearchQuery;
+  final VoidCallback onToggle;
+  final ValueChanged<RoomVisualData> onRoomTap;
 
   @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+  Widget build(BuildContext context) => AppCard(
+    onTap: onToggle,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.bedroom_parent_outlined,
+              color: Theme.of(context).colorScheme.primary,
+            ),
+            const SizedBox(width: AppSpacing.s3),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    type.name,
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.s1),
+                  Text(
+                    '$totalRoomCount ${totalRoomCount == 1 ? 'habitación' : 'habitaciones'}',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              expanded
+                  ? Icons.keyboard_arrow_up_rounded
+                  : Icons.keyboard_arrow_down_rounded,
+              color: context.appColors.textSecondary,
+            ),
+          ],
+        ),
+        if (expanded) ...[
+          const SizedBox(height: AppSpacing.s3),
+          const Divider(),
+          const SizedBox(height: AppSpacing.s3),
           Text(
-            'Administracion',
-            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                  color: Theme.of(context).colorScheme.primary,
-                ),
+            'Habitaciones de ${type.name}',
+            style: Theme.of(context).textTheme.titleMedium,
           ),
           const SizedBox(height: AppSpacing.s1),
           Text(
-            'Habitaciones del motel',
-            style: Theme.of(context).textTheme.headlineMedium,
-          ),
-          const SizedBox(height: AppSpacing.s2),
-          Text(
-            'Consulta inventario y estado administrativo efectivo en modo solo lectura.',
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+            'Toca una habitación para consultar su detalle.',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
           const SizedBox(height: AppSpacing.s3),
-          Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: AppSpacing.s3,
-              vertical: AppSpacing.s2,
+          if (rooms.isEmpty)
+            _AdminEmptyState(
+              message: hasSearchQuery
+                  ? 'No hay habitaciones que coincidan con la búsqueda.'
+                  : 'No hay habitaciones para este tipo.',
+            )
+          else
+            ...rooms.map(
+              (room) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                child: _AdminRoomCard(
+                  room: room,
+                  typeName: type.name,
+                  onTap: () => onRoomTap(room),
+                ),
+              ),
             ),
-            decoration: BoxDecoration(
-              color: context.appColors.elevated,
-              borderRadius: BorderRadius.circular(AppRadius.pill),
-            ),
-            child: Text(motelName),
-          ),
         ],
-      ),
-    );
-  }
-}
-
-class _AdminSortBar extends StatelessWidget {
-  const _AdminSortBar({
-    required this.sortAscending,
-    required this.onChanged,
-  });
-
-  final bool sortAscending;
-  final ValueChanged<bool> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Wrap(
-      spacing: AppSpacing.s2,
-      runSpacing: AppSpacing.s2,
-      children: [
-        ChoiceChip(
-          label: const Text('A-Z'),
-          selected: sortAscending,
-          onSelected: (_) => onChanged(true),
-        ),
-        ChoiceChip(
-          label: const Text('Z-A'),
-          selected: !sortAscending,
-          onSelected: (_) => onChanged(false),
-        ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _AdminRoomCard extends StatelessWidget {
   const _AdminRoomCard({
     required this.room,
+    required this.typeName,
     required this.onTap,
   });
-
   final RoomVisualData room;
+  final String typeName;
   final VoidCallback onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final effective = resolveRoomEffectiveState(room);
-
-    return AppCard(
-      onTap: onTap,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(room.name, style: Theme.of(context).textTheme.titleLarge),
-                    const SizedBox(height: AppSpacing.s1),
-                    Text(
-                      'Habitacion ${room.roomNumber} · ${room.motelName}',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
-                    ),
-                  ],
-                ),
-              ),
-              _AdministrativeBadge(
-                label: effective.status.label,
-                color: roomOperationalColor(effective.status),
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            room.description,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Wrap(
-            spacing: AppSpacing.s3,
-            runSpacing: AppSpacing.s2,
-            children: [
-              _InfoText(
-                icon: Icons.payments_outlined,
-                text: formatPricePerHour(room.pricePerHour),
-              ),
-              _InfoText(
-                icon: Icons.people_alt_outlined,
-                text: '${room.capacity} personas',
-              ),
-            ],
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            buildAdminReadOnlyMessage(room),
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            roomServiceSummary(room),
-            style: Theme.of(context).textTheme.labelMedium,
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _AdministrativeBadge extends StatelessWidget {
-  const _AdministrativeBadge({
-    required this.label,
-    required this.color,
-  });
-
-  final String label;
-  final Color color;
-
-  @override
-  Widget build(BuildContext context) {
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: .16),
-        borderRadius: BorderRadius.circular(AppRadius.pill),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s3,
-          vertical: AppSpacing.s2,
-        ),
-        child: Text(
-          label,
-          style: Theme.of(context).textTheme.labelMedium?.copyWith(color: color),
-        ),
-      ),
-    );
-  }
-}
-
-class _InfoText extends StatelessWidget {
-  const _InfoText({
-    required this.icon,
-    required this.text,
-  });
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
+  Widget build(BuildContext context) => AppCard(
+    onTap: onTap,
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: context.appColors.textSecondary),
-        const SizedBox(width: AppSpacing.s2),
-        Text(text, style: Theme.of(context).textTheme.labelMedium),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                room.name,
+                style: Theme.of(context).textTheme.titleLarge,
+              ),
+            ),
+            RoomStatusBadge(isActive: room.isActive),
+          ],
+        ),
+        const SizedBox(height: AppSpacing.s1),
+        Text(
+          '$typeName · Habitación ${room.roomNumber}',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s3),
+        Text(room.description, style: Theme.of(context).textTheme.bodyMedium),
+        const SizedBox(height: AppSpacing.s3),
+        Text(
+          '${formatPricePerHour(room.pricePerHour)} · ${room.capacity} personas',
+          style: Theme.of(context).textTheme.labelMedium,
+        ),
       ],
-    );
-  }
+    ),
+  );
 }
 
 class _AdminEmptyState extends StatelessWidget {
-  const _AdminEmptyState({
-    required this.title,
-    required this.description,
-  });
-
-  final String title;
-  final String description;
-
+  const _AdminEmptyState({required this.message});
+  final String message;
   @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.s5),
-        child: Column(
-          children: [
-            Icon(
-              Icons.meeting_room_outlined,
-              size: 48,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            Text(title, style: Theme.of(context).textTheme.titleLarge),
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              description,
-              textAlign: TextAlign.center,
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
-            ),
-          ],
+  Widget build(BuildContext context) => AppCard(
+    child: Padding(
+      padding: const EdgeInsets.all(AppSpacing.s4),
+      child: Text(
+        message,
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+          color: context.appColors.textSecondary,
         ),
       ),
-    );
-  }
+    ),
+  );
 }

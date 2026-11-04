@@ -1,15 +1,17 @@
 import 'package:flutter/material.dart';
-import '../../controllers/notification/notification_controller.dart';
-import '../../core/design_system/components/app_button.dart';
-import '../../core/design_system/components/app_text_field.dart';
-import '../../core/design_system/theme/app_theme_extensions.dart';
-import '../../core/design_system/tokens/app_colors.dart';
-import '../../core/design_system/tokens/app_radius.dart';
-import '../../core/design_system/tokens/app_spacing.dart';
-import '../../models/notification/notification_model.dart';
+import 'package:machuco/controllers/notification/notification_controller.dart';
+import 'package:machuco/core/design_system/components/app_button.dart';
+import 'package:machuco/core/design_system/components/app_text_field.dart';
+import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_colors.dart';
+import 'package:machuco/core/design_system/tokens/app_radius.dart';
+import 'package:machuco/core/design_system/tokens/app_spacing.dart';
+import 'package:machuco/models/notification/notification_model.dart';
 
 class CreateNotificationSheet extends StatefulWidget {
-  const CreateNotificationSheet({super.key});
+  const CreateNotificationSheet({super.key, required this.controller});
+
+  final NotificationController controller;
 
   @override
   State<CreateNotificationSheet> createState() =>
@@ -17,12 +19,11 @@ class CreateNotificationSheet extends StatefulWidget {
 }
 
 class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
-  final NotificationController _controller = NotificationController();
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _messageController = TextEditingController();
   final TextEditingController _recipientController = TextEditingController();
 
-  NotificationType _selectedType = NotificationType.system;
+  NotificationType? _selectedType;
   NotificationTarget _selectedTarget = NotificationTarget.all;
 
   @override
@@ -33,57 +34,65 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
     super.dispose();
   }
 
-  void _sendNotification() {
+  Future<void> _sendNotification() async {
+    final type = _selectedType;
     final title = _titleController.text.trim();
     final message = _messageController.text.trim();
     final recipient = _recipientController.text.trim();
 
+    if (type == null) {
+      _showError('No hay tipos de notificación disponibles.');
+      return;
+    }
     if (title.isEmpty || message.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Por favor completa el título y el mensaje.'),
-          backgroundColor: AppColors.rose,
-        ),
-      );
+      _showError('Por favor completa el título y el mensaje.');
+      return;
+    }
+    if (_selectedTarget == NotificationTarget.specificUser &&
+        recipient.isEmpty) {
+      _showError('Ingresa el correo o ID del usuario destino.');
       return;
     }
 
-    if (_selectedTarget == NotificationTarget.specificUser && recipient.isEmpty) {
+    try {
+      await widget.controller.addNotification(
+        type: type,
+        title: title,
+        message: message,
+        target: _selectedTarget,
+        recipientUser: _selectedTarget == NotificationTarget.specificUser
+            ? recipient
+            : null,
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ingresa el correo o ID del usuario destino.'),
-          backgroundColor: AppColors.rose,
+        SnackBar(
+          content: Text(
+            _selectedTarget == NotificationTarget.all
+                ? 'Notificación guardada para todos los usuarios.'
+                : 'Notificación guardada para: $recipient',
+          ),
+          backgroundColor: AppColors.available,
         ),
       );
-      return;
+    } on ArgumentError catch (error) {
+      _showError(error.message?.toString() ?? 'Datos inválidos.');
+    } catch (_) {
+      _showError('No se pudo guardar la notificación.');
     }
+  }
 
-    _controller.addNotification(
-      type: _selectedType,
-      title: title,
-      message: message,
-      target: _selectedTarget,
-      recipientUser: _selectedTarget == NotificationTarget.specificUser
-          ? recipient
-          : null,
-    );
-
-    Navigator.pop(context);
-
+  void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _selectedTarget == NotificationTarget.all
-              ? 'Notificación enviada a TODOS los usuarios.'
-              : 'Notificación enviada a: $recipient',
-        ),
-        backgroundColor: AppColors.available,
-      ),
+      SnackBar(content: Text(message), backgroundColor: AppColors.rose),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final types = widget.controller.types;
+    _selectedType ??= types.isEmpty ? null : types.first;
     final bottomInset = MediaQuery.of(context).viewInsets.bottom;
 
     return Container(
@@ -121,16 +130,13 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
                 const SizedBox(width: AppSpacing.s2),
                 Text(
                   'Crear Notificación (Admin)',
-                  style: Theme.of(context)
-                      .textTheme
-                      .titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
                 ),
               ],
             ),
             const SizedBox(height: AppSpacing.s4),
-
-            // Target selector: All vs Specific
             Text(
               '¿A quién va dirigida?',
               style: Theme.of(context).textTheme.labelLarge,
@@ -144,7 +150,9 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
                     selected: _selectedTarget == NotificationTarget.all,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() => _selectedTarget = NotificationTarget.all);
+                        setState(
+                          () => _selectedTarget = NotificationTarget.all,
+                        );
                       }
                     },
                   ),
@@ -153,18 +161,20 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
                 Expanded(
                   child: ChoiceChip(
                     label: const Center(child: Text('Usuario específico')),
-                    selected: _selectedTarget == NotificationTarget.specificUser,
+                    selected:
+                        _selectedTarget == NotificationTarget.specificUser,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() =>
-                            _selectedTarget = NotificationTarget.specificUser);
+                        setState(
+                          () =>
+                              _selectedTarget = NotificationTarget.specificUser,
+                        );
                       }
                     },
                   ),
                 ),
               ],
             ),
-
             if (_selectedTarget == NotificationTarget.specificUser) ...[
               const SizedBox(height: AppSpacing.s3),
               AppTextField(
@@ -174,44 +184,46 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
                 prefixIcon: const Icon(Icons.person_outline),
               ),
             ],
-
             const SizedBox(height: AppSpacing.s4),
-
-            // Notification Type selector
             Text(
               'Tipo de Notificación',
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: AppSpacing.s2),
-            Wrap(
-              spacing: AppSpacing.s2,
-              children: NotificationType.values.map((type) {
-                return ChoiceChip(
-                  avatar: Icon(type.icon, size: 16, color: type.color),
-                  label: Text(type.label),
-                  selected: _selectedType == type,
-                  onSelected: (selected) {
-                    if (selected) {
-                      setState(() => _selectedType = type);
-                    }
-                  },
-                );
-              }).toList(),
-            ),
-
+            if (types.isEmpty)
+              Text(
+                widget.controller.errorMessage ??
+                    'No hay tipos de notificación disponibles.',
+                style: Theme.of(
+                  context,
+                ).textTheme.bodySmall?.copyWith(color: AppColors.rose),
+              )
+            else
+              Wrap(
+                spacing: AppSpacing.s2,
+                children: types
+                    .map((type) {
+                      return ChoiceChip(
+                        avatar: Icon(type.icon, size: 16, color: type.color),
+                        label: Text(type.name),
+                        selected: _selectedType?.id == type.id,
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() => _selectedType = type);
+                          }
+                        },
+                      );
+                    })
+                    .toList(growable: false),
+              ),
             const SizedBox(height: AppSpacing.s4),
-
-            // Title
             AppTextField(
               label: 'Título de la Notificación',
               hint: 'ej: Mantenimiento del sistema',
               controller: _titleController,
               prefixIcon: const Icon(Icons.title),
             ),
-
             const SizedBox(height: AppSpacing.s3),
-
-            // Message / Body
             AppTextField(
               label: 'Contenido / Mensaje',
               hint: 'Escribe el mensaje completo de la notificación...',
@@ -219,14 +231,11 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
               maxLines: 3,
               prefixIcon: const Icon(Icons.message_outlined),
             ),
-
             const SizedBox(height: AppSpacing.s5),
-
-            // Action Button
             AppButton(
               label: 'Enviar Notificación',
               icon: Icons.send,
-              onPressed: _sendNotification,
+              onPressed: widget.controller.isSaving ? null : _sendNotification,
             ),
           ],
         ),
