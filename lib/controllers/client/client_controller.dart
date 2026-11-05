@@ -1,84 +1,88 @@
-import 'dart:convert';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:machuco/database/model/client/client.dart';
+
+import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
-import 'package:machuco/database/repository/client/client_repository.dart';
-import 'package:machuco/models/auth/account_status.dart';
-import 'package:machuco/models/auth/country_phone_code.dart';
-import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
 import 'package:machuco/models/client/client_model.dart';
-import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
+import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 class ClientController extends ChangeNotifier {
   ClientController._();
   static final ClientController instance = ClientController._();
-  static const _clientKey = 'current_client_data';
 
-  late ClientRepository _clientRepo;
-  late AuthCatalogRepository _authCatalogRepo;
+  late PhoneCountryCodeRepository _phoneCountryCodeRepo;
   late UserProfileRepository _userProfileRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  final List<ClientModel> _allClients = [];
   ClientModel? _currentClient;
-  List<CountryPhoneCode> _countryCodes = [];
+  List<ClientModel> _allClients = [];
+  List<PhoneCountryCode> _countryCodes = [];
   bool _isInitialized = false;
   bool _isLoading = false;
   String? _errorMessage;
 
   ClientModel? get currentClient => _currentClient;
   List<ClientModel> get allClients => List.unmodifiable(_allClients);
-  List<CountryPhoneCode> get countryCodes => List.unmodifiable(_countryCodes);
+  List<PhoneCountryCode> get countryCodes => List.unmodifiable(_countryCodes);
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  Future<void> loadData() async {
+  Future<void> _initRepositories() async {
     if (!_isInitialized) {
-      _clientRepo = ClientRepository();
-      _authCatalogRepo = AuthCatalogRepository.fromEnvironment();
+      _phoneCountryCodeRepo = PhoneCountryCodeRepository(
+        baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
+        apiKey: SupabasePhoneCountryCodeConfig.apiKey,
+        daoProvider: () async => (await AppDatabaseProvider.database).phoneCountryCodeDao,
+      );
       _userProfileRepo = FirestoreUserProfileRepository();
+      _countryCodes = await _phoneCountryCodeRepo.getCountryCodes();
       _isInitialized = true;
     }
+  }
+
+  (String code, String number) _parsePhoneNumber(String fullPhone) {
+    String code = '+57';
+    String number = fullPhone.trim();
+
+    for (final country in _countryCodes) {
+      if (number.startsWith(country.callingCode)) {
+        code = country.callingCode;
+        number = number.substring(country.callingCode.length).trim();
+        break;
+      }
+    }
+    return (code, number);
+  }
+
+  Future<void> loadProfileData() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      _countryCodes = await _authCatalogRepo.getCountryPhoneCodes();
+      await _initRepositories();
       final firebaseUser = _auth.currentUser;
 
       if (firebaseUser != null) {
         final profile = await _userProfileRepo.getProfile(firebaseUser.uid);
         if (profile != null) {
-          _currentClient = ClientModel(
-            name: profile.fullName,
-            phone: profile.phoneNumber,
-            email: profile.email,
-            countryCode: '+57',
-          );
-          await _saveToSharedPreferences(_currentClient!);
-        }
-      }
+          final (code, phone) = _parsePhoneNumber(profile.phoneNumber);
 
-      if (_currentClient == null) {
-        final prefs = await SharedPreferences.getInstance();
-        final clientJson = prefs.getString(_clientKey);
-        if (clientJson != null) {
-          final data = jsonDecode(clientJson) as Map<String, dynamic>;
           _currentClient = ClientModel(
-            id: data['id'] as int?,
-            name: data['name'] as String,
-            phone: data['phone'] as String,
-            email: data['email'] as String,
-            countryCode: (data['countryCode'] ?? data['country_code'] ?? '+57') as String,
+            uid: profile.uid,
+            name: profile.fullName,
+            phone: phone,
+            email: profile.email,
+            countryCode: code,
           );
         }
       }
     } catch (e) {
-      debugPrint('Error cargando perfil cliente de Firebase: $e');
+      debugPrint('Error cargando perfil: $e');
       _errorMessage = 'No pudimos cargar la información de tu perfil.';
     } finally {
       _isLoading = false;
@@ -86,63 +90,34 @@ class ClientController extends ChangeNotifier {
     }
   }
 
-  Future<bool> registerClient({
-    required String name,
-    required String email,
-    required String password,
-    required String phone,
-    required String countryCode,
-  }) async {
+  Future<void> loadAllClients() async {
     _isLoading = true;
     _errorMessage = null;
     notifyListeners();
 
     try {
-      final credential = await _auth.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+      await _initRepositories();
+      final querySnapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'client')
+          .get();
 
-      final uid = credential.user?.uid;
-      if (uid == null) throw Exception('No se pudo generar el usuario.');
+      _allClients = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        final rawPhone = (data['phoneNumber'] ?? '') as String;
+        final (code, phone) = _parsePhoneNumber(rawPhone);
 
-      final fullPhoneNumber = '$countryCode$phone';
-
-      final userProfile = UserProfile(
-        uid: uid,
-        fullName: name,
-        email: email,
-        phoneNumber: fullPhoneNumber,
-        role: RegisteredUserRole.client,
-        accountStatus: initialAccountStatusFor(RegisteredUserRole.client),
-      );
-      await _userProfileRepo.createProfile(userProfile);
-
-      final clientModel = ClientModel(
-        name: name,
-        phone: phone,
-        email: email,
-        countryCode: countryCode,
-      );
-
-      final entry = ClientEntry(
-        name: name,
-        phone: phone,
-        email: email,
-        countryCode: countryCode,
-      );
-      await _clientRepo.saveClient(entry);
-
-      _currentClient = clientModel;
-      await _saveToSharedPreferences(clientModel);
-
-      return true;
-    } on FirebaseAuthException catch (e) {
-      _errorMessage = e.message ?? 'Error durante el registro.';
-      return false;
+        return ClientModel(
+          uid: doc.id,
+          name: (data['fullName'] ?? '') as String,
+          email: (data['email'] ?? '') as String,
+          phone: phone,
+          countryCode: code,
+        );
+      }).toList();
     } catch (e) {
-      _errorMessage = 'Ocurrió un error inesperado al registrarte.';
-      return false;
+      debugPrint('Error obteniendo clientes de Firestore: $e');
+      _errorMessage = 'No pudimos cargar el listado de clientes.';
     } finally {
       _isLoading = false;
       notifyListeners();
@@ -168,55 +143,22 @@ class ClientController extends ChangeNotifier {
 
       final firebaseUser = _auth.currentUser;
       if (firebaseUser != null) {
+        final fullPhoneNumber = '$countryCode$phone'.replaceAll(' ', '');
         await _userProfileRepo.updateProfile(
           uid: firebaseUser.uid,
           fullName: name,
-          phoneNumber: '$countryCode$phone',
+          phoneNumber: fullPhoneNumber,
         );
       }
 
-      await _saveToSharedPreferences(updatedClientModel);
-
-      // 3. Guardar en SQLite local
-      final entryToUpdate = ClientEntry(
-        id: updatedClientModel.id,
-        name: updatedClientModel.name,
-        phone: updatedClientModel.phone,
-        email: updatedClientModel.email,
-        countryCode: updatedClientModel.countryCode,
-      );
-      await _clientRepo.updateClient(entryToUpdate);
-
       _currentClient = updatedClientModel;
-      _syncToDirectory(updatedClientModel);
-
       return true;
     } catch (e) {
-      _errorMessage = 'No fue posible actualizar el perfil. Intenta de nuevo.';
+      _errorMessage = 'No fue posible actualizar el perfil.';
       return false;
     } finally {
       _isLoading = false;
       notifyListeners();
-    }
-  }
-
-  Future<void> _saveToSharedPreferences(ClientModel client) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_clientKey, jsonEncode({
-      'id': client.id,
-      'name': client.name,
-      'phone': client.phone,
-      'email': client.email,
-      'countryCode': client.countryCode,
-    }));
-  }
-
-  void _syncToDirectory(ClientModel updatedClient) {
-    final index = _allClients.indexWhere((c) => c.id == updatedClient.id);
-    if (index != -1) {
-      _allClients[index] = updatedClient;
-    } else {
-      _allClients.insert(0, updatedClient);
     }
   }
 
@@ -231,10 +173,9 @@ class ClientController extends ChangeNotifier {
   }
 
   void unlink(ClientModel client) {
-    _allClients.removeWhere((c) => 
-      (client.id != null && c.id == client.id) || 
-      (client.uid != null && c.uid == client.uid)
-    );
+    _allClients.removeWhere((c) =>
+        (client.id != null && c.id == client.id) ||
+        (client.uid != null && c.uid == client.uid));
     notifyListeners();
   }
 }
