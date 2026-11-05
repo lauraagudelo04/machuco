@@ -204,6 +204,6 @@ Parámetros opcionales (`--dart-define`):
 
 El ingreso con Google y GitHub está definido pero todavía no implementado.
 
-### Modo de usuarios de prueba (sin Firebase)
+### Cuentas para probar la app
 
-Por defecto la app arranca con las cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), de modo que `flutter run` funciona sin argumentos adicionales. El modo se controla con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=<true|false>` y está pensado únicamente para desarrollo local y QA; en builds distribuidos debe desactivarse con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.
+Ya no hay usuarios de prueba en el código: la app solo autentica con Firebase Authentication. Cada integrante se registra con su correo desde la pantalla de registro (Cliente o Propietario). Para un Propietario activo o un Administrador, ajuste `accountStatus` o `role` en el documento `users/{uid}` desde la consola de Firebase hasta que existan las vistas del administrador.

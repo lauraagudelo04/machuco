@@ -3,9 +3,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth_service.dart';
-import 'package:machuco/service/auth/hardcoded_auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
 import 'package:machuco/views/login/login_page.dart';
 
@@ -47,6 +47,26 @@ void main() {
     expect(find.text('Cliente'), findsOneWidget);
     expect(find.text('Propietario'), findsOneWidget);
     expect(find.text('Administrador'), findsNothing);
+  });
+
+  testWidgets('el login deshabilita Google y GitHub con "Próximamente"', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: LoginPage(authService: _FakeAuthService()),
+      ),
+    );
+    await tester.pump();
+
+    expect(find.text('Próximamente'), findsNWidgets(2));
+    for (final label in ['Continuar con Google', 'Continuar con GitHub']) {
+      final button = tester.widget<AppButton>(
+        find.widgetWithText(AppButton, label),
+      );
+      expect(button.onPressed, isNull);
+    }
   });
 
   test('guarda el rol seleccionado al registrar', () async {
@@ -100,45 +120,31 @@ void main() {
     expect(controller.session, isNull);
   });
 
-  test('usuarios quemados redirigen a la ruta correcta por rol', () async {
-    final controller = LoginController(
-      authService: HardcodedAuthService(),
-      userDirectory: _FakeRegisteredUserDirectory(),
-    );
+  test('cada rol autenticado redirige a su ruta inicial', () async {
+    final expectations = <RegisteredUserRole, String>{
+      RegisteredUserRole.client: AppRoutes.clientMotels,
+      RegisteredUserRole.owner: AppRoutes.ownerMotels,
+      RegisteredUserRole.admin: AppRoutes.ownerManagement,
+    };
 
-    final expectations = <({HardcodedAuthUser user, String route})>[
-      (
-        user: hardcodedAuthUsers.firstWhere(
-          (candidate) => candidate.role == RegisteredUserRole.client,
-        ),
-        route: AppRoutes.clientMotels,
-      ),
-      (
-        user: hardcodedAuthUsers.firstWhere(
-          (candidate) => candidate.role == RegisteredUserRole.owner,
-        ),
-        route: AppRoutes.ownerMotels,
-      ),
-      (
-        user: hardcodedAuthUsers.firstWhere(
-          (candidate) => candidate.role == RegisteredUserRole.admin,
-        ),
-        route: AppRoutes.ownerManagement,
-      ),
-    ];
-
-    for (final item in expectations) {
-      final session = await controller.login(
-        email: item.user.email,
-        password: item.user.password,
+    for (final entry in expectations.entries) {
+      final controller = LoginController(
+        authService: _FakeAuthService(loginRole: entry.key),
+        userDirectory: _FakeRegisteredUserDirectory(),
       );
-      expect(controller.resolvePostLoginRoute(session), item.route);
-      await controller.logout();
+      final session = await controller.login(
+        email: 'usuario@example.com',
+        password: 'password123',
+      );
+      expect(controller.resolvePostLoginRoute(session), entry.value);
     }
   });
 }
 
 final class _FakeAuthService implements AuthService {
+  _FakeAuthService({this.loginRole = RegisteredUserRole.client});
+
+  final RegisteredUserRole loginRole;
   RegisteredUserRole? registerRole;
   bool logoutCalled = false;
 
@@ -154,7 +160,7 @@ final class _FakeAuthService implements AuthService {
       userId: 'user-1',
       name: 'Test User',
       email: 'test@example.com',
-      role: RegisteredUserRole.client,
+      role: loginRole,
       accessToken: 'access',
       idToken: 'header.payload.signature',
     );
@@ -182,6 +188,12 @@ final class _FakeAuthService implements AuthService {
   }) async {
     registerRole = role;
   }
+
+  @override
+  Future<void> registerAccount(RegistrationData data) async {}
+
+  @override
+  Future<void> deleteAccount({required String password}) async {}
 
   @override
   Future<void> requestPasswordReset({required String email}) async {}

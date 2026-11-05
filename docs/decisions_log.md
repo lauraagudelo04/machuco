@@ -436,3 +436,26 @@ reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
 `machuco`.
 
 **Estado:** cerrado.
+
+## 2026-11-04 — Retiro de las credenciales de prueba e indicativos con bandera (rama `feature-juan_pablo`)
+
+**Credenciales de prueba:** se eliminó `HardcodedAuthService`, el flag
+`AUTH_USE_HARDCODED_AUTH_USERS` (que estaba **encendido por defecto**) y el
+aviso con los usuarios de prueba del login. Firebase Authentication es el
+único proveedor; los integrantes crean sus cuentas con su correo. Las pruebas
+usan servicios falsos inyectados. Las contraseñas antiguas siguen en el
+historial de git: no deben reutilizarse en cuentas reales.
+
+**Indicativos:** la tabla real de Supabase es `phone_country_codes`
+(`country_code` ISO, `calling_code`); `country_phone_codes`, que consultaba
+el registro, no existe en Supabase, por lo que el selector siempre caía a la
+caché o a la semilla. `AuthCatalogRepository` ahora consulta
+`phone_country_codes` siguiendo el patrón de `ClientRepository` y cachea con
+el DAO compartido `PhoneCountryCodeDao`. La tabla local `country_phone_codes`
+queda sin uso; se retira en una migración coordinada.
+
+**Dependencia nueva:** `country_flags: ^4.1.2` (solicitada por la rama) para
+pintar la bandera desde el código ISO. Solo se usa a través de
+`AppCountryFlag`.
+
+**Estado:** implementado.

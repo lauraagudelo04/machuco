@@ -1,4 +1,7 @@
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/auth/registration_data.dart';
+import 'package:machuco/models/auth/user_profile.dart';
 
 /// Categorizes why an [AuthService] operation failed, so views can choose
 /// an appropriate message or recovery action without parsing raw provider
@@ -11,6 +14,25 @@ enum AuthFailureType {
   network,
   cancelled,
   unknown,
+
+  /// Propietario pendiente de aprobación (la sesión sí se crea; este tipo
+  /// queda para operaciones que exigen una cuenta activa).
+  accountPending,
+
+  /// Solicitud rechazada por un administrador; ver [AuthFailure.rejectionReason].
+  accountRejected,
+
+  /// Cuenta deshabilitada (por un administrador o por Firebase Auth).
+  accountDisabled,
+
+  /// Firebase limitó los intentos (`too-many-requests`).
+  tooManyRequests,
+
+  /// La operación sensible exige volver a iniciar sesión.
+  requiresRecentLogin,
+
+  /// Dato de entrada rechazado por la validación de la aplicación.
+  invalidInput,
 }
 
 /// An error thrown by any [AuthService] implementation.
@@ -18,10 +40,14 @@ enum AuthFailureType {
 /// [message] is already a user-safe, Spanish-language message suitable for
 /// display; it must not leak raw provider error details.
 final class AuthFailure implements Exception {
-  const AuthFailure(this.type, this.message);
+  const AuthFailure(this.type, this.message, {this.rejectionReason});
 
   final AuthFailureType type;
   final String message;
+
+  /// Motivo escrito por el administrador; solo con
+  /// [AuthFailureType.accountRejected].
+  final String? rejectionReason;
 }
 
 /// The authenticated session data the app keeps after a successful
@@ -35,6 +61,8 @@ final class AuthSession {
     required this.role,
     required this.accessToken,
     required this.idToken,
+    this.accountStatus = AccountStatus.active,
+    this.profile,
   });
 
   final String userId;
@@ -43,14 +71,22 @@ final class AuthSession {
   final RegisteredUserRole role;
   final String accessToken;
   final String idToken;
+
+  /// Estado de la cuenta. Un propietario `pendingApproval` tiene sesión pero
+  /// debe ser dirigido a la pantalla de revisión. Solo para mostrar/enrutar:
+  /// la autorización real vive en `firestore.rules`.
+  final AccountStatus accountStatus;
+
+  /// Perfil de Firestore con el que se construyó la sesión (puede ser `null`
+  /// en servicios que no lo tengan).
+  final UserProfile? profile;
 }
 
 /// Contract for authenticating a user and managing their session.
 ///
-/// Transitional: it only exists while `FirebaseAuthService` and the
-/// temporary `HardcodedAuthService` (local test accounts, gated by
-/// `AuthConfig.useHardcodedAuthUsers`) coexist. Do not extend it with new
-/// capabilities; it is removed together with the hardcoded login.
+/// `FirebaseAuthService` is the only production implementation. The contract
+/// is kept as the seam to inject fakes in tests; do not add alternative
+/// providers.
 abstract interface class AuthService {
   Future<AuthSession?> restoreSession();
 
@@ -66,7 +102,15 @@ abstract interface class AuthService {
     required RegisteredUserRole role,
   });
 
+  /// Registro por rol. Cliente queda `active`; propietario
+  /// `pending_approval`. No deja sesión abierta.
+  Future<void> registerAccount(RegistrationData data);
+
   Future<void> requestPasswordReset({required String email});
 
   Future<void> logout();
+
+  /// Elimina la cuenta del usuario autenticado tras reautenticarlo con
+  /// [password]: borra `users/{uid}` y luego el usuario de Firebase Auth.
+  Future<void> deleteAccount({required String password});
 }

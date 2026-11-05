@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/auth/admin_access_controller.dart';
+import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
@@ -40,6 +42,11 @@ import 'package:machuco/views/room/owner_view/room_owner_page.dart';
 import 'package:machuco/views/room/system_admin_view/room_admin_page.dart';
 
 import 'package:machuco/views/home/temporal_home_page.dart';
+import 'package:machuco/views/account_review/account_review_page.dart';
+import 'package:machuco/views/admin_access/admin_route_guard.dart';
+import 'package:machuco/views/admin_access/administrators_page.dart';
+import 'package:machuco/views/admin_access/owner_approval_detail_page.dart';
+import 'package:machuco/views/admin_access/owner_approvals_page.dart';
 
 /// Central registry of named routes for the app.
 ///
@@ -87,6 +94,12 @@ abstract final class AppRoutes {
   static const clientProfile = '/client/profile';
   static const clientProfileEdit = '/client/profile/edit';
   static const invoice = '/invoice';
+
+  // Autenticación (mismos valores que `AuthRoutes`, usados por el controller).
+  static const accountReview = AuthRoutes.accountReview;
+  static const adminOwnerApprovals = AuthRoutes.adminOwnerApprovals;
+  static const adminOwnerApprovalDetail = AuthRoutes.adminOwnerApprovalDetail;
+  static const adminAdministrators = AuthRoutes.adminAdministrators;
 
   /// Resolves a [RouteSettings.name] to its screen and wraps it in a
   /// [MaterialPageRoute].
@@ -246,6 +259,30 @@ abstract final class AppRoutes {
           'Se requiere un objeto Reservation para abrir la factura.',
         );
       }(),
+      accountReview => AccountReviewPage(
+        args: settings.arguments is AccountReviewArgs
+            ? settings.arguments! as AccountReviewArgs
+            : const AccountReviewArgs(email: ''),
+      ),
+      // Rutas de administración: la protección de UX está en el guard; la
+      // autorización real son las reglas de Firestore.
+      adminOwnerApprovals => AdminRouteGuard(
+        child: OwnerApprovalsPage(
+          controller: settings.arguments is AdminAccessController
+              ? settings.arguments! as AdminAccessController
+              : null,
+        ),
+      ),
+      adminOwnerApprovalDetail => AdminRouteGuard(
+        child: settings.arguments is OwnerApprovalDetailArgs
+            ? OwnerApprovalDetailPage(
+                uid: (settings.arguments! as OwnerApprovalDetailArgs).uid,
+                controller:
+                    (settings.arguments! as OwnerApprovalDetailArgs).controller,
+              )
+            : const OwnerApprovalsPage(),
+      ),
+      adminAdministrators => const AdminRouteGuard(child: AdministratorsPage()),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);

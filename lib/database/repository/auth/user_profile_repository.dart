@@ -31,6 +31,10 @@ abstract interface class UserProfileRepository {
     required String fullName,
     required String phoneNumber,
   });
+
+  /// Deletes `users/{uid}`. Idempotent: succeeds if the document is already
+  /// gone. Only the owner of the profile may delete it (`firestore.rules`).
+  Future<void> deleteProfile(String uid);
 }
 
 /// [UserProfileRepository] backed by Cloud Firestore. Authorization is
@@ -74,10 +78,18 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
     required String phoneNumber,
   }) async {
     try {
-      await _doc(uid).update({
-        'fullName': fullName,
-        'phoneNumber': phoneNumber,
-      });
+      await _doc(
+        uid,
+      ).update({'fullName': fullName, 'phoneNumber': phoneNumber});
+    } on FirebaseException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  @override
+  Future<void> deleteProfile(String uid) async {
+    try {
+      await _doc(uid).delete();
     } on FirebaseException catch (e) {
       throw _map(e);
     }

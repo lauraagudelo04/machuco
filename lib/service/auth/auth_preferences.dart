@@ -49,6 +49,12 @@ class AuthPreferences {
   Future<void> clearCurrentUserEmail() =>
       _preferences.remove(_currentUserEmailKey);
 
+  /// Borra TODO el namespace `auth` (correo de sesión, correo recordado,
+  /// último indicativo, marca de sincronización...). Se usa al eliminar la
+  /// cuenta; no toca las preferencias de otros módulos ni los maestros en
+  /// SQLite.
+  Future<void> clearAll() => _preferences.clear();
+
   Future<int?> loadLastCountryCodeId() =>
       _preferences.getInt(_lastCountryCodeIdKey);
 

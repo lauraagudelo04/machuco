@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 
 /// Profile of a user stored in Firestore at `users/{uid}`.
@@ -15,6 +16,15 @@ class UserProfile {
     required this.role,
     required this.accountStatus,
     this.createdAt,
+    this.firstNames,
+    this.lastNames,
+    this.phoneCountryCodeId,
+    this.birthDate,
+    this.personType,
+    this.nit,
+    this.companyName,
+    this.planId,
+    this.rejectionReason,
   });
 
   final String uid;
@@ -32,6 +42,35 @@ class UserProfile {
   /// `null` for a profile not yet written (the server assigns it).
   final DateTime? createdAt;
 
+  // The fields below are optional so profiles written before the role-based
+  // sign-up (which only have `fullName`) keep loading.
+
+  final String? firstNames;
+  final String? lastNames;
+
+  /// Id of the `phone_country_codes` master row chosen at sign-up.
+  final int? phoneCountryCodeId;
+
+  /// Clients only. Sensitive: stored in Firestore, never in SQLite or
+  /// SharedPreferences.
+  final DateTime? birthDate;
+
+  /// Owners only.
+  final PersonType? personType;
+
+  /// Owners only (`base-DV`). Sensitive: Firestore only, never local.
+  final String? nit;
+
+  /// Legal name; owners with [PersonType.juridica].
+  final String? companyName;
+
+  /// Subscription plan chosen by an owner at sign-up (Supabase
+  /// `subscription_plans.id`).
+  final int? planId;
+
+  /// Reason given by the admin when the account was rejected.
+  final String? rejectionReason;
+
   /// Builds a profile from a Firestore document, tolerating missing fields.
   /// A missing/unknown role falls back to client (least privilege).
   factory UserProfile.fromFirestore(String uid, Map<String, dynamic> data) {
@@ -45,22 +84,62 @@ class UserProfile {
       accountStatus: accountStatusFromStorage(
         data['accountStatus']?.toString(),
       ),
-      createdAt: switch (rawCreatedAt) {
-        Timestamp() => rawCreatedAt.toDate().toUtc(),
-        DateTime() => rawCreatedAt.toUtc(),
-        _ => null,
-      },
+      createdAt: _dateOrNull(rawCreatedAt),
+      firstNames: _textOrNull(data['firstNames']),
+      lastNames: _textOrNull(data['lastNames']),
+      phoneCountryCodeId: _intOrNull(data['phoneCountryCodeId']),
+      birthDate: _dateOrNull(data['birthDate']),
+      personType: personTypeFromMetadata(data['personType']?.toString()),
+      nit: _textOrNull(data['nit']),
+      companyName: _textOrNull(data['companyName']),
+      planId: _intOrNull(data['planId']),
+      rejectionReason: _textOrNull(data['rejectionReason']),
     );
   }
 
   /// Document written on creation. `createdAt` is assigned by the server.
-  Map<String, dynamic> toFirestore() => <String, dynamic>{
-    'fullName': fullName,
-    'email': email,
-    'phoneNumber': phoneNumber,
-    'role': role.metadataValue,
-    'accountStatus':
-        (accountStatus ?? AccountStatus.pendingApproval).storageValue,
-    'createdAt': FieldValue.serverTimestamp(),
+  Map<String, dynamic> toFirestore() {
+    final birth = birthDate;
+    final type = personType;
+    return <String, dynamic>{
+      'fullName': fullName,
+      'email': email,
+      'phoneNumber': phoneNumber,
+      'role': role.metadataValue,
+      'accountStatus':
+          (accountStatus ?? AccountStatus.pendingApproval).storageValue,
+      'createdAt': FieldValue.serverTimestamp(),
+      // Optional fields are omitted when null: `firestore.rules` validates the
+      // exact key set per role.
+      if (firstNames != null) 'firstNames': firstNames,
+      if (lastNames != null) 'lastNames': lastNames,
+      if (phoneCountryCodeId != null) 'phoneCountryCodeId': phoneCountryCodeId,
+      if (birth != null)
+        'birthDate': Timestamp.fromDate(
+          DateTime.utc(birth.year, birth.month, birth.day),
+        ),
+      if (type != null) 'personType': type.metadataValue,
+      if (nit != null) 'nit': nit,
+      if (companyName != null) 'companyName': companyName,
+      if (planId != null) 'planId': planId,
+    };
+  }
+
+  static String? _textOrNull(Object? value) {
+    final text = value?.toString().trim();
+    return text == null || text.isEmpty ? null : text;
+  }
+
+  static int? _intOrNull(Object? value) => switch (value) {
+    int() => value,
+    num() => value.toInt(),
+    String() => int.tryParse(value),
+    _ => null,
+  };
+
+  static DateTime? _dateOrNull(Object? value) => switch (value) {
+    Timestamp() => value.toDate().toUtc(),
+    DateTime() => value.toUtc(),
+    _ => null,
   };
 }

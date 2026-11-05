@@ -4,10 +4,11 @@ import 'dart:async';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
+import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
-import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
+import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
@@ -32,7 +33,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 12,
+  version: 13,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -43,11 +44,11 @@ part 'app_database.g.dart';
     ClientEntry,
     PhoneCountryCode,
     MotelEntity,
+    AuthUserProfileEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
-  AuthCatalogDao? _authCatalogDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
@@ -58,11 +59,8 @@ abstract class AppDatabase extends FloorDatabase {
 
   ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
-
-  AuthCatalogDao get authCatalogDao => _authCatalogDao ??= AuthCatalogDao(
-    () async => database as sqflite.Database,
-  );
   MotelDao get motelDao;
+  AuthUserProfileDao get authUserProfileDao;
 }
 
 class AppDatabaseProvider {
@@ -89,6 +87,7 @@ class AppDatabaseProvider {
         migration9To10,
         migration10To11,
         migration11To12,
+        migration12To13,
       ])
       .addCallback(
         Callback(
@@ -346,7 +345,10 @@ Future<void> _createClientSchema(sqflite.Database database) async {
   );
 }
 
-/// Maestros del módulo de autenticación (caché local de Supabase).
+/// Tabla obsoleta: el registro ahora usa `phone_country_codes` (entidad
+/// compartida `PhoneCountryCode`), que es la tabla que existe en Supabase.
+/// Se sigue creando para no cambiar el esquema compartido sin coordinar una
+/// migración con las demás ramas; retirarla en una migración acordada.
 Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
   await database.execute('''
     CREATE TABLE IF NOT EXISTS country_phone_codes (
@@ -373,10 +375,25 @@ final migration10To11 = Migration(10, 11, (database) async {
 
 final migration11To12 = Migration(11, 12, (database) async {
   final columns = await database.rawQuery("PRAGMA table_info(clients)");
-  final hasPasswordColumn =
-      columns.any((column) => column['name'] == 'password');
+  final hasPasswordColumn = columns.any(
+    (column) => column['name'] == 'password',
+  );
 
   if (hasPasswordColumn) {
     await database.execute('ALTER TABLE clients DROP COLUMN password');
   }
+});
+
+/// Agrega la caché de una sola fila del perfil del usuario autenticado
+/// (módulo de autenticación). Mismo DDL que genera Floor para la entidad
+/// `AuthUserProfileEntry`; no guarda NIT ni fecha de nacimiento.
+final migration12To13 = Migration(12, 13, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
+    '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
+    '`first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, '
+    '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
+    '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
+    '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
 });
