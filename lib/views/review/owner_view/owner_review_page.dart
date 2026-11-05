@@ -21,10 +21,12 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
   final TextEditingController _searchController = TextEditingController();
 
   late final OwnerReviewController _controller;
+  bool _ownsController = false;
 
   @override
   void initState() {
     super.initState();
+    _ownsController = widget.controller == null;
     _controller = widget.controller ?? OwnerReviewController();
     unawaited(_controller.loadReviews());
   }
@@ -32,6 +34,9 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
   @override
   void dispose() {
     _searchController.dispose();
+    if (_ownsController) {
+      _controller.dispose();
+    }
     super.dispose();
   }
 
@@ -113,6 +118,7 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: OwnerReviewCard(
                 review: review,
+                motelName: _controller.getMotelName(review.motelId),
                 onReply: () => _openReplySheet(review),
               ),
             ),
@@ -197,13 +203,16 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
               color: Theme.of(context).colorScheme.primary,
             ),
             const SizedBox(height: AppSpacing.s3),
-            Text('No hay reseñas', style: Theme.of(context).textTheme.titleLarge),
+            Text(
+              'No hay reseñas',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
             const SizedBox(height: AppSpacing.s2),
             Text(
               'No encontramos reseñas que coincidan con la búsqueda o el filtro.',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(color: context.appColors.textSecondary),
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: context.appColors.textSecondary,
+              ),
               textAlign: TextAlign.center,
             ),
           ],

@@ -79,7 +79,6 @@ class _ClientListPageState extends State<ClientListPage> {
               child: ListenableBuilder(
                 listenable: ClientController.instance,
                 builder: (context, _) {
-                  // Consumimos la instancia Singleton
                   final clients = ClientController.instance.search(_searchQuery);
 
                   if (clients.isEmpty) {
@@ -100,10 +99,7 @@ class _ClientListPageState extends State<ClientListPage> {
                       return _ClientCard(
                         client: client,
                         onUnlink: () => _confirmUnlink(context, client),
-                        onTap: () {
-                          // Navegación hipotética al detalle del cliente
-                          // Navigator.pushNamed(context, AppRoutes.clientDetail, arguments: client.id);
-                        },
+                        onTap: () {},
                       );
                     },
                   );
@@ -143,16 +139,19 @@ class _ClientCard extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+                  color: Theme.of(context)
+                      .colorScheme
+                      .primary
+                      .withValues(alpha: .10),
                   borderRadius: BorderRadius.circular(AppRadius.md),
                 ),
                 alignment: Alignment.center,
                 child: Text(
                   client.initials,
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.bold,
-                  ),
+                        color: Theme.of(context).colorScheme.primary,
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
               ),
               const SizedBox(width: AppSpacing.s4),
@@ -163,8 +162,8 @@ class _ClientCard extends StatelessWidget {
                     Text(
                       client.name,
                       style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        fontWeight: FontWeight.w600,
-                      ),
+                            fontWeight: FontWeight.w600,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -172,8 +171,8 @@ class _ClientCard extends StatelessWidget {
                     Text(
                       client.email,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                            color: context.appColors.textSecondary,
+                          ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),

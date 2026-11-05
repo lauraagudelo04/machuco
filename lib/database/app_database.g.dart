@@ -90,7 +90,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 11,
+      version: 12,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -118,7 +118,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `bookingId` TEXT NOT NULL, `bookingReference` TEXT NOT NULL, `clientId` TEXT NOT NULL, `client` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motel` TEXT NOT NULL, `roomId` TEXT NOT NULL, `room` TEXT NOT NULL, `reservationDate` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `status` TEXT NOT NULL, `method` TEXT, `paymentMethodId` INTEGER, `paidAt` INTEGER, `receiptNumber` TEXT, FOREIGN KEY (`paymentMethodId`) REFERENCES `payment_method_catalog` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL, `password` TEXT NOT NULL)');
+            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -453,6 +453,29 @@ class _$PaymentDao extends PaymentDao {
             'payment_method_catalog',
             (PaymentCatalogEntry item) =>
                 <String, Object?>{'id': item.id, 'name': item.name}),
+        _paymentRecordUpdateAdapter = UpdateAdapter(
+            database,
+            'payments',
+            ['id'],
+            (PaymentRecord item) => <String, Object?>{
+                  'id': item.id,
+                  'bookingId': item.bookingId,
+                  'bookingReference': item.bookingReference,
+                  'clientId': item.clientId,
+                  'client': item.client,
+                  'motelId': item.motelId,
+                  'motel': item.motel,
+                  'roomId': item.roomId,
+                  'room': item.room,
+                  'reservationDate':
+                      _subscriptionDateConverter.encode(item.reservationDate),
+                  'amount': item.amount,
+                  'status': _paymentStatusConverter.encode(item.status),
+                  'method': _paymentMethodConverter.encode(item.method),
+                  'paymentMethodId': item.paymentMethodId,
+                  'paidAt': _paymentOptionalDateConverter.encode(item.paidAt),
+                  'receiptNumber': item.receiptNumber
+                }),
         _paymentCatalogEntryUpdateAdapter = UpdateAdapter(
             database,
             'payment_method_catalog',
@@ -470,6 +493,8 @@ class _$PaymentDao extends PaymentDao {
 
   final InsertionAdapter<PaymentCatalogEntry>
       _paymentCatalogEntryInsertionAdapter;
+
+  final UpdateAdapter<PaymentRecord> _paymentRecordUpdateAdapter;
 
   final UpdateAdapter<PaymentCatalogEntry> _paymentCatalogEntryUpdateAdapter;
 
@@ -538,6 +563,12 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
+  Future<void> deleteLegacyDemoPayments() async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM payments WHERE id IN (\'pay-001\', \'pay-002\', \'pay-003\', \'owner-pay-001\', \'owner-pay-002\', \'owner-pay-003\')');
+  }
+
+  @override
   Future<List<PaymentCatalogEntry>> findCatalogEntries() async {
     return _queryAdapter.queryList(
         'SELECT * FROM payment_method_catalog ORDER BY id',
@@ -577,15 +608,14 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
-  Future<void> insertMissingDemoPayments(List<PaymentRecord> payments) async {
-    await _paymentRecordInsertionAdapter.insertList(
-        payments, OnConflictStrategy.ignore);
-  }
-
-  @override
   Future<void> insertCatalogEntries(List<PaymentCatalogEntry> entries) async {
     await _paymentCatalogEntryInsertionAdapter.insertList(
         entries, OnConflictStrategy.ignore);
+  }
+
+  @override
+  Future<void> updatePayment(PaymentRecord payment) async {
+    await _paymentRecordUpdateAdapter.update(payment, OnConflictStrategy.abort);
   }
 
   @override
@@ -629,6 +659,20 @@ class _$PaymentDao extends PaymentDao {
       });
     }
   }
+
+  @override
+  Future<void> mergeRemotePayments(List<PaymentRecord> payments) async {
+    if (database is sqflite.Transaction) {
+      await super.mergeRemotePayments(payments);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.paymentDao.mergeRemotePayments(payments);
+      });
+    }
+  }
 }
 
 class _$ClientDao extends ClientDao {
@@ -644,8 +688,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 }),
         _clientEntryUpdateAdapter = UpdateAdapter(
             database,
@@ -656,8 +699,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 }),
         _clientEntryDeletionAdapter = DeletionAdapter(
             database,
@@ -668,8 +710,7 @@ class _$ClientDao extends ClientDao {
                   'name': item.name,
                   'phone': item.phone,
                   'email': item.email,
-                  'country_code': item.countryCode,
-                  'password': item.password
+                  'country_code': item.countryCode
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -692,8 +733,7 @@ class _$ClientDao extends ClientDao {
             name: row['name'] as String,
             phone: row['phone'] as String,
             email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String),
+            countryCode: row['country_code'] as String),
         arguments: [id]);
   }
 
@@ -705,8 +745,7 @@ class _$ClientDao extends ClientDao {
             name: row['name'] as String,
             phone: row['phone'] as String,
             email: row['email'] as String,
-            countryCode: row['country_code'] as String,
-            password: row['password'] as String));
+            countryCode: row['country_code'] as String));
   }
 
   @override

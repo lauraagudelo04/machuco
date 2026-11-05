@@ -133,7 +133,6 @@ class ClientRepository {
           'phone': client.phone,
           'email': client.email,
           'country_code': client.countryCode,
-          'password': client.password,
         }),
       ).timeout(const Duration(seconds: 10));
 
@@ -169,7 +168,6 @@ class ClientRepository {
             'phone': client.phone,
             'email': client.email,
             'country_code': client.countryCode,
-            'password': client.password,
           }),
         ).timeout(const Duration(seconds: 10));
         

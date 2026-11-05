@@ -25,6 +25,12 @@ abstract interface class UserProfileRepository {
 
   /// Returns the profile or `null` when no document exists.
   Future<UserProfile?> getProfile(String uid);
+
+  Future<void> updateProfile({
+    required String uid,
+    required String fullName,
+    required String phoneNumber,
+  });
 }
 
 /// [UserProfileRepository] backed by Cloud Firestore. Authorization is
@@ -56,6 +62,22 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
         return null;
       }
       return UserProfile.fromFirestore(uid, data);
+    } on FirebaseException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  @override
+  Future<void> updateProfile({
+    required String uid,
+    required String fullName,
+    required String phoneNumber,
+  }) async {
+    try {
+      await _doc(uid).update({
+        'fullName': fullName,
+        'phoneNumber': phoneNumber,
+      });
     } on FirebaseException catch (e) {
       throw _map(e);
     }
