@@ -32,7 +32,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 12,
+  version: 13,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -89,6 +89,7 @@ class AppDatabaseProvider {
         migration9To10,
         migration10To11,
         migration11To12,
+        migration12To13,
       ])
       .addCallback(
         Callback(
@@ -380,3 +381,7 @@ final migration11To12 = Migration(11, 12, (database) async {
     await database.execute('ALTER TABLE clients DROP COLUMN password');
   }
 });
+
+
+/// Retira únicamente los identificadores de los antiguos ejemplos de room.
+final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
