@@ -33,9 +33,35 @@ los registros locales, no con los totales fijos anteriores. El resumen no se
 presenta como mensual. Las comisiones se muestran como no calculadas hasta
 que exista una regla acordada.
 
-La elección «En el Local» del cliente todavía NO crea un pago de Payment:
-esa conexión con Reservas no forma parte de este cambio. La única modificación
-autorizada en Payment_Method sigue siendo la etiqueta de su pantalla de selección.
+## Pago creado desde Payment_Method
+
+Al finalizar la selección con una reserva real, `PaymentCheckoutController`
+(`lib/controllers/payment_method/`) registra el pago de esa reserva con el id
+determinista `pay-<id de la reserva>`:
+
+- **«En el Local»:** estado `pending`, sin `paymentMethodId`, `paidAt` ni
+  comprobante. El propietario lo confirma después con «Registrar pago» y elige
+  el método.
+- **Tarjeta:** estado `paid`, con el método del maestro según el selector
+  Crédito/Débito del formulario (`Tarjeta de crédito` o `Tarjeta de débito`),
+  `paidAt` y comprobante `CARD-<id>`. No se guardan datos de la tarjeta.
+
+El pago se guarda primero en SQLite y después se intenta enviar a Firestore con
+`PaymentCloudRepository`. Si no hay sesión de Firebase, no se conoce el
+propietario del motel o Firebase falla, el pago local se conserva y la pantalla
+muestra el aviso. Una reserva admite un solo pago: repetir «En el Local» es
+idempotente; pagar con tarjeta una reserva ya pendiente se rechaza.
+
+`firestore.rules` permite ahora que un cliente activo cree **sus** pagos
+(`clientId == request.auth.uid`): `pending` sin método, o `paid` con
+`paymentMethodId` y `paidAt`. Actualizar sigue siendo exclusivo del propietario.
+Las reglas hay que volver a desplegarlas con `firebase deploy --only
+firestore:rules` (reemplazan todas las publicadas).
+
+Datos pendientes de Booking: `Reservation` no trae `guestId`/`guestName` ni una
+referencia legible. Mientras tanto `clientId` es el uid de Firebase,
+`bookingReference` es el id de la reserva y `ownerId` sale de `Motel.ownerId`.
+El propietario solo verá el pago en la nube si `Motel.ownerId` es su uid real.
 
 ## Contrato remoto
 
