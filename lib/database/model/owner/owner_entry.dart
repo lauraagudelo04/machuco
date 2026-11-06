@@ -15,6 +15,8 @@ class OwnerEntry {
     required this.documentNumber,
     required this.email,
     required this.phone,
+    this.countryCode,
+    this.countryName,
     this.address,
     required this.isActive,
     required this.synchronized,
@@ -31,6 +33,13 @@ class OwnerEntry {
   final String documentNumber;
   final String email;
   final String phone;
+
+  /// Indicativo del país (`+57`), separado del número nacional.
+  final String? countryCode;
+
+  /// Nombre del país al que pertenece [countryCode].
+  final String? countryName;
+
   final String? address;
 
   /// 1 = activo, 0 = inactivo.

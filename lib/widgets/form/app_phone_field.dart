@@ -16,9 +16,14 @@ class AppPhoneField extends StatelessWidget {
     required this.phoneController,
     this.loading = false,
     this.errorMessage,
+    this.phoneErrorText,
     this.onRetry,
     this.validator,
     this.textInputAction = TextInputAction.next,
+    this.label = 'Celular',
+    this.hint = '300 123 4567',
+    this.onChanged,
+    this.onSubmitted,
   });
 
   final List<CountryPhoneCode> countryCodes;
@@ -27,9 +32,26 @@ class AppPhoneField extends StatelessWidget {
   final TextEditingController phoneController;
   final bool loading;
   final String? errorMessage;
+
+  /// Error del número nacional; se muestra bajo el campo para conservar el
+  /// comportamiento de los formularios que validan fuera de un `Form`.
+  final String? phoneErrorText;
+
   final VoidCallback? onRetry;
   final FormFieldValidator<String>? validator;
   final TextInputAction textInputAction;
+
+  /// Etiqueta del campo numérico; otros módulos ya no hablan de "celular".
+  final String label;
+
+  /// Texto de ayuda del número nacional.
+  final String hint;
+
+  /// Se invoca en cada cambio del número nacional.
+  final ValueChanged<String>? onChanged;
+
+  /// Se invoca al confirmar el número nacional desde el teclado.
+  final ValueChanged<String>? onSubmitted;
 
   Future<void> _openPicker(BuildContext context) async {
     final selected = await showModalBottomSheet<CountryPhoneCode>(
@@ -102,14 +124,17 @@ class AppPhoneField extends StatelessWidget {
             const SizedBox(width: AppSpacing.s2),
             Expanded(
               child: AppTextField(
-                label: 'Celular',
-                hint: '300 123 4567',
+                label: label,
+                hint: hint,
                 controller: phoneController,
                 keyboardType: TextInputType.phone,
                 textInputAction: textInputAction,
                 autofillHints: const [AutofillHints.telephoneNumber],
+                errorText: phoneErrorText,
                 validator: validator,
                 autovalidateMode: AutovalidateMode.onUserInteraction,
+                onChanged: onChanged,
+                onSubmitted: onSubmitted,
               ),
             ),
           ],

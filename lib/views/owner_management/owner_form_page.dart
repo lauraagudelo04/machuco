@@ -8,8 +8,10 @@ import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
+import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/widgets/form/app_phone_field.dart';
 
 import 'owner_summary.dart';
 
@@ -88,6 +90,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
     _isActive = initialData?.isActive ?? true;
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCountryCodes());
   }
 
   @override
@@ -115,7 +118,53 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _emailError = _isEditing
         ? null
         : OwnerController.validateEmail(_emailController.text);
-    _phoneError = OwnerController.validatePhone(_phoneController.text);
+    _phoneError = widget.controller.validatePhone(_phoneController.text);
+  }
+
+  /// Carga el maestro de indicativos y alinea el selector con los datos
+  /// existentes. Las filas antiguas guardaban el teléfono concatenado
+  /// (`+57 300 123 4567`), así que aquí se separa el indicativo la primera vez.
+  Future<void> _loadCountryCodes({bool forceRefresh = false}) async {
+    final controller = widget.controller;
+    await controller.loadCountryCodes(forceRefresh: forceRefresh);
+    if (!mounted) return;
+
+    final initialData = widget.initialData;
+    var phone = _phoneController.text;
+    var code = controller.countryCodeForDialCode(initialData?.countryCode);
+
+    if (initialData != null && initialData.countryCode == null) {
+      final raw = initialData.phone.trim();
+      if (raw.startsWith('+')) {
+        CountryPhoneCode? match;
+        for (final candidate in controller.countryCodes) {
+          if (raw.startsWith(candidate.dialCode) &&
+              (match == null ||
+                  candidate.dialCode.length > match.dialCode.length)) {
+            match = candidate;
+          }
+        }
+        if (match != null) {
+          code = match;
+          phone = raw.substring(match.dialCode.length).trim();
+        }
+      }
+    }
+
+    if (code != null) controller.selectCountryCode(code);
+    if (phone != _phoneController.text) {
+      _phoneController.text = phone;
+    }
+    setState(() {
+      if (_hasAttemptedSubmit) _updateErrors();
+    });
+  }
+
+  void _selectCountryCode(CountryPhoneCode code) {
+    setState(() {
+      widget.controller.selectCountryCode(code);
+      if (_hasAttemptedSubmit) _updateErrors();
+    });
   }
 
   void _revalidateAfterChange() {
@@ -157,11 +206,16 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     setState(() => _isSaving = true);
 
     final initialData = widget.initialData;
+    final selectedCountryCode = widget.controller.selectedCountryCode;
+    final countryCode = selectedCountryCode?.dialCode;
+    final countryName = selectedCountryCode?.countryName;
     final Owner? saved;
     if (initialData != null) {
       saved = await widget.controller.updateOwnerPhone(
         initialData.id,
         _phoneController.text.trim(),
+        countryCode: countryCode,
+        countryName: countryName,
       );
     } else {
       final address = _addressController.text.trim();
@@ -171,6 +225,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         documentNumber: _documentNumberController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
+        countryCode: countryCode,
+        countryName: countryName,
         address: address.isEmpty ? null : address,
         isActive: _isActive,
       );
@@ -318,16 +374,20 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             onSubmitted: (_) => _focusNextField(),
           ),
           const SizedBox(height: AppSpacing.s4),
-          AppTextField(
+          AppPhoneField(
+            countryCodes: widget.controller.countryCodes,
+            selectedCountryCode: widget.controller.selectedCountryCode,
+            onCountryCodeSelected: _selectCountryCode,
+            phoneController: _phoneController,
+            loading: widget.controller.isLoadingCountryCodes,
+            errorMessage: widget.controller.countryCodesError,
+            phoneErrorText: _phoneError,
+            onRetry: () => _loadCountryCodes(forceRefresh: true),
             label: 'Teléfono',
-            controller: _phoneController,
-            hint: '+57 300 123 4567',
-            errorText: _phoneError,
-            keyboardType: TextInputType.phone,
+            hint: '300 123 4567',
             textInputAction: _isEditing
                 ? TextInputAction.done
                 : TextInputAction.next,
-            autofillHints: const [AutofillHints.telephoneNumber],
             onChanged: (_) => _revalidateAfterChange(),
             onSubmitted: (_) {
               if (_isEditing) {

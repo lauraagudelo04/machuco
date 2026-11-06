@@ -592,7 +592,10 @@ class _OwnerCard extends StatelessWidget {
             text: owner.documentLabel,
           ),
           _OwnerDetailLine(icon: Icons.mail_outline, text: owner.email),
-          _OwnerDetailLine(icon: Icons.phone_outlined, text: owner.phone),
+          _OwnerDetailLine(
+            icon: Icons.phone_outlined,
+            text: owner.phoneWithDialCode,
+          ),
           const SizedBox(height: AppSpacing.s2),
           // Wrap y no Row: en pantallas angostas las cinco acciones no caben
           // en una linea y deben bajar a la siguiente en vez de desbordarse.

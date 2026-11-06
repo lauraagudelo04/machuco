@@ -6,6 +6,8 @@ import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/service/owner/owner_service.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -33,7 +35,9 @@ void main() {
     DocumentType documentType = DocumentType.citizenshipCard,
     String documentNumber = '1020304050',
     String email = 'laura.gomez@machuco.com',
-    String phone = '+57 300 123 4567',
+    String phone = '300 123 4567',
+    String? countryCode = '+57',
+    String? countryName = 'Colombia',
     String? address = 'Calle 10 # 43-25',
     bool isActive = true,
   }) => Owner(
@@ -43,6 +47,8 @@ void main() {
     documentNumber: documentNumber,
     email: email,
     phone: phone,
+    countryCode: countryCode,
+    countryName: countryName,
     address: address,
     isActive: isActive,
   );
@@ -60,6 +66,9 @@ void main() {
     expect(loaded.documentNumber, owner.documentNumber);
     expect(loaded.email, owner.email);
     expect(loaded.phone, owner.phone);
+    expect(loaded.countryCode, owner.countryCode);
+    expect(loaded.countryName, owner.countryName);
+    expect(loaded.phoneWithDialCode, '+57 300 123 4567');
     expect(loaded.address, owner.address);
     expect(loaded.isActive, isTrue);
   });
@@ -121,10 +130,11 @@ void main() {
 
     final originalCreatedAt = await readCreatedAt();
 
-    await repository.update(owner.copyWith(phone: '+57 311 000 1111'));
+    await repository.update(owner.copyWith(phone: '311 000 1111'));
 
     final updated = await repository.findById(owner.id);
-    expect(updated!.phone, '+57 311 000 1111');
+    expect(updated!.phone, '311 000 1111');
+    expect(updated.phoneWithDialCode, '+57 311 000 1111');
     expect(updated.isActive, isTrue);
     expect(await readCreatedAt(), originalCreatedAt);
   });
@@ -217,7 +227,9 @@ void main() {
       documentType: DocumentType.citizenshipCard,
       documentNumber: '79123456',
       email: 'camilo.torres@machuco.com',
-      phone: '+57 320 555 1234',
+      phone: '320 555 1234',
+      countryCode: '+57',
+      countryName: 'Colombia',
     );
 
     // Nueva sesión = nuevo servicio y repositorio sobre la misma base.
@@ -230,5 +242,62 @@ void main() {
       loaded.any((owner) => owner.id == created.id && owner.phone == created.phone),
       isTrue,
     );
+  });
+
+  test('la migración 13->14 agrega el indicativo sin perder los teléfonos',
+      () async {
+    final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
+    sqfliteFfiInit();
+    final legacy = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: sqflite.OpenDatabaseOptions(
+        version: 13,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE owners (
+              id TEXT NOT NULL PRIMARY KEY,
+              fullName TEXT NOT NULL,
+              documentType TEXT NOT NULL,
+              documentNumber TEXT NOT NULL,
+              email TEXT NOT NULL,
+              phone TEXT NOT NULL,
+              address TEXT,
+              isActive INTEGER NOT NULL,
+              synchronized INTEGER NOT NULL,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    await legacy.insert('owners', {
+      'id': 'owner-legacy',
+      'fullName': 'Laura Gómez Restrepo',
+      'documentType': DocumentType.citizenshipCard.name,
+      'documentNumber': '1020304050',
+      'email': 'laura.gomez@machuco.com',
+      'phone': '+57 300 123 4567',
+      'address': 'Calle 10 # 43-25',
+      'isActive': 1,
+      'synchronized': 0,
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
+    await legacy.close();
+
+    final migrated = await AppDatabaseProvider.open(name: legacyPath);
+    addTearDown(migrated.close);
+    final raw = migrated.database as sqflite.Database;
+
+    expect(await raw.getVersion(), 14);
+    final columns = await raw.rawQuery('PRAGMA table_info(owners)');
+    expect(
+      columns.map((column) => column['name']),
+      containsAll(['countryCode', 'countryName']),
+    );
+    final rows = await raw.query('owners');
+    expect(rows.single['phone'], '+57 300 123 4567');
+    expect(rows.single['countryCode'], isNull);
   });
 }

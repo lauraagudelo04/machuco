@@ -19,7 +19,8 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
       | Tipo de documento | CC |
       | Número de documento | 1020304050 |
       | Correo electrónico | laura.gomez@machuco.com |
-      | Teléfono | +57 300 123 4567 |
+      | Indicativo | +57 |
+      | Teléfono | 300 123 4567 |
       | Dirección | Calle 10 # 43-25, Medellín |
     And El usuario selecciona "Guardar"
     Then Se muestra un mensaje de "Propietario registrado exitosamente"
@@ -30,10 +31,10 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     Given Existe un propietario registrado con nombre "Laura Gómez Restrepo"
     And El usuario selecciona el propietario en la lista
     And El usuario selecciona "Editar teléfono"
-    When El usuario ingresa el nuevo teléfono "+57 310 987 6543"
+    When El usuario ingresa el nuevo teléfono "310 987 6543"
     And El usuario selecciona "Guardar cambios"
     Then Se muestra un mensaje de "Teléfono actualizado exitosamente"
-    Y El listado muestra el nuevo número de teléfono
+    Y El listado muestra el nuevo número de teléfono con su indicativo "+57 310 987 6543"
     Y El detalle del propietario refleja el cambio
 
   Scenario: Activar/desactivar a un propietario
@@ -59,19 +60,39 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
 
 ## Alcance técnico
 
-- **Carpetas donde trabajo**: 
-  - `lib/controllers/owner_management/` — controlador OwnerController (reglas de negocio y validación)
-  - `lib/models/owner_management/` — modelos Owner, DocumentType, OwnerStatusFilter
-  - `lib/views/owner_management/` — vistas owner_page, owner_form_page, owner_detail_page, owner_summary
-  - `lib/service/persistence/sqlite/` — OwnerDao, database_config, migraciones
-- **Fuera de alcance (por ahora)**: 
-  - Integración con Supabase (nube) — se gestionará después con credenciales individuales
-  - Cambios en archivos compartidos `database_config.dart` y `sqlite_database.dart` sin coordinación previa
-  - Lógica de reautenticación o migración de base de datos existente a nueva versión
+- **Carpetas donde trabajo**:
+  - `lib/controllers/owner_management/` — `OwnerController` (estado de la vista, validación por país)
+  - `lib/models/owner_management/` — modelos `Owner`, `DocumentType`, `OwnerStatusFilter`
+  - `lib/service/owner/` — `OwnerService` (reglas de negocio y orquestación)
+  - `lib/views/owner_management/` — vistas `owner_page`, `owner_form_page`, `owner_detail_page`, `owner_summary`
+  - `lib/database/model/owner/` y `lib/database/repository/owner/` — entidad Floor `OwnerEntry` y `OwnerDao`/`OwnerRepository`
+- **Supabase (solo lo que toca propietarios)**: esquema SQL de la tabla remota de owners, su mapeo 1:1, el repositorio de nube y la sincronización de owners. Se hace con **REST + `http`**, igual que el resto del equipo; **no** se instala `supabase_flutter`.
+- **Fuera de alcance**:
+  - Tareas Supabase de otras entidades (pagos, clientes, reservas, moteles).
+  - `supabase_flutter` y la migración de las llamadas REST existentes.
+  - Cambios en archivos compartidos (`lib/database/app_database.dart`, `app_database.g.dart`) sin coordinación previa de número de migración.
+- **Migraciones**: `12→13` crea `owners`; `13→14` separa el indicativo. Los números siguientes deben coordinarse con el equipo porque otras ramas también suben la versión.
 
 ## Definiciones de datos
 
-- **Owner**: entidad con id, fullName, documentType, documentNumber, email, phone, address, isActive
-- **DocumentType**: enum { citizenshipCard (CC), foreignerCard (CE), taxId (NIT), passport (Pasaporte), taxIdentity (TI) }
-- **OwnerStatusFilter**: filtro { all, active, inactive }
-- **synchronized**: flag entero 0/1 que indica si el registro ya fue enviado a la nube
+- **Owner**: `id`, `fullName`, `documentType`, `documentNumber`, `email`, `phone` (número nacional), `countryCode` (`+57`), `countryName` (`Colombia`), `address`, `isActive`, `isSynchronized`.
+- **phoneWithDialCode**: teléfono listo para mostrar, por ejemplo `+57 300 123 4567`.
+- **DocumentType**: enum { citizenshipCard (CC), foreignerCard (CE), taxId (NIT), passport (Pasaporte), taxIdentity (TI) }.
+- **OwnerStatusFilter**: filtro { all, active, inactive }.
+- **synchronized**: flag entero 0/1 que indica si el registro ya fue enviado a la nube.
+
+## Escenarios nuevos
+
+  Scenario: Elegir el indicativo del país al registrar un propietario
+    Given El usuario está en el formulario de nuevo propietario
+    When El usuario toca el selector de indicativo
+    Then Se abre un buscador por nombre de país, código ISO o indicativo
+    And Puede elegir cualquier país del maestro (por ejemplo +1, +44 o +52)
+    And El indicativo elegido se guarda aparte del número nacional
+
+  Scenario: Rechazar un teléfono con longitud inválida para el país
+    Given El usuario eligió Colombia (+57) en el selector
+    When El usuario ingresa un número nacional de 6 dígitos
+    And El usuario selecciona "Guardar"
+    Then El sistema bloquea el envío
+    And Muestra un mensaje indicando cuántos dígitos se esperan para Colombia

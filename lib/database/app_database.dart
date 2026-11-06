@@ -34,7 +34,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 13,
+  version: 14,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -94,6 +94,7 @@ class AppDatabaseProvider {
         migration10To11,
         migration11To12,
         migration12To13,
+        migration13To14,
       ])
       .addCallback(
         Callback(
@@ -413,3 +414,21 @@ Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {
     )
   ''');
 }
+
+/// Separa el indicativo del país del número nacional.
+///
+/// `owners` se creó en 12->13 con el teléfono concatenado; aquí se agregan las
+/// columnas que lo dividen y el nombre del país para mostrarlo sin consultar
+/// el maestro. Se consulta `PRAGMA table_info` porque una base nueva ya nace
+/// con ambas columnas.
+final migration13To14 = Migration(13, 14, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+
+  if (!names.contains('countryCode')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryCode TEXT');
+  }
+  if (!names.contains('countryName')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryName TEXT');
+  }
+});

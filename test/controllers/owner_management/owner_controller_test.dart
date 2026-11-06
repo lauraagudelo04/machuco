@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 import 'package:machuco/service/owner/owner_service.dart';
@@ -46,6 +47,47 @@ void main() {
   });
 
   test(
+    'loadCountryCodes usa la semilla de desarrollo sin repositorio',
+    () async {
+      final controller = buildController();
+
+      await controller.loadCountryCodes();
+
+      expect(controller.isLoadingCountryCodes, isFalse);
+      expect(controller.countryCodesError, isNull);
+      expect(controller.hasCountryCodes, isTrue);
+      expect(controller.selectedCountryCode?.dialCode, '+57');
+    },
+  );
+
+  test('validatePhone respeta la longitud del país seleccionado', () async {
+    final controller = buildController();
+    await controller.loadCountryCodes();
+
+    // Colombia: 10 dígitos.
+    expect(controller.validatePhone(''), isNotNull);
+    expect(controller.validatePhone('3001234567'), isNull);
+    expect(controller.validatePhone('300123'), isNotNull);
+
+    // Un país con otra longitud, elegido a mano: 9 dígitos.
+    controller.selectCountryCode(
+      const CountryPhoneCode(
+        id: 99,
+        isoCode: 'ES',
+        countryName: 'España',
+        dialCode: '+34',
+        phoneMinLength: 9,
+        phoneMaxLength: 9,
+        sortOrder: 99,
+      ),
+    );
+
+    expect(controller.validatePhone('612345678'), isNull);
+    expect(controller.validatePhone('61234567'), isNotNull);
+    expect(controller.validatePhone('6123456789'), isNotNull);
+  });
+
+  test(
     'un propietario creado sobrevive al cierre de sesión (nueva instancia)',
     () async {
       final firstSession = buildController();
@@ -56,11 +98,14 @@ void main() {
         documentType: DocumentType.citizenshipCard,
         documentNumber: '79123456',
         email: 'camilo.torres@machuco.com',
-        phone: '+57 320 555 1234',
+        phone: '320 555 1234',
+        countryCode: '+57',
+        countryName: 'Colombia',
       );
 
       expect(created, isNotNull);
       expect(created!.isSynchronized, isFalse);
+      expect(created.phoneWithDialCode, '+57 320 555 1234');
 
       // Nueva instancia = sesión nueva: la memoria arranca vacía.
       final secondSession = buildController();
@@ -72,7 +117,8 @@ void main() {
         secondSession.owners.any(
           (owner) =>
               owner.documentNumber == '79123456' &&
-              owner.phone == '+57 320 555 1234',
+              owner.phone == '320 555 1234' &&
+              owner.countryCode == '+57',
         ),
         isTrue,
       );
@@ -123,18 +169,22 @@ void main() {
 
     final updated = await controller.updateOwnerPhone(
       laura.id,
-      '+57 311 999 8888',
+      '311 999 8888',
+      countryCode: '+57',
+      countryName: 'Colombia',
     );
 
     expect(updated, isNotNull);
-    expect(updated!.phone, '+57 311 999 8888');
+    expect(updated!.phone, '311 999 8888');
+    expect(updated.phoneWithDialCode, '+57 311 999 8888');
 
     final reloaded = buildController();
     await reloaded.init();
-    expect(
-      reloaded.owners.firstWhere((owner) => owner.id == laura.id).phone,
-      '+57 311 999 8888',
+    final persisted = reloaded.owners.firstWhere(
+      (owner) => owner.id == laura.id,
     );
+    expect(persisted.phone, '311 999 8888');
+    expect(persisted.countryCode, '+57');
   });
 
   test('setActiveState alterna el estado y persiste', () async {

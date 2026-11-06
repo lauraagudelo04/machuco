@@ -29,7 +29,7 @@ class OwnerSummary extends StatelessWidget {
             value: owner.documentLabel,
           ),
           _SummaryRow(label: 'Correo electrónico', value: owner.email),
-          _SummaryRow(label: 'Teléfono', value: owner.phone),
+          _SummaryRow(label: 'Teléfono', value: owner.phoneWithDialCode),
           _SummaryRow(label: 'Dirección', value: owner.address),
           Padding(
             padding: const EdgeInsets.only(top: AppSpacing.s3),

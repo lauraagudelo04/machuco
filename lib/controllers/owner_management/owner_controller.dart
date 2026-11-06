@@ -1,6 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
@@ -10,7 +12,6 @@ const _minimumFullNameLength = 3;
 
 final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
 final _phonePattern = RegExp(r'^\+?\d{7,15}$');
-final _phoneSeparatorsPattern = RegExp(r'[\s\-()]');
 
 // Se comparan las cadenas sin tildes para que "gomez" encuentre a "Gómez".
 const _accentedCharacters = 'áàäâãéèëêíìïîóòöôõúùüûñç';
@@ -33,14 +34,23 @@ String _normalize(String value) {
 /// vía Floor). Cada operación de escritura recarga el listado desde la base
 /// para que la interfaz refleje exactamente lo que quedó guardado.
 class OwnerController extends ChangeNotifier {
-  OwnerController({OwnerService? service})
-    : _service = service ?? OwnerService();
+  OwnerController({
+    OwnerService? service,
+    AuthCatalogRepository? catalogRepository,
+  }) : _service = service ?? OwnerService(),
+       _catalogRepository = catalogRepository;
 
   /// Instancia compartida por las pantallas del módulo (listado, formulario y
   /// moteles del propietario) para que todas vean el mismo estado.
-  static final OwnerController instance = OwnerController();
+  static final OwnerController instance = OwnerController(
+    catalogRepository: AuthCatalogRepository.fromEnvironment(),
+  );
 
   final OwnerService _service;
+
+  /// Maestro de indicativos. Si es `null` se usa la semilla de desarrollo
+  /// (Colombia) para que el formulario funcione sin Supabase ni caché.
+  final AuthCatalogRepository? _catalogRepository;
 
   final List<Owner> _owners = [];
   String _searchQuery = '';
@@ -49,6 +59,11 @@ class OwnerController extends ChangeNotifier {
   String? _lastError;
   Future<void>? _load;
   bool _seededOnce = false;
+
+  List<CountryPhoneCode> _countryPhoneCodes = const [];
+  CountryPhoneCode? _selectedCountryCode;
+  bool _isLoadingCountryCodes = false;
+  String? _countryCodesError;
 
   /// Propietarios cargados desde la base. Solo lectura: para modificarlos se
   /// usan las acciones del controlador.
@@ -86,6 +101,19 @@ class OwnerController extends ChangeNotifier {
 
   bool get hasActiveFilters =>
       _searchQuery.trim().isNotEmpty || _statusFilter != OwnerStatusFilter.all;
+
+  /// Indicativos disponibles para el selector del formulario.
+  List<CountryPhoneCode> get countryCodes =>
+      List.unmodifiable(_countryPhoneCodes);
+
+  CountryPhoneCode? get selectedCountryCode => _selectedCountryCode;
+
+  bool get isLoadingCountryCodes => _isLoadingCountryCodes;
+
+  /// Error al traer el maestro de indicativos, o `null` si cargó bien.
+  String? get countryCodesError => _countryCodesError;
+
+  bool get hasCountryCodes => _countryPhoneCodes.isNotEmpty;
 
   /// Carga los propietarios guardados. La primera vez siembra los datos demo.
   ///
@@ -135,6 +163,59 @@ class OwnerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Carga el maestro de indicativos (caché SQLite primero, Supabase después).
+  ///
+  /// Sin repositorio inyectado usa la semilla de desarrollo, igual que el
+  /// login, para que el formulario siga siendo usable sin conexión.
+  Future<void> loadCountryCodes({bool forceRefresh = false}) async {
+    if (_isLoadingCountryCodes) return;
+    _isLoadingCountryCodes = true;
+    _countryCodesError = null;
+    notifyListeners();
+    try {
+      final repository = _catalogRepository;
+      _countryPhoneCodes = repository == null
+          ? const [developmentCountryPhoneCodeSeed]
+          : await repository.getCountryPhoneCodes(forceRefresh: forceRefresh);
+      _selectedCountryCode = countryCodeForDialCode(
+        _selectedCountryCode?.dialCode,
+      );
+    } on AuthCatalogRepositoryException {
+      _countryPhoneCodes = const [];
+      _countryCodesError =
+          'No pudimos cargar los indicativos. Revisa tu conexión.';
+    } finally {
+      _isLoadingCountryCodes = false;
+      notifyListeners();
+    }
+  }
+
+  /// Elige el indicativo que se usará al guardar el teléfono.
+  void selectCountryCode(CountryPhoneCode code) {
+    if (_selectedCountryCode?.id == code.id &&
+        _selectedCountryCode?.dialCode == code.dialCode) {
+      return;
+    }
+    _selectedCountryCode = code;
+    notifyListeners();
+  }
+
+  /// Busca en el maestro el indicativo que corresponde a [dialCode].
+  ///
+  /// Si no lo encuentra (o el maestro está vacío) devuelve el predeterminado
+  /// —Colombia cuando existe— para que el formulario siempre tenga uno.
+  CountryPhoneCode? countryCodeForDialCode(String? dialCode) {
+    if (dialCode != null && dialCode.trim().isNotEmpty) {
+      for (final code in _countryPhoneCodes) {
+        if (code.dialCode == dialCode) return code;
+      }
+    }
+    for (final code in _countryPhoneCodes) {
+      if (code.isoCode == 'CO') return code;
+    }
+    return _countryPhoneCodes.isEmpty ? null : _countryPhoneCodes.first;
+  }
+
   /// Registra un propietario y devuelve el resultado ya persistido.
   ///
   /// Devuelve `null` si la validación de negocio falla; el motivo queda en
@@ -145,6 +226,8 @@ class OwnerController extends ChangeNotifier {
     required String documentNumber,
     required String email,
     required String phone,
+    String? countryCode,
+    String? countryName,
     String? address,
     bool isActive = true,
   }) => _runAction(
@@ -154,14 +237,27 @@ class OwnerController extends ChangeNotifier {
       documentNumber: documentNumber,
       email: email,
       phone: phone,
+      countryCode: countryCode,
+      countryName: countryName,
       address: address,
       isActive: isActive,
     ),
   );
 
   /// Actualiza el teléfono de un propietario existente y devuelve cómo quedó.
-  Future<Owner?> updateOwnerPhone(String ownerId, String phone) =>
-      _runAction(() => _service.actualizarTelefono(ownerId, phone));
+  Future<Owner?> updateOwnerPhone(
+    String ownerId,
+    String phone, {
+    String? countryCode,
+    String? countryName,
+  }) => _runAction(
+    () => _service.actualizarTelefono(
+      ownerId,
+      phone,
+      countryCode: countryCode,
+      countryName: countryName,
+    ),
+  );
 
   /// Activa o inactiva a un propietario y devuelve cómo quedó.
   ///
@@ -262,11 +358,28 @@ class OwnerController extends ChangeNotifier {
     return null;
   }
 
-  static String? validatePhone(String value) {
-    if (value.trim().isEmpty) return 'Ingresa el teléfono.';
-    final phone = value.replaceAll(_phoneSeparatorsPattern, '');
-    if (!_phonePattern.hasMatch(phone)) {
-      return 'Ingresa un teléfono válido, por ejemplo +57 300 123 4567.';
+  /// Valida el número nacional con la longitud del país seleccionado.
+  ///
+  /// Si el maestro aún no cargó, cae a la validación genérica para no bloquear
+  /// el formulario por un problema de red.
+  String? validatePhone(String? value) {
+    final digits = value?.replaceAll(RegExp(r'\D'), '') ?? '';
+    if (digits.isEmpty) return 'Ingresa el teléfono.';
+
+    final code = _selectedCountryCode;
+    if (code == null) {
+      if (!_phonePattern.hasMatch('+$digits')) {
+        return 'Ingresa un teléfono válido, por ejemplo 300 123 4567.';
+      }
+      return null;
+    }
+
+    if (digits.length < code.phoneMinLength ||
+        digits.length > code.phoneMaxLength) {
+      final range = code.phoneMinLength == code.phoneMaxLength
+          ? '${code.phoneMinLength}'
+          : '${code.phoneMinLength} a ${code.phoneMaxLength}';
+      return 'Ingresa un número de $range dígitos para ${code.countryName}.';
     }
     return null;
   }

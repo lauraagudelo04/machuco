@@ -15,7 +15,9 @@ List<Owner> buildSeedOwners() => const [
     documentType: DocumentType.citizenshipCard,
     documentNumber: '1020304050',
     email: 'laura.gomez@machuco.com',
-    phone: '+57 300 123 4567',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    phone: '300 123 4567',
     address: 'Calle 10 # 43-25, Medellín',
   ),
   Owner(
@@ -24,7 +26,9 @@ List<Owner> buildSeedOwners() => const [
     documentType: DocumentType.taxId,
     documentNumber: '900123456-7',
     email: 'contacto@inversionesmachuco.com',
-    phone: '+57 604 444 5566',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    phone: '604 444 5566',
     address: 'Carrera 50 # 12-80, Rionegro',
   ),
   Owner(
@@ -33,7 +37,9 @@ List<Owner> buildSeedOwners() => const [
     documentType: DocumentType.foreignerCard,
     documentNumber: '345678',
     email: 'simon.restrepo@machuco.com',
-    phone: '+57 311 987 6543',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    phone: '311 987 6543',
     isActive: false,
   ),
 ];
@@ -69,12 +75,17 @@ class OwnerService {
   }
 
   /// Registra un propietario validando correo y duplicados.
+  ///
+  /// [countryCode] y [countryName] viajan aparte de [phone] para que la nube y
+  /// los filtros trabajen con el indicativo sin partir un texto concatenado.
   Future<Owner> crearPropietario({
     required String fullName,
     required DocumentType documentType,
     required String documentNumber,
     required String email,
     required String phone,
+    String? countryCode,
+    String? countryName,
     String? address,
     bool isActive = true,
   }) async {
@@ -100,6 +111,8 @@ class OwnerService {
       documentNumber: documentNumber,
       email: email,
       phone: phone,
+      countryCode: countryCode,
+      countryName: countryName,
       address: address,
       isActive: isActive,
     );
@@ -109,12 +122,24 @@ class OwnerService {
   }
 
   /// Actualiza el teléfono de un propietario existente.
-  Future<Owner> actualizarTelefono(String ownerId, String nuevoTelefono) async {
+  ///
+  /// Si se entrega [countryCode], se actualiza también el indicativo y el
+  /// nombre del país; si se omite, se conserva el que ya estaba guardado.
+  Future<Owner> actualizarTelefono(
+    String ownerId,
+    String nuevoTelefono, {
+    String? countryCode,
+    String? countryName,
+  }) async {
     final owner = await _repository.findById(ownerId);
     if (owner == null) {
       throw StateError('El propietario ya no existe.');
     }
-    final updated = owner.copyWith(phone: nuevoTelefono);
+    final updated = owner.copyWith(
+      phone: nuevoTelefono,
+      countryCode: countryCode,
+      countryName: countryName,
+    );
     await _repository.update(updated);
     return updated;
   }
