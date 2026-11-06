@@ -34,7 +34,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 12,
+  version: 13,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -45,6 +45,7 @@ part 'app_database.g.dart';
     ClientEntry,
     PhoneCountryCode,
     MotelEntity,
+    OwnerEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -92,6 +93,7 @@ class AppDatabaseProvider {
         migration9To10,
         migration10To11,
         migration11To12,
+        migration12To13,
       ])
       .addCallback(
         Callback(
@@ -376,10 +378,38 @@ final migration10To11 = Migration(10, 11, (database) async {
 
 final migration11To12 = Migration(11, 12, (database) async {
   final columns = await database.rawQuery("PRAGMA table_info(clients)");
-  final hasPasswordColumn =
-      columns.any((column) => column['name'] == 'password');
+  final hasPasswordColumn = columns.any(
+    (column) => column['name'] == 'password',
+  );
 
   if (hasPasswordColumn) {
     await database.execute('ALTER TABLE clients DROP COLUMN password');
   }
 });
+
+/// Agrega la tabla de propietarios del módulo de administración de dueños.
+///
+/// La rama de propietarios publicó esto como 9->10, pero develop reclamó esa
+/// versión para `motels`; por eso viaja como 12->13 y usa `IF NOT EXISTS` para
+/// ser segura sobre bases que ya la tuvieran.
+final migration12To13 = Migration(12, 13, (database) async {
+  await _createOwnerSchema(database);
+});
+
+Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT NOT NULL PRIMARY KEY,
+      fullName TEXT NOT NULL,
+      documentType TEXT NOT NULL,
+      documentNumber TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT,
+      isActive INTEGER NOT NULL,
+      synchronized INTEGER NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  ''');
+}
