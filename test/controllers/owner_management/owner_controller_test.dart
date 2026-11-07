@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
@@ -8,7 +11,9 @@ import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
+import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -20,10 +25,12 @@ void main() {
   ///
   /// Varios controladores sobre la misma base simulan cierres y aperturas de
   /// sesión: lo que persiste es la base, no el estado en memoria.
-  OwnerController buildController() => OwnerController(
-    service: OwnerService(repository: OwnerRepository(database: database)),
-    documentTypeRepository: DocumentTypeRepository(database: database),
-  );
+  OwnerController buildController({OwnerPreferences? preferences}) =>
+      OwnerController(
+        service: OwnerService(repository: OwnerRepository(database: database)),
+        documentTypeRepository: DocumentTypeRepository(database: database),
+        preferences: preferences,
+      );
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('machuco_owner_ctl_');
@@ -76,6 +83,56 @@ void main() {
       'PAS',
       'TI',
     ]);
+  });
+
+  test(
+    'loadDocumentTypes(forceRefresh) actualiza el maestro desde Supabase',
+    () async {
+      const body = '''
+[
+  {"id":2,"code":"CE","name":"Cédula de extranjería",
+   "pattern":"^\\\\d{6,12}\$","example":"345678","is_active":true,"sort_order":2}
+]
+''';
+      final client = MockClient(
+        (_) async => http.Response.bytes(utf8.encode(body), 200),
+      );
+      final controller = OwnerController(
+        service: OwnerService(repository: OwnerRepository(database: database)),
+        documentTypeRepository: DocumentTypeRepository(
+          database: database,
+          httpClient: client,
+          supabaseUrl: 'https://example.supabase.co',
+          apiKey: 'public-key',
+        ),
+      );
+
+      await controller.loadDocumentTypes(forceRefresh: true);
+
+      expect(controller.documentTypes, [DocumentType.foreignerCard]);
+      expect(controller.documentTypesError, isNull);
+    },
+  );
+
+  test('lastUsedCountryCode retoma el indicativo guardado', () async {
+    SharedPreferences.setMockInitialValues({});
+    final controller = buildController(preferences: OwnerPreferences());
+    await controller.loadCountryCodes();
+
+    expect(await controller.lastUsedCountryCode(), isNull);
+
+    await controller.saveLastCountryCode(0);
+
+    expect((await controller.lastUsedCountryCode())?.dialCode, '+57');
+  });
+
+  test('sin preferencias guardar el indicativo no falla', () async {
+    final controller = buildController();
+    await controller.loadCountryCodes();
+
+    expect(await controller.lastUsedCountryCode(), isNull);
+    await controller.saveLastCountryCode(0);
+    expect(await controller.lastUsedCountryCode(), isNull);
   });
 
   test('validatePhone respeta la longitud del país seleccionado', () async {

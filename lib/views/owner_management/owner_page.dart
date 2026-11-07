@@ -13,6 +13,7 @@ import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
@@ -43,10 +44,25 @@ class _OwnerPageState extends State<OwnerPage> {
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
 
+  /// Correo de la sesión administrativa, leído de `shared_preferences`.
+  /// Es solo informativo: la autorización la valida el backend.
+  String? _adminEmail;
+
   @override
   void initState() {
     super.initState();
     _controller.init();
+    _loadAdminEmail();
+  }
+
+  Future<void> _loadAdminEmail() async {
+    try {
+      final email = await AuthPreferences().loadCurrentUserEmail();
+      if (!mounted || email == null) return;
+      setState(() => _adminEmail = email);
+    } catch (_) {
+      // Sin preferencias disponibles se omite el subtítulo; no es crítico.
+    }
   }
 
   @override
@@ -214,7 +230,18 @@ class _OwnerPageState extends State<OwnerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Propietarios'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Propietarios'),
+            if (_adminEmail != null)
+              Text(
+                'Sesión: $_adminEmail',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+          ],
+        ),
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s2),

@@ -852,13 +852,27 @@ class _$DocumentTypeDao extends DocumentTypeDao {
   _$DocumentTypeDao(
     this.database,
     this.changeListener,
-  ) : _queryAdapter = QueryAdapter(database);
+  )   : _queryAdapter = QueryAdapter(database),
+        _documentTypeEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'document_types',
+            (DocumentTypeEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'code': item.code,
+                  'name': item.name,
+                  'pattern': item.pattern,
+                  'example': item.example,
+                  'isActive': item.isActive,
+                  'sortOrder': item.sortOrder
+                });
 
   final sqflite.DatabaseExecutor database;
 
   final StreamController<String> changeListener;
 
   final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<DocumentTypeEntry> _documentTypeEntryInsertionAdapter;
 
   @override
   Future<List<DocumentTypeEntry>> findActive() async {
@@ -886,6 +900,17 @@ class _$DocumentTypeDao extends DocumentTypeDao {
             example: row['example'] as String,
             isActive: row['isActive'] as int,
             sortOrder: row['sortOrder'] as int));
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM document_types');
+  }
+
+  @override
+  Future<void> insertDocumentTypes(List<DocumentTypeEntry> types) async {
+    await _documentTypeEntryInsertionAdapter.insertList(
+        types, OnConflictStrategy.replace);
   }
 }
 

@@ -90,7 +90,9 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
     _isActive = initialData?.isActive ?? true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _loadCatalogs(forceRefresh: true),
+    );
   }
 
   @override
@@ -124,7 +126,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   /// Carga los maestros que alimentan el formulario (tipos de documento e
   /// indicativos) y alinea la selección con los datos existentes.
   Future<void> _loadCatalogs({bool forceRefresh = false}) async {
-    await widget.controller.loadDocumentTypes();
+    await widget.controller.loadDocumentTypes(forceRefresh: forceRefresh);
     if (!mounted) return;
 
     final types = widget.controller.documentTypes;
@@ -162,6 +164,12 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
           phone = raw.substring(match.dialCode.length).trim();
         }
       }
+    }
+
+    // Al crear, retoma el indicativo usado la última vez en este dispositivo.
+    if (initialData == null) {
+      final lastUsed = await controller.lastUsedCountryCode();
+      if (lastUsed != null) code = lastUsed;
     }
 
     if (code != null) controller.selectCountryCode(code);
@@ -258,6 +266,11 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         ),
       );
       return;
+    }
+
+    // Recuerda el indicativo para la próxima creación en este dispositivo.
+    if (selectedCountryCode != null) {
+      await widget.controller.saveLastCountryCode(selectedCountryCode.id);
     }
 
     if (initialData != null) {

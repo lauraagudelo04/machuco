@@ -7,6 +7,7 @@ import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
+import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
 
 const _minimumFullNameLength = 3;
@@ -39,18 +40,25 @@ class OwnerController extends ChangeNotifier {
     OwnerService? service,
     AuthCatalogRepository? catalogRepository,
     DocumentTypeRepository? documentTypeRepository,
+    OwnerPreferences? preferences,
   }) : _service = service ?? OwnerService(),
        _catalogRepository = catalogRepository,
        _documentTypeRepository =
-           documentTypeRepository ?? DocumentTypeRepository();
+           documentTypeRepository ?? DocumentTypeRepository(),
+       _preferences = preferences;
 
   /// Instancia compartida por las pantallas del módulo (listado, formulario y
   /// moteles del propietario) para que todas vean el mismo estado.
   static final OwnerController instance = OwnerController(
     catalogRepository: AuthCatalogRepository.fromEnvironment(),
+    preferences: OwnerPreferences(),
   );
 
   final OwnerService _service;
+
+  /// Preferencias locales del módulo. Es opcional para que los tests de
+  /// persistencia no dependan de `shared_preferences`.
+  final OwnerPreferences? _preferences;
 
   /// Maestro de indicativos. Si es `null` se usa la semilla de desarrollo
   /// (Colombia) para que el formulario funcione sin Supabase ni caché.
@@ -236,20 +244,57 @@ class OwnerController extends ChangeNotifier {
     return _countryPhoneCodes.isEmpty ? null : _countryPhoneCodes.first;
   }
 
-  /// Carga los tipos de documento activos desde el maestro local.
+  /// Indicativo elegido la última vez en este dispositivo.
   ///
-  /// Si la consulta falla se conservan los valores del enum como respaldo.
-  Future<void> loadDocumentTypes() async {
+  /// Devuelve `null` si no hay preferencia guardada, si el maestro todavía no
+  /// cargó o si el id guardado ya no existe en el catálogo. Cualquier fallo de
+  /// `shared_preferences` se trata como ausencia de preferencia: la
+  /// preselección es una comodidad, no un requisito para guardar.
+  Future<CountryPhoneCode?> lastUsedCountryCode() async {
+    final id = await _loadLastCountryCodeId();
+    if (id == null) return null;
+    for (final code in _countryPhoneCodes) {
+      if (code.id == id) return code;
+    }
+    return null;
+  }
+
+  /// Recuerda el indicativo elegido para preseleccionarlo la próxima vez.
+  Future<void> saveLastCountryCode(int id) async {
+    try {
+      await _preferences?.saveLastCountryCodeId(id);
+    } catch (_) {
+      // La preferencia es opcional: si falla, el formulario sigue funcionando.
+    }
+  }
+
+  Future<int?> _loadLastCountryCodeId() async {
+    try {
+      return await _preferences?.loadLastCountryCodeId();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Carga los tipos de documento activos.
+  ///
+  /// Con [forceRefresh] consulta Supabase y actualiza la caché local; sin él
+  /// responde con la tabla `document_types` de SQLite. Si todo falla se
+  /// conservan los valores del enum como respaldo.
+  Future<void> loadDocumentTypes({bool forceRefresh = false}) async {
     if (_isLoadingDocumentTypes) return;
     _isLoadingDocumentTypes = true;
     _documentTypesError = null;
     notifyListeners();
     try {
-      final loaded = await _documentTypeRepository.findActive();
+      final loaded = await _documentTypeRepository.getActiveDocumentTypes(
+        forceRefresh: forceRefresh,
+      );
       if (loaded.isNotEmpty) _documentTypes = loaded;
-    } catch (_) {
+    } on DocumentTypeRepositoryException {
       _documentTypesError =
-          'No pudimos cargar los tipos de documento. Usamos los del sistema.';
+          'No pudimos cargar los tipos de documento desde Supabase. '
+          'Usamos los del sistema.';
     } finally {
       _isLoadingDocumentTypes = false;
       notifyListeners();

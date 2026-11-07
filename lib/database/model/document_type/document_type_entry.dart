@@ -35,4 +35,29 @@ class DocumentTypeEntry {
   /// 1 = disponible, 0 = retirado (no se ofrece en formularios nuevos).
   final int isActive;
   final int sortOrder;
+
+  /// Traduce una fila del maestro publicado en Supabase.
+  factory DocumentTypeEntry.fromJson(Map<String, dynamic> json) {
+    return DocumentTypeEntry(
+      id: json['id'] as int,
+      code: json['code'] as String,
+      name: json['name'] as String,
+      pattern: json['pattern'] as String,
+      example: json['example'] as String,
+      isActive: json['is_active'] == true ? 1 : 0,
+      sortOrder: json['sort_order'] as int? ?? 0,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'code': code,
+      'name': name,
+      'pattern': pattern,
+      'example': example,
+      'is_active': isActive == 1,
+      'sort_order': sortOrder,
+    };
+  }
 }
