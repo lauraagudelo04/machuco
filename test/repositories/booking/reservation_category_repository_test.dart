@@ -9,6 +9,7 @@ class _FakeDao implements ReservationCategoryDao {
 
   final List<ReservationCategory> rows;
   int insertAllCalls = 0;
+  int upsertAllCalls = 0;
   bool failInsert = false;
 
   @override
@@ -28,6 +29,16 @@ class _FakeDao implements ReservationCategoryDao {
     insertAllCalls++;
     if (failInsert) throw StateError('seed failed');
     rows.addAll(categories);
+  }
+
+  @override
+  Future<void> upsertAll(List<ReservationCategory> categories) async {
+    upsertAllCalls++;
+    for (final category in categories) {
+      rows
+        ..removeWhere((row) => row.id == category.id)
+        ..add(category);
+    }
   }
 
   @override
@@ -103,6 +114,80 @@ void main() {
 
       expect((await repository.getCategoryById(3))?.name, 'Suite');
       expect(await repository.getCategoryById(999), isNull);
+    });
+  
+    group('with the Supabase master', () {
+      test('refreshes the cache with the remote categories', () async {
+        final dao = _FakeDao(const [ReservationCategory(id: 3, name: 'Old')]);
+        final repository = FloorReservationCategoryRepository(
+          dao,
+          fetchRemote: () async => const [
+            ReservationCategory(id: 3, name: 'Suite'),
+            ReservationCategory(id: 6, name: 'Presidencial'),
+          ],
+        );
+
+        final categories = await repository.getCategories();
+
+        expect(categories.map((c) => c.name), ['Presidencial', 'Suite']);
+        expect(dao.insertAllCalls, 0);
+      });
+
+      test('syncs only once across repeated reads', () async {
+        var fetches = 0;
+        final dao = _FakeDao();
+        final repository = FloorReservationCategoryRepository(
+          dao,
+          fetchRemote: () async {
+            fetches++;
+            return const [ReservationCategory(id: 1, name: 'Sencilla')];
+          },
+        );
+
+        await repository.getCategories();
+        await repository.getCategoryById(1);
+
+        expect(fetches, 1);
+        expect(dao.upsertAllCalls, 1);
+      });
+
+      test('seeds the fallback when offline and the cache is empty', () async {
+        final dao = _FakeDao();
+        final repository = FloorReservationCategoryRepository(
+          dao,
+          fetchRemote: () async => throw StateError('offline'),
+        );
+
+        final categories = await repository.getCategories();
+
+        expect(categories.length, defaultReservationCategories.length);
+        expect(dao.upsertAllCalls, 0);
+      });
+
+      test('keeps the cache when offline', () async {
+        final dao = _FakeDao(const [ReservationCategory(id: 9, name: 'Custom')]);
+        final repository = FloorReservationCategoryRepository(
+          dao,
+          fetchRemote: () async => throw StateError('offline'),
+        );
+
+        final categories = await repository.getCategories();
+
+        expect(categories.map((c) => c.name), ['Custom']);
+        expect(dao.insertAllCalls, 0);
+      });
+
+      test('an empty master seeds the fallback', () async {
+        final dao = _FakeDao();
+        final repository = FloorReservationCategoryRepository(
+          dao,
+          fetchRemote: () async => const [],
+        );
+
+        final categories = await repository.getCategories();
+
+        expect(categories.length, defaultReservationCategories.length);
+      });
     });
   });
 }

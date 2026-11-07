@@ -12,6 +12,10 @@ abstract class ReservationCategoryDao {
   @Insert(onConflict: OnConflictStrategy.ignore)
   Future<void> insertAll(List<ReservationCategory> categories);
 
+  /// Refreshes the cache with the Supabase master (renamed rows included).
+  @Insert(onConflict: OnConflictStrategy.replace)
+  Future<void> upsertAll(List<ReservationCategory> categories);
+
   @Insert(onConflict: OnConflictStrategy.ignore)
   Future<void> insertCategory(ReservationCategory category);
 }

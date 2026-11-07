@@ -1012,6 +1012,12 @@ class _$ReservationCategoryDao extends ReservationCategoryDao {
   }
 
   @override
+  Future<void> upsertAll(List<ReservationCategory> categories) async {
+    await _reservationCategoryInsertionAdapter.insertList(
+        categories, OnConflictStrategy.replace);
+  }
+
+  @override
   Future<void> insertCategory(ReservationCategory category) async {
     await _reservationCategoryInsertionAdapter.insert(
         category, OnConflictStrategy.ignore);

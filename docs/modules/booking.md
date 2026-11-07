@@ -125,7 +125,12 @@ modo que las transiciones se prueban de forma determinista:
 
 ## Categorías y filtros
 
-El catálogo `reservation_categories` se carga desde SQLite. El cliente debe
+El catálogo `reservation_categories` es un dato maestro en Supabase
+(`supabase/migrations/202611070001_create_reservation_categories.sql`, solo
+lectura pública). `FloorReservationCategoryRepository` lo lee por REST
+(`SupabaseReservationCategorySource`) la primera vez que se usa y actualiza la
+caché SQLite; sin conexión, o si la tabla remota está vacía, usa la caché y,
+si también está vacía, siembra `defaultReservationCategories`. El cliente debe
 elegir una categoría antes de reservar y la reserva guarda su `categoryId`
 (nulo en reservas anteriores al catálogo). Propietario y administrador
 filtran por categoría; si el catálogo no carga, el filtro se omite sin
@@ -161,7 +166,8 @@ repositorio por defecto a `LazyBookingRepository` -> `FloorBookingRepository`.
 El modelo de dominio `Reservation` no tiene anotaciones de Floor.
 
 - Tablas (base común `machuco.db` de `AppDatabaseProvider`, versión 13):
-  - `reservation_categories`: catálogo de categorías (desde la versión 1).
+  - `reservation_categories`: caché local del maestro de categorías de
+    Supabase.
   - `reservations`: una fila por reserva (`ReservationEntity`). Fechas como
     epoch en milisegundos, enums como su `name`. Indices en `requestId` y
     `motelId`.
