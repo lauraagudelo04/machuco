@@ -16,6 +16,14 @@ class RoomTypeData {
         motelId: motelId ?? this.motelId,
         name: name ?? this.name,
       );
+
+  factory RoomTypeData.fromJson(Map<String, dynamic> json) => RoomTypeData(
+    id: json['id'] as String,
+    motelId: json['motelId'] as String,
+    name: json['name'] as String,
+  );
+
+  Map<String, dynamic> toJson() => {'id': id, 'motelId': motelId, 'name': name};
 }
 
 enum RoomPageRole { admin, owner, client }
@@ -76,4 +84,32 @@ class RoomVisualData {
     isActive: isActive ?? this.isActive,
     includedServices: includedServices ?? this.includedServices,
   );
+
+  factory RoomVisualData.fromJson(Map<String, dynamic> json) => RoomVisualData(
+    id: json['id'] as String,
+    motelId: json['motelId'] as String,
+    name: json['name'] as String,
+    description: json['description'] as String,
+    idType: json['idType'] as String,
+    pricePerHour: json['pricePerHour'] as int,
+    roomNumber: json['roomNumber'] as String,
+    capacity: json['capacity'] as int,
+    imageUrls: List<String>.from(json['imageUrls'] as List),
+    isActive: json['isActive'] as bool,
+    includedServices: List<String>.from(json['includedServices'] as List),
+  );
+
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'motelId': motelId,
+    'name': name,
+    'description': description,
+    'idType': idType,
+    'pricePerHour': pricePerHour,
+    'roomNumber': roomNumber,
+    'capacity': capacity,
+    'imageUrls': imageUrls,
+    'isActive': isActive,
+    'includedServices': includedServices,
+  };
 }

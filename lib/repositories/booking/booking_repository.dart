@@ -162,7 +162,7 @@ class LazyBookingRepository implements BookingRepository {
   Future<BookingRepository>? _delegate;
 
   Future<BookingRepository> _resolve() {
-    return _delegate ??= AppDatabase.instance().then(
+    return _delegate ??= AppDatabaseProvider.database.then(
       (db) => FloorBookingRepository(db.reservationDao),
     );
   }

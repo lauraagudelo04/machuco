@@ -7,7 +7,7 @@ import 'package:machuco/models/auth/registered_user.dart';
 /// noted as pending in README.md#estado-y-decisiones-pendientes: today it
 /// is satisfied either by [InMemoryRegisteredUserDirectory] (seed/demo
 /// data) or by `BackendRegisteredUserDirectory` (a real HTTP users API),
-/// selected via [Auth0Config.useBackendUsers].
+/// selected via [AuthConfig.useBackendUsers].
 abstract interface class RegisteredUserDirectory {
   Future<List<RegisteredUser>> listUsers({String? accessToken});
 

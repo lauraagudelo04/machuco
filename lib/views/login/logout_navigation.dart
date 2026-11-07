@@ -1,15 +1,14 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/service/auth/auth0_auth_service.dart';
+import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/firebase_auth_service.dart';
 import 'package:machuco/views/login/login_page.dart';
 
 Future<void> logoutAndGoToLogin(
   BuildContext context, {
   AuthService? authService,
 }) async {
-  final service = authService ?? Auth0AuthService.fromEnvironment();
-  if (service != null) {
-    await service.logout();
-  }
+  final service = authService ?? FirebaseAuthService();
+  await service.logout();
   if (!context.mounted) {
     return;
   }

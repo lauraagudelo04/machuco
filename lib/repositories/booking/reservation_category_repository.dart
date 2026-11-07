@@ -64,7 +64,7 @@ class LazyReservationCategoryRepository
   Future<ReservationCategoryRepository>? _delegate;
 
   Future<ReservationCategoryRepository> _resolve() {
-    return _delegate ??= AppDatabase.instance().then(
+    return _delegate ??= AppDatabaseProvider.database.then(
       (db) => FloorReservationCategoryRepository(db.reservationCategoryDao),
     );
   }

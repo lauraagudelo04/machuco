@@ -13,6 +13,9 @@ class RoomOwnerController {
   final List<RoomVisualData> _rooms;
   final List<RoomTypeData> _types;
 
+  List<RoomVisualData> get allRooms => List.unmodifiable(_rooms);
+  List<RoomTypeData> get allTypes => List.unmodifiable(_types);
+
   List<RoomTypeData> get roomTypes =>
       _types.where((type) => type.motelId == motelId).toList()
         ..sort((a, b) => a.name.compareTo(b.name));

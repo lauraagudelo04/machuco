@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/subscription/owner_subscription_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/suscripcion/subscription_firestore_repository.dart';
 import 'package:machuco/widgets/subscription/add_payment_sheet.dart';
 import 'package:machuco/widgets/subscription/subscription_detail_card.dart';
 import 'package:machuco/widgets/subscription/subscription_payment_card.dart';
@@ -13,7 +14,9 @@ class OwnerSubscriptionPage extends StatefulWidget {
 }
 
 class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
-  final OwnerSubscriptionController _controller = OwnerSubscriptionController();
+  late final OwnerSubscriptionController _controller = OwnerSubscriptionController(
+    firestoreRepository: SubscriptionFirestoreRepository(),
+  );
 
   @override
   void dispose() {
@@ -22,19 +25,22 @@ class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
   }
 
   void _openAddPaymentModal() {
+    final subscription = _controller.subscription;
+    if (subscription == null || _controller.isLoading) return;
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => AddPaymentSheet(
-        defaultAmount: _controller.subscription.amount,
+        defaultAmount: subscription.amount,
+        loadPaymentMethods: _controller.loadPaymentMethods,
         onSave:
             ({
               required int amount,
               required String paymentMethod,
               required String reference,
-            }) {
-              _controller.addPayment(
+            }) async {
+              await _controller.addPayment(
                 amount: amount,
                 paymentMethod: paymentMethod,
                 reference: reference,
@@ -67,6 +73,62 @@ class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
     final semantic = context.appColors;
     final subscription = _controller.subscription;
     final payments = _controller.payments;
+
+    if (_controller.isLoading) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Suscripción')),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (_controller.errorMessage != null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Suscripción')),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.screen),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _controller.errorMessage ??
+                      'No hay una suscripción registrada.',
+                ),
+                const SizedBox(height: AppSpacing.s4),
+                AppButton(
+                  label: 'Volver a cargar',
+                  onPressed: _controller.load,
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (subscription == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Suscripción')),
+        body: ListView(
+          padding: const EdgeInsets.all(AppSpacing.screen),
+          children: [
+            const Text('No hay una suscripción registrada.'),
+            const SizedBox(height: AppSpacing.s6),
+            Text('Planes disponibles', style: AppTextStyles.h2),
+            const SizedBox(height: AppSpacing.s3),
+            if (_controller.plans.isEmpty)
+              const Text('No hay planes disponibles.'),
+            ..._controller.plans.map(
+              (plan) => Padding(
+                padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                child: AppCard(
+                  child: Text(plan.name, style: AppTextStyles.bodyLarge),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(title: const Text('Suscripción'), centerTitle: false),

@@ -1,7 +1,30 @@
+// Floor 1.5 marca TypeConverter como experimental; la base común ya lo utiliza.
+// ignore_for_file: experimental_member_use
+
+import 'package:floor/floor.dart';
+import 'package:machuco/models/payment/payment_catalog_entry.dart';
+
 enum PaymentStatus { pending, paid, refunded, cancelled }
 
+/// Compatibilidad con los datos de demostración anteriores al maestro.
+/// Los nuevos pagos en el local utilizan [PaymentRecord.paymentMethodId].
 enum PaymentMethod { online, cash }
 
+@Entity(
+  tableName: 'payments',
+  foreignKeys: [
+    ForeignKey(
+      childColumns: ['paymentMethodId'],
+      parentColumns: ['id'],
+      entity: PaymentCatalogEntry,
+    ),
+  ],
+  indices: [
+    Index(value: ['clientId']),
+    Index(value: ['motelId']),
+    Index(value: ['paymentMethodId']),
+  ],
+)
 class PaymentRecord {
   const PaymentRecord({
     required this.id,
@@ -17,10 +40,12 @@ class PaymentRecord {
     required this.amount,
     required this.status,
     this.method,
+    this.paymentMethodId,
     this.paidAt,
     this.receiptNumber,
   });
 
+  @primaryKey
   final String id;
   final String bookingId;
   final String bookingReference;
@@ -34,12 +59,14 @@ class PaymentRecord {
   final int amount;
   final PaymentStatus status;
   final PaymentMethod? method;
+  final int? paymentMethodId;
   final DateTime? paidAt;
   final String? receiptNumber;
 
   PaymentRecord copyWith({
     PaymentStatus? status,
     PaymentMethod? method,
+    int? paymentMethodId,
     DateTime? paidAt,
     String? receiptNumber,
   }) => PaymentRecord(
@@ -56,9 +83,36 @@ class PaymentRecord {
     amount: amount,
     status: status ?? this.status,
     method: method ?? this.method,
+    paymentMethodId: paymentMethodId ?? this.paymentMethodId,
     paidAt: paidAt ?? this.paidAt,
     receiptNumber: receiptNumber ?? this.receiptNumber,
   );
+}
+
+class PaymentStatusConverter extends TypeConverter<PaymentStatus, String> {
+  @override
+  PaymentStatus decode(String value) => PaymentStatus.values.byName(value);
+
+  @override
+  String encode(PaymentStatus value) => value.name;
+}
+
+class PaymentMethodConverter extends TypeConverter<PaymentMethod?, String?> {
+  @override
+  PaymentMethod? decode(String? value) =>
+      value == null ? null : PaymentMethod.values.byName(value);
+
+  @override
+  String? encode(PaymentMethod? value) => value?.name;
+}
+
+class PaymentOptionalDateConverter extends TypeConverter<DateTime?, int?> {
+  @override
+  DateTime? decode(int? value) =>
+      value == null ? null : DateTime.fromMicrosecondsSinceEpoch(value);
+
+  @override
+  int? encode(DateTime? value) => value?.microsecondsSinceEpoch;
 }
 
 class FrequentClient {

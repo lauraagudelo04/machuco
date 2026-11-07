@@ -160,7 +160,7 @@ administrador.
 repositorio por defecto a `LazyBookingRepository` -> `FloorBookingRepository`.
 El modelo de dominio `Reservation` no tiene anotaciones de Floor.
 
-- Tablas (base `machuco.db`, version 2):
+- Tablas (base común `machuco.db` de `AppDatabaseProvider`, versión 13):
   - `reservation_categories`: catálogo de categorías (desde la versión 1).
   - `reservations`: una fila por reserva (`ReservationEntity`). Fechas como
     epoch en milisegundos, enums como su `name`. Indices en `requestId` y
@@ -173,7 +173,6 @@ El modelo de dominio `Reservation` no tiene anotaciones de Floor.
   reserva y reemplaza sus lineas dentro de una `@transaction`.
 - Siembra: si `reservations` esta vacia, el repositorio inserta una vez la
   semilla de `booking_seed_data.dart`.
-- Migracion v1 -> v2 (`AppDatabase.migration1to2`): crea ambas tablas e
-  indices para instalaciones que ya tenian la v1 (solo
-  `reservation_categories`). Debe mantenerse igual al SQL generado en
-  `app_database.g.dart`.
+- Migración 12 -> 13 (`migration12To13` en `app_database.dart`): crea las
+  tres tablas e índices de reservas en bases que ya tenían la versión 12 de
+  `develop`. Debe mantenerse igual al SQL generado en `app_database.g.dart`.

@@ -29,6 +29,7 @@ class _SystemAdminNotificationViewState
   @override
   void dispose() {
     _controller.removeListener(_onControllerChanged);
+    _controller.dispose();
     super.dispose();
   }
 
@@ -43,7 +44,7 @@ class _SystemAdminNotificationViewState
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => const CreateNotificationSheet(),
+      builder: (context) => CreateNotificationSheet(controller: _controller),
     );
   }
 

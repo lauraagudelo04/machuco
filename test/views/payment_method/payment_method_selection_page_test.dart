@@ -1,14 +1,52 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:machuco/controllers/payment_method/payment_method_checkout_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/payment/payment.dart';
+import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 
+/// Records card payments without touching SQLite or Firebase.
+class _FakeCheckout implements PaymentCheckoutController {
+  final registeredCardPayments = <String>[];
+
+  @override
+  Future<PaymentCheckoutResult> registerCardPayment(
+    Reservation reservation, {
+    required CardPaymentKind kind,
+  }) async {
+    registeredCardPayments.add(reservation.id);
+    return PaymentCheckoutResult(
+      payment: PaymentRecord(
+        id: 'pay-${reservation.id}',
+        bookingId: reservation.id,
+        bookingReference: reservation.requestId,
+        clientId: reservation.guestId,
+        client: reservation.guestName,
+        motelId: reservation.motelId,
+        motel: reservation.motelName,
+        roomId: reservation.roomId,
+        room: reservation.roomName,
+        reservationDate: reservation.checkIn,
+        amount: reservation.total,
+        status: PaymentStatus.paid,
+      ),
+    );
+  }
+
+  @override
+  Future<PaymentCheckoutResult> registerPendingLocalPayment(
+    Reservation reservation,
+  ) => throw UnimplementedError();
+}
+
 Future<void> _payWithCard(
   WidgetTester tester,
   Reservation reservation, {
+  required PaymentCheckoutController checkoutController,
   Future<bool> Function(String reservationId)? confirmReservationPayment,
 }) async {
   tester.view.physicalSize = const Size(800, 2400);
@@ -19,6 +57,7 @@ Future<void> _payWithCard(
       theme: AppTheme.light,
       home: PaymentMethodSelectionPage(
         reservation: reservation,
+        checkoutController: checkoutController,
         confirmReservationPayment: confirmReservationPayment,
       ),
       onGenerateRoute: (settings) => MaterialPageRoute<void>(
@@ -72,8 +111,11 @@ void main() {
       (r) => r.status == ReservationStatus.pending,
     );
 
-    await _payWithCard(tester, pending);
+    final checkout = _FakeCheckout();
 
+    await _payWithCard(tester, pending, checkoutController: checkout);
+
+    expect(checkout.registeredCardPayments, [pending.id]);
     final stored = await repository.getById(pending.id);
     expect(stored?.status, isNot(ReservationStatus.pending));
     expect(stored?.paymentMethod, isNotNull);
@@ -88,7 +130,11 @@ void main() {
       (r) => r.status == ReservationStatus.completed,
     );
 
-    await _payWithCard(tester, notPending);
+    final checkout = _FakeCheckout();
+
+    await _payWithCard(tester, notPending, checkoutController: checkout);
+
+    expect(checkout.registeredCardPayments, isEmpty);
 
     expect(find.textContaining('No pudimos confirmar el pago'), findsOneWidget);
     expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
@@ -108,6 +154,7 @@ void main() {
     await _payWithCard(
       tester,
       pending,
+      checkoutController: _FakeCheckout(),
       confirmReservationPayment: (id) async {
         confirmedId = id;
         return true;

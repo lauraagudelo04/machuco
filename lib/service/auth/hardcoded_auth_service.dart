@@ -1,5 +1,5 @@
 import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/service/auth/auth0_auth_service.dart';
+import 'package:machuco/service/auth/auth_service.dart';
 
 final class HardcodedAuthUser {
   const HardcodedAuthUser({
@@ -38,7 +38,7 @@ const List<HardcodedAuthUser> hardcodedAuthUsers = <HardcodedAuthUser>[
 
 /// Servicio de autenticación local para pruebas de login por rol.
 ///
-/// No depende de Auth0 ni persiste credenciales fuera del ciclo de ejecución.
+/// No depende de Firebase ni persiste credenciales fuera del ciclo de ejecución.
 final class HardcodedAuthService implements AuthService {
   AuthSession? _activeSession;
 

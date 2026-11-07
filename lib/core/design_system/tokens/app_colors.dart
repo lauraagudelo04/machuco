@@ -13,6 +13,8 @@ abstract final class AppColors {
   static const cleaning = Color(0xFFFDE68A);
   static const maintenance = Color(0xFFFCD34D);
   static const blocked = Color(0xFFFECDD3);
+  // Estrella de calificación (misma tonalidad en tema claro y oscuro).
+  static const rating = Color(0xFFFFB300);
 }
 
 abstract final class AppLightColors {
