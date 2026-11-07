@@ -52,3 +52,7 @@ app.*.map.json
 macos/Runner/DebugProfile.entitlements
 macos/Runner/Release.entitlements
 macos/Runner.xcodeproj/project.pbxproj
+
+# Local tooling and agent session transcripts
+devtools_options.yaml
+session-*.md
