@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
@@ -21,6 +22,7 @@ void main() {
   /// sesión: lo que persiste es la base, no el estado en memoria.
   OwnerController buildController() => OwnerController(
     service: OwnerService(repository: OwnerRepository(database: database)),
+    documentTypeRepository: DocumentTypeRepository(database: database),
   );
 
   setUp(() async {
@@ -59,6 +61,22 @@ void main() {
       expect(controller.selectedCountryCode?.dialCode, '+57');
     },
   );
+
+  test('loadDocumentTypes lee el maestro local en orden', () async {
+    final controller = buildController();
+
+    await controller.loadDocumentTypes();
+
+    expect(controller.isLoadingDocumentTypes, isFalse);
+    expect(controller.documentTypesError, isNull);
+    expect(controller.documentTypes.map((type) => type.code), [
+      'CC',
+      'CE',
+      'NIT',
+      'PAS',
+      'TI',
+    ]);
+  });
 
   test('validatePhone respeta la longitud del país seleccionado', () async {
     final controller = buildController();

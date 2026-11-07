@@ -90,7 +90,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
     _isActive = initialData?.isActive ?? true;
-    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCountryCodes());
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
   }
 
   @override
@@ -119,6 +119,19 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         ? null
         : OwnerController.validateEmail(_emailController.text);
     _phoneError = widget.controller.validatePhone(_phoneController.text);
+  }
+
+  /// Carga los maestros que alimentan el formulario (tipos de documento e
+  /// indicativos) y alinea la selección con los datos existentes.
+  Future<void> _loadCatalogs({bool forceRefresh = false}) async {
+    await widget.controller.loadDocumentTypes();
+    if (!mounted) return;
+
+    final types = widget.controller.documentTypes;
+    if (types.isNotEmpty && !types.contains(_documentType)) {
+      setState(() => _documentType = types.first);
+    }
+    await _loadCountryCodes(forceRefresh: forceRefresh);
   }
 
   /// Carga el maestro de indicativos y alinea el selector con los datos
@@ -341,6 +354,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
           const SizedBox(height: AppSpacing.s4),
           _DocumentTypeSelector(
             selectedType: _documentType,
+            documentTypes: widget.controller.documentTypes,
             onSelected: _isEditing ? null : _selectDocumentType,
           ),
           const SizedBox(height: AppSpacing.s4),
@@ -382,7 +396,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             loading: widget.controller.isLoadingCountryCodes,
             errorMessage: widget.controller.countryCodesError,
             phoneErrorText: _phoneError,
-            onRetry: () => _loadCountryCodes(forceRefresh: true),
+            onRetry: () => _loadCatalogs(forceRefresh: true),
             label: 'Teléfono',
             hint: '300 123 4567',
             textInputAction: _isEditing
@@ -523,10 +537,14 @@ class _FormSection extends StatelessWidget {
 class _DocumentTypeSelector extends StatelessWidget {
   const _DocumentTypeSelector({
     required this.selectedType,
+    required this.documentTypes,
     required this.onSelected,
   });
 
   final DocumentType selectedType;
+
+  /// Tipos activos del maestro (`OwnerController.documentTypes`).
+  final List<DocumentType> documentTypes;
 
   /// `null` deja el selector en solo lectura.
   final ValueChanged<DocumentType>? onSelected;
@@ -537,9 +555,7 @@ class _DocumentTypeSelector extends StatelessWidget {
     final onSelected = this.onSelected;
     // En solo lectura solo se conserva el tipo seleccionado: las demás opciones
     // no aportan nada si no se pueden elegir.
-    final documentTypes = onSelected == null
-        ? [selectedType]
-        : DocumentType.values;
+    final types = onSelected == null ? [selectedType] : documentTypes;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -554,7 +570,7 @@ class _DocumentTypeSelector extends StatelessWidget {
           spacing: AppSpacing.s2,
           runSpacing: AppSpacing.s2,
           children: [
-            for (final documentType in documentTypes)
+            for (final documentType in types)
               Tooltip(
                 message: documentType.description,
                 child: ChoiceChip(

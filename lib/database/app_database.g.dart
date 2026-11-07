@@ -80,6 +80,8 @@ class _$AppDatabase extends AppDatabase {
 
   OwnerDao? _ownerDaoInstance;
 
+  DocumentTypeDao? _documentTypeDaoInstance;
+
   ClientDao? _clientDaoInstance;
 
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
@@ -92,7 +94,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 14,
+      version: 15,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -127,6 +129,8 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `motels` (`id` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `name` TEXT NOT NULL, `email` TEXT NOT NULL, `room_count` INTEGER NOT NULL, `nit` TEXT NOT NULL, `address` TEXT NOT NULL, `phone` TEXT NOT NULL, `description` TEXT, `general_location` TEXT, `payment_methods_json` TEXT NOT NULL, `image_urls_json` TEXT NOT NULL, `is_available` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `document_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL, `example` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
         await database.execute(
@@ -164,6 +168,12 @@ class _$AppDatabase extends AppDatabase {
   @override
   OwnerDao get ownerDao {
     return _ownerDaoInstance ??= _$OwnerDao(database, changeListener);
+  }
+
+  @override
+  DocumentTypeDao get documentTypeDao {
+    return _documentTypeDaoInstance ??=
+        _$DocumentTypeDao(database, changeListener);
   }
 
   @override
@@ -835,6 +845,47 @@ class _$OwnerDao extends OwnerDao {
   @override
   Future<void> updateOwner(OwnerEntry owner) async {
     await _ownerEntryUpdateAdapter.update(owner, OnConflictStrategy.abort);
+  }
+}
+
+class _$DocumentTypeDao extends DocumentTypeDao {
+  _$DocumentTypeDao(
+    this.database,
+    this.changeListener,
+  ) : _queryAdapter = QueryAdapter(database);
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  @override
+  Future<List<DocumentTypeEntry>> findActive() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM document_types WHERE isActive = 1 ORDER BY sortOrder ASC',
+        mapper: (Map<String, Object?> row) => DocumentTypeEntry(
+            id: row['id'] as int,
+            code: row['code'] as String,
+            name: row['name'] as String,
+            pattern: row['pattern'] as String,
+            example: row['example'] as String,
+            isActive: row['isActive'] as int,
+            sortOrder: row['sortOrder'] as int));
+  }
+
+  @override
+  Future<List<DocumentTypeEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM document_types ORDER BY sortOrder ASC',
+        mapper: (Map<String, Object?> row) => DocumentTypeEntry(
+            id: row['id'] as int,
+            code: row['code'] as String,
+            name: row['name'] as String,
+            pattern: row['pattern'] as String,
+            example: row['example'] as String,
+            isActive: row['isActive'] as int,
+            sortOrder: row['sortOrder'] as int));
   }
 }
 

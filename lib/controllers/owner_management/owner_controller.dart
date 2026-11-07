@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
@@ -37,8 +38,11 @@ class OwnerController extends ChangeNotifier {
   OwnerController({
     OwnerService? service,
     AuthCatalogRepository? catalogRepository,
+    DocumentTypeRepository? documentTypeRepository,
   }) : _service = service ?? OwnerService(),
-       _catalogRepository = catalogRepository;
+       _catalogRepository = catalogRepository,
+       _documentTypeRepository =
+           documentTypeRepository ?? DocumentTypeRepository();
 
   /// Instancia compartida por las pantallas del módulo (listado, formulario y
   /// moteles del propietario) para que todas vean el mismo estado.
@@ -52,6 +56,8 @@ class OwnerController extends ChangeNotifier {
   /// (Colombia) para que el formulario funcione sin Supabase ni caché.
   final AuthCatalogRepository? _catalogRepository;
 
+  final DocumentTypeRepository _documentTypeRepository;
+
   final List<Owner> _owners = [];
   String _searchQuery = '';
   OwnerStatusFilter _statusFilter = OwnerStatusFilter.all;
@@ -64,6 +70,10 @@ class OwnerController extends ChangeNotifier {
   CountryPhoneCode? _selectedCountryCode;
   bool _isLoadingCountryCodes = false;
   String? _countryCodesError;
+
+  List<DocumentType> _documentTypes = DocumentType.values;
+  bool _isLoadingDocumentTypes = false;
+  String? _documentTypesError;
 
   /// Propietarios cargados desde la base. Solo lectura: para modificarlos se
   /// usan las acciones del controlador.
@@ -114,6 +124,16 @@ class OwnerController extends ChangeNotifier {
   String? get countryCodesError => _countryCodesError;
 
   bool get hasCountryCodes => _countryPhoneCodes.isNotEmpty;
+
+  /// Tipos de documento activos del maestro local.
+  ///
+  /// Arranca con los valores del enum para que el formulario nunca quede sin
+  /// opciones si la tabla todavía no cargó.
+  List<DocumentType> get documentTypes => List.unmodifiable(_documentTypes);
+
+  bool get isLoadingDocumentTypes => _isLoadingDocumentTypes;
+
+  String? get documentTypesError => _documentTypesError;
 
   /// Carga los propietarios guardados. La primera vez siembra los datos demo.
   ///
@@ -214,6 +234,26 @@ class OwnerController extends ChangeNotifier {
       if (code.isoCode == 'CO') return code;
     }
     return _countryPhoneCodes.isEmpty ? null : _countryPhoneCodes.first;
+  }
+
+  /// Carga los tipos de documento activos desde el maestro local.
+  ///
+  /// Si la consulta falla se conservan los valores del enum como respaldo.
+  Future<void> loadDocumentTypes() async {
+    if (_isLoadingDocumentTypes) return;
+    _isLoadingDocumentTypes = true;
+    _documentTypesError = null;
+    notifyListeners();
+    try {
+      final loaded = await _documentTypeRepository.findActive();
+      if (loaded.isNotEmpty) _documentTypes = loaded;
+    } catch (_) {
+      _documentTypesError =
+          'No pudimos cargar los tipos de documento. Usamos los del sistema.';
+    } finally {
+      _isLoadingDocumentTypes = false;
+      notifyListeners();
+    }
   }
 
   /// Registra un propietario y devuelve el resultado ya persistido.

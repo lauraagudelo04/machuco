@@ -77,7 +77,7 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
 
 - **Owner**: `id`, `fullName`, `documentType`, `documentNumber`, `email`, `phone` (número nacional), `countryCode` (`+57`), `countryName` (`Colombia`), `address`, `isActive`, `isSynchronized`.
 - **phoneWithDialCode**: teléfono listo para mostrar, por ejemplo `+57 300 123 4567`.
-- **DocumentType**: enum { citizenshipCard (CC), foreignerCard (CE), taxId (NIT), passport (Pasaporte), taxIdentity (TI) }.
+- **DocumentType**: enum { citizenshipCard (CC), foreignerCard (CE), taxId (NIT), passport (PAS), identityCard (TI) }. El maestro local `document_types` guarda `code`, `name`, `pattern`, `example`, `isActive` y `sortOrder`; es la fuente del selector y se siembra con los cinco códigos.
 - **OwnerStatusFilter**: filtro { all, active, inactive }.
 - **synchronized**: flag entero 0/1 que indica si el registro ya fue enviado a la nube.
 

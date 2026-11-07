@@ -2,10 +2,13 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/service/owner/owner_service.dart';
+import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
@@ -195,6 +198,21 @@ void main() {
     expect(pending.single.isSynchronized, isFalse);
   });
 
+  test(
+    'el maestro de tipos de documento se siembra con los cinco códigos',
+    () async {
+      final types = await DocumentTypeRepository(
+        database: database,
+      ).findActive();
+
+      expect(types.map((type) => type.code), ['CC', 'CE', 'NIT', 'PAS', 'TI']);
+      expect(
+        types.every((type) => type.acceptsDocumentNumber(type.example)),
+        isTrue,
+      );
+    },
+  );
+
   test('seedIfEmpty siembra la primera vez y no duplica después', () async {
     final seeds = buildSeedOwners();
 
@@ -290,7 +308,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 14);
+    expect(await raw.getVersion(), 15);
     final columns = await raw.rawQuery('PRAGMA table_info(owners)');
     expect(
       columns.map((column) => column['name']),
@@ -299,5 +317,6 @@ void main() {
     final rows = await raw.query('owners');
     expect(rows.single['phone'], '+57 300 123 4567');
     expect(rows.single['countryCode'], isNull);
+    expect(await raw.query('document_types'), hasLength(5));
   });
 }

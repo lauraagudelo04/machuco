@@ -5,9 +5,11 @@ import 'dart:async';
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
+import 'package:machuco/database/model/document_type/document_type_entry.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
@@ -34,7 +36,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 15,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -46,6 +48,7 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     OwnerEntry,
+    DocumentTypeEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -56,6 +59,7 @@ abstract class AppDatabase extends FloorDatabase {
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
   OwnerDao get ownerDao;
+  DocumentTypeDao get documentTypeDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -95,11 +99,13 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
       ])
       .addCallback(
         Callback(
           onCreate: (database, version) async {
             await _createManualSchemas(database, version);
+            await _seedDocumentTypes(database);
             await seedSubscriptionTestOwner(database);
           },
         ),
@@ -432,3 +438,89 @@ final migration13To14 = Migration(13, 14, (database) async {
     await database.execute('ALTER TABLE owners ADD COLUMN countryName TEXT');
   }
 });
+
+/// Maestro de tipos de documento que alimenta el selector del formulario.
+///
+/// Antes vivía solo en el enum `DocumentType`. La tabla permite retirar o
+/// reordenar opciones sin recompilar y es la contraparte local de la tabla
+/// remota. Las filas usan `code` para mapearse al enum del dominio.
+final migration14To15 = Migration(14, 15, (database) async {
+  await _createDocumentTypeSchema(database);
+  await _seedDocumentTypes(database);
+});
+
+Future<void> _createDocumentTypeSchema(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS document_types (
+      id INTEGER NOT NULL PRIMARY KEY,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      pattern TEXT NOT NULL,
+      example TEXT NOT NULL,
+      isActive INTEGER NOT NULL,
+      sortOrder INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Semillas del maestro; `INSERT OR IGNORE` permite correrla también en bases
+/// nuevas, donde Floor ya creó la tabla vacía.
+Future<void> _seedDocumentTypes(sqflite.DatabaseExecutor database) async {
+  const rows = [
+    {
+      'id': 1,
+      'code': 'CC',
+      'name': 'Cédula de ciudadanía',
+      'pattern': r'^\d{6,10}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 1,
+    },
+    {
+      'id': 2,
+      'code': 'CE',
+      'name': 'Cédula de extranjería',
+      'pattern': r'^\d{6,12}$',
+      'example': '345678',
+      'isActive': 1,
+      'sortOrder': 2,
+    },
+    {
+      'id': 3,
+      'code': 'NIT',
+      'name': 'Número de identificación tributaria',
+      'pattern': r'^\d{9,10}(-\d)?$',
+      'example': '900123456-7',
+      'isActive': 1,
+      'sortOrder': 3,
+    },
+    {
+      'id': 4,
+      'code': 'PAS',
+      'name': 'Pasaporte',
+      'pattern': r'^[A-Za-z0-9]{6,12}$',
+      'example': 'AV123456',
+      'isActive': 1,
+      'sortOrder': 4,
+    },
+    {
+      'id': 5,
+      'code': 'TI',
+      'name': 'Tarjeta de identidad',
+      'pattern': r'^\d{6,11}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 5,
+    },
+  ];
+
+  for (final row in rows) {
+    await database.insert(
+      'document_types',
+      row,
+      conflictAlgorithm: sqflite.ConflictAlgorithm.ignore,
+    );
+  }
+}
