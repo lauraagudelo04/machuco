@@ -70,8 +70,8 @@ class ReservationFirestoreDocument {
     'roomId': reservation.roomId,
     'roomName': reservation.roomName,
     'roomNumber': reservation.roomNumber,
-    'checkIn': Timestamp.fromDate(reservation.checkIn.toUtc()),
-    'checkOut': Timestamp.fromDate(reservation.checkOut.toUtc()),
+    'checkIn': _timestamp(reservation.checkIn),
+    'checkOut': _timestamp(reservation.checkOut),
     'stayMode': reservation.stayMode.name,
     'guestCount': reservation.guestCount,
     'services': [for (final item in reservation.services) _lineItem(item)],
@@ -79,7 +79,7 @@ class ReservationFirestoreDocument {
     'roomTotal': reservation.roomTotal,
     'total': reservation.total,
     'status': reservation.status.name,
-    'createdAt': Timestamp.fromDate(reservation.createdAt.toUtc()),
+    'createdAt': _timestamp(reservation.createdAt),
     if (reservation.categoryId != null) 'categoryId': reservation.categoryId,
     if (reservation.cancellationReason != null)
       'cancellationReason': reservation.cancellationReason,
@@ -88,6 +88,11 @@ class ReservationFirestoreDocument {
       'paymentMethod': reservation.paymentMethod,
     'updatedAt': FieldValue.serverTimestamp(),
   };
+
+  /// Millisecond precision, like the SQLite cache: re-pushing a cached
+  /// reservation must not look like a change to these immutable fields.
+  static Timestamp _timestamp(DateTime value) =>
+      Timestamp.fromMillisecondsSinceEpoch(value.millisecondsSinceEpoch);
 
   static Map<String, dynamic> _lineItem(ReservationLineItem item) => {
     'id': item.id,

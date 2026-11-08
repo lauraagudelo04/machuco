@@ -122,4 +122,43 @@ void main() {
       throwsFormatException,
     );
   });
+
+  test('stores dates with millisecond precision, like the SQLite cache', () {
+    final withMicros = _reservation();
+    final micro = Reservation(
+      id: withMicros.id,
+      requestId: withMicros.requestId,
+      motelId: withMicros.motelId,
+      motelName: withMicros.motelName,
+      roomId: withMicros.roomId,
+      roomName: withMicros.roomName,
+      roomNumber: withMicros.roomNumber,
+      checkIn: DateTime(2026, 11, 10, 17, 0, 0, 0, 123),
+      checkOut: DateTime(2026, 11, 10, 21, 0, 0, 0, 456),
+      stayMode: withMicros.stayMode,
+      guestCount: withMicros.guestCount,
+      services: withMicros.services,
+      products: withMicros.products,
+      roomTotal: withMicros.roomTotal,
+      total: withMicros.total,
+      status: withMicros.status,
+      createdAt: DateTime(2026, 11, 7, 12, 0, 0, 5, 789),
+      guestId: withMicros.guestId,
+    );
+
+    final data = ReservationFirestoreDocument(
+      ownerId: 'uid-owner',
+      reservation: micro,
+    ).toFirestore();
+
+    for (final key in ['checkIn', 'checkOut', 'createdAt']) {
+      final stored = (data[key] as Timestamp).toDate();
+      expect(stored.microsecond, 0, reason: key);
+    }
+    expect(
+      (data['createdAt'] as Timestamp).toDate().millisecondsSinceEpoch,
+      micro.createdAt.millisecondsSinceEpoch,
+    );
+  });
 }
+

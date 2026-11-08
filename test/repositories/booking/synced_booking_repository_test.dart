@@ -14,13 +14,21 @@ class _FakeCloud implements ReservationCloudRepository {
   final reads = <String>[];
   Object? failure;
 
+  /// Fails only the pushes, while reads keep working.
+  Object? saveFailure;
+
   @override
   Future<void> saveReservation({
     required String ownerId,
     required Reservation reservation,
   }) async {
     if (failure != null) throw failure!;
+    if (saveFailure != null) throw saveFailure!;
     saved.add((ownerId: ownerId, reservation: reservation));
+    // Like Firestore, later reads return what was saved.
+    remote
+      ..removeWhere((r) => r.id == reservation.id)
+      ..add(reservation);
   }
 
   @override
@@ -229,6 +237,56 @@ void main() {
       await synced.waitForPendingSync();
 
       expect(await local.getById('res-new'), isNotNull);
+    });
+
+    test('a pull does not overwrite a change whose push failed', () async {
+      uid = 'uid-client';
+      role = RegisteredUserRole.client;
+      cloud.remote
+        ..clear()
+        ..add(_reservation('res-1'));
+      final synced = repository();
+      await synced.getAll();
+      cloud.saveFailure = const ReservationCloudRepositoryException(
+        ReservationCloudFailureType.permissionDenied,
+        'denied',
+      );
+
+      await synced.update(
+        _reservation('res-1', status: ReservationStatus.upcoming),
+      );
+      await synced.waitForPendingSync();
+      final all = await synced.getAll();
+
+      expect(cloud.saved, isEmpty);
+      expect(all.single.status, ReservationStatus.upcoming);
+      expect((await local.getById('res-1'))?.status, ReservationStatus.upcoming);
+    });
+
+    test('the next read retries a failed push before pulling', () async {
+      uid = 'uid-client';
+      role = RegisteredUserRole.client;
+      cloud.remote
+        ..clear()
+        ..add(_reservation('res-1'));
+      final synced = repository();
+      await synced.getAll();
+
+      cloud.failure = const ReservationCloudRepositoryException(
+        ReservationCloudFailureType.network,
+        'offline',
+      );
+      await synced.update(
+        _reservation('res-1', status: ReservationStatus.upcoming),
+      );
+      await synced.waitForPendingSync();
+      expect(cloud.saved, isEmpty);
+
+      cloud.failure = null;
+      final all = await synced.getAll();
+
+      expect(cloud.saved.single.reservation.status, ReservationStatus.upcoming);
+      expect(all.single.status, ReservationStatus.upcoming);
     });
 
     test('seed reservations and unknown motels are not pushed', () async {

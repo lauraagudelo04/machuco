@@ -13,10 +13,12 @@ import 'package:machuco/repositories/booking/reservation_cloud_repository.dart';
 /// Firebase calls). With a session:
 /// - [getAll] first pulls what the user's role may read (client: their own,
 ///   owner: their motels', admin: all) into the local cache, and hides the
-///   demo seed. The remote copy wins over the cached one. Offline, the cache
-///   is returned.
+///   demo seed. The remote copy wins over the cached one, except for
+///   reservations whose push has not succeeded yet: those are pushed again
+///   first and keep their local state. Offline, the cache is returned.
 /// - [add] and [update] write locally and then push in the background, so the
 ///   UI never waits for the network. A failed push keeps the local copy.
+///   Unsynced changes are tracked in memory only, so a restart forgets them.
 class SyncedBookingRepository implements BookingRepository {
   SyncedBookingRepository({
     required BookingRepository local,
@@ -38,6 +40,9 @@ class SyncedBookingRepository implements BookingRepository {
 
   final Map<String, RegisteredUserRole> _roles = {};
   final Set<Future<void>> _pendingPushes = {};
+
+  /// Ids whose latest local change has not reached Firestore yet.
+  final Set<String> _unsynced = {};
   Future<void>? _pulling;
 
   @override
@@ -77,12 +82,15 @@ class SyncedBookingRepository implements BookingRepository {
     try {
       final role = await _role(uid);
       if (role == null) return;
+      await _retryUnsynced();
       final remote = switch (role) {
         RegisteredUserRole.client => await _cloud.listForGuest(uid),
         RegisteredUserRole.owner => await _cloud.listForOwner(uid),
         RegisteredUserRole.admin => await _cloud.listAll(),
       };
       for (final reservation in remote) {
+        // A local change that is still unsynced wins over the server copy.
+        if (_unsynced.contains(reservation.id)) continue;
         if (await _local.getById(reservation.id) == null) {
           await _local.add(reservation);
         } else {
@@ -106,17 +114,34 @@ class SyncedBookingRepository implements BookingRepository {
   void _push(Reservation reservation) {
     if (_currentUid() == null) return;
     if (isSeedReservationId(reservation.id)) return;
+    _unsynced.add(reservation.id);
     late final Future<void> push;
     push = _save(reservation).whenComplete(() => _pendingPushes.remove(push));
     _pendingPushes.add(push);
   }
 
+  Future<void> _retryUnsynced() async {
+    for (final id in List.of(_unsynced)) {
+      final reservation = await _local.getById(id);
+      if (reservation == null) {
+        _unsynced.remove(id);
+      } else {
+        await _save(reservation);
+      }
+    }
+  }
+
+  /// Pushes [reservation] and clears its unsynced mark on success.
   Future<void> _save(Reservation reservation) async {
     try {
       final ownerId = await _ownerIdForMotel(reservation.motelId);
       // A motel outside the shared catalog (demo data) has no owner account.
-      if (ownerId == null) return;
+      if (ownerId == null) {
+        _unsynced.remove(reservation.id);
+        return;
+      }
       await _cloud.saveReservation(ownerId: ownerId, reservation: reservation);
+      _unsynced.remove(reservation.id);
     } catch (error) {
       debugPrint('Reservation push failed, kept locally: $error');
     }
