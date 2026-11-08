@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/booking/reservation_category.dart';
@@ -59,11 +60,12 @@ class CreateReservationResult {
 /// and, for screens with a visible countdown, by [startExpirationWatch].
 class ClientBookingController extends ChangeNotifier {
   ClientBookingController({
-    this.userId = demoUserId,
+    String? userId,
     MotelController? motelController,
     ReservationCategoryRepository? categoryRepository,
     BookingService? bookingService,
-  }) : _motelController = motelController ?? MotelController(),
+  }) : userId = userId ?? CurrentUser.uidOrNull ?? demoUserId,
+       _motelController = motelController ?? MotelController(),
        _categoryRepository =
            categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
        _service = bookingService ?? BookingService();
@@ -80,6 +82,7 @@ class ClientBookingController extends ChangeNotifier {
   /// How far in the future a reservation can be made.
   static const Duration bookingHorizon = BookingService.bookingHorizon;
 
+  /// Signed-in Firebase uid; [demoUserId] without a session.
   final String userId;
 
   final MotelController _motelController;
@@ -397,7 +400,7 @@ class ClientBookingController extends ChangeNotifier {
         roomTotal: roomTotal,
         categoryId: categoryId,
         guestId: userId,
-        guestName: 'Usuario demo',
+        guestName: CurrentUser.emailOrNull ?? 'Usuario demo',
         externalBlocked: externalBlocked,
         roomIsActive: roomIsActive,
       ),
@@ -444,7 +447,7 @@ class ClientBookingController extends ChangeNotifier {
         roomTotal: roomTotal,
         categoryId: categoryId,
         guestId: userId,
-        guestName: 'Usuario demo',
+        guestName: CurrentUser.emailOrNull ?? 'Usuario demo',
       ),
     );
   }

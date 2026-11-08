@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/booking/reservation_category.dart';
@@ -28,11 +29,16 @@ export 'package:machuco/utils/booking/reservation_transition_exception.dart';
 /// etapa 2 (backend real), su firma no debería tener que cambiar.
 class OwnerBookingController extends ChangeNotifier {
   OwnerBookingController({
-    this.ownerId = demoOwnerId,
+    String? ownerId,
     MotelController? motelController,
     ReservationCategoryRepository? categoryRepository,
     BookingService? bookingService,
-  }) : _motelController = motelController ?? MotelController(),
+  }) : ownerId = ownerId ?? CurrentUser.uidOrNull ?? demoOwnerId,
+       _motelController =
+           motelController ??
+           (CurrentUser.uidOrNull == null
+               ? MotelController()
+               : MotelController.persistent()),
        _categoryRepository =
            categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
        _service = bookingService ?? BookingService();
@@ -43,6 +49,7 @@ class OwnerBookingController extends ChangeNotifier {
   /// relación paralela.
   static const String demoOwnerId = 'owner-1020304050';
 
+  /// Signed-in Firebase uid; [demoOwnerId] without a session.
   final String ownerId;
   final MotelController _motelController;
   final ReservationCategoryRepository _categoryRepository;
