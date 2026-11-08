@@ -10,6 +10,15 @@ const String demoClientUserId = 'user-demo-001';
 /// Ids are stable on purpose: widgets and tests refer to them.
 /// Motel `'3'` (Motel Eclipse) is deliberately left without reservations to
 /// cover the "motel without history" scenario of the admin dashboard.
+/// Whether [id] belongs to a demo reservation of [buildSeedReservations], so
+/// a signed-in session can hide it and never push it to Firestore. Matches by
+/// pattern because the admin history ids depend on the seed date; real ids
+/// look like `reservation-<microseconds>-<requestId>`.
+bool isSeedReservationId(String id) =>
+    id.startsWith('reservation-seed-') ||
+    id.startsWith('owner-reservation-') ||
+    id.contains('-admin-res-');
+
 List<Reservation> buildSeedReservations(DateTime now) {
   return [
     ..._clientSeeds(now),
