@@ -176,6 +176,87 @@ service cloud.firestore {
         && data.phoneNumber.size() >= 4 && data.phoneNumber.size() <= 20;
     }
 
+    // Administrador con cuenta activa (no basta con tener el rol).
+    function isActiveAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    // Campos comunes opcionales del registro por rol (los perfiles antiguos
+    // solo traen fullName, email y phoneNumber).
+    function hasValidCommonExtras(data) {
+      return (!('firstNames' in data)
+          || (data.firstNames is string
+            && data.firstNames.size() >= 2 && data.firstNames.size() <= 50))
+        && (!('lastNames' in data)
+          || (data.lastNames is string
+            && data.lastNames.size() >= 2 && data.lastNames.size() <= 50))
+        && (!('phoneCountryCodeId' in data)
+          || (data.phoneCountryCodeId is int && data.phoneCountryCodeId > 0));
+    }
+
+    // Cliente: sin campos de propietario; fecha de nacimiento real, no futura
+    // y de mayor de edad (18 * 365 dias: nunca rechaza a un adulto por bisiestos).
+    function hasValidClientExtras(data) {
+      return !('personType' in data)
+        && !('nit' in data)
+        && !('companyName' in data)
+        && !('planId' in data)
+        && (!('birthDate' in data)
+          || (data.birthDate is timestamp
+            && data.birthDate <= request.time - duration.value(6570, 'd')
+            && data.birthDate.year() >= 1900));
+    }
+
+    // Propietario: tipo de persona y NIT (base 6-10 digitos + guion + DV)
+    // obligatorios; sin fecha de nacimiento; razon social solo juridica.
+    function hasValidOwnerExtras(data) {
+      return !('birthDate' in data)
+        && 'personType' in data
+        && data.personType in ['natural', 'juridica']
+        && 'nit' in data
+        && data.nit is string
+        && data.nit.matches('^[0-9]{6,10}-[0-9]$')
+        && (!('companyName' in data)
+          || (data.personType == 'juridica'
+            && data.companyName is string
+            && data.companyName.size() >= 2
+            && data.companyName.size() <= 120))
+        && (!('planId' in data)
+          || (data.planId is int && data.planId > 0));
+    }
+
+    // Un admin activo atiende una solicitud de propietario SOLO si sigue en
+    // pending_approval, y solo escribe estado + auditoria (nunca el rol).
+    function isOwnerApprovalDecision(uid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changed = after.diff(before).affectedKeys();
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && before.role == 'owner'
+        && before.accountStatus == 'pending_approval'
+        && (
+          (after.accountStatus == 'active'
+            && changed.hasOnly(['accountStatus', 'approvedBy', 'approvedAt'])
+            && changed.hasAll(['accountStatus', 'approvedBy', 'approvedAt'])
+            && after.approvedBy == request.auth.uid
+            && after.approvedAt == request.time)
+          ||
+          (after.accountStatus == 'rejected'
+            && changed.hasOnly(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && changed.hasAll(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && after.rejectionReason is string
+            && after.rejectionReason.size() >= 10
+            && after.rejectionReason.size() <= 300
+            && after.rejectedBy == request.auth.uid
+            && after.rejectedAt == request.time)
+        );
+    }
+
     // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
     // se pueden asignar en la creacion (valores iniciales) o por un admin.
     match /users/{uid} {
@@ -184,37 +265,47 @@ service cloud.firestore {
       // Registro publico: nunca admin; cliente activo, propietario pendiente.
       allow create: if isSignedIn()
         && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(
+        && request.resource.data.keys().hasAll(
           ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
+        && request.resource.data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'birthDate', 'personType', 'nit', 'companyName', 'planId'])
         && hasValidContactFields(request.resource.data)
+        && hasValidCommonExtras(request.resource.data)
         && request.resource.data.email == request.auth.token.email
         && request.resource.data.role in ['client', 'owner']
         && (
           (request.resource.data.role == 'client'
-            && request.resource.data.accountStatus == 'active')
+            && request.resource.data.accountStatus == 'active'
+            && hasValidClientExtras(request.resource.data))
           ||
           (request.resource.data.role == 'owner'
-            && request.resource.data.accountStatus == 'pending_approval')
+            && request.resource.data.accountStatus == 'pending_approval'
+            && hasValidOwnerExtras(request.resource.data))
         )
         && request.resource.data.createdAt == request.time;
 
-      // Un admin solo cambia el estado de la cuenta (aprobar, rechazar,
-      // deshabilitar); nunca el rol, ni siquiera el suyo. Si la aprobacion de
-      // propietarios necesita mas campos (p. ej. motivo de rechazo), se
-      // agregan aqui de forma explicita.
+      // Un admin activo (a) atiende solicitudes de propietarios pendientes
+      // (ver isOwnerApprovalDecision) o (b) habilita/deshabilita cuentas que
+      // no son de administrador; nunca cambia el rol.
       // El propio usuario solo puede cambiar su nombre y su celular.
-      allow update: if (isAdmin()
+      allow update: if isOwnerApprovalDecision(uid)
+        || (isActiveAdmin()
+          && resource.data.role != 'admin'
+          && resource.data.accountStatus in ['active', 'disabled']
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['accountStatus'])
-          && request.resource.data.accountStatus
-              in ['active', 'pending_approval', 'rejected', 'disabled'])
+          && request.resource.data.accountStatus in ['active', 'disabled'])
         || (isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['fullName', 'phoneNumber'])
           && hasValidContactFields(request.resource.data));
 
-      allow delete: if false;
+      // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
+      // tras reautenticarse). Las subcolecciones no se borran en cascada.
+      allow delete: if isSignedIn() && request.auth.uid == uid;
 
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
@@ -302,3 +393,4 @@ service cloud.firestore {
     }
   }
 }
+
