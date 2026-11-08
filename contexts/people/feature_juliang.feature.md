@@ -61,17 +61,20 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
 ## Alcance técnico
 
 - **Carpetas donde trabajo**:
-  - `lib/controllers/owner_management/` — `OwnerController` (estado de la vista, validación por país)
-  - `lib/models/owner_management/` — modelos `Owner`, `DocumentType`, `OwnerStatusFilter`
-  - `lib/service/owner/` — `OwnerService` (reglas de negocio y orquestación)
+  - `lib/controllers/owner_management/` — `OwnerController` (estado de la vista, validación por país, sincronización)
+  - `lib/models/owner_management/` — modelos `Owner`, `DocumentType`, `OwnerStatusFilter` y `OwnerFirestoreDocument`
+  - `lib/service/owner/` — `OwnerService` (reglas de negocio) y `OwnerPreferences` (shared_preferences)
+  - `lib/repositories/owner/` — `OwnerCloudRepository` y la implementación Firestore
   - `lib/views/owner_management/` — vistas `owner_page`, `owner_form_page`, `owner_detail_page`, `owner_summary`
-  - `lib/database/model/owner/` y `lib/database/repository/owner/` — entidad Floor `OwnerEntry` y `OwnerDao`/`OwnerRepository`
-- **Supabase (solo lo que toca propietarios)**: esquema SQL de la tabla remota de owners, su mapeo 1:1, el repositorio de nube y la sincronización de owners. Se hace con **REST + `http`**, igual que el resto del equipo; **no** se instala `supabase_flutter`.
+  - `lib/database/model/owner/`, `lib/database/model/document_type/` y sus repositorios — entidades Floor y DAOs
+- **Firestore (datos de dominio)**: colección `owners`, documento `owner_firestore_document.dart`, repositorio de nube, reglas de seguridad y sincronización push + pull + merge.
+- **Supabase (solo maestros)**: tabla `document_types` con su SQL en `supabase/migrations/`, consultada por **REST + `http`**. No se instala `supabase_flutter`.
+- **shared_preferences**: namespace `owners` para el último indicativo; namespace `auth` para el correo del administrador.
 - **Fuera de alcance**:
-  - Tareas Supabase de otras entidades (pagos, clientes, reservas, moteles).
-  - `supabase_flutter` y la migración de las llamadas REST existentes.
+  - Tabla `owners` en Supabase (los propietarios van a Firestore).
+  - Tareas Supabase/Firebase de otras entidades (pagos, clientes, reservas, moteles).
   - Cambios en archivos compartidos (`lib/database/app_database.dart`, `app_database.g.dart`) sin coordinación previa de número de migración.
-- **Migraciones**: `12→13` crea `owners`; `13→14` separa el indicativo. Los números siguientes deben coordinarse con el equipo porque otras ramas también suben la versión.
+- **Migraciones**: `12→13` crea `owners`; `13→14` separa el indicativo; `14→15` agrega `document_types`. El plan no añade migraciones nuevas.
 
 ## Definiciones de datos
 
@@ -96,3 +99,39 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And El usuario selecciona "Guardar"
     Then El sistema bloquea el envío
     And Muestra un mensaje indicando cuántos dígitos se esperan para Colombia
+
+  Scenario: Sincronizar un propietario nuevo con Firestore
+    Given El usuario está autenticado como administrador con Firebase
+    When El usuario registra un propietario con conexión
+    Then El propietario se guarda primero en SQLite con synchronized = 0
+    And Se envía a la colección owners de Firestore
+    And La fila local queda con synchronized = 1
+    And El correo del administrador aparece como "Sesión: correo@..."
+
+  Scenario: Trabajar sin conexión y reintentar la sincronización
+    Given El dispositivo está en modo avión
+    When El usuario registra un propietario
+    Then El propietario se conserva en SQLite con synchronized = 0
+    And La pantalla muestra un aviso de sincronización con "Reintentar"
+    When El usuario recupera la conexión y pulsa "Reintentar"
+    Then El propietario pendiente se envía a Firestore
+    And El aviso desaparece
+
+  Scenario: Incorporar propietarios creados en otro dispositivo
+    Given Existe un propietario en la colección owners de Firestore
+    And No existe en el SQLite de este dispositivo
+    When El usuario abre la pantalla de propietarios
+    Then El propietario remoto se inserta en SQLite ya marcado como sincronizado
+    And Aparece en el listado local
+
+  Scenario: Recordar el último indicativo usado
+    Given El usuario registró un propietario con el indicativo +52
+    When El usuario abre el formulario de nuevo propietario
+    Then El selector de indicativo aparece preseleccionado en +52
+
+  Scenario: Actualizar el maestro de tipos de documento desde Supabase
+    Given La tabla document_types está publicada en Supabase
+    When El usuario abre el formulario de propietarios con conexión
+    Then La app consulta el maestro por REST
+    And Reemplaza la caché local de document_types
+    And El selector muestra los tipos activos ordenados por sort_order
