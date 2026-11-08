@@ -15,11 +15,11 @@ Branch: `feature_daniel` · Delivery: `ask-on-risk` · Test runner: `flutter tes
 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S4, S5 | inline | pending | |
-| T2 | S1 | inline | pending | |
-| T3 | S2 | inline | pending | |
-| T4 | S1, S3 | inline | pending | |
-| T5 | S1-S4 docs | inline | pending | |
+| T1 | S4, S5 | inline | done (SQL reassign pending) | `2ea5f8c`; 3 tests; suite 465 green |
+| T2 | S1 | inline | done | `d2f2513`; RED (missing file) → GREEN 3 tests |
+| T3 | S2 | inline | written, uncommitted, unverified | needs emulator (Java missing) |
+| T4 | S1, S3 | inline | done | `36ed12a`; RED → GREEN 12 tests; suite 480 green |
+| T5 | S1-S5 docs | inline | done | `7ddcf96` |
 
 - T1: shared session identity (`CurrentUser`) used by client/owner booking controllers, owner motels page and `MotelController.getMyMotels`; SQL to reassign demo motels.
 - T2: `ReservationFirestoreDocument` + `ReservationCloudRepository` (Firestore impl) with role-scoped reads.
@@ -35,3 +35,5 @@ Route evidence: no Writer trigger (units are sequential and depend on each other
 - **L2** (2026-11-07) User: "si somo reseva ya qeu hace una seas hicmos un caombio" — the branch owns reservations, not PQRS.
 - **L3** Discovery: booking controllers use `demoUserId` / `demoOwnerId`; Firestore rules need the real uid, hence S4. No `fake_cloud_firestore` and new dependencies need a team decision, so Firestore code is tested through an interface fake (payments pattern) plus pure document mapping tests. Rules are deployed by the user (`firebase deploy --only firestore:rules`); no emulator test available here.
 - **L4** (2026-11-07) Discovery: Supabase `motels.owner_id` holds demo ids (`owner-1020304050`, `owner-900123456`), even for motels created from the app, because `owner_motels_page.dart` and `MotelController.getMyMotels` hardcode the demo owner. Firestore rules can only match `request.auth.uid`, so owners would see nothing (payments has the same gap). User: "la 1, arregla el origen" → S5.
+- **L5** (2026-11-07) T3 rules written (`match /reservations/{reservationId}`): create relaxed from `pending`-only to any valid status, because an offline-paid reservation would first sync as `upcoming` and the client can do pending→upcoming anyway. No Java in this machine, so the Firestore emulator cannot run; rules stay uncommitted until verified. Next: emulator rule tests (needs Java) or independent verifier; user deploys rules; user reassigns demo motels in Supabase.
+
