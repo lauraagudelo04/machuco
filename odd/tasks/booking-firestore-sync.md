@@ -15,7 +15,7 @@ Branch: `feature_daniel` · Delivery: `ask-on-risk` · Test runner: `flutter tes
 
 | ID | Specs | Route | Status | Evidence |
 |----|-------|-------|--------|----------|
-| T1 | S4, S5 | inline | done (SQL reassign pending) | `2ea5f8c`; 3 tests; suite 465 green |
+| T1 | S4, S5 | inline | done | `2ea5f8c`; 3 tests; suite 465 green |
 | T2 | S1 | inline | done | `d2f2513`; RED (missing file) → GREEN 3 tests |
 | T3 | S2 | inline | done | `10e266f`; 31 emulator cases green; independent verifier: S2 met |
 | T4 | S1, S3 | inline | done | `36ed12a`; RED → GREEN 12 tests; suite 480 green |
@@ -37,4 +37,5 @@ Route evidence: no Writer trigger (units are sequential and depend on each other
 - **L4** (2026-11-07) Discovery: Supabase `motels.owner_id` holds demo ids (`owner-1020304050`, `owner-900123456`), even for motels created from the app, because `owner_motels_page.dart` and `MotelController.getMyMotels` hardcode the demo owner. Firestore rules can only match `request.auth.uid`, so owners would see nothing (payments has the same gap). User: "la 1, arregla el origen" → S5.
 - **L5** (2026-11-07) T3 rules written (`match /reservations/{reservationId}`): create relaxed from `pending`-only to any valid status, because an offline-paid reservation would first sync as `upcoming` and the client can do pending→upcoming anyway. No Java in this machine, so the Firestore emulator cannot run; rules stay uncommitted until verified. Next: emulator rule tests (needs Java) or independent verifier; user deploys rules; user reassigns demo motels in Supabase.
 - **L6** (2026-11-07) User: "si, instala java y prueba las reglas". Java 21 via mise; 31 Firestore emulator cases pass (harness outside the repo). Independent verifier: S2/S4 met, S3 met in code, S5 partial (Supabase SQL pending); 2 blockers in sync: B1 dates pushed with microseconds vs SQLite milliseconds → every re-push denied (createdAt looked changed); B2 pull overwrote locally unsynced changes. Fixed in `ae14170` (ms timestamps; unsynced ids keep local state and are re-pushed before pulling), RED→GREEN 3 tests, suite 483 green. Advisories not fixed (out of scope, reported to user): client-chosen ownerId/totals/status/invoiceAccessStatus are not cross-checked (same gap as payments), final states still editable in reason/payment method, shared-device local cache, rule length limits vs app inputs.
+- **L7** (2026-11-07) Live Firestore rules were ahead of git (newer `users` rules from an unpushed branch); publishing the repo file would have removed them. Rebased the reservations block on the published ruleset (`bf0f8c4`, +100/-0 vs published, 31 emulator cases green); user published it. User: "si, pasalos a juan camilo" → 5 Supabase motels reassigned to `5ZweFyvTJpWUZJEAUzYjgdCDVoR2` via REST (`0a672cd`, verified 5/5 with the publishable key). Side effect: without a session the owner motels page (Supabase-backed) no longer shows the demo owner's motels.
 
