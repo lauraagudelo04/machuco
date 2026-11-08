@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/booking/system_admin_view/system_admin_booking_controller.dart';
@@ -93,31 +94,33 @@ class _AdminMotelReservationDashboardPageState
       appBar: AppBar(
         title: Text(_controller.selectedMotel?.name ?? 'Dashboard de reservas'),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Herramientas de depuración (mock)',
-            icon: const Icon(Icons.bug_report_outlined),
-            onSelected: (action) {
-              switch (action) {
-                case 'reload':
-                  unawaited(_load());
-                case 'error':
-                  unawaited(_load(simulateError: true));
-                case 'offline':
-                  unawaited(_load(simulateOffline: true));
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'reload', child: Text('Recargar')),
-              PopupMenuItem(
-                value: 'error',
-                child: Text('Simular error de carga'),
-              ),
-              PopupMenuItem(
-                value: 'offline',
-                child: Text('Simular sin conexión'),
-              ),
-            ],
-          ),
+          // Mock failure simulation: development builds only.
+          if (kDebugMode)
+            PopupMenuButton<String>(
+              tooltip: 'Herramientas de depuración (mock)',
+              icon: const Icon(Icons.bug_report_outlined),
+              onSelected: (action) {
+                switch (action) {
+                  case 'reload':
+                    unawaited(_load());
+                  case 'error':
+                    unawaited(_load(simulateError: true));
+                  case 'offline':
+                    unawaited(_load(simulateOffline: true));
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'reload', child: Text('Recargar')),
+                PopupMenuItem(
+                  value: 'error',
+                  child: Text('Simular error de carga'),
+                ),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: Text('Simular sin conexión'),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(child: _buildBody(context)),

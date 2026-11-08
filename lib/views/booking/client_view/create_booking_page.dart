@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 
@@ -411,15 +412,18 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
                 }
               }),
             ),
-            const SizedBox(height: AppSpacing.s4),
-            _DebugToolsCard(
-              simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
-              simulateConflict: _simulateConflictNextAttempt,
-              onNetworkFailureChanged: (value) =>
-                  setState(() => _simulateNetworkFailureNextAttempt = value),
-              onConflictChanged: (value) =>
-                  setState(() => _simulateConflictNextAttempt = value),
-            ),
+            // Mock failure simulation: development builds only.
+            if (kDebugMode) ...[
+              const SizedBox(height: AppSpacing.s4),
+              _DebugToolsCard(
+                simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
+                simulateConflict: _simulateConflictNextAttempt,
+                onNetworkFailureChanged: (value) =>
+                    setState(() => _simulateNetworkFailureNextAttempt = value),
+                onConflictChanged: (value) =>
+                    setState(() => _simulateConflictNextAttempt = value),
+              ),
+            ],
             const SizedBox(height: AppSpacing.s4),
             _SummaryCard(
               room: widget.room,
