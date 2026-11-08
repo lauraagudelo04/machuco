@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:machuco/core/design_system/components/app_button.dart';
@@ -90,9 +92,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
     _isActive = initialData?.isActive ?? true;
-    WidgetsBinding.instance.addPostFrameCallback(
-      (_) => _loadCatalogs(forceRefresh: true),
-    );
+    WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
   }
 
   @override
@@ -125,15 +125,31 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
 
   /// Carga los maestros que alimentan el formulario (tipos de documento e
   /// indicativos) y alinea la selección con los datos existentes.
+  ///
+  /// La caché local pinta de inmediato; el refresco de Supabase se lanza en
+  /// segundo plano para que abrir el formulario sin conexión no espere a la
+  /// red.
   Future<void> _loadCatalogs({bool forceRefresh = false}) async {
-    await widget.controller.loadDocumentTypes(forceRefresh: forceRefresh);
+    await widget.controller.loadDocumentTypes();
     if (!mounted) return;
+    _applyDocumentTypes();
 
+    await _loadCountryCodes(forceRefresh: forceRefresh);
+    // Refresca el maestro sin bloquear el formulario.
+    unawaited(_refreshDocumentTypes());
+  }
+
+  Future<void> _refreshDocumentTypes() async {
+    await widget.controller.loadDocumentTypes(forceRefresh: true);
+    if (!mounted) return;
+    _applyDocumentTypes();
+  }
+
+  void _applyDocumentTypes() {
     final types = widget.controller.documentTypes;
     if (types.isNotEmpty && !types.contains(_documentType)) {
       setState(() => _documentType = types.first);
     }
-    await _loadCountryCodes(forceRefresh: forceRefresh);
   }
 
   /// Carga el maestro de indicativos y alinea el selector con los datos

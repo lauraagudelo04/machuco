@@ -67,8 +67,8 @@ Accept: application/json
 - Sin `forceRefresh` responde con la caché de SQLite.
 - Si la red falla o el catálogo llega vacío se conserva la caché; solo se lanza
   `DocumentTypeRepositoryException` cuando no hay ninguna fila local.
-- El formulario pide el refresco al abrirse y mantiene el enum como último
-  respaldo.
+- El formulario consulta el refresco al abrirse en segundo plano: pinta la
+  caché local de inmediato y conserva el enum como último respaldo.
 
 ## Cloud Firestore
 

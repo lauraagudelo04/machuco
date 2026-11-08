@@ -323,6 +323,9 @@ class OwnerController extends ChangeNotifier {
       _documentTypesError =
           'No pudimos cargar los tipos de documento desde Supabase. '
           'Usamos los del sistema.';
+    } catch (_) {
+      _documentTypesError =
+          'No pudimos cargar los tipos de documento. Usamos los del sistema.';
     } finally {
       _isLoadingDocumentTypes = false;
       notifyListeners();
