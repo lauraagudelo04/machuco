@@ -6,11 +6,16 @@ import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 
 /// Records card payments without touching SQLite or Firebase.
 class _FakeCheckout implements PaymentCheckoutController {
+  _FakeCheckout({this.failuresBeforeSuccess = 0});
+
+  /// Number of card registrations that fail before one succeeds.
+  int failuresBeforeSuccess;
   final registeredCardPayments = <String>[];
 
   @override
@@ -18,6 +23,13 @@ class _FakeCheckout implements PaymentCheckoutController {
     Reservation reservation, {
     required CardPaymentKind kind,
   }) async {
+    if (failuresBeforeSuccess > 0) {
+      failuresBeforeSuccess--;
+      throw const PaymentRepositoryException(
+        PaymentRepositoryError.connection,
+        'No se pudo conectar con el maestro de métodos de pago.',
+      );
+    }
     registeredCardPayments.add(reservation.id);
     return PaymentCheckoutResult(
       payment: PaymentRecord(
@@ -168,4 +180,34 @@ void main() {
       ReservationStatus.pending,
     );
   });
+
+  testWidgets('a failed payment registration can be retried', (tester) async {
+    final repository = BookingRepositoryProvider.instance;
+    final pending = (await repository.getAll()).firstWhere(
+      (r) => r.status == ReservationStatus.pending,
+    );
+    final checkout = _FakeCheckout(failuresBeforeSuccess: 1);
+    var confirmations = 0;
+
+    await _payWithCard(
+      tester,
+      pending,
+      checkoutController: checkout,
+      confirmReservationPayment: (id) async {
+        confirmations++;
+        return confirmations == 1;
+      },
+    );
+    expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
+
+    await tester.tap(find.text('Continuar'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 500));
+    await tester.pump(const Duration(milliseconds: 500));
+
+    expect(confirmations, 1);
+    expect(checkout.registeredCardPayments, [pending.id]);
+    expect(find.text('route:${AppRoutes.invoice}'), findsOneWidget);
+  });
 }
+

@@ -49,6 +49,10 @@ class _PaymentMethodSelectionPageState
   bool _isCashSelected = false;
   bool _isRegistering = false;
 
+  /// Set once the reservation was confirmed, so retrying a failed payment
+  /// registration does not confirm it again (it is no longer pending).
+  bool _reservationConfirmed = false;
+
   // Perezoso: crear el controlador toca Firebase y SQLite, que no deben
   // inicializarse mientras el usuario solo está eligiendo.
   late final PaymentCheckoutController _checkout =
@@ -109,7 +113,10 @@ class _PaymentMethodSelectionPageState
   Future<void> _continueAfterCard(PaymentMethodModel model) async {
     final reservation = _reservation;
     if (reservation != null) {
-      if (!await _confirmReservation(reservation)) return;
+      if (!_reservationConfirmed) {
+        if (!await _confirmReservation(reservation)) return;
+        _reservationConfirmed = true;
+      }
       final registered = await _registerPayment(
         () => _checkout.registerCardPayment(reservation, kind: model.cardKind),
       );
