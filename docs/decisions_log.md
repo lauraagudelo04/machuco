@@ -436,3 +436,22 @@ reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
 `machuco`.
 
 **Estado:** cerrado.
+
+## 2026-11-07 — Reservas en Firestore y propietarios por uid (rama `feature_daniel`)
+
+**Decisión:** las reservas se sincronizan con la colección `reservations` de
+Cloud Firestore (SQLite queda como caché local), aplicando la decisión del
+2026-10-27 de que los datos de dominio van en Firebase. Supabase guarda solo
+los maestros `reservation_categories` y `country_phone_codes`
+(`supabase/migrations/202611070001_*` y `202611070002_*`).
+
+**Propiedad de moteles:** `motels.owner_id` debe ser el uid de Firebase del
+propietario. Antes tenía ids de demostración (`owner-1020304050`) porque
+`OwnerMotelsPage` y `MotelController.getMyMotels` los fijaban en el código, y
+ninguna regla basada en `request.auth.uid` (reservas ni pagos) podía
+autorizar a un propietario real. Ahora usan `CurrentUser.uidOrNull` y solo sin
+sesión el propietario de demostración.
+
+**Pendiente:** reasignar en Supabase los moteles de demostración a cuentas de
+propietario reales y desplegar `firestore.rules`.
+

@@ -148,8 +148,10 @@ administrador.
 
 ## Qué falta o es provisional
 
-- No hay backend: las reservas se persisten solo en el dispositivo (ver
-  "Persistencia local").
+- Sin sesión de Firebase las reservas se persisten solo en el dispositivo
+  (modo demo). Con sesión se sincronizan con Firestore (ver "Sincronización
+  con Firestore"); un cambio hecho sin conexión puede quedar sobrescrito por
+  la copia remota en la siguiente lectura (no hay cola de reintentos).
 - El pago real de una reserva (`confirmPayment`) se dispara desde el pago con
   tarjeta; el procesamiento con pasarela real está fuera del alcance.
 - La disponibilidad de habitaciones se calcula combinando este módulo con
@@ -182,3 +184,31 @@ El modelo de dominio `Reservation` no tiene anotaciones de Floor.
 - Migración 12 -> 13 (`migration12To13` en `app_database.dart`): crea las
   tres tablas e índices de reservas en bases que ya tenían la versión 12 de
   `develop`. Debe mantenerse igual al SQL generado en `app_database.g.dart`.
+
+## Sincronización con Firestore
+
+`BookingRepositoryProvider.useDatabase()` envuelve el repositorio local en
+`SyncedBookingRepository` (`lib/repositories/booking/`):
+
+- **Sin sesión** (`CurrentUser.uidOrNull == null`): se comporta igual que el
+  repositorio local, con la semilla de demostración y sin llamar a Firebase.
+- **Con sesión**: `getAll` descarga primero lo que el rol puede leer (cliente:
+  `listForGuest(uid)`, propietario: `listForOwner(uid)`, admin: `listAll()`),
+  lo guarda en SQLite (la copia remota gana) y oculta la semilla
+  (`isSeedReservationId`). Sin conexión devuelve la caché.
+- `add` y `update` guardan en local y suben en segundo plano
+  (`ReservationCloudRepository.saveReservation`). No se suben la semilla ni las
+  reservas de moteles que no están en el catálogo de Supabase (sin propietario
+  conocido). Un error al subir conserva la copia local.
+- Documento `reservations/{id}` (`ReservationFirestoreDocument`): los campos de
+  `Reservation` más `ownerId`, el propietario del motel (`motels.owner_id` de
+  Supabase), que usan las reglas para autorizar al propietario.
+- Reglas (`firestore.rules`, `match /reservations/{reservationId}`): leen el
+  cliente (`guestId`), el propietario (`ownerId`) y el admin; solo el cliente
+  crea, a su nombre; las actualizaciones solo cambian estado, motivo de
+  cancelación, acceso a factura y método de pago, con las transiciones de
+  `BookingService`; nadie borra.
+- Identidad: los controladores de cliente y propietario usan el uid de Firebase
+  (`CurrentUser.uidOrNull`) y solo sin sesión los ids de demostración. Para que
+  un propietario vea reservas, `motels.owner_id` debe ser su uid: los moteles
+  nuevos ya se crean así desde `OwnerMotelsPage`.
