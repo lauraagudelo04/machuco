@@ -62,6 +62,18 @@ class OwnerService {
   /// ejemplo tras eliminar al último propietario) no reponga datos borrados.
   Future<List<Owner>> cargarPropietarios() => _repository.findAll();
 
+  /// Propietarios que todavía no se enviaron a Firestore.
+  Future<List<Owner>> propietariosSinSincronizar() =>
+      _repository.findUnsynchronized();
+
+  /// Confirma que la nube ya recibió al propietario.
+  Future<void> marcarSincronizado(String ownerId) =>
+      _repository.markSynchronized(ownerId);
+
+  /// Incorpora a SQLite los propietarios que existen en la nube.
+  Future<void> incorporarRemotos(List<Owner> owners) =>
+      _repository.mergeRemoteOwners(owners);
+
   /// Siembra los datos demo solo la primera vez, cuando la tabla está vacía.
   Future<void> sembrarDatosDemo() => _repository.seedIfEmpty(buildSeedOwners());
 

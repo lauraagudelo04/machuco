@@ -93,29 +93,31 @@ void main() {
     expect(all, hasLength(2));
   });
 
-  test('existsByDocument detecta documentos duplicados por tipo y número',
-      () async {
-    await repository.insert(buildOwner());
+  test(
+    'existsByDocument detecta documentos duplicados por tipo y número',
+    () async {
+      await repository.insert(buildOwner());
 
-    expect(
-      await repository.existsByDocument(
-        DocumentType.citizenshipCard,
-        '1020304050',
-      ),
-      isTrue,
-    );
-    expect(
-      await repository.existsByDocument(DocumentType.taxId, '1020304050'),
-      isFalse,
-    );
-    expect(
-      await repository.existsByDocument(
-        DocumentType.citizenshipCard,
-        '999999',
-      ),
-      isFalse,
-    );
-  });
+      expect(
+        await repository.existsByDocument(
+          DocumentType.citizenshipCard,
+          '1020304050',
+        ),
+        isTrue,
+      );
+      expect(
+        await repository.existsByDocument(DocumentType.taxId, '1020304050'),
+        isFalse,
+      );
+      expect(
+        await repository.existsByDocument(
+          DocumentType.citizenshipCard,
+          '999999',
+        ),
+        isFalse,
+      );
+    },
+  );
 
   test('update conserva createdAt y refleja el nuevo teléfono', () async {
     final owner = buildOwner();
@@ -169,9 +171,36 @@ void main() {
     expect(rows.single['synchronized'], 0);
   });
 
-  test('findUnsynchronized ignora los registros ya enviados a la nube',
-      () async {
-    await repository.insert(buildOwner());
+  test(
+    'findUnsynchronized ignora los registros ya enviados a la nube',
+    () async {
+      await repository.insert(buildOwner());
+      await repository.insert(
+        buildOwner(
+          id: 'owner-2',
+          fullName: 'Inversiones Machuco S.A.S.',
+          documentType: DocumentType.taxId,
+          documentNumber: '900123456-7',
+          email: 'contacto@inversionesmachuco.com',
+        ),
+      );
+
+      expect(await repository.findUnsynchronized(), hasLength(2));
+
+      // Simula que la nube confirmó el primero: solo ese sale de pendientes.
+      await repository.markSynchronized('owner-1');
+
+      final pending = await repository.findUnsynchronized();
+      expect(pending, hasLength(1));
+      expect(pending.single.id, 'owner-2');
+      expect(pending.single.isSynchronized, isFalse);
+      expect((await repository.findById('owner-1'))!.isSynchronized, isTrue);
+    },
+  );
+
+  test('mergeRemoteOwners inserta nuevos y respeta los pendientes', () async {
+    // owner-1 sigue pendiente de envío; owner-2 ya fue confirmado.
+    await repository.insert(buildOwner(phone: '300 000 0001'));
     await repository.insert(
       buildOwner(
         id: 'owner-2',
@@ -179,23 +208,45 @@ void main() {
         documentType: DocumentType.taxId,
         documentNumber: '900123456-7',
         email: 'contacto@inversionesmachuco.com',
+        phone: '300 000 0002',
       ),
     );
+    await repository.markSynchronized('owner-2');
 
-    expect(await repository.findUnsynchronized(), hasLength(2));
+    await repository.mergeRemoteOwners([
+      buildOwner(phone: '999 999 9999'),
+      buildOwner(
+        id: 'owner-2',
+        fullName: 'Inversiones Machuco S.A.S.',
+        documentType: DocumentType.taxId,
+        documentNumber: '900123456-7',
+        email: 'contacto@inversionesmachuco.com',
+        phone: '999 999 9998',
+      ),
+      buildOwner(
+        id: 'owner-3',
+        fullName: 'Nuevo Remoto',
+        documentNumber: '555555',
+        email: 'remoto@machuco.com',
+        phone: '999 999 9997',
+      ),
+    ]);
 
-    // Simula que la nube confirmó el primero: solo ese sale de pendientes.
-    await database.database.update(
-      'owners',
-      {'synchronized': 1},
-      where: 'id = ?',
-      whereArgs: ['owner-1'],
-    );
+    // El pendiente local no se pisa.
+    final localPending = await repository.findById('owner-1');
+    expect(localPending!.phone, '300 000 0001');
+    expect(localPending.isSynchronized, isFalse);
 
-    final pending = await repository.findUnsynchronized();
-    expect(pending, hasLength(1));
-    expect(pending.single.id, 'owner-2');
-    expect(pending.single.isSynchronized, isFalse);
+    // El ya sincronizado recibe los cambios de la nube.
+    final synced = await repository.findById('owner-2');
+    expect(synced!.phone, '999 999 9998');
+    expect(synced.isSynchronized, isTrue);
+
+    // El que solo existía en la nube se inserta ya marcado.
+    final remoteOnly = await repository.findById('owner-3');
+    expect(remoteOnly, isNotNull);
+    expect(remoteOnly!.isSynchronized, isTrue);
+    expect(await repository.findAll(), hasLength(3));
   });
 
   test(
@@ -237,41 +288,46 @@ void main() {
     expect(await repository.findAll(), hasLength(1));
   });
 
-  test('el servicio registra un propietario que sobrevive a una nueva sesión',
-      () async {
-    final service = OwnerService(repository: repository);
-    final created = await service.crearPropietario(
-      fullName: 'Camilo Torres',
-      documentType: DocumentType.citizenshipCard,
-      documentNumber: '79123456',
-      email: 'camilo.torres@machuco.com',
-      phone: '320 555 1234',
-      countryCode: '+57',
-      countryName: 'Colombia',
-    );
+  test(
+    'el servicio registra un propietario que sobrevive a una nueva sesión',
+    () async {
+      final service = OwnerService(repository: repository);
+      final created = await service.crearPropietario(
+        fullName: 'Camilo Torres',
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '79123456',
+        email: 'camilo.torres@machuco.com',
+        phone: '320 555 1234',
+        countryCode: '+57',
+        countryName: 'Colombia',
+      );
 
-    // Nueva sesión = nuevo servicio y repositorio sobre la misma base.
-    final secondSession = OwnerService(
-      repository: OwnerRepository(database: database),
-    );
-    final loaded = await secondSession.cargarPropietarios();
+      // Nueva sesión = nuevo servicio y repositorio sobre la misma base.
+      final secondSession = OwnerService(
+        repository: OwnerRepository(database: database),
+      );
+      final loaded = await secondSession.cargarPropietarios();
 
-    expect(
-      loaded.any((owner) => owner.id == created.id && owner.phone == created.phone),
-      isTrue,
-    );
-  });
+      expect(
+        loaded.any(
+          (owner) => owner.id == created.id && owner.phone == created.phone,
+        ),
+        isTrue,
+      );
+    },
+  );
 
-  test('la migración 13->14 agrega el indicativo sin perder los teléfonos',
-      () async {
-    final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
-    sqfliteFfiInit();
-    final legacy = await databaseFactoryFfi.openDatabase(
-      legacyPath,
-      options: sqflite.OpenDatabaseOptions(
-        version: 13,
-        onCreate: (db, version) async {
-          await db.execute('''
+  test(
+    'la migración 13->14 agrega el indicativo sin perder los teléfonos',
+    () async {
+      final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
+      sqfliteFfiInit();
+      final legacy = await databaseFactoryFfi.openDatabase(
+        legacyPath,
+        options: sqflite.OpenDatabaseOptions(
+          version: 13,
+          onCreate: (db, version) async {
+            await db.execute('''
             CREATE TABLE owners (
               id TEXT NOT NULL PRIMARY KEY,
               fullName TEXT NOT NULL,
@@ -286,37 +342,38 @@ void main() {
               updatedAt INTEGER NOT NULL
             )
           ''');
-        },
-      ),
-    );
-    await legacy.insert('owners', {
-      'id': 'owner-legacy',
-      'fullName': 'Laura Gómez Restrepo',
-      'documentType': DocumentType.citizenshipCard.name,
-      'documentNumber': '1020304050',
-      'email': 'laura.gomez@machuco.com',
-      'phone': '+57 300 123 4567',
-      'address': 'Calle 10 # 43-25',
-      'isActive': 1,
-      'synchronized': 0,
-      'createdAt': 1,
-      'updatedAt': 1,
-    });
-    await legacy.close();
+          },
+        ),
+      );
+      await legacy.insert('owners', {
+        'id': 'owner-legacy',
+        'fullName': 'Laura Gómez Restrepo',
+        'documentType': DocumentType.citizenshipCard.name,
+        'documentNumber': '1020304050',
+        'email': 'laura.gomez@machuco.com',
+        'phone': '+57 300 123 4567',
+        'address': 'Calle 10 # 43-25',
+        'isActive': 1,
+        'synchronized': 0,
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+      await legacy.close();
 
-    final migrated = await AppDatabaseProvider.open(name: legacyPath);
-    addTearDown(migrated.close);
-    final raw = migrated.database as sqflite.Database;
+      final migrated = await AppDatabaseProvider.open(name: legacyPath);
+      addTearDown(migrated.close);
+      final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 15);
-    final columns = await raw.rawQuery('PRAGMA table_info(owners)');
-    expect(
-      columns.map((column) => column['name']),
-      containsAll(['countryCode', 'countryName']),
-    );
-    final rows = await raw.query('owners');
-    expect(rows.single['phone'], '+57 300 123 4567');
-    expect(rows.single['countryCode'], isNull);
-    expect(await raw.query('document_types'), hasLength(5));
-  });
+      expect(await raw.getVersion(), 15);
+      final columns = await raw.rawQuery('PRAGMA table_info(owners)');
+      expect(
+        columns.map((column) => column['name']),
+        containsAll(['countryCode', 'countryName']),
+      );
+      final rows = await raw.query('owners');
+      expect(rows.single['phone'], '+57 300 123 4567');
+      expect(rows.single['countryCode'], isNull);
+      expect(await raw.query('document_types'), hasLength(5));
+    },
+  );
 }

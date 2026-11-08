@@ -273,6 +273,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       await widget.controller.saveLastCountryCode(selectedCountryCode.id);
     }
 
+    if (!mounted) return;
+
     if (initialData != null) {
       Navigator.of(context).pop(saved);
       return;

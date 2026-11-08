@@ -296,6 +296,42 @@ class _OwnerPageState extends State<OwnerPage> {
                     constraints: const BoxConstraints(maxWidth: _listMaxWidth),
                     child: CustomScrollView(
                       slivers: [
+                        if (_controller.syncWarningMessage != null)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                AppSpacing.s4,
+                                horizontalPadding,
+                                0,
+                              ),
+                              child: AppCard(
+                                semanticLabel:
+                                    'Aviso de sincronización de propietarios',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_off_outlined,
+                                      color: context.appColors.textSecondary,
+                                    ),
+                                    const SizedBox(width: AppSpacing.s2),
+                                    Expanded(
+                                      child: Text(
+                                        _controller.syncWarningMessage!,
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _controller.init,
+                                      child: const Text('Reintentar'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: EdgeInsets.fromLTRB(

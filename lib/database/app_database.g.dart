@@ -832,6 +832,13 @@ class _$OwnerDao extends OwnerDao {
   }
 
   @override
+  Future<void> markSynchronized(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE owners SET synchronized = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
   Future<void> deleteById(String id) async {
     await _queryAdapter
         .queryNoReturn('DELETE FROM owners WHERE id = ?1', arguments: [id]);

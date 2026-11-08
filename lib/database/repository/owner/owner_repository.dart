@@ -28,6 +28,10 @@ abstract class OwnerDao {
   @Query('SELECT * FROM owners WHERE synchronized = 0 ORDER BY createdAt ASC')
   Future<List<OwnerEntry>> findUnsynchronized();
 
+  /// Marca una fila como confirmada por la nube.
+  @Query('UPDATE owners SET synchronized = 1 WHERE id = :id')
+  Future<void> markSynchronized(String id);
+
   @insert
   Future<void> insertOwner(OwnerEntry owner);
 
@@ -80,12 +84,36 @@ class OwnerRepository {
   }
 
   /// Propietarios que todavía no se han enviado a la nube.
-  ///
-  /// Será la fuente del proceso de sincronización cuando exista el backend.
   Future<List<Owner>> findUnsynchronized() async {
     final database = await _database;
     final entries = await database.ownerDao.findUnsynchronized();
     return entries.map(_toOwner).toList(growable: false);
+  }
+
+  /// Confirma que la nube ya recibió el propietario.
+  Future<void> markSynchronized(String id) async {
+    final database = await _database;
+    await database.ownerDao.markSynchronized(id);
+  }
+
+  /// Incorpora los propietarios que existen en la nube.
+  ///
+  /// Un cambio local pendiente (`synchronized = 0`) nunca se pisa: se subirá
+  /// en el siguiente envío. Los registros nuevos se insertan ya marcados como
+  /// sincronizados para que no se vuelvan a enviar.
+  Future<void> mergeRemoteOwners(List<Owner> owners) async {
+    final database = await _database;
+    for (final remote in owners) {
+      final existing = await database.ownerDao.findById(remote.id);
+      if (existing == null) {
+        await database.ownerDao.insertOwner(_toEntry(remote, synchronized: 1));
+        continue;
+      }
+      if (existing.synchronized == 0) continue;
+      await database.ownerDao.updateOwner(
+        _toEntry(remote, synchronized: 1, createdAt: existing.createdAt),
+      );
+    }
   }
 
   Future<void> insert(Owner owner) async {
@@ -154,7 +182,12 @@ class OwnerRepository {
 
   /// Al crear, el registro nace con la marca `synchronized = 0` (pendiente
   /// de enviar a la nube) y con las marcas de tiempo de ahora.
-  OwnerEntry _toEntry(Owner owner) {
+  OwnerEntry _toEntry(
+    Owner owner, {
+    int synchronized = 0,
+    DateTime? createdAt,
+    DateTime? updatedAt,
+  }) {
     final now = DateTime.now();
     return OwnerEntry(
       id: owner.id,
@@ -167,9 +200,9 @@ class OwnerRepository {
       countryName: owner.countryName,
       address: owner.address,
       isActive: owner.isActive ? 1 : 0,
-      synchronized: 0,
-      createdAt: now,
-      updatedAt: now,
+      synchronized: synchronized,
+      createdAt: createdAt ?? now,
+      updatedAt: updatedAt ?? now,
     );
   }
 }

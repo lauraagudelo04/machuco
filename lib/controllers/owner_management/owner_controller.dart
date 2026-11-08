@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
@@ -7,6 +9,8 @@ import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
+import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
+import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
 
@@ -41,11 +45,17 @@ class OwnerController extends ChangeNotifier {
     AuthCatalogRepository? catalogRepository,
     DocumentTypeRepository? documentTypeRepository,
     OwnerPreferences? preferences,
+    OwnerCloudRepository? cloudRepository,
+    String? Function()? currentUserId,
   }) : _service = service ?? OwnerService(),
        _catalogRepository = catalogRepository,
        _documentTypeRepository =
            documentTypeRepository ?? DocumentTypeRepository(),
-       _preferences = preferences;
+       _preferences = preferences,
+       _cloudRepository =
+           cloudRepository ??
+           (service == null ? FirestoreOwnerCloudRepository() : null),
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid);
 
   /// Instancia compartida por las pantallas del módulo (listado, formulario y
   /// moteles del propietario) para que todas vean el mismo estado.
@@ -55,6 +65,12 @@ class OwnerController extends ChangeNotifier {
   );
 
   final OwnerService _service;
+
+  /// Nube de propietarios. Es `null` cuando se inyecta un servicio local en
+  /// los tests, igual que en pagos, para no salir a la red sin querer.
+  final OwnerCloudRepository? _cloudRepository;
+
+  final String? Function() _currentUserId;
 
   /// Preferencias locales del módulo. Es opcional para que los tests de
   /// persistencia no dependan de `shared_preferences`.
@@ -73,6 +89,9 @@ class OwnerController extends ChangeNotifier {
   String? _lastError;
   Future<void>? _load;
   bool _seededOnce = false;
+  bool _isSyncing = false;
+  bool _disposed = false;
+  String? _syncWarningMessage;
 
   List<CountryPhoneCode> _countryPhoneCodes = const [];
   CountryPhoneCode? _selectedCountryCode;
@@ -108,6 +127,13 @@ class OwnerController extends ChangeNotifier {
 
   /// Último error de negocio, o `null` si la última operación salió bien.
   String? get lastError => _lastError;
+
+  /// Indica si hay una sincronización con Firestore en curso.
+  bool get isSyncing => _isSyncing;
+
+  /// Aviso no bloqueante cuando la nube falló pero los datos locales siguen
+  /// disponibles. La pantalla lo muestra como banner, sin tapar el listado.
+  String? get syncWarningMessage => _syncWarningMessage;
 
   bool get hasOwners => _owners.isNotEmpty;
 
@@ -168,6 +194,8 @@ class OwnerController extends ChangeNotifier {
       _isLoading = false;
       notifyListeners();
     }
+    // La nube nunca bloquea el listado local: si falla, queda el aviso.
+    if (_lastError == null) await _synchronizeWithCloud();
   }
 
   /// Filtra el listado por nombre, número de documento o correo.
@@ -352,7 +380,10 @@ class OwnerController extends ChangeNotifier {
 
   /// Elimina un propietario de forma permanente y devuelve el que se quitó.
   ///
-  /// A diferencia de [setActiveState], la operación no se puede deshacer.
+  /// A diferencia de [setActiveState], la operación no se puede deshacer. Si
+  /// hay sesión y nube, primero se elimina el documento remoto: así el próximo
+  /// pull no lo resucita en este dispositivo. Sin conexión se conserva el
+  /// registro local y se informa el motivo.
   Future<Owner?> deleteOwner(String ownerId) async {
     final owner = _findOwner(ownerId);
     if (owner == null) {
@@ -360,10 +391,28 @@ class OwnerController extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+
+    final cloud = _cloudRepository;
+    final adminId = _currentUserId();
+    if (cloud != null && adminId != null && adminId.trim().isNotEmpty) {
+      try {
+        await cloud.deleteOwner(ownerId);
+      } on OwnerCloudRepositoryException catch (error) {
+        _lastError = '${error.message} No se eliminó en este dispositivo.';
+        notifyListeners();
+        return null;
+      } catch (_) {
+        _lastError =
+            'No se pudo eliminar el propietario de la nube. Intenta de nuevo.';
+        notifyListeners();
+        return null;
+      }
+    }
+
     return _runAction(() async {
       await _service.eliminarPropietario(ownerId);
       return owner;
-    });
+    }, sync: false);
   }
 
   bool _matchesQuery(Owner owner, String normalizedQuery) {
@@ -382,13 +431,20 @@ class OwnerController extends ChangeNotifier {
 
   /// Ejecuta una escritura, recarga el listado y centraliza el manejo de
   /// errores: las vistas solo leen [lastError] para informar al usuario.
-  Future<T?> _runAction<T>(Future<T> Function() action) async {
+  ///
+  /// Tras una escritura exitosa, [sync] lanza el envío a Firestore en segundo
+  /// plano para que la interfaz no espere a la red.
+  Future<T?> _runAction<T>(
+    Future<T> Function() action, {
+    bool sync = true,
+  }) async {
     _isLoading = true;
     _lastError = null;
     notifyListeners();
     try {
       final result = await action();
       await _reload();
+      if (sync && result != null) unawaited(_synchronizePending());
       return result;
     } catch (error) {
       _lastError = _messageFor(error);
@@ -396,6 +452,82 @@ class OwnerController extends ChangeNotifier {
     } finally {
       _isLoading = false;
       notifyListeners();
+    }
+  }
+
+  /// Sube los pendientes y luego trae lo que otros administradores hayan
+  /// guardado. La base local manda mientras haya cambios sin sincronizar.
+  Future<void> _synchronizeWithCloud() async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed) return;
+    final adminId = _currentUserId();
+    if (adminId == null || adminId.trim().isEmpty) {
+      _syncWarningMessage =
+          'Inicia sesión con Firebase para sincronizar los propietarios.';
+      notifyListeners();
+      return;
+    }
+
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    notifyListeners();
+    try {
+      await _pushPending(cloud, adminId);
+      final remote = await cloud.listOwners();
+      await _service.incorporarRemotos(remote);
+      await _reload();
+    } on OwnerCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+    } on OwnerRepositoryException catch (error) {
+      _syncWarningMessage =
+          'Los propietarios están en Firebase, pero no se pudieron '
+          'actualizar en este dispositivo: ${error.message}';
+    } catch (_) {
+      _syncWarningMessage =
+          'Los propietarios locales están disponibles, pero no se pudieron '
+          'sincronizar con Firebase.';
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  /// Envía solo los registros nuevos o modificados (`synchronized = 0`).
+  Future<void> _synchronizePending() async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed) return;
+    final adminId = _currentUserId();
+    if (adminId == null || adminId.trim().isEmpty) {
+      _syncWarningMessage =
+          'El propietario quedó guardado localmente. Inicia sesión para '
+          'sincronizarlo.';
+      notifyListeners();
+      return;
+    }
+
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    notifyListeners();
+    try {
+      await _pushPending(cloud, adminId);
+      await _reload();
+    } on OwnerCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+    } catch (_) {
+      _syncWarningMessage =
+          'El propietario quedó guardado localmente y se sincronizará al '
+          'reintentar.';
+    } finally {
+      _isSyncing = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _pushPending(OwnerCloudRepository cloud, String adminId) async {
+    final pending = await _service.propietariosSinSincronizar();
+    for (final owner in pending) {
+      await cloud.saveOwner(adminId: adminId, owner: owner);
+      await _service.marcarSincronizado(owner.id);
     }
   }
 
@@ -467,5 +599,11 @@ class OwnerController extends ChangeNotifier {
       return 'Ingresa un número de $range dígitos para ${code.countryName}.';
     }
     return null;
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }

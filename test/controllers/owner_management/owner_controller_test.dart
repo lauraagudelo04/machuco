@@ -10,7 +10,9 @@ import 'package:machuco/database/repository/document_type/document_type_reposito
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
+import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
+import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
 import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -25,12 +27,17 @@ void main() {
   ///
   /// Varios controladores sobre la misma base simulan cierres y aperturas de
   /// sesión: lo que persiste es la base, no el estado en memoria.
-  OwnerController buildController({OwnerPreferences? preferences}) =>
-      OwnerController(
-        service: OwnerService(repository: OwnerRepository(database: database)),
-        documentTypeRepository: DocumentTypeRepository(database: database),
-        preferences: preferences,
-      );
+  OwnerController buildController({
+    OwnerPreferences? preferences,
+    OwnerCloudRepository? cloudRepository,
+    String? currentUserId = 'admin-1',
+  }) => OwnerController(
+    service: OwnerService(repository: OwnerRepository(database: database)),
+    documentTypeRepository: DocumentTypeRepository(database: database),
+    preferences: preferences,
+    cloudRepository: cloudRepository,
+    currentUserId: () => currentUserId,
+  );
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('machuco_owner_ctl_');
@@ -315,4 +322,154 @@ void main() {
     expect(controller.visibleOwners, controller.owners);
     expect(controller.owners, hasLength(3));
   });
+
+  group('sincronización con Firestore', () {
+    test('init sube los pendientes y los marca sincronizados', () async {
+      final cloud = _FakeOwnerCloudRepository();
+      final controller = buildController(cloudRepository: cloud);
+
+      await controller.init();
+
+      expect(controller.syncWarningMessage, isNull);
+      expect(cloud.remote, hasLength(3));
+      expect(controller.owners.every((owner) => owner.isSynchronized), isTrue);
+      expect(
+        await OwnerRepository(database: database).findUnsynchronized(),
+        isEmpty,
+      );
+    });
+
+    test('init incorpora propietarios que solo existen en la nube', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['remote-1'] = const Owner(
+          id: 'remote-1',
+          fullName: 'Remoto Uno',
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '777777',
+          email: 'remoto@machuco.com',
+          phone: '300 777 7777',
+          isSynchronized: true,
+        );
+      final controller = buildController(cloudRepository: cloud);
+
+      await controller.init();
+
+      expect(controller.owners, hasLength(4));
+      expect(
+        controller.owners.any(
+          (owner) => owner.id == 'remote-1' && owner.isSynchronized,
+        ),
+        isTrue,
+      );
+    });
+
+    test('si la nube falla conserva los locales y muestra el aviso', () async {
+      final cloud = _FakeOwnerCloudRepository()..failSave = true;
+      final controller = buildController(cloudRepository: cloud);
+
+      await controller.init();
+
+      expect(controller.owners, hasLength(3));
+      expect(controller.owners.every((owner) => !owner.isSynchronized), isTrue);
+      expect(controller.syncWarningMessage, isNotNull);
+    });
+
+    test('crear un propietario lo envía a la nube', () async {
+      final cloud = _FakeOwnerCloudRepository();
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+
+      final created = await controller.createOwner(
+        fullName: 'Camilo Torres',
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '79123456',
+        email: 'camilo.torres@machuco.com',
+        phone: '320 555 1234',
+        countryCode: '+57',
+        countryName: 'Colombia',
+      );
+      // El envío posterior a la escritura es en segundo plano: se espera con
+      // una carga completa, que también reintenta los pendientes.
+      await controller.init();
+
+      expect(created, isNotNull);
+      expect(cloud.remote.containsKey(created!.id), isTrue);
+      final persisted = await OwnerRepository(
+        database: database,
+      ).findById(created.id);
+      expect(persisted!.isSynchronized, isTrue);
+    });
+
+    test('eliminar borra también el documento remoto', () async {
+      final cloud = _FakeOwnerCloudRepository();
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+      final target = controller.owners.first;
+
+      final deleted = await controller.deleteOwner(target.id);
+
+      expect(deleted, isNotNull);
+      expect(cloud.remote.containsKey(target.id), isFalse);
+      expect(controller.owners.any((owner) => owner.id == target.id), isFalse);
+    });
+
+    test('si la nube no puede borrar, conserva el propietario local', () async {
+      final cloud = _FakeOwnerCloudRepository();
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+      final target = controller.owners.first;
+      cloud.failDelete = true;
+
+      final deleted = await controller.deleteOwner(target.id);
+
+      expect(deleted, isNull);
+      expect(controller.lastError, isNotNull);
+      expect(controller.owners.any((owner) => owner.id == target.id), isTrue);
+      expect(cloud.remote.containsKey(target.id), isTrue);
+    });
+  });
+}
+
+/// Doble en memoria de [OwnerCloudRepository] para los tests del controlador.
+class _FakeOwnerCloudRepository implements OwnerCloudRepository {
+  final Map<String, Owner> remote = {};
+  bool failSave = false;
+  bool failList = false;
+  bool failDelete = false;
+
+  @override
+  Future<void> saveOwner({
+    required String adminId,
+    required Owner owner,
+  }) async {
+    if (failSave) {
+      throw const OwnerCloudRepositoryException(
+        OwnerCloudFailureType.network,
+        'Sin conexión.',
+      );
+    }
+    remote[owner.id] = owner.copyWith(isSynchronized: true);
+  }
+
+  @override
+  Future<List<Owner>> listOwners() async {
+    if (failList) {
+      throw const OwnerCloudRepositoryException(
+        OwnerCloudFailureType.network,
+        'Sin conexión.',
+      );
+    }
+    return remote.values.toList(growable: false);
+  }
+
+  @override
+  Future<void> deleteOwner(String ownerId) async {
+    if (failDelete) {
+      throw const OwnerCloudRepositoryException(
+        OwnerCloudFailureType.network,
+        'Sin conexión.',
+      );
+    }
+    remote.remove(ownerId);
+  }
 }
