@@ -12,3 +12,13 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Artefactos de Gradle dentro de android/ (reportes, cachés)
+/build/
+/app/build/
+
+# Firma y credenciales: nunca se versionan (docs/auth/android-setup.md)
+**/*.p12
+**/*.pem
+**/*.pepk
+**/key.properties

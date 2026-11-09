@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/widgets/auth/auth_password_field.dart';
-import 'package:machuco/widgets/auth/coming_soon_social_buttons.dart';
 
 /// Formulario de inicio de sesión. No conoce el controlador: recibe los
 /// controladores de texto y los callbacks por parámetro.
@@ -15,7 +14,10 @@ class LoginForm extends StatelessWidget {
     required this.onForgotPassword,
     required this.onSubmit,
     required this.onRegisterTap,
+    this.socialButtons,
     this.notice,
+    this.rememberEmail = false,
+    this.onRememberEmailChanged,
   });
 
   final TextEditingController emailController;
@@ -25,8 +27,15 @@ class LoginForm extends StatelessWidget {
   final VoidCallback onSubmit;
   final VoidCallback onRegisterTap;
 
+  /// "Continuar con Google/GitHub".
+  final Widget? socialButtons;
+
   /// Aviso en línea (error de la última solicitud), si lo hay.
   final Widget? notice;
+
+  /// Casilla "Recordar mi correo" (no aplica al ingreso social).
+  final bool rememberEmail;
+  final ValueChanged<bool>? onRememberEmailChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -62,6 +71,17 @@ class LoginForm extends StatelessWidget {
                   validator: AuthValidators.password,
                   onSubmitted: (_) => onSubmit(),
                 ),
+                CheckboxListTile(
+                  key: const ValueKey('remember-email'),
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  dense: true,
+                  value: rememberEmail,
+                  title: const Text('Recordar mi correo'),
+                  onChanged: submitting || onRememberEmailChanged == null
+                      ? null
+                      : (value) => onRememberEmailChanged!(value ?? false),
+                ),
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
@@ -81,7 +101,7 @@ class LoginForm extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.s4),
-          const ComingSoonSocialButtons(),
+          ?socialButtons,
           const SizedBox(height: AppSpacing.s2),
           Text.rich(
             TextSpan(

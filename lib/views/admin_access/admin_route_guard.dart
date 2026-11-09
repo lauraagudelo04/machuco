@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/registered_user.dart';
@@ -10,7 +11,9 @@ import 'package:machuco/views/login/logout_navigation.dart';
 typedef AdminSessionLoader = Future<AuthSession?> Function();
 
 /// Protege las rutas de administración: si la sesión no es de un
-/// administrador activo redirige al login.
+/// administrador activo redirige al login. Un administrador que aún debe
+/// cambiar su contraseña temporal (`mustChangePassword`) va a
+/// [AuthRoutes.adminChangePassword], también al restaurar la sesión.
 ///
 /// Esto es solo experiencia de usuario: la autorización real son las reglas
 /// de `firestore.rules`.
@@ -20,6 +23,8 @@ class AdminRouteGuard extends StatefulWidget {
     required this.child,
     this.sessionLoader,
     this.onDenied,
+    this.allowPendingPasswordChange = false,
+    this.onPasswordChangeRequired,
   });
 
   final Widget child;
@@ -30,11 +35,18 @@ class AdminRouteGuard extends StatefulWidget {
   /// Por defecto navega al login limpiando la pila.
   final void Function(BuildContext context)? onDenied;
 
+  /// `true` solo en la pantalla de cambio de contraseña: sin esto el guard
+  /// la redirigiría a sí misma en bucle.
+  final bool allowPendingPasswordChange;
+
+  /// Por defecto navega a [AuthRoutes.adminChangePassword] limpiando la pila.
+  final void Function(BuildContext context)? onPasswordChangeRequired;
+
   @override
   State<AdminRouteGuard> createState() => _AdminRouteGuardState();
 }
 
-enum _GuardState { checking, allowed, denied, failed }
+enum _GuardState { checking, allowed, denied, passwordChange, failed }
 
 class _AdminRouteGuardState extends State<AdminRouteGuard> {
   _GuardState _state = _GuardState.checking;
@@ -56,13 +68,25 @@ class _AdminRouteGuardState extends State<AdminRouteGuard> {
           session != null &&
           session.role == RegisteredUserRole.admin &&
           session.accountStatus == AccountStatus.active;
+      final mustChange =
+          isAdmin &&
+          !widget.allowPendingPasswordChange &&
+          session.profile?.mustChangePassword == true;
       setState(
-        () => _state = isAdmin ? _GuardState.allowed : _GuardState.denied,
+        () => _state = !isAdmin
+            ? _GuardState.denied
+            : mustChange
+            ? _GuardState.passwordChange
+            : _GuardState.allowed,
       );
-      if (!isAdmin) {
+      if (!isAdmin || mustChange) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!mounted) return;
-          (widget.onDenied ?? goToLogin)(context);
+          if (mustChange) {
+            (widget.onPasswordChangeRequired ?? _goToChangePassword)(context);
+          } else {
+            (widget.onDenied ?? goToLogin)(context);
+          }
         });
       }
     } on AuthFailure {
@@ -71,11 +95,17 @@ class _AdminRouteGuardState extends State<AdminRouteGuard> {
     }
   }
 
+  void _goToChangePassword(BuildContext context) {
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AuthRoutes.adminChangePassword, (_) => false);
+  }
+
   @override
   Widget build(BuildContext context) {
     return switch (_state) {
       _GuardState.allowed => widget.child,
-      _GuardState.checking => Scaffold(
+      _GuardState.checking || _GuardState.passwordChange => Scaffold(
         body: Center(
           child: Semantics(
             label: 'Verificando acceso',

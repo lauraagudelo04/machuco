@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/admin_access_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/owner_approval_request.dart';
+import 'package:machuco/models/auth/owner_request_alert.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/views/admin_access/owner_application_format.dart';
+import 'package:machuco/widgets/auth/auth_notice.dart';
 import 'package:machuco/widgets/auth/reject_owner_sheet.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
@@ -40,15 +42,32 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
 
   AdminAccessController get _controller => widget.controller;
 
+  @override
+  void initState() {
+    super.initState();
+    // Las alertas solo informan; se piden tras el primer frame para no
+    // notificar al controlador compartido mientras se construye el árbol.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final application = _application;
+      if (mounted && application != null) _controller.loadAlerts(application);
+    });
+  }
+
   Future<void> _approve() async {
     final application = _application;
     if (application == null) return;
+    final alerts = _controller.alertsFor(widget.uid);
+    final name = ownerApplicationTitle(application);
     final confirmed = await AppDialog.confirm(
       context,
-      title: 'Aprobar solicitud',
-      message:
-          '¿Aprobar la cuenta de ${ownerApplicationTitle(application)}? '
-          'Podrá ingresar como propietario de inmediato.',
+      title: alerts != null && alerts.isNotEmpty
+          ? 'Aprobar con advertencias'
+          : 'Aprobar solicitud',
+      message: alerts != null && alerts.isNotEmpty
+          ? '¿Aprobar la cuenta de $name? Revisa estas advertencias:\n'
+                '${alerts.alerts.map((a) => '• ${a.message}').join('\n')}'
+          : '¿Aprobar la cuenta de $name? '
+                'Podrá ingresar como propietario de inmediato.',
       confirmLabel: 'Aprobar',
     );
     if (!confirmed || !mounted) return;
@@ -129,6 +148,43 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
     );
   }
 
+  /// Advertencias informativas: nunca bloquean "Aprobar".
+  Widget _buildAlerts(BuildContext context) {
+    if (_controller.isCheckingAlerts(widget.uid)) {
+      return const _AlertsChecking();
+    }
+    final alerts = _controller.alertsFor(widget.uid);
+    if (alerts == null || alerts.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.s4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              'Revisa antes de aprobar',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s2),
+          for (final alert in alerts.alerts) ...[
+            AuthNotice(
+              message: alert.message,
+              tone: alert.type == OwnerRequestAlertType.verificationUnavailable
+                  ? AuthNoticeTone.info
+                  : AuthNoticeTone.error,
+              icon: alert.type == OwnerRequestAlertType.verificationUnavailable
+                  ? Icons.wifi_off_outlined
+                  : Icons.warning_amber_outlined,
+            ),
+            const SizedBox(height: AppSpacing.s2),
+          ],
+        ],
+      ),
+    );
+  }
+
   Widget _buildContent(BuildContext context, OwnerApplication application) {
     final busy = _controller.isSubmitting;
     final plan = application.planId;
@@ -154,6 +210,7 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
             ],
           ),
         ),
+        _buildAlerts(context),
         const SizedBox(height: AppSpacing.s5),
         AppButton(
           label: 'Aprobar',
@@ -169,6 +226,35 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
           onPressed: busy ? null : _reject,
         ),
       ],
+    );
+  }
+}
+
+class _AlertsChecking extends StatelessWidget {
+  const _AlertsChecking();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: AppSpacing.s4),
+      child: Semantics(
+        liveRegion: true,
+        child: Row(
+          children: [
+            const SizedBox.square(
+              dimension: AppSpacing.s5,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            const SizedBox(width: AppSpacing.s2),
+            Expanded(
+              child: Text(
+                'Comprobando los datos de la solicitud…',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

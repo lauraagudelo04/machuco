@@ -10,6 +10,12 @@ import 'package:machuco/widgets/form/app_bottom_sheet.dart';
 const passwordResetNeutralMessage =
     'Si el correo está registrado, recibirás instrucciones.';
 
+/// Se muestra siempre (exista o no la cuenta, sea social o no), así no revela
+/// nada sobre el correo escrito.
+const socialAccountResetHint =
+    'Si creaste tu cuenta con Google o GitHub, también puedes seguir '
+    'entrando con ese botón; el enlace solo agrega una contraseña.';
+
 Future<void> showForgotPasswordSheet(
   BuildContext context, {
   required LoginController controller,
@@ -118,6 +124,13 @@ class _ForgotPasswordSheetState extends State<ForgotPasswordSheet> {
                   tone: AuthNoticeTone.info,
                   icon: Icons.mark_email_read_outlined,
                   message: passwordResetNeutralMessage,
+                ),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  socialAccountResetHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
               ],
               if (_failure != null) ...[

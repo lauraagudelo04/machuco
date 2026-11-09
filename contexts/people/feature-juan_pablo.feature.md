@@ -30,11 +30,10 @@ rechazar cuentas `pending_approval`).
   guardan en Firebase (Cloud Firestore y/o Cloud Storage, pendiente de
   confirmar cuál) protegidos por reglas de seguridad. Los **maestros** siguen
   en Supabase.
-- **Proveedores externos (Google/Gmail y GitHub): solo definidos, no
-  implementados**. Se ingresarán más adelante a través de Firebase Auth y en
-  cooperación con otras ramas. En esta rama solo se dejan escritos sus
-  escenarios (ver "Ingreso con proveedores externos [Futuro]"); no se agregan
-  dependencias, botones funcionales ni lógica para ellos.
+- **Proveedores externos (Google/Gmail y GitHub): implementados** a través de
+  Firebase Auth (`FirebaseSocialAuthService`, `SocialAuthButtons`, "Completar
+  perfil"; ver `docs/auth/plan-auth-social.md`). *(Texto anterior: "solo
+  definidos, no implementados".)*
 - **Credenciales de prueba retiradas (decisión 2026-11-04)**: los
   integrantes del proyecto ya crean sus propios usuarios con correo en
   Firebase Auth, así que se **elimina** el login quemado: el
@@ -372,8 +371,26 @@ And si no hay perfil guardado recibe `null`
 > mientras no exista, la app lo hace en el orden indicado abajo. Respaldo
 > legal: derecho de supresión de la Ley 1581 de 2012.
 
+> **Qué pasa con los datos según el rol (decisión 2026-11-08)**: las cuentas
+> de **Cliente y Propietario se eliminan** con sus datos personales. Las de
+> **Administrador se anonimizan**, porque sus decisiones (aprobaciones,
+> rechazos, creación de otros administradores) deben seguir siendo auditables;
+> ver "Gestión de administradores". **Desde 2026-11-09** el administrador
+> anonimiza su `users/{uid}` (falla con `lastAdministrator`, sin cambios, si es
+> el último activo) y luego se borra su usuario de Auth; Cliente y Propietario
+> siguen borrando su perfil como antes. Sin Cloud Functions (plan Spark): la
+> eliminación se hace desde la app en el orden indicado, y las reglas de
+> Firestore impiden que un administrador borre su `users/{uid}`.
+
+Scenario: La opción de eliminar está disponible en todos los perfiles
+Given un Cliente, un Propietario (activo, pendiente o rechazado) o un Administrador autenticado
+When abre su perfil o menú
+Then encuentra la acción "Eliminar cuenta" al final, como acción de peligro
+And todos los perfiles usan el mismo panel de confirmación, a través de esta rama
+And el panel indica qué datos se eliminan o, si es Administrador, cuáles se anonimizan
+
 Scenario: El usuario elimina su cuenta (camino feliz)
-Given un usuario autenticado en su perfil
+Given un Cliente o Propietario autenticado en su perfil
 When selecciona "Eliminar cuenta"
 Then el sistema muestra un AppBottomSheet que explica que la acción es permanente y qué datos se borran
 And pide su contraseña actual y escribir "ELIMINAR" para confirmar
@@ -430,6 +447,44 @@ Given un usuario autenticado o una petición manipulada
 When intenta borrar `users/{uid}` de otro usuario
 Then las reglas de Firestore lo rechazan (solo `request.auth.uid == uid` puede borrar su documento)
 
+Scenario: Eliminar una cuenta que solo entra con Google o GitHub
+Given un usuario sin contraseña que ingresó con Google o GitHub
+When confirma "Eliminar cuenta"
+Then el sistema no le pide contraseña
+And lo reautentica con su proveedor antes de eliminar
+But si cancela la confirmación del proveedor, no se elimina nada y mantiene la sesión
+
+Scenario: Qué datos personales se eliminan
+Given un Cliente o Propietario que confirmó la eliminación
+When el sistema termina el proceso
+Then ya no existen su documento `users/{uid}` (nombres, apellidos, correo, celular, fecha de nacimiento, tipo de persona, NIT, razón social y plan de interés) ni su usuario de Firebase Auth
+And tampoco sus subcolecciones de `users/{uid}`, que Firestore no borra en cascada
+And se borran su perfil de SQLite y el namespace `auth` de SharedPreferences
+And quedan desvinculados sus proveedores de ingreso
+
+Scenario: Datos de la cuenta en otras funcionalidades
+Given un usuario eliminado con registros en reservas, reseñas, PQRS o pagos
+When el backend procesa la eliminación
+Then borra los registros que no deben conservarse
+And los que se conservan por obligación legal o contable quedan sin nombre, correo, celular ni otro dato que lo identifique
+And cada rama dueña de esos datos define el tratamiento de los suyos
+
+Scenario: Un Administrador elimina su propia cuenta
+Given un Administrador autenticado que no es el último administrador activo
+When confirma "Eliminar cuenta"
+Then el sistema anonimiza su cuenta en lugar de borrar su documento `users/{uid}`
+And aplica la feature "Gestión de administradores"
+And navega a la pantalla de login con el mensaje "Tu cuenta fue eliminada" sin permitir volver atrás
+
+Scenario: Sesión abierta en otro dispositivo al eliminar la cuenta
+Given un usuario con sesión abierta en otro dispositivo
+When elimina su cuenta
+Then esa sesión deja de tener acceso al backend, a más tardar al vencer su token
+And al detectarlo, la app de ese dispositivo borra sus datos locales y muestra el login
+And la app lo revisa al abrirse, al volver a primer plano y cada 15 minutos en primer plano (`AccountSessionWatcher`)
+But sin conexión, o si el usuario no tiene perfil porque está en "Completar perfil", conserva la sesión
+But si la sesión solo venció, p. ej. por un cambio de contraseña, conserva el correo recordado
+
 Scenario: Prevención de doble envío al eliminar
 Given un usuario que acaba de confirmar la eliminación
 When la operación sigue en curso
@@ -452,6 +507,11 @@ And un segundo toque no repite la operación
 | DA-10 | Reglas (emulador) | Usuario A borra `users/{A}` | Permitido |
 | DA-11 | Widget | Flujo completo con servicio falso | Navega al login con el mensaje y sin ruta para volver atrás |
 | DA-12 | Manual | Eliminar una cuenta real del equipo y volver a registrarse | El registro nuevo funciona; el perfil anterior no existe en Firestore |
+| DA-13 | Widget | Perfiles de Cliente, Propietario y Administrador | Los tres muestran "Eliminar cuenta" |
+| DA-14 | Unitaria (servicio) | Cuenta solo de Google o GitHub | Reautentica con el proveedor, sin pedir contraseña |
+| DA-15 | Unitaria (servicio) | Cliente con subcolecciones en `users/{uid}` | No quedan documentos bajo `users/{uid}` |
+| DA-16 | Unitaria (servicio) | Administrador elimina su cuenta | Anonimiza; no borra `users/{uid}` |
+| DA-17 | Manual | Eliminar con sesión abierta en otro dispositivo | Ese dispositivo pierde acceso y borra sus datos locales |
 
 ### Riesgos
 
@@ -464,6 +524,7 @@ And un segundo toque no repite la operación
 | `requires-recent-login` en sesiones viejas | La operación falla de forma confusa | Reautenticar siempre antes de eliminar |
 | Reglas de Firestore que permitan borrar perfiles ajenos | Borrado malicioso de cuentas | Regla `allow delete: if request.auth.uid == uid`; pruebas DA-09 y DA-10 en el emulador |
 | Datos locales que sobreviven a la eliminación | Fuga de información en el dispositivo | Borrar SQLite y el namespace `auth` completo tras confirmar la eliminación |
+| Subcolecciones de `users/{uid}` que sobreviven: Firestore no borra en cascada y las reglas hoy tienen `allow delete: if false` en `subscriptions` y `payments` | Datos personales huérfanos tras "eliminar" | Borrarlas desde el backend o acordar el cambio de reglas con la rama de suscripciones; prueba DA-15 |
 
 ## Feature: Correo del usuario compartido (SharedPreferences)
 
@@ -735,9 +796,15 @@ When llega al backend
 Then el backend valida que el plan exista y esté activo, y si no, rechaza el registro
 And el precio nunca se toma del valor enviado por la app
 
-## Feature: Ingreso con proveedores externos (Google/Gmail y GitHub) [Futuro]
+## Feature: Ingreso con proveedores externos (Google/Gmail y GitHub) [Hecho; ver docs/auth/plan-auth-social.md]
 
-> **Solo definición, no implementación.** Estos escenarios se implementarán
+> **Actualización 2026-11-09:** ya están implementados con
+> `FirebaseSocialAuthService` (`signInWithProvider`), `SocialAuthButtons` y
+> "Completar perfil"; los escenarios siguientes se conservan como referencia
+> histórica y la fuente vigente es `docs/auth/`. El texto siguiente ("solo
+> definición") ya no aplica.
+>
+> **Solo definición, no implementación (histórico).** Estos escenarios se implementarán
 > más adelante con los proveedores de Firebase Auth (`GoogleAuthProvider` y
 > `GithubAuthProvider`) y **en cooperación con otras ramas** (configuración
 > del proyecto de Firebase, OAuth App de GitHub, SHA-1/SHA-256 de Android,
@@ -853,16 +920,22 @@ When se filtra la lista
 Then el filtro se aplica en memoria o con parámetros enlazados
 And la app no falla ni muestra resultados inesperados
 
-## Feature: Creación de administradores (vista del administrador) [Pendiente]
+## Feature: Creación de administradores (vista del administrador) [Datos y reglas hechos 2026-11-09; vista pendiente]
 
-> No implementada al 2026-10-28: los administradores se crean a mano en la
+> Datos, controller y reglas implementados el 2026-11-09
+> (`AdministratorsRepository`, `AdministratorsController`, `firestore.rules`);
+> `AdministratorsPage` sigue mostrando "Próximamente" hasta que la rama de
+> frontend construya las vistas con ese contrato. Antes se creaban a mano en la
 > consola de Firebase (`users/{uid}` con `role: admin`).
 
-> Solo un administrador autenticado puede crear otro administrador. La
-> creación ocurre en el **backend** (p. ej. una función con Firebase Admin
-> SDK), porque crear un usuario con el SDK cliente de Firebase cerraría la
-> sesión del administrador creador e impediría validar el rol del lado del
-> servidor.
+> **Sin backend propio (plan Spark, decisión 2026-11-09).** Solo un
+> administrador activo puede crear otro; la autoridad son las reglas de
+> Firestore. La app crea el usuario con una **instancia secundaria** de
+> Firebase (así no se cierra la sesión de quien crea), genera una **contraseña
+> temporal** que quien crea ve una sola vez y entrega por su cuenta, y escribe
+> `users/{uid}` con la sesión del administrador principal. **No se envían
+> correos ni SMS.** La contraseña temporal nunca se guarda ni se registra. Si
+> falla la escritura del perfil, se borra el usuario recién creado.
 
 Scenario: El administrador accede a la vista "Administradores"
 Given un administrador autenticado
@@ -875,17 +948,18 @@ Given un administrador en la vista "Administradores"
 When presiona "Crear administrador"
 And diligencia nombres, apellidos, indicativo y celular y correo con formato válido (sin tipo ni número de documento)
 And presiona "Crear"
-Then el backend verifica que quien hace la petición tiene rol `admin` y cuenta `active`
-And crea la cuenta con rol `admin` y estado `active`
-And envía al nuevo administrador un correo para definir su contraseña (el creador nunca conoce ni define la contraseña)
-And registra qué administrador lo creó y cuándo
+Then las reglas de Firestore verifican que quien escribe es un administrador activo (rol `admin`, estado `active` y sin contraseña temporal pendiente)
+And la app crea el usuario en Firebase Auth con una contraseña temporal de 12 o más caracteres generada con `Random.secure()`
+And guarda `users/{uid}` con rol `admin`, estado `active`, `mustChangePassword: true`, `createdBy` y `createdAt`, y suma 1 a `system/adminRegistry.activeAdminCount` en la misma transacción
+And muestra la contraseña temporal una sola vez, para que el creador la entregue por su cuenta (no se envía ningún correo ni SMS)
 And el administrador creador permanece en su sesión y ve al nuevo administrador en la lista con un mensaje de confirmación
 
 Scenario: Correo ya registrado al crear un administrador
 Given un administrador en el formulario "Crear administrador"
 When ingresa un correo que ya pertenece a otra cuenta
-Then el sistema informa que el correo ya está en uso
+Then el sistema informa que "ese correo ya está en uso" (`email-already-in-use`)
 And no crea ni modifica ninguna cuenta (no convierte en administrador a un cliente o propietario existente)
+And el correo de un administrador eliminado por otro también sigue ocupado, porque su usuario de Firebase Auth no se borra (limitación aceptada)
 
 Scenario: Datos inválidos al crear un administrador
 Given un administrador en el formulario "Crear administrador"
@@ -896,7 +970,7 @@ Scenario: Un usuario que no es administrador intenta crear un administrador
 Given un cliente o propietario autenticado, o una petición manipulada
 When intenta acceder a la ruta de "Administradores" o llama directamente a la operación de creación
 Then la app no muestra la vista (redirige a la ruta de su rol)
-And el backend rechaza la petición aunque la app haya sido modificada
+And las reglas de Firestore rechazan la escritura aunque la app haya sido modificada
 
 Scenario: Prevención de doble envío al crear un administrador
 Given un administrador que acaba de presionar "Crear"
@@ -904,10 +978,279 @@ When la creación todavía está en curso
 Then el botón muestra estado de carga y queda deshabilitado
 And un segundo toque no crea una segunda cuenta
 
-## Feature: Solicitudes de aprobación de propietarios (vista del administrador) [Pendiente]
+Scenario: Primer ingreso del nuevo administrador
+Given un administrador recién creado que recibió la contraseña temporal de quien lo creó
+When inicia sesión con esa contraseña
+Then `resolvePostLoginRoute` lo lleva a `AuthRoutes.adminChangePassword` en lugar de la ruta del administrador
+And debe definir una contraseña nueva que cumpla la política
+When la cambia
+Then la app llama a `User.updatePassword` y luego limpia `mustChangePassword`
+And entra a la ruta inicial del administrador
+But si Firebase pide un inicio de sesión reciente (`requires-recent-login`) o la contraseña es débil, se informa y puede reintentar sin repetir el cambio ya hecho
+And mientras `mustChangePassword` sea `true`, las reglas no lo tratan como administrador activo (no crea, edita ni elimina administradores, ni atiende solicitudes)
 
-> No implementada al 2026-10-28. Las reglas de Firestore ya permiten que un
-> admin cambie `accountStatus`; falta la interfaz.
+Scenario: El nuevo administrador pierde la contraseña temporal
+Given un administrador creado que aún no define su contraseña
+When usa "¿Olvidaste tu contraseña?" desde el login
+Then recibe el correo de restablecimiento existente y define su contraseña desde allí
+And nadie más ve ni reenvía la contraseña (no existe "Reenviar correo")
+
+Scenario: Error de red al crear un administrador
+Given un administrador en el formulario "Crear administrador"
+When la conexión falla antes de recibir respuesta
+Then el sistema conserva los datos escritos y ofrece reintentar
+And si el usuario de Auth ya se había creado y falla la escritura del perfil, la app lo borra (reversión)
+And reintentar no deja una segunda cuenta huérfana con el mismo correo
+
+## Feature: Gestión de administradores (vista del administrador) [Datos y reglas hechos 2026-11-09; vista pendiente]
+
+> Vista "Administradores": consultar, registrar (ver "Creación de
+> administradores"), actualizar y eliminar cuentas de administrador. **Siempre
+> debe existir al menos un administrador activo**, y eliminar un administrador
+> **anonimiza** sus datos en lugar de borrar su registro.
+>
+> **Administrador activo (para la regla del último administrador)** es todo
+> el que tiene `role: admin` y `accountStatus: active`, **incluso con la
+> contraseña temporal pendiente** (decisión 2026-11-09; reemplaza "ya definió
+> su contraseña"). Distinto es el administrador "activo para las reglas"
+> (`isActiveAdmin()`): además exige `mustChangePassword != true`, porque solo
+> puede operar quien ya cambió su contraseña.
+>
+> **Sin backend propio (plan Spark).** Anonimizar a otro administrador es solo
+> escribir su `users/{uid}`; las reglas de Firestore son la autoridad.
+> **Limitación aceptada:** el usuario de Firebase Auth de OTRO administrador no
+> se puede borrar desde el cliente (solo el Admin SDK), así que sigue
+> existiendo: pierde el acceso porque su perfil queda `anonymized`, pero su
+> correo sigue ocupado. Al **eliminar la propia cuenta** sí se borra el usuario
+> con `User.delete()`.
+>
+> **Contador:** `system/adminRegistry.activeAdminCount`. Crear suma 1 y
+> anonimizar resta 1 en una transacción que lee el conteo y falla con
+> `lastAdmin` si es <= 1 (si el documento no existe, la app lo inicializa
+> contando los administradores activos). Las reglas exigen ese cambio con
+> `getAfter` y que el resultado sea >= 1.
+
+### Datos al anonimizar `users/{uid}`
+
+| Dato | Tratamiento |
+| --- | --- |
+| `fullName` | Se reemplaza por "Administrador eliminado" |
+| `firstNames`, `lastNames`, `email`, `phoneNumber`, `phoneCountryCodeId` | Se eliminan |
+| `accountStatus` | Pasa a `anonymized` (estado nuevo, definitivo) |
+| `anonymizedAt`, `anonymizedBy` | Se agregan: fecha y uid de quien ejecutó la acción |
+| `uid`, `role`, `createdAt`, `createdBy` (si existía) | Se conservan, sin identificar a la persona |
+| `mustChangePassword` | Se elimina |
+| Referencias en otros documentos (`approvedBy`, `rejectedBy`, creador) | Se conservan: apuntan al uid anonimizado |
+| Usuario de Firebase Auth | Propia cuenta: se elimina con `User.delete()`. Otro administrador: **se conserva** (limitación aceptada); no puede ingresar porque la app rechaza el estado `anonymized` con "Esta cuenta ya no existe" |
+
+### Consulta
+
+Scenario: Consultar los administradores
+Given un administrador activo autenticado
+When abre su perfil o menú y selecciona "Administradores"
+Then el sistema muestra cada administrador con nombre, correo y estado (activo, deshabilitado o con contraseña temporal pendiente: `mustChangePassword`)
+And identifica su propia cuenta con la etiqueta "Tú"
+And no muestra las cuentas anonimizadas
+And ofrece el botón "Crear administrador"
+
+Scenario: Error de red al cargar los administradores
+Given un administrador en la vista "Administradores"
+When la conexión falla al cargar la lista
+Then el sistema muestra un error comprensible con opción de reintentar
+And no muestra datos parciales como si fueran la lista completa
+
+Scenario: Ver el detalle de un administrador
+Given un administrador en la lista
+When selecciona un administrador
+Then el sistema muestra nombres, apellidos, indicativo y celular, correo, estado, fecha de creación y quién lo creó
+And las acciones "Editar" y "Eliminar cuenta"
+
+### Actualización
+
+Scenario: Actualizar los datos de un administrador (camino feliz)
+Given un administrador en el detalle de un administrador
+When presiona "Editar", cambia nombres, apellidos, indicativo o celular con formato válido y guarda
+Then las reglas de Firestore verifican que quien escribe es un administrador activo
+And guardan solo nombres, apellidos, `fullName` (recalculado), indicativo y celular
+And la lista y el detalle muestran los datos nuevos con un mensaje de confirmación
+
+Scenario: Datos inválidos al actualizar
+Given un administrador en el formulario de edición
+When deja campos obligatorios vacíos o con formato inválido
+Then el sistema no envía el formulario y señala cada campo
+And aplica las mismas reglas de formato del registro
+
+Scenario: El correo y el rol no se editan
+Given un administrador en el formulario de edición
+When revisa los campos
+Then el correo se muestra en solo lectura y el rol no aparece como editable
+And las reglas rechazan una petición manipulada que intente cambiarlos
+
+Scenario: El administrador editado ya fue anonimizado
+Given dos administradores con el mismo administrador abierto
+When uno lo elimina y luego el otro intenta guardar cambios
+Then la app (y, si se manipula, las reglas) rechaza la edición
+And la app informa que esa cuenta ya no existe y refresca la lista
+
+Scenario: Error de red al actualizar
+Given un administrador que guarda cambios
+When la conexión falla antes de recibir respuesta
+Then el sistema conserva lo escrito y ofrece reintentar
+And no muestra los datos como guardados hasta recibir confirmación de Firestore
+
+### Eliminación con anonimización
+
+Scenario: Eliminar a otro administrador (camino feliz)
+Given un administrador activo en el detalle de otro administrador, y queda al menos otro administrador activo
+When presiona "Eliminar cuenta"
+Then el sistema muestra un AppBottomSheet que explica que la acción es permanente y qué datos se anonimizan
+And pide reautenticarse y escribir "ELIMINAR" para confirmar
+When confirma
+Then la app anonimiza `users/{uid}` y resta 1 al contador en una transacción
+And el usuario de Firebase Auth de esa persona NO se elimina (limitación aceptada: su correo sigue ocupado) pero ya no puede ingresar
+And la cuenta desaparece de la lista con un mensaje de confirmación
+And quien eliminó permanece en su sesión
+
+Scenario: Eliminar la propia cuenta de administrador
+Given un administrador activo en su propio detalle, y existe otro administrador activo
+When confirma "Eliminar cuenta" tras reautenticarse
+Then el sistema anonimiza su cuenta y elimina su usuario de Firebase Auth con `User.delete()`
+And borra su perfil de SQLite y el namespace `auth` de SharedPreferences
+And navega al login con el mensaje "Tu cuenta fue eliminada" sin permitir volver atrás
+
+Scenario: Las decisiones del administrador eliminado siguen siendo auditables
+Given un administrador anonimizado que aprobó o rechazó propietarios o creó administradores
+When alguien consulta esos registros
+Then el registro conserva la decisión, la fecha y el uid
+And muestra "Administrador eliminado" como responsable, sin nombre, correo ni celular
+
+Scenario: La anonimización no se puede revertir
+Given una cuenta anonimizada
+When cualquier administrador o una petición manipulada intenta reactivarla, editarla o cambiar su estado
+Then las reglas de Firestore lo rechazan
+And esa cuenta no puede iniciar sesión (fallo neutro "Esta cuenta ya no existe" y se cierra la sesión)
+
+Scenario: Registrarse de nuevo con el correo de un administrador eliminado
+Given el correo de un administrador anonimizado por OTRO administrador
+When esa persona se registra de nuevo o la crean otra vez como administrador
+Then el sistema informa que el correo ya está en uso (su usuario de Firebase Auth sigue existiendo: limitación aceptada)
+But si el administrador eliminó su PROPIA cuenta, su usuario de Auth se borró y el correo queda libre para crear una cuenta nueva con otro uid
+And no se recupera ningún dato ni permiso de la cuenta anterior
+
+Scenario: Falla parcial al eliminar la propia cuenta
+Given un administrador que confirmó la eliminación
+When el proceso falla después de anonimizar el documento y antes de `User.delete()`
+Then el sistema informa el error y permite reintentar
+And el reintento detecta el perfil ya anonimizado y solo ejecuta `User.delete()`, sin duplicar cambios ni restar dos veces al contador
+And el usuario no conserva acceso de administrador mientras tanto
+
+### Siempre debe existir un administrador
+
+Scenario: No se puede eliminar al último administrador activo
+Given un único administrador activo
+When intenta eliminar su propia cuenta
+Then la transacción falla con el tipo `lastAdmin` y no cambia ningún dato (`AuthFailureType.lastAdministrator` en el flujo de eliminar cuenta)
+And el sistema explica que primero debe existir otro administrador activo y ofrece "Crear administrador"
+
+Scenario: Los administradores no activos no cuentan para la regla
+Given un administrador activo y otros deshabilitados o anonimizados
+When el administrador activo intenta eliminar su cuenta
+Then el contador lo trata como el último administrador activo y rechaza la operación
+But un administrador con la contraseña temporal pendiente SÍ cuenta (su estado es `active`), así que con uno pendiente el otro sí puede eliminarse
+
+Scenario: Dos administradores se eliminan al mismo tiempo
+Given exactamente dos administradores activos
+When cada uno elimina al otro, o a sí mismo, al mismo tiempo
+Then la regla se valida dentro de una transacción que lee `activeAdminCount`
+And Firestore reintenta la transacción en conflicto: solo una operación se completa y la otra falla con `lastAdmin`
+And queda exactamente un administrador activo
+
+Scenario: Deshabilitar o cambiar de rol no deja al sistema sin administradores
+Given un único administrador activo
+When una petición manipulada intenta deshabilitarlo o cambiarle el rol
+Then las reglas la rechazan (nadie cambia el rol ni el estado de un administrador)
+
+Scenario: La regla no depende de la interfaz
+Given una app modificada o una petición directa a Firestore
+When intenta eliminar o anonimizar al último administrador activo
+Then las reglas la rechazan porque el contador resultante sería menor que 1, aunque la app haya ocultado o no el botón
+And un administrador no puede borrar su `users/{uid}` (las reglas niegan `delete` a los administradores)
+
+### Autorización y doble envío
+
+Scenario: Un usuario sin permiso intenta gestionar administradores
+Given un cliente, un propietario, un administrador deshabilitado, uno con la contraseña temporal pendiente o una petición manipulada
+When intenta abrir "Administradores" o llamar a sus operaciones
+Then la app no muestra la vista
+And las reglas de Firestore rechazan la escritura y la lectura del contador
+
+Scenario: Prevención de doble envío al editar o eliminar
+Given un administrador que acaba de confirmar una edición o una eliminación
+When la operación sigue en curso
+Then el botón muestra estado de carga y queda deshabilitado
+And un segundo toque no repite la operación
+
+### Casos de prueba
+
+| ID | Tipo | Caso | Resultado esperado |
+| --- | --- | --- | --- |
+| AG-01 | Widget | Lista con varios estados, incluida una cuenta anonimizada | Muestra estados y "Tú"; oculta la anonimizada |
+| AG-02 | Widget | Falla la carga | Error con "Reintentar" |
+| AG-03 | Unitaria (controller) | Editar con datos inválidos, incluida inyección SQL | No llama al repositorio; señala los campos |
+| AG-04 | Reglas (emulador) | Petición que cambia correo o rol | Rechazada |
+| AG-05 | Unitaria (repositorio) y reglas | Anonimizar | Quedan solo los campos permitidos; sin nombre, correo ni celular |
+| AG-06 | Unitaria (servicio) | Falla `User.delete()` tras anonimizar y reintento | Solo ejecuta `User.delete()`, sin duplicar cambios ni restar dos veces |
+| AG-07 | Reglas (emulador) | Reactivar o editar una cuenta anonimizada | Rechazada |
+| AG-08 | Reglas (emulador) y unitaria | Eliminar, deshabilitar o cambiar el rol del último activo | Rechazada; sin cambios |
+| AG-09 | Reglas (emulador) y unitaria | Dos eliminaciones simultáneas con dos activos | Una se completa, la otra se rechaza (`lastAdmin`); queda un activo |
+| AG-10 | Unitaria (repositorio) | Un activo y otro con contraseña temporal pendiente | El pendiente cuenta: el activo puede eliminarse; con solo uno activo, se rechaza |
+| AG-11 | Reglas (emulador) | Cliente, propietario y admin con contraseña pendiente llaman a las operaciones | Rechazadas |
+| AG-15 | Unitaria (repositorio) | Fallo al escribir el perfil tras crear el usuario | Se borra el usuario creado (reversión) y se cierra la app secundaria |
+| AG-16 | Unitaria (repositorio) | Correo ya en uso al crear | `emailInUse`; ninguna cuenta ni contador cambia |
+| AG-17 | Unitaria (controller) | Primer ingreso: cambiar contraseña y limpiar la marca | Reintenta solo la limpieza si el cambio ya se hizo; maneja `requires-recent-login` y contraseña débil |
+| AG-18 | Unitaria (controller) | `resolvePostLoginRoute` con `mustChangePassword` | `AuthRoutes.adminChangePassword` |
+| AG-12 | Widget | Doble toque al eliminar | Una sola operación |
+| AG-13 | Widget | Solicitud aprobada por un administrador anonimizado | Muestra "Administrador eliminado" |
+| AG-14 | Manual | Eliminar un administrador de prueba y crearlo otra vez con el mismo correo | Cuenta nueva con otro uid; sin datos anteriores |
+
+### Riesgos
+
+| Riesgo | Impacto | Mitigación |
+| --- | --- | --- |
+| Quedarse sin administradores por eliminaciones simultáneas | Nadie puede aprobar propietarios ni crear administradores | Transacción que lee el contador + reglas con `getAfter`; prueba AG-09 |
+| Un administrador malintencionado escribe `system/adminRegistry` directamente | El contador se desvía y la regla del último administrador falla | Las reglas limitan el cambio a +-1 y >= 1; aceptado en un proyecto universitario |
+| `firestore.rules` permitía a cualquier usuario borrar su propio `users/{uid}` | El último administrador podía saltarse la regla | **Resuelto 2026-11-09:** `delete` excluye `role == 'admin'` y cuentas `anonymized` |
+| Sin Admin SDK no se puede borrar el usuario de Auth de otro administrador | Su correo queda ocupado y su usuario de Auth sigue existiendo | **Limitación aceptada (2026-11-09).** Las reglas niegan toda edición de la cuenta anonimizada y la app rechaza su ingreso |
+| `isAdmin()` (fuera de esta rama) solo comprueba `role == 'admin'` | Un administrador anonimizado por otro o con contraseña temporal pendiente conserva los accesos que dependen de `isAdmin()` (lecturas de `users`, `owners`, `payments`, `subscriptions`) | Pedir a la rama dueña que lo cambie por una comprobación de estado `active` (ver informe del 2026-11-09) |
+| Datos personales fuera de `users/{uid}` (registros de auditoría, cachés, otras ramas) | Anonimización incompleta | Guardar en auditoría solo uids; revisar colecciones de otras ramas; prueba AG-05 |
+| Estado nuevo `anonymized` no contemplado por otras ramas | Pantallas que fallan o tratan la cuenta como activa | Actualizar `AccountStatus` y `accountAccessFailure`; denegar por defecto cualquier estado desconocido |
+| Un administrador malintencionado elimina a los demás | Pérdida de acceso de otros administradores | Reautenticación, registro de quién y cuándo; evaluar confirmación de un segundo administrador |
+
+## Feature: Solicitudes de aprobación de propietarios (vista del administrador) [Parcial]
+
+> Al 2026-11-08 existen `owner_approvals_page.dart`,
+> `owner_approval_detail_page.dart`, `reject_owner_sheet.dart` y
+> `admin_access_repository.dart`, con reglas para aprobar y rechazar. **Desde
+> 2026-11-09** la capa de datos expone las alertas de validación
+> (`AdminAccessController.loadAlerts` -> `OwnerRequestAlerts`: dígito de
+> verificación del NIT, NIT duplicado y plan disponible; solo informan, no
+> bloquean); falta que el frontend las muestre en el detalle y pida confirmar
+> antes de aprobar. Pendiente también enlazar la vista desde el menú del
+> administrador en las demás ramas (`docs/auth/handoff-otras-ramas.md`).
+
+Scenario: El administrador valida los datos antes de decidir
+Given un administrador en el detalle de una solicitud pendiente
+When revisa la solicitud
+Then el sistema indica si el dígito de verificación del NIT es válido
+And indica si el NIT ya está registrado en otra cuenta de propietario
+And indica si el plan de interés sigue activo
+But estas alertas informan y no bloquean: la decisión de aprobar o rechazar es del administrador
+
+Scenario: Confirmación antes de aprobar con alertas
+Given una solicitud con una o más alertas de validación
+When el administrador presiona "Aprobar"
+Then el sistema muestra las alertas y pide confirmar antes de enviar
+And el backend registra la aprobación solo tras la confirmación
 
 Scenario: El administrador consulta las solicitudes pendientes
 Given un administrador autenticado
@@ -1170,11 +1513,11 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
 - **Directorios de trabajo**:
   - Vistas: `lib/views/login/` (`login_page.dart`, `logout_navigation.dart`), `lib/views/register/` y `lib/views/admin_access/` (`administrators_page.dart`, `create_admin_page.dart`, `owner_approvals_page.dart`, `owner_approval_detail_page.dart`).
   - Controllers: `lib/controllers/auth/login_controller.dart`. Si la carga de maestros crece, separarla en `lib/controllers/auth/auth_catalog_controller.dart`. Las vistas del administrador usan `lib/controllers/auth/admin_access_controller.dart` (creación de administradores y aprobación de propietarios). Validadores de formato en `lib/controllers/auth/validators/`.
-  - Rutas nuevas en `lib/routes/routes.dart` (solo rol administrador): `adminAdministrators` (`/auth/admin/administrators`), `adminCreateAdministrator` (`/auth/admin/administrators/new`), `adminOwnerApprovals` (`/auth/admin/owner-approvals`) y `adminOwnerApprovalDetail` (`/auth/admin/owner-approvals/detail`). Se enlazan desde el perfil o menú del administrador.
+  - Rutas nuevas en `lib/routes/routes.dart` (solo rol administrador): `adminAdministrators` (`/auth/admin/administrators`), `adminCreateAdministrator` (`/auth/admin/administrators/new`), `adminAdministratorDetail` (`/auth/admin/administrators/detail`), `adminOwnerApprovals` (`/auth/admin/owner-approvals`) y `adminOwnerApprovalDetail` (`/auth/admin/owner-approvals/detail`). Se enlazan desde el perfil o menú del administrador.
   - Modelos: `lib/models/auth/`.
     - `registered_user.dart`: agregar `firstNames`, `lastNames`, `phoneCountryCodeId` y `accountStatus`. No incluir campos de tipo ni número de documento.
     - Datos propios por rol: `birthDate` (cliente); `personType` y `nit` obligatorios y `companyName` solo para persona jurídica (propietario). Modelarlos como campos opcionales validados por rol o como un objeto de detalle por rol; no crear tres modelos de usuario paralelos.
-    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo). Al 2026-10-28 existen `country_phone_code.dart`, `account_status.dart` y `user_profile.dart`; `person_type.dart` y `owner_approval_request.dart` siguen pendientes.
+    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled` y, para administradores eliminados, `anonymized`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo). Al 2026-10-28 existen `country_phone_code.dart`, `account_status.dart` y `user_profile.dart`; `person_type.dart` y `owner_approval_request.dart` siguen pendientes.
     - Se mantiene `RegisteredUserRole { admin, client, owner }` como único enum de rol.
   - Registro por rol: la validación específica de cada rol vive en el controller (o en un validador por rol en `lib/controllers/auth/`), no en la vista. La vista solo decide qué bloque de campos mostrar según el rol elegido.
   - Servicios de autenticación: `lib/service/auth/`.
@@ -1187,14 +1530,15 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - Maestros: `lib/database/repository/auth/auth_catalog_repository.dart` (REST a Supabase `phone_country_codes` + caché con el DAO compartido `PhoneCountryCodeDao`), siguiendo el patrón de `lib/database/repository/client/client_repository.dart`. `auth_catalog_dao.dart` se eliminó (2026-11-04); `subscription_plan_options` sigue pendiente. Modelo nuevo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
   - Almacenamiento en Firebase: el perfil del usuario y las solicitudes de propietarios se leen y escriben a través de un repositorio (p. ej. `lib/database/repository/auth/user_profile_repository.dart`), nunca desde la vista.
   - Preferencias: `SharedPreferencesLocalService` con `namespace: 'auth'` (contrato en `lib/service/storage/local_preferences_service.dart`). El acceso compartido al correo se expone con una clase pequeña (p. ej. `lib/service/auth/auth_preferences.dart`) que otras ramas consumen sin conocer las claves.
-- **Claves de SharedPreferences (namespace `auth`)**: `current_user_email` (string; correo del usuario autenticado, compartido con otras funcionalidades), `remember_email` (bool), `remembered_email` (string), `last_country_code_id` (int), `last_auth_tab` (string), `catalogs_synced_at` (string ISO-8601). **Nunca** guardar contraseñas, tokens ni el NIT en SharedPreferences. La persistencia del token la maneja el SDK de Firebase. Al eliminar la cuenta se borra el namespace `auth` completo.
+- **Claves de SharedPreferences (namespace `auth`)**: `current_user_email` (string; correo del usuario autenticado, compartido con otras funcionalidades), `remember_email` (bool), `remembered_email` (string), `last_country_code_id` (int), `last_auth_tab` (string), `catalogs_synced_at` (string ISO-8601). **Nota 2026-11-09:** `SharedPreferencesLocalService` solo acepta claves en lowerCamelCase sin puntos, así que las claves reales son `currentUserEmail`, `rememberEmail`, `rememberedEmail`, `lastCountryCodeId` y `catalogsSyncedAt` (los nombres en snake_case son solo descriptivos). API: `AuthPreferences.loadRememberedEmail()`, `saveRememberedEmail(email)` y `clearRememberedEmail()`; el controller las usa en `LoginController.login(rememberEmail:)` y `loadRememberedEmail()`. **Nunca** guardar contraseñas, tokens ni el NIT en SharedPreferences. La persistencia del token la maneja el SDK de Firebase. Al eliminar la cuenta se borra el namespace `auth` completo.
 - **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 12; `country_phone_codes` se creó en la 10 → 11. `auth_user_profile` irá en la 12 → 13 con su DAO `lib/database/repository/auth/auth_user_profile_dao.dart` y su entidad en `lib/models/auth/`; la caché de planes, si se implementa, en otra migración). Es un archivo compartido con otras ramas (`room`, `suscripcion`, `motel`, `client`, pagos): coordinar el número de versión antes de hacer merge para no chocar migraciones.
 - **Configuración de Supabase**: reutilizar `SUPABASE_URL` y `SUPABASE_ANON_KEY` vía `--dart-define`. Las ramas de suscripciones y notificaciones leen `SUPABASE_PUBLISHABLE_KEY`; proponer al equipo un solo nombre. `SupabaseRoomConfig` es específico de habitaciones; si se necesita una configuración común, proponer al equipo una sola clase compartida en lugar de crear otra copia.
 - **Dependencias de entrada**: rutas por rol de `lib/routes/routes.dart` (`clientMotels`, `ownerMotels`, `ownerManagement`); componentes del sistema de diseño (`AppTextField`, `AppButton`, `AppCard`, `AppBottomSheet`).
 - **Dependencias de salida**: todas las vistas protegidas dependen de la sesión que expone `LoginController` (usuario y rol). `logout_navigation.dart` es consumido por otras ramas para cerrar sesión: no cambiar su firma sin avisar. El lector del correo compartido (`AuthPreferences` o equivalente) también es una API pública para otras ramas.
 - **Fuera de alcance**:
   - Las vistas de destino de cada rol (pertenecen a otras ramas), salvo las vistas "Administradores" y "Solicitudes de propietarios" del administrador.
-  - La gestión general de usuarios (activar/desactivar cuentas existentes, editar o eliminar administradores).
+  - La gestión general de clientes y propietarios (activar o desactivar cuentas existentes). La gestión de administradores (registrar, actualizar y eliminar con anonimización) **sí** es de esta rama.
+  - Las vistas de otros roles distintos de "Eliminar cuenta": se definirán después, empezando por las de administrador.
   - El contenido real de los términos y condiciones (solo se deja el botón con contenido provisional).
   - El CRUD de los maestros (se administran directamente en Supabase).
   - El cobro, la activación y la gestión de la suscripción del propietario (rama de suscripciones); aquí solo se consultan los planes y se registra el plan de interés.
@@ -1226,13 +1570,29 @@ nadie las corrija, pero deben confirmarse:
   documento de Firestore.~~ **Resuelto (2026-10-27):** Cloud Firestore; el rol
   y el estado se guardan en el documento `users/{uid}`. Cloud Storage
   (archivos) sigue sin decidir.
-- Si el administrador creado define su contraseña mediante correo de
-  restablecimiento (propuesta) o con una contraseña temporal.
+- ~~Si el administrador creado define su contraseña mediante correo de
+  restablecimiento o con una contraseña temporal.~~ **Resuelto (2026-11-09):**
+  contraseña temporal generada por la app, sin correo ni SMS; el nuevo
+  administrador la cambia en su primer ingreso.
 - Eliminación de cuenta: si se exige resolver reservas, moteles y
   suscripciones antes de eliminar (propuesta) o se anonimizan; qué datos de
   otras ramas (reseñas, PQRS, pagos) se borran, anonimizan o conservan por
   obligación legal; y si se implementa como Cloud Function (requiere plan
   Blaze de Firebase).
+- ~~**Backend de la gestión de administradores**: Cloud Functions con Admin
+  SDK (plan Blaze).~~ **Resuelto (2026-11-09): no hay Cloud Functions.** Se usa
+  el plan Spark: la app crea el usuario con una instancia secundaria de
+  Firebase y las reglas de Firestore son la autoridad. Limitación aceptada: el
+  usuario de Auth de otro administrador eliminado no se borra (su correo sigue
+  ocupado). Ver `docs/decisions_log.md` (2026-11-09).
+- Qué campos conserva la anonimización (la tabla de "Gestión de
+  administradores" está implementada) y si un administrador puede eliminar a
+  otro sin la confirmación de un tercero (hoy basta con reautenticarse y las
+  reglas no exigen un tercero).
+- `isAdmin()` en `firestore.rules` (fuera de esta rama) solo comprueba el rol:
+  endurecerlo con el estado `active` con la rama dueña.
+- Si las alertas de validación de una solicitud de propietario solo informan
+  (propuesta) o algunas, como un NIT duplicado, deben bloquear la aprobación.
 - Si un propietario rechazado puede corregir sus datos y volver a enviar la
   solicitud, o debe registrarse de nuevo.
 - Si "Términos y condiciones" pasará a requerir una casilla de aceptación
@@ -1293,9 +1653,12 @@ nadie las corrija, pero deben confirmarse:
 - **Cuenta en revisión** (Propietario): pantalla de estado con ícono,
   mensaje explicativo, el correo registrado y el botón "Cerrar sesión".
   Variante "Solicitud rechazada" con el motivo.
-- **Administradores** (Administrador): lista en AppCards con nombre, correo
-  y estado; botón principal "Crear administrador" que abre un formulario
-  con los mismos componentes y validaciones del registro (sin contraseña).
+- **Administradores** (Administrador): lista en AppCards con nombre, correo,
+  estado y la etiqueta "Tú" en la cuenta propia; botón principal "Crear
+  administrador" que abre un formulario con los mismos componentes y
+  validaciones del registro (sin contraseña). El detalle muestra los datos y
+  las acciones "Editar" y "Eliminar cuenta" (peligro), que abre un
+  AppBottomSheet con lo que se anonimiza, la reautenticación y "ELIMINAR".
 - **Solicitudes de propietarios** (Administrador): lista en AppCards con
   nombre o razón social, tipo de persona, correo y fecha; contador de
   pendientes en el acceso desde el perfil; estado vacío y estado de error

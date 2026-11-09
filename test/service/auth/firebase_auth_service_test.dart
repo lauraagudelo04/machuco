@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
@@ -27,13 +28,16 @@ void main() {
   late _FakeFirebaseAuth firebase;
   late _FakeProfiles profiles;
   late FirebaseAuthService service;
+  late _StubAdministrators administrators;
 
   setUp(() {
     firebase = _FakeFirebaseAuth();
     profiles = _FakeProfiles();
+    administrators = _StubAdministrators();
     service = FirebaseAuthService(
       firebaseAuth: firebase,
       profileRepository: profiles,
+      administratorsRepository: administrators,
     );
   });
 
@@ -59,24 +63,34 @@ void main() {
       expect(firebase.signOutCalls, 0);
     });
 
-    test(
-      'cuenta activa y perfil ausente (cliente por mínimo privilegio)',
-      () async {
-        profiles.stored = _stored(
-          role: RegisteredUserRole.client,
-          status: AccountStatus.active,
-        );
-        expect(
-          (await service.login(email: 'a@b.co', password: 'x')).accountStatus,
-          AccountStatus.active,
-        );
+    test('[SOC-R1] cuenta activa entra; perfil ausente exige completar perfil '
+        'y conserva la sesión de Firebase', () async {
+      profiles.stored = _stored(
+        role: RegisteredUserRole.client,
+        status: AccountStatus.active,
+      );
+      expect(
+        (await service.login(email: 'a@b.co', password: 'x')).accountStatus,
+        AccountStatus.active,
+      );
 
-        profiles.stored = null;
-        final session = await service.login(email: 'a@b.co', password: 'x');
-        expect(session.role, RegisteredUserRole.client);
-        expect(session.accountStatus, AccountStatus.active);
-      },
-    );
+      profiles.stored = null;
+      await expectLater(
+        service.login(email: 'a@b.co', password: 'x'),
+        failureOf(AuthFailureType.profileIncomplete),
+      );
+      expect(firebase.signOutCalls, 0);
+    });
+
+    test('[SOC-R2] admin sin accountStatus: configuración inválida', () async {
+      profiles.stored = _stored(role: RegisteredUserRole.admin, status: null);
+
+      await expectLater(
+        service.login(email: 'a@b.co', password: 'x'),
+        failureOf(AuthFailureType.invalidConfiguration),
+      );
+      expect(firebase.signOutCalls, 1);
+    });
 
     test('rechazada cierra sesión y entrega el motivo', () async {
       profiles.stored = _stored(
@@ -369,7 +383,195 @@ void main() {
         failureOf(AuthFailureType.unknown),
       );
     });
+
+    test(
+      'un cliente sigue borrando su perfil, sin tocar administradores',
+      () async {
+        profiles.stored = _stored(
+          role: RegisteredUserRole.client,
+          status: AccountStatus.active,
+        );
+        await service.deleteAccount(password: 'secreto123');
+        expect(profiles.deleted, ['u1']);
+        expect(administrators.calls, isEmpty);
+      },
+    );
   });
+
+  group('eliminación de cuenta de administrador', () {
+    late _FakeUser user;
+
+    setUp(() {
+      user = _FakeUser(firebase);
+      firebase.currentUser = user;
+      profiles.stored = _stored(
+        role: RegisteredUserRole.admin,
+        status: AccountStatus.active,
+      );
+      administrators.onAnonymizeOwn = () =>
+          FirebaseAuthEvents.log.add('anonymizeOwn');
+    });
+
+    test(
+      'reautentica, anonimiza (no borra el perfil) y luego borra el usuario',
+      () async {
+        await service.deleteAccount(password: 'secreto123');
+
+        expect(firebase.events, [
+          'reauth:luz@example.com',
+          'anonymizeOwn',
+          'deleteUser',
+          'signOut',
+        ]);
+        expect(profiles.deleted, isEmpty);
+      },
+    );
+
+    test(
+      'el último administrador falla con lastAdministrator y sin cambios',
+      () async {
+        administrators.failNext = const AdministratorsRepositoryException(
+          AdministratorsFailureType.lastAdmin,
+          'Eres el único administrador activo.',
+        );
+
+        await expectLater(
+          service.deleteAccount(password: 'secreto123'),
+          failureOf(AuthFailureType.lastAdministrator),
+        );
+
+        expect(user.deleteCalls, 0);
+        expect(profiles.deleted, isEmpty);
+        expect(firebase.signOutCalls, 0);
+      },
+    );
+
+    test('contraseña incorrecta no anonimiza nada', () async {
+      user.reauthError = FirebaseAuthException(code: 'wrong-password');
+      await expectLater(
+        service.deleteAccount(password: 'mala'),
+        failureOf(AuthFailureType.invalidCredentials),
+      );
+      expect(administrators.calls, isEmpty);
+    });
+
+    test('un fallo de red al anonimizar no borra el usuario', () async {
+      administrators.failNext = const AdministratorsRepositoryException(
+        AdministratorsFailureType.network,
+        'sin red',
+      );
+      await expectLater(
+        service.deleteAccount(password: 'secreto123'),
+        failureOf(AuthFailureType.network),
+      );
+      expect(user.deleteCalls, 0);
+    });
+
+    test(
+      'reintento tras fallar User.delete: ya anonimizado, solo borra el usuario',
+      () async {
+        user.deleteError = FirebaseAuthException(
+          code: 'network-request-failed',
+        );
+        await expectLater(
+          service.deleteAccount(password: 'secreto123'),
+          failureOf(AuthFailureType.network),
+        );
+        expect(administrators.calls, ['anonymizeOwn']);
+
+        profiles.stored = _stored(
+          role: RegisteredUserRole.admin,
+          status: AccountStatus.anonymized,
+        );
+        user.deleteError = null;
+        await service.deleteAccount(password: 'secreto123');
+
+        expect(administrators.calls, ['anonymizeOwn']);
+        expect(user.deleteCalls, 2);
+      },
+    );
+  });
+
+  group('cuenta anonimizada', () {
+    test('no puede iniciar sesión: fallo neutro y sesión cerrada', () async {
+      profiles.stored = _stored(
+        role: RegisteredUserRole.admin,
+        status: AccountStatus.anonymized,
+      );
+
+      await expectLater(
+        service.login(email: 'a@b.co', password: 'x'),
+        throwsA(
+          isA<AuthFailure>()
+              .having((f) => f.type, 'type', AuthFailureType.accountDeleted)
+              .having((f) => f.message, 'message', 'Esta cuenta ya no existe.'),
+        ),
+      );
+      expect(firebase.signOutCalls, 1);
+    });
+
+    test('restoreSession la descarta', () async {
+      firebase.currentUser = _FakeUser(firebase);
+      profiles.stored = _stored(
+        role: RegisteredUserRole.admin,
+        status: AccountStatus.anonymized,
+      );
+      expect(await service.restoreSession(), isNull);
+      expect(firebase.signOutCalls, 1);
+    });
+
+    test('un perfil anonimizado sin correo ni teléfono se lee sin error', () {
+      final profile = UserProfile.fromFirestore('gone', {
+        'fullName': 'Administrador eliminado',
+        'role': 'admin',
+        'accountStatus': 'anonymized',
+        'anonymizedBy': 'otro',
+      });
+      expect(profile.accountStatus, AccountStatus.anonymized);
+      expect(profile.email, isEmpty);
+      expect(profile.phoneNumber, isEmpty);
+      expect(profile.mustChangePassword, isFalse);
+      expect(AccountStatus.anonymized.storageValue, 'anonymized');
+      expect(accountStatusFromStorage('anonymized'), AccountStatus.anonymized);
+    });
+
+    test('mustChangePassword ausente es false y true se lee', () {
+      expect(
+        UserProfile.fromFirestore('a', {'role': 'admin'}).mustChangePassword,
+        isFalse,
+      );
+      expect(
+        UserProfile.fromFirestore('a', {
+          'role': 'admin',
+          'mustChangePassword': true,
+          'createdBy': 'creador',
+        }),
+        isA<UserProfile>()
+            .having((p) => p.mustChangePassword, 'mustChange', isTrue)
+            .having((p) => p.createdBy, 'createdBy', 'creador'),
+      );
+    });
+  });
+}
+
+class _StubAdministrators implements AdministratorsRepository {
+  final calls = <String>[];
+  AdministratorsRepositoryException? failNext;
+  void Function()? onAnonymizeOwn;
+
+  @override
+  Future<void> anonymizeOwnAccount() async {
+    final failure = failNext;
+    if (failure != null) {
+      failNext = null;
+      throw failure;
+    }
+    calls.add('anonymizeOwn');
+    onAnonymizeOwn?.call();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
 final class _FakeProfiles implements UserProfileRepository {

@@ -3,7 +3,8 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/service/auth/auth_service.dart';
-import 'package:machuco/widgets/auth/coming_soon_social_buttons.dart';
+import 'package:machuco/models/auth/auth_provider_kind.dart';
+import 'package:machuco/widgets/auth/social_auth_buttons.dart';
 import 'package:machuco/widgets/auth/delete_account_sheet.dart';
 import 'package:machuco/widgets/auth/forgot_password_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -166,15 +167,49 @@ void main() {
     });
   });
 
-  testWidgets('Google y GitHub están deshabilitados con "Próximamente"', (
-    tester,
-  ) async {
-    await tester.pumpWidget(
-      testApp(const Scaffold(body: ComingSoonSocialButtons())),
-    );
+  group('botones sociales', () {
+    testWidgets('[SOC-UI-01] habilitados sin "Próximamente"; el toque llama '
+        'al proveedor', (tester) async {
+      final selected = <AuthProviderKind>[];
+      await tester.pumpWidget(
+        testApp(Scaffold(body: SocialAuthButtons(onSelected: selected.add))),
+      );
 
-    expect(find.text('Próximamente'), findsNWidgets(2));
-    expect(button(tester, 'Continuar con Google').onPressed, isNull);
-    expect(button(tester, 'Continuar con GitHub').onPressed, isNull);
+      expect(find.text('Próximamente'), findsNothing);
+      await tester.tap(find.text('Continuar con GitHub'));
+      expect(selected, [AuthProviderKind.github]);
+    });
+
+    testWidgets('[SOC-UI-02] en curso: carga en el elegido y ambos '
+        'bloqueados', (tester) async {
+      await tester.pumpWidget(
+        testApp(
+          Scaffold(
+            body: SocialAuthButtons(
+              onSelected: (_) {},
+              busyProvider: AuthProviderKind.google,
+            ),
+          ),
+        ),
+      );
+
+      final google = tester.widget<AppButton>(
+        find.byKey(const ValueKey('social-google')),
+      );
+      expect(google.loading, isTrue);
+      expect(google.onPressed, isNull);
+      expect(button(tester, 'Continuar con GitHub').onPressed, isNull);
+    });
+
+    testWidgets('sin Firebase disponible se deshabilitan con explicación', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        testApp(const Scaffold(body: SocialAuthButtons(onSelected: null))),
+      );
+
+      expect(find.textContaining('no está disponible'), findsOneWidget);
+      expect(button(tester, 'Continuar con Google').onPressed, isNull);
+    });
   });
 }

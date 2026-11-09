@@ -25,6 +25,8 @@ class UserProfile {
     this.companyName,
     this.planId,
     this.rejectionReason,
+    this.mustChangePassword = false,
+    this.createdBy,
   });
 
   final String uid;
@@ -71,6 +73,13 @@ class UserProfile {
   /// Reason given by the admin when the account was rejected.
   final String? rejectionReason;
 
+  /// Administrators created by another administrator start with a temporary
+  /// password and must replace it on first sign-in. Missing means `false`.
+  final bool mustChangePassword;
+
+  /// Uid of the administrator who created this account (admins only).
+  final String? createdBy;
+
   /// Builds a profile from a Firestore document, tolerating missing fields.
   /// A missing/unknown role falls back to client (least privilege).
   factory UserProfile.fromFirestore(String uid, Map<String, dynamic> data) {
@@ -94,6 +103,8 @@ class UserProfile {
       companyName: _textOrNull(data['companyName']),
       planId: _intOrNull(data['planId']),
       rejectionReason: _textOrNull(data['rejectionReason']),
+      mustChangePassword: data['mustChangePassword'] == true,
+      createdBy: _textOrNull(data['createdBy']),
     );
   }
 

@@ -2,18 +2,25 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/admin_access_controller.dart';
 import 'package:machuco/database/repository/auth/admin_access_repository.dart';
 import 'package:machuco/models/auth/owner_approval_request.dart';
+import 'package:machuco/models/auth/owner_request_alert.dart';
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/auth/subscription_plan_option.dart';
 
-OwnerApplication _owner(String uid, {String name = 'Luz'}) => OwnerApplication(
+OwnerApplication _owner(
+  String uid, {
+  String name = 'Luz',
+  String nit = '900123456-8',
+  int? planId = 1,
+}) => OwnerApplication(
   uid: uid,
   firstNames: name,
   lastNames: 'Mora',
   email: '$uid@example.com',
   phoneNumber: '+573001234567',
   personType: PersonType.juridica,
-  nit: '900123456-8',
+  nit: nit,
   companyName: 'Moteles SAS',
-  planId: 1,
+  planId: planId,
   createdAt: DateTime.utc(2026, 11, 1),
 );
 
@@ -107,6 +114,105 @@ void main() {
     },
   );
 
+  group('alertas de la solicitud', () {
+    // 900123456-8 es un NIT con dígito de verificación válido.
+    Future<OwnerRequestAlerts> alertsFor(
+      OwnerApplication application, {
+      List<SubscriptionPlanOption> plans = const [
+        SubscriptionPlanOption(id: 1, name: 'Básico'),
+      ],
+      Object? planError,
+    }) {
+      controller = AdminAccessController(
+        repository: repository,
+        loadPlans: () async {
+          if (planError != null) throw planError;
+          return plans;
+        },
+      );
+      return controller.loadAlerts(application);
+    }
+
+    test('una solicitud correcta no tiene alertas', () async {
+      final alerts = await alertsFor(_owner('a'));
+      expect(alerts.isEmpty, isTrue);
+      expect(controller.alertsFor('a'), same(alerts));
+      expect(controller.isCheckingAlerts('a'), isFalse);
+    });
+
+    test('dígito de verificación inválido', () async {
+      final alerts = await alertsFor(_owner('a', nit: '900123456-9'));
+      expect(alerts.has(OwnerRequestAlertType.invalidNitCheckDigit), isTrue);
+      expect(alerts.alerts, hasLength(1));
+    });
+
+    test('NIT sin formato reconocible', () async {
+      final alerts = await alertsFor(_owner('a', nit: 'abc'));
+      expect(alerts.has(OwnerRequestAlertType.invalidNitCheckDigit), isTrue);
+    });
+
+    test(
+      'NIT duplicado en otro propietario, excluyendo al solicitante',
+      () async {
+        repository.nitOwners['900123456-8'] = {'a', 'otro'};
+        expect(
+          (await alertsFor(
+            _owner('a'),
+          )).has(OwnerRequestAlertType.duplicateNit),
+          isTrue,
+        );
+
+        repository.nitOwners['900123456-8'] = {'a'};
+        expect(
+          (await alertsFor(
+            _owner('a'),
+          )).has(OwnerRequestAlertType.duplicateNit),
+          isFalse,
+        );
+      },
+    );
+
+    test('plan inexistente o ausente', () async {
+      expect(
+        (await alertsFor(
+          _owner('a'),
+          plans: const [SubscriptionPlanOption(id: 9, name: 'Otro')],
+        )).has(OwnerRequestAlertType.planNotAvailable),
+        isTrue,
+      );
+      expect(
+        (await alertsFor(
+          _owner('a', planId: null),
+        )).has(OwnerRequestAlertType.planNotAvailable),
+        isTrue,
+      );
+    });
+
+    test('si no se puede comprobar, informa y no lanza', () async {
+      repository.failNext = const AdminAccessRepositoryException(
+        AdminAccessFailureType.network,
+        'sin red',
+      );
+      final alerts = await alertsFor(_owner('a'), planError: StateError('x'));
+      expect(
+        alerts.alerts.where(
+          (a) => a.type == OwnerRequestAlertType.verificationUnavailable,
+        ),
+        hasLength(2),
+      );
+    });
+
+    test('las alertas no bloquean la aprobación', () async {
+      repository.nitOwners['900123456-8'] = {'a', 'otro'};
+      await controller.loadPendingOwners();
+      final alerts = await alertsFor(_owner('a', nit: '900123456-9'));
+      expect(alerts.isNotEmpty, isTrue);
+
+      await controller.loadPendingOwners();
+      expect(await controller.approveOwner('a'), isTrue);
+    });
+  });
+
   test('un fallo de permisos conserva la solicitud', () async {
     await controller.loadPendingOwners();
     repository.failNext = const AdminAccessRepositoryException(
@@ -134,4 +240,10 @@ final class _ThrowingRepository implements AdminAccessRepository {
 
   @override
   Future<void> rejectOwner(String uid, {required String reason}) async {}
+
+  @override
+  Future<bool> isNitUsedByAnotherOwner({
+    required String nit,
+    required String excludeUid,
+  }) async => false;
 }

@@ -4,12 +4,16 @@ import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/admin_access_repository.dart';
+import 'package:machuco/models/auth/auth_provider_kind.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/firebase_social_auth_service.dart';
 import 'package:machuco/views/account_review/account_review_page.dart';
+import 'package:machuco/views/login/account_session_guard.dart';
 import 'package:machuco/views/login/auth_controller_factory.dart';
 import 'package:machuco/views/login/logout_navigation.dart';
+import 'package:machuco/views/login/social_auth_flow.dart';
 import 'package:machuco/views/register/register_form.dart';
 import 'package:machuco/widgets/auth/active_session_card.dart';
 import 'package:machuco/widgets/auth/auth_header.dart';
@@ -18,6 +22,7 @@ import 'package:machuco/widgets/auth/auth_tab_switcher.dart';
 import 'package:machuco/widgets/auth/delete_account_sheet.dart';
 import 'package:machuco/widgets/auth/forgot_password_sheet.dart';
 import 'package:machuco/widgets/auth/login_form.dart';
+import 'package:machuco/widgets/auth/social_auth_buttons.dart';
 
 export 'package:machuco/widgets/auth/auth_tab_switcher.dart' show AuthTab;
 
@@ -29,6 +34,7 @@ class LoginPage extends StatefulWidget {
     this.controller,
     this.adminAccessController,
     this.notice,
+    this.socialAuthService,
   });
 
   final AuthTab initialTab;
@@ -41,6 +47,10 @@ class LoginPage extends StatefulWidget {
 
   /// Aviso breve al abrir la pantalla (p. ej. "Tu cuenta fue eliminada").
   final String? notice;
+
+  /// Google y GitHub. Si es `null` se usa el de producción, o ninguno si
+  /// Firebase no está disponible (los botones se deshabilitan).
+  final SocialAuthService? socialAuthService;
 
   @override
   State<LoginPage> createState() => _LoginPageState();
@@ -57,7 +67,11 @@ class _LoginPageState extends State<LoginPage> {
   AdminAccessController? _adminController;
   bool _ownsAdminController = false;
   bool _adminLoaded = false;
+  bool _rememberEmail = false;
   AuthFailure? _loginFailure;
+  VoidCallback? _noticeRetry;
+  SocialAuthService? _social;
+  AuthProviderKind? _socialBusy;
 
   bool get _isSubmitting => _controller.isSubmitting;
   AuthSession? get _session => _controller.session;
@@ -72,6 +86,8 @@ class _LoginPageState extends State<LoginPage> {
         buildLoginController(authService: widget.authService);
     _controller.addListener(_onControllerChanged);
     _adminController = widget.adminAccessController;
+    _social = widget.socialAuthService ?? buildSocialAuthService();
+    ensureAccountSessionWatcher(context);
     final notice = widget.notice;
     if (notice != null) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -113,6 +129,14 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _bootstrap() async {
+    final remembered = await _controller.loadRememberedEmail();
+    if (mounted && remembered.remember) {
+      setState(() => _rememberEmail = true);
+      final email = remembered.email;
+      if (email != null && _loginEmailController.text.isEmpty) {
+        _loginEmailController.text = email;
+      }
+    }
     final savedEmail = await _controller.loadCurrentUserEmail();
     if (mounted && savedEmail != null && _loginEmailController.text.isEmpty) {
       _loginEmailController.text = savedEmail;
@@ -120,11 +144,13 @@ class _LoginPageState extends State<LoginPage> {
     if (!_controller.isAuthConfigured) return;
     try {
       final restored = await _controller.restoreSession();
-      if (!mounted || restored == null) return;
+      if (!mounted) return;
+      if (restored == null) return _resumeSocialSession();
       _goToRoleHome(restored);
     } on AuthFailure catch (failure) {
       if (!mounted) return;
-      if (failure.type == AuthFailureType.network) {
+      if (failure.type == AuthFailureType.network ||
+          failure.type == AuthFailureType.accountDeleted) {
         setState(() => _loginFailure = failure);
       } else {
         _showSnack(message: 'No se pudo restaurar tu sesión.', isError: true);
@@ -134,6 +160,80 @@ class _LoginPageState extends State<LoginPage> {
 
   void _selectTab(AuthTab tab) => setState(() => _selectedTab = tab);
 
+  /// Retoma "Completar perfil" si la app se cerró antes de terminarlo, o
+  /// vuelve a leer el perfil de un usuario ya autenticado (p. ej. tras un
+  /// error de red) sin abrir otra vez el flujo del proveedor.
+  Future<void> _resumeSocialSession({AuthProviderKind? busy}) async {
+    final social = _social;
+    if (social == null) return;
+    if (busy != null) setState(() => _socialBusy = busy);
+    final result = await social.resumeSession();
+    if (!mounted) return;
+    if (busy != null) setState(() => _socialBusy = null);
+    if (result == null) return;
+    _showSocialFailure(
+      await routeSocialResult(
+        context,
+        result: result,
+        controller: _controller,
+        social: social,
+      ),
+      retry: _resumeSocialSession,
+    );
+  }
+
+  Future<void> _signInWithProvider(AuthProviderKind kind) async {
+    final social = _social;
+    if (social == null || _socialBusy != null || _isSubmitting) return;
+    // Ya hay un usuario de Firebase (el proveedor respondió pero, p. ej., no
+    // se pudo leer el perfil): abrir otro flujo del proveedor con la sesión
+    // iniciada deja el navegador sin su estado ("missing initial state").
+    if (social.linkedProviders.isNotEmpty) {
+      return _resumeSocialSession(busy: kind);
+    }
+    final pendingBefore = social.pendingLinkProvider;
+    setState(() {
+      _socialBusy = kind;
+      _loginFailure = null;
+    });
+    final result = kind == AuthProviderKind.github
+        ? await social.signInWithGitHub()
+        : await social.signInWithGoogle();
+    if (!mounted) return;
+    if (pendingBefore != null && pendingBefore != kind) {
+      await offerPendingProviderLink(
+        context,
+        social: social,
+        pendingBeforeSignIn: pendingBefore,
+      );
+      if (!mounted) return;
+    }
+    final failure = await routeSocialResult(
+      context,
+      result: result,
+      controller: _controller,
+      social: social,
+    );
+    if (!mounted) return;
+    setState(() => _socialBusy = null);
+    _showSocialFailure(failure, retry: () => _signInWithProvider(kind));
+  }
+
+  void _showSocialFailure(AuthFailure? failure, {VoidCallback? retry}) {
+    if (failure == null || !mounted) return;
+    switch (failure.type) {
+      case AuthFailureType.network ||
+          AuthFailureType.accountDisabled ||
+          AuthFailureType.accountDeleted:
+        setState(() {
+          _loginFailure = failure;
+          _noticeRetry = retry;
+        });
+      default:
+        _showSnack(message: failure.message, isError: true);
+    }
+  }
+
   Future<void> _submitLogin() async {
     if (_isSubmitting) return;
     if (!(_loginFormKey.currentState?.validate() ?? false)) return;
@@ -141,14 +241,22 @@ class _LoginPageState extends State<LoginPage> {
       _showAuthNotConfigured();
       return;
     }
-    setState(() => _loginFailure = null);
+    setState(() {
+      _loginFailure = null;
+      _noticeRetry = null;
+    });
     try {
       final session = await _controller.login(
         email: _loginEmailController.text,
         password: _loginPasswordController.text,
+        rememberEmail: _rememberEmail,
       );
       if (!mounted) return;
       _showSnack(message: 'Bienvenido, ${session.name}.');
+      if (_social case final social?) {
+        await offerPendingProviderLink(context, social: social);
+        if (!mounted) return;
+      }
       _goToRoleHome(session);
     } on AuthFailure catch (failure) {
       if (!mounted) return;
@@ -167,7 +275,9 @@ class _LoginPageState extends State<LoginPage> {
             rejectionReason: failure.rejectionReason,
           ),
         );
-      case AuthFailureType.accountDisabled || AuthFailureType.network:
+      case AuthFailureType.accountDisabled ||
+          AuthFailureType.network ||
+          AuthFailureType.accountDeleted:
         setState(() => _loginFailure = failure);
       default:
         _showSnack(message: failure.message, isError: true);
@@ -218,6 +328,8 @@ class _LoginPageState extends State<LoginPage> {
     final deleted = await showDeleteAccountSheet(
       context,
       controller: _controller,
+      socialAuthService: _social,
+      isAdministrator: _session?.role == RegisteredUserRole.admin,
     );
     if (!deleted || !mounted) return;
     goToLogin(context, notice: 'Tu cuenta fue eliminada');
@@ -248,16 +360,8 @@ class _LoginPageState extends State<LoginPage> {
       );
   }
 
-  void _goToRoleHome(AuthSession session) {
-    final route = _controller.resolvePostLoginRoute(session);
-    Navigator.of(context).pushNamedAndRemoveUntil(
-      route,
-      (_) => false,
-      arguments: route == AuthRoutes.accountReview
-          ? AccountReviewArgs(email: session.email)
-          : null,
-    );
-  }
+  void _goToRoleHome(AuthSession session) =>
+      goToSessionHome(context, controller: _controller, session: session);
 
   Widget? _buildLoginNotice() {
     final failure = _loginFailure;
@@ -265,15 +369,24 @@ class _LoginPageState extends State<LoginPage> {
     final isNetwork = failure.type == AuthFailureType.network;
     return AuthNotice(
       message: failure.message,
-      icon: isNetwork ? Icons.wifi_off_outlined : Icons.block_outlined,
+      icon: isNetwork
+          ? Icons.wifi_off_outlined
+          : failure.type == AuthFailureType.accountDeleted
+          ? Icons.person_off_outlined
+          : Icons.block_outlined,
       actionLabel: isNetwork ? 'Reintentar' : null,
-      onAction: isNetwork ? _submitLogin : null,
+      onAction: isNetwork ? (_noticeRetry ?? _submitLogin) : null,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final session = _session;
+    final socialButtons = SocialAuthButtons(
+      onSelected: _social == null ? null : _signInWithProvider,
+      busyProvider: _socialBusy,
+      enabled: !_isSubmitting,
+    );
     return Scaffold(
       body: SafeArea(
         child: LayoutBuilder(
@@ -310,6 +423,12 @@ class _LoginPageState extends State<LoginPage> {
                                 AuthRoutes.adminOwnerApprovals,
                                 arguments: _adminController,
                               ),
+                          onOpenAdministrators:
+                              session.role == RegisteredUserRole.admin
+                              ? () => Navigator.of(
+                                  context,
+                                ).pushNamed(AuthRoutes.adminAdministrators)
+                              : null,
                         ),
                       ],
                       const SizedBox(height: AppSpacing.s6),
@@ -327,17 +446,22 @@ class _LoginPageState extends State<LoginPage> {
                                   emailController: _loginEmailController,
                                   passwordController: _loginPasswordController,
                                   submitting: _isSubmitting,
+                                  rememberEmail: _rememberEmail,
+                                  onRememberEmailChanged: (value) =>
+                                      setState(() => _rememberEmail = value),
                                   notice: _buildLoginNotice(),
                                   onForgotPassword: _openForgotPassword,
                                   onSubmit: _submitLogin,
                                   onRegisterTap: () =>
                                       _selectTab(AuthTab.register),
+                                  socialButtons: socialButtons,
                                 ),
                               )
                             : RegisterForm(
                                 controller: _controller,
                                 onSubmit: _submitRegister,
                                 onLoginTap: () => _selectTab(AuthTab.login),
+                                socialButtons: socialButtons,
                               ),
                       ),
                     ],

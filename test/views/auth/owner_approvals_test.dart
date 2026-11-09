@@ -10,7 +10,6 @@ import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/views/admin_access/admin_route_guard.dart';
-import 'package:machuco/views/admin_access/administrators_page.dart';
 import 'package:machuco/views/admin_access/owner_approval_detail_page.dart';
 import 'package:machuco/views/admin_access/owner_approvals_page.dart';
 
@@ -232,12 +231,5 @@ void main() {
       expect(find.text('Acceso restringido'), findsOneWidget);
       expect(denied, isTrue);
     });
-  });
-
-  testWidgets('administradores: estado Próximamente', (tester) async {
-    await tester.pumpWidget(testApp(const AdministratorsPage()));
-
-    expect(find.text('Próximamente'), findsOneWidget);
-    expect(find.textContaining('consola de Firebase'), findsOneWidget);
   });
 }

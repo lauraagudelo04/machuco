@@ -154,7 +154,8 @@ class LoginController extends ChangeNotifier {
       await _clearCurrentUserEmail();
       await _clearCachedProfile();
     } else if (restored.accountStatus == AccountStatus.disabled ||
-        restored.accountStatus == AccountStatus.rejected) {
+        restored.accountStatus == AccountStatus.rejected ||
+        restored.accountStatus == AccountStatus.anonymized) {
       _session = null;
       await _clearCurrentUserEmail();
       await _clearCachedProfile();
@@ -196,9 +197,28 @@ class LoginController extends ChangeNotifier {
     }
   }
 
+  /// Estado de "Recordar mi correo" para precargar el formulario de login:
+  /// `remember` (casilla marcada) y `email` (el último correo recordado, o
+  /// `null`). Solo para mostrar; nunca autoriza.
+  Future<({bool remember, String? email})> loadRememberedEmail() async {
+    final preferences = _preferences;
+    if (preferences == null) return (remember: false, email: null);
+    try {
+      return await preferences.loadRememberedEmail();
+    } catch (error) {
+      debugPrint('No fue posible leer el correo recordado: $error');
+      return (remember: false, email: null);
+    }
+  }
+
+  /// [rememberEmail] es el valor de la casilla "Recordar mi correo": con un
+  /// ingreso exitoso `true` guarda el correo y `false` elimina el recordado.
+  /// Un ingreso fallido no cambia nada. Cerrar sesión lo conserva; eliminar la
+  /// cuenta lo borra.
   Future<AuthSession> login({
     required String email,
     required String password,
+    bool rememberEmail = false,
   }) async {
     final authService = _requireAuthService();
     _setSubmitting(true);
@@ -208,6 +228,11 @@ class LoginController extends ChangeNotifier {
         password: password,
       );
       await _startSession(nextSession);
+      await _runPreference((preferences) {
+        return rememberEmail
+            ? preferences.saveRememberedEmail(email)
+            : preferences.clearRememberedEmail();
+      });
       return nextSession;
     } on AuthFailure catch (failure) {
       if (_isBlockingFailure(failure)) {
@@ -483,7 +508,15 @@ class LoginController extends ChangeNotifier {
 
   /// Ruta a la que enviar tras iniciar sesión. Un propietario pendiente de
   /// aprobación va a la pantalla de revisión ([AuthRoutes.accountReview]).
+  ///
+  /// Un administrador creado con contraseña temporal (`mustChangePassword`)
+  /// va primero a [AuthRoutes.adminChangePassword]. Solo es enrutamiento: sin
+  /// cambiarla, `firestore.rules` no le da permisos de administrador.
   String resolvePostLoginRoute(AuthSession session) {
+    if (session.role == RegisteredUserRole.admin &&
+        session.profile?.mustChangePassword == true) {
+      return AuthRoutes.adminChangePassword;
+    }
     if (session.accountStatus == AccountStatus.pendingApproval) {
       return AuthRoutes.accountReview;
     }
@@ -501,7 +534,8 @@ class LoginController extends ChangeNotifier {
 
   bool _isBlockingFailure(AuthFailure failure) =>
       failure.type == AuthFailureType.accountDisabled ||
-      failure.type == AuthFailureType.accountRejected;
+      failure.type == AuthFailureType.accountRejected ||
+      failure.type == AuthFailureType.accountDeleted;
 
   CountryPhoneCode? _resolveCountryCodeFor(int id) {
     for (final code in _countryPhoneCodes) {

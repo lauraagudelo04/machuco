@@ -33,6 +33,32 @@ enum AuthFailureType {
 
   /// Dato de entrada rechazado por la validación de la aplicación.
   invalidInput,
+
+  /// Usuario autenticado en Firebase sin `users/{uid}`: debe completar su
+  /// perfil antes de entrar (nunca se le da acceso de cliente por omisión).
+  profileIncomplete,
+
+  /// El correo ya tiene una cuenta con otro método de acceso
+  /// (`account-exists-with-different-credential`).
+  accountExistsWithDifferentCredential,
+
+  /// El proveedor no entregó un correo (p. ej. GitHub con correo privado).
+  emailUnavailable,
+
+  /// No se pudo comprobar que el correo del proveedor esté verificado.
+  emailNotVerified,
+
+  /// Proveedor deshabilitado o app mal configurada (SHA, OAuth App,
+  /// `google-services.json`).
+  providerMisconfigured,
+
+  /// La cuenta fue anonimizada (administrador eliminado): ya no existe para
+  /// el usuario. El mensaje es neutro a propósito.
+  accountDeleted,
+
+  /// Quien elimina su cuenta es el único administrador activo; primero debe
+  /// existir otro (la regla real está en `firestore.rules`).
+  lastAdministrator,
 }
 
 /// An error thrown by any [AuthService] implementation.

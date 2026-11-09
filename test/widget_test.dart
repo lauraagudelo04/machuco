@@ -49,7 +49,7 @@ void main() {
     expect(find.text('Administrador'), findsNothing);
   });
 
-  testWidgets('el login deshabilita Google y GitHub con "Próximamente"', (
+  testWidgets('el login ofrece Google y GitHub sin "Próximamente"', (
     tester,
   ) async {
     await tester.pumpWidget(
@@ -60,13 +60,9 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.text('Próximamente'), findsNWidgets(2));
-    for (final label in ['Continuar con Google', 'Continuar con GitHub']) {
-      final button = tester.widget<AppButton>(
-        find.widgetWithText(AppButton, label),
-      );
-      expect(button.onPressed, isNull);
-    }
+    expect(find.text('Próximamente'), findsNothing);
+    expect(find.text('Continuar con Google'), findsOneWidget);
+    expect(find.text('Continuar con GitHub'), findsOneWidget);
   });
 
   test('guarda el rol seleccionado al registrar', () async {

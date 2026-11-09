@@ -40,6 +40,13 @@ abstract interface class AdminAccessRepository {
 
   /// Pasa la cuenta a `rejected` con [reason] (10 a 300 caracteres).
   Future<void> rejectOwner(String uid, {required String reason});
+
+  /// `true` si otra cuenta de propietario (distinta de [excludeUid]) ya usa
+  /// ese NIT (formato canónico `base-DV`). Solo informa: no bloquea.
+  Future<bool> isNitUsedByAnotherOwner({
+    required String nit,
+    required String excludeUid,
+  });
 }
 
 /// [AdminAccessRepository] sobre Cloud Firestore (`users`).
@@ -116,6 +123,23 @@ class FirestoreAdminAccessRepository implements AdminAccessRepository {
     });
   }
 
+  @override
+  Future<bool> isNitUsedByAnotherOwner({
+    required String nit,
+    required String excludeUid,
+  }) async {
+    try {
+      final snapshot = await _users
+          .where('role', isEqualTo: RegisteredUserRole.owner.metadataValue)
+          .where('nit', isEqualTo: nit)
+          .limit(5)
+          .get();
+      return snapshot.docs.any((doc) => doc.id != excludeUid);
+    } on FirebaseException catch (e) {
+      throw _map(e);
+    }
+  }
+
   /// Transacción: solo actualiza si el propietario sigue pendiente.
   Future<void> _resolve(
     String uid,
@@ -185,6 +209,9 @@ class InMemoryAdminAccessRepository implements AdminAccessRepository {
 
   final List<OwnerApplication> _pending;
 
+  /// NIT (`base-DV`) -> uids de los propietarios que lo usan.
+  final Map<String, Set<String>> nitOwners = {};
+
   /// Para simular fallos: si no es `null` se lanza en la siguiente operación.
   AdminAccessRepositoryException? failNext;
 
@@ -209,6 +236,15 @@ class InMemoryAdminAccessRepository implements AdminAccessRepository {
     _throwIfFailing();
     _removePending(uid);
     rejected[uid] = reason.trim();
+  }
+
+  @override
+  Future<bool> isNitUsedByAnotherOwner({
+    required String nit,
+    required String excludeUid,
+  }) async {
+    _throwIfFailing();
+    return (nitOwners[nit] ?? const <String>{}).any((uid) => uid != excludeUid);
   }
 
   void _removePending(String uid) {

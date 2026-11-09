@@ -204,6 +204,10 @@ Parámetros opcionales (`--dart-define`):
 
 El ingreso con Google y GitHub está definido pero todavía no implementado.
 
+### Android: flavors y firma
+
+La app Android tiene dos flavors: `dev` (`co.machuco.app.dev`) y `prod` (`co.machuco.app`). `flutter run` sin argumentos usa `dev` (`default-flavor` en `pubspec.yaml`); para producción use `--flavor prod`. La firma compartida, Java y `google-services.json` se configuran según [docs/auth/android-setup.md](docs/auth/android-setup.md).
+
 ### Cuentas para probar la app
 
 Ya no hay usuarios de prueba en el código: la app solo autentica con Firebase Authentication. Cada integrante se registra con su correo desde la pantalla de registro (Cliente o Propietario). Para un Propietario activo o un Administrador, ajuste `accountStatus` o `role` en el documento `users/{uid}` desde la consola de Firebase hasta que existan las vistas del administrador.

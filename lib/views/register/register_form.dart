@@ -5,13 +5,9 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
-import 'package:machuco/views/register/client_registration_section.dart';
-import 'package:machuco/views/register/owner_registration_section.dart';
-import 'package:machuco/views/register/role_selector.dart';
+import 'package:machuco/views/register/profile_fields.dart';
 import 'package:machuco/widgets/auth/auth_password_field.dart';
-import 'package:machuco/widgets/auth/coming_soon_social_buttons.dart';
 import 'package:machuco/widgets/auth/terms_sheet.dart';
-import 'package:machuco/widgets/form/app_phone_field.dart';
 
 /// Registro por rol en una sola pantalla con scroll (sin stepper).
 ///
@@ -25,9 +21,13 @@ class RegisterForm extends StatefulWidget {
     required this.controller,
     required this.onSubmit,
     required this.onLoginTap,
+    this.socialButtons,
   });
 
   final LoginController controller;
+
+  /// "Continuar con Google/GitHub" (los arma la página que conoce el flujo).
+  final Widget? socialButtons;
   final Future<void> Function(RegistrationData data) onSubmit;
   final VoidCallback onLoginTap;
 
@@ -148,8 +148,6 @@ class _RegisterFormState extends State<RegisterForm> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    final reduceMotion = MediaQuery.disableAnimationsOf(context);
-    final duration = reduceMotion ? Duration.zero : AppMotion.normal;
     return ListenableBuilder(
       listenable: _controller,
       builder: (context, _) {
@@ -164,95 +162,24 @@ class _RegisterFormState extends State<RegisterForm> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text('Tipo de perfil', style: theme.textTheme.bodyLarge),
-                const SizedBox(height: AppSpacing.s2),
-                RoleSelector(selectedRole: _role, onSelected: _selectRole),
-                const SizedBox(height: AppSpacing.s4),
-                AppTextField(
-                  label: 'Nombres',
-                  hint: 'Ej. Carlos Andrés',
-                  controller: _firstNames,
-                  keyboardType: TextInputType.name,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.givenName],
-                  validator: AuthValidators.firstNames,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                AppTextField(
-                  label: 'Apellidos',
-                  hint: 'Ej. Rodríguez Pérez',
-                  controller: _lastNames,
-                  keyboardType: TextInputType.name,
-                  textInputAction: TextInputAction.next,
-                  autofillHints: const [AutofillHints.familyName],
-                  validator: AuthValidators.lastNames,
-                  autovalidateMode: AutovalidateMode.onUserInteraction,
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                Text('Número de celular', style: theme.textTheme.bodyLarge),
-                const SizedBox(height: AppSpacing.s2),
-                AppPhoneField(
-                  countryCodes: _controller.countryPhoneCodes,
-                  selectedCountryCode: _controller.selectedCountryPhoneCode,
-                  onCountryCodeSelected: _controller.selectCountryPhoneCode,
-                  phoneController: _phone,
-                  loading: _controller.isLoadingCountryPhoneCodes,
-                  errorMessage: _controller.countryPhoneCodesError,
-                  onRetry: () =>
-                      _controller.loadCountryPhoneCodes(forceRefresh: true),
-                  validator: _controller.validatePhoneNumber,
-                ),
-                const SizedBox(height: AppSpacing.s4),
-                AnimatedSize(
-                  duration: duration,
-                  curve: AppMotion.standard,
-                  alignment: Alignment.topCenter,
-                  child: AnimatedSwitcher(
-                    duration: duration,
-                    switchInCurve: AppMotion.standard,
-                    child: AppCard(
-                      key: ValueKey('role-block-${_role.name}'),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(
-                              isOwner
-                                  ? 'Datos del propietario'
-                                  : 'Datos del cliente',
-                              style: theme.textTheme.titleMedium,
-                            ),
-                          ),
-                          const SizedBox(height: AppSpacing.s3),
-                          if (isOwner)
-                            OwnerRegistrationSection(
-                              personType: _personType,
-                              onPersonTypeChanged: _selectPersonType,
-                              nitController: _nit,
-                              companyController: _company,
-                              plans: _controller.subscriptionPlans,
-                              loadingPlans:
-                                  _controller.isLoadingSubscriptionPlans,
-                              plansError: _controller.subscriptionPlansError,
-                              selectedPlanId: _planId,
-                              planValidationError: _planError,
-                              onPlanSelected: (id) => setState(() {
-                                _planId = id;
-                                _planError = null;
-                              }),
-                              onRetryPlans: () => _controller
-                                  .loadSubscriptionPlans(forceRefresh: true),
-                            )
-                          else
-                            ClientRegistrationSection(
-                              birthDateController: _birthDate,
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
+                ProfileFields(
+                  controller: _controller,
+                  role: _role,
+                  onRoleSelected: _selectRole,
+                  firstNames: _firstNames,
+                  lastNames: _lastNames,
+                  phone: _phone,
+                  birthDate: _birthDate,
+                  nit: _nit,
+                  company: _company,
+                  personType: _personType,
+                  onPersonTypeChanged: _selectPersonType,
+                  planId: _planId,
+                  planError: _planError,
+                  onPlanSelected: (id) => setState(() {
+                    _planId = id;
+                    _planError = null;
+                  }),
                 ),
                 const SizedBox(height: AppSpacing.s4),
                 AppTextField(
@@ -293,7 +220,7 @@ class _RegisterFormState extends State<RegisterForm> {
                   onPressed: canSubmit ? _submit : null,
                 ),
                 const SizedBox(height: AppSpacing.s4),
-                const ComingSoonSocialButtons(),
+                ?widget.socialButtons,
                 Text.rich(
                   TextSpan(
                     text: '¿Ya tienes cuenta? ',

@@ -1,0 +1,16 @@
+# Copia este archivo como android/key.properties (NO se versiona).
+# Rutas relativas a la carpeta android/. Ver docs/auth/android-setup.md.
+
+# Keystore de desarrollo compartido por el equipo (un solo SHA-1, decisión D3).
+# El archivo y sus datos se reciben por el canal seguro del equipo.
+storeFile=debug.keystore
+storePassword=<recibido-por-canal-seguro>
+keyAlias=<recibido-por-canal-seguro>
+keyPassword=<recibido-por-canal-seguro>
+
+# Keystore de producción (opcional; solo quien publique en Google Play).
+# Si falta, el release se firma con el keystore de desarrollo (no apto para Play).
+# releaseStoreFile=
+# releaseStorePassword=
+# releaseKeyAlias=
+# releaseKeyPassword=

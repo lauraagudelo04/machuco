@@ -4,7 +4,8 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 
 /// Tarjeta "Sesión activa" del login: cerrar sesión, eliminar cuenta y, para
-/// administradores, el acceso a las solicitudes de propietarios.
+/// administradores, el acceso a las solicitudes de propietarios y a la
+/// gestión de administradores.
 ///
 /// Ocultar un acceso aquí es solo UX; la autorización real está en
 /// `firestore.rules`.
@@ -16,6 +17,7 @@ class ActiveSessionCard extends StatelessWidget {
     required this.onDeleteAccount,
     this.adminController,
     this.onOpenOwnerApprovals,
+    this.onOpenAdministrators,
   });
 
   final AuthSession session;
@@ -23,6 +25,7 @@ class ActiveSessionCard extends StatelessWidget {
   final VoidCallback onDeleteAccount;
   final AdminAccessController? adminController;
   final VoidCallback? onOpenOwnerApprovals;
+  final VoidCallback? onOpenAdministrators;
 
   @override
   Widget build(BuildContext context) {
@@ -67,6 +70,15 @@ class ActiveSessionCard extends StatelessWidget {
               },
             ),
           ],
+          if (onOpenAdministrators != null)
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              minVerticalPadding: AppSpacing.s2,
+              leading: const Icon(Icons.admin_panel_settings_outlined),
+              title: const Text('Administradores'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: onOpenAdministrators,
+            ),
           const SizedBox(height: AppSpacing.s3),
           AppButton(
             label: 'Cerrar sesión',

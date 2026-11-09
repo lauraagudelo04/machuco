@@ -52,3 +52,8 @@ app.*.map.json
 macos/Runner/DebugProfile.entitlements
 macos/Runner/Release.entitlements
 macos/Runner.xcodeproj/project.pbxproj
+
+# Pruebas de reglas de Firestore (Node)
+test_rules/node_modules/
+firebase-debug.log
+firestore-debug.log
