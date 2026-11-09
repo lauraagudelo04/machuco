@@ -44,7 +44,21 @@ class RoomController extends ChangeNotifier {
   List<RoomTypeData> _roomTypes = const [];
   List<RoomService> _includedServices = const [];
   bool _isLoadingServices = false;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
+  }
+
+  @override
+  void notifyListeners() {
+    if (!_disposed) super.notifyListeners();
+  }
+
   String? _servicesError;
+  String? databasePath;
 
   List<RoomVisualData> get rooms => List.unmodifiable(_rooms);
   List<RoomTypeData> get roomTypes => List.unmodifiable(_roomTypes);
@@ -54,6 +68,9 @@ class RoomController extends ChangeNotifier {
   String? get servicesError => _servicesError;
 
   Future<void> loadLocalData() async {
+    databasePath = await _roomDao.getDatabasePath();
+    debugPrint('Room SQLite: $databasePath');
+    await _roomDao.removeLegacyMockData();
     _rooms = await _roomDao.getRooms();
     _roomTypes = await _roomDao.getRoomTypes();
     notifyListeners();

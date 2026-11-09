@@ -33,7 +33,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 13,
+  version: 14,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -88,6 +88,7 @@ class AppDatabaseProvider {
         migration10To11,
         migration11To12,
         migration12To13,
+        migration13To14,
       ])
       .addCallback(
         Callback(
@@ -384,10 +385,17 @@ final migration11To12 = Migration(11, 12, (database) async {
   }
 });
 
+/// Retira únicamente los identificadores de los antiguos ejemplos de room.
+final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
+
 /// Agrega la caché de una sola fila del perfil del usuario autenticado
 /// (módulo de autenticación). Mismo DDL que genera Floor para la entidad
 /// `AuthUserProfileEntry`; no guarda NIT ni fecha de nacimiento.
-final migration12To13 = Migration(12, 13, (database) async {
+///
+/// Es idempotente porque esta tabla se creó antes como v13 en la rama de
+/// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
+/// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
+final migration13To14 = Migration(13, 14, (database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
     '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '

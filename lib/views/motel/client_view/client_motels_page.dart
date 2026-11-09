@@ -106,7 +106,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                   icon: Icons.person_outline,
                   tooltip: 'Perfil',
                   onPressed: () {
-                    ClientController.instance.loadData();
+                    ClientController.instance.loadProfileData();
                     Navigator.pushNamed(context, AppRoutes.clientProfile);
                   }
                       

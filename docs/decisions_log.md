@@ -556,3 +556,16 @@ bastaría, porque quedaría en el historial de Git.
 **Actualiza el pendiente del 2026-11-04:** el SHA-1/SHA-256 compartido está
 registrado (2026-11-05) y el responsable de la rama confirmó que Google y GitHub
 están habilitados en Firebase. Sigue pendiente el keystore de release.
+
+## 2026-11-09 — `auth_user_profile` pasa a la versión 14 de SQLite (rama `feature-juan_pablo`)
+
+**Contexto:** al fusionar `develop`, la versión 13 ya estaba ocupada por la
+limpieza de ejemplos de room (riesgo R10 del plan de autenticación).
+
+**Decisión:** se conserva el 12 -> 13 de `develop` y `auth_user_profile` se crea
+en un 13 -> 14 con `CREATE TABLE IF NOT EXISTS`. Así migran tanto las bases v13
+de `develop`, que no tienen la tabla, como las v13 de esta rama, que la conservan
+con su fila. Estas últimas no ejecutan el 12 -> 13: sus ejemplos de room los
+limpia `RoomDao.removeLegacyMockData`.
+
+La próxima migración de cualquier rama usa la versión 15.

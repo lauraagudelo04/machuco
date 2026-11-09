@@ -1,5 +1,5 @@
-// Migraciones SQLite del módulo de autenticación (versión 13,
-// `auth_user_profile`). Complementa la prueba 12 -> 13 de
+// Migraciones SQLite del módulo de autenticación (versión 14,
+// `auth_user_profile`). Complementa la prueba 13 -> 14 de
 // test/repositories/auth/auth_user_profile_repository_test.dart.
 import 'dart:io';
 
@@ -60,9 +60,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 13 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 14 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 13);
+    expect(await raw().getVersion(), 14);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -75,7 +75,7 @@ void main() {
   });
 
   test(
-    '[MIG-02] de v11 a v13 aplica 11 -> 12 y 12 -> 13 sin perder datos',
+    '[MIG-02] de v11 a v14 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
@@ -98,7 +98,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 13);
+      expect(await raw().getVersion(), 14);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _columns(raw(), 'clients'), isNot(contains('password')));
       final clients = await raw().query('clients');
@@ -107,8 +107,28 @@ void main() {
     },
   );
 
-  test('[MIG-03] 12 -> 13 es idempotente: si la tabla ya existe conserva su '
-      'fila', () async {
+  test('[MIG-05] una v13 sin auth_user_profile (develop) recibe la tabla y '
+      'conserva sus datos', () async {
+    final db = raw();
+    await db.execute('DROP TABLE auth_user_profile');
+    await db.insert('clients', {
+      'name': 'Ana',
+      'phone': '3001234567',
+      'email': 'ana@example.com',
+      'country_code': '+57',
+    });
+    await db.setVersion(13);
+
+    await reopen();
+
+    expect(await raw().getVersion(), 14);
+    expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
+    final clients = await raw().query('clients');
+    expect(clients.single['email'], 'ana@example.com');
+  });
+
+  test('[MIG-03] 13 -> 14 es idempotente: una v13 de la rama de autenticación '
+      'conserva su fila', () async {
     await raw().insert('auth_user_profile', {
       'uid': 'u1',
       'email': 'ana@example.com',
@@ -118,11 +138,11 @@ void main() {
       'account_status': 'active',
       'synced_at': '2026-11-05T00:00:00.000Z',
     });
-    await raw().setVersion(12);
+    await raw().setVersion(13);
 
     await reopen();
 
-    expect(await raw().getVersion(), 13);
+    expect(await raw().getVersion(), 14);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 

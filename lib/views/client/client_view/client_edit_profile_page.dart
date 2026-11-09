@@ -23,13 +23,32 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   late String _selectedCountryCode;
 
   @override
-  void initState() {
-    super.initState();
-    final client = ClientController.instance.currentClient;
-    _nameController = TextEditingController(text: client?.name ?? '');
-    _phoneController = TextEditingController(text: client?.phone ?? '');
-    _selectedCountryCode = client?.countryCode ?? '+57';
+void initState() {
+  super.initState();
+  final client = ClientController.instance.currentClient;
+  final availableCodes = ClientController.instance.countryCodes;
+
+  String rawPhone = client?.phone ?? '';
+  String code = client?.countryCode ?? '+57';
+
+  if (rawPhone.startsWith('+')) {
+    for (final country in availableCodes) {
+      if (rawPhone.startsWith(country.callingCode)) {
+        code = country.callingCode;
+        rawPhone = rawPhone.substring(country.callingCode.length).trim();
+        break;
+      }
+    }
+    if (rawPhone.startsWith('+57')) {
+      code = '+57';
+      rawPhone = rawPhone.substring(3).trim();
+    }
   }
+
+  _selectedCountryCode = code;
+  _nameController = TextEditingController(text: client?.name ?? '');
+  _phoneController = TextEditingController(text: rawPhone);
+}
 
   @override
   void dispose() {
@@ -82,14 +101,14 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
             List<DropdownMenuItem<String>> dropdownItems = [];
 
             if (availableCodes.isNotEmpty) {
-              if (!availableCodes.any((c) => c.dialCode == _selectedCountryCode)) {
-                _selectedCountryCode = availableCodes.first.dialCode;
+              if (!availableCodes.any((c) => c.callingCode == _selectedCountryCode)) {
+                _selectedCountryCode = availableCodes.first.callingCode;
               }
 
               dropdownItems = availableCodes.map((code) {
                 return DropdownMenuItem(
-                  value: code.dialCode,
-                  child: Text('${code.isoCode} ${code.dialCode}'),
+                  value: code.callingCode,
+                  child: Text('${code.countryCode} ${code.callingCode}'),
                 );
               }).toList();
             } else {

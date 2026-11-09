@@ -31,7 +31,7 @@ class ClientProfilePage extends StatelessWidget {
             if (controller.errorMessage != null && controller.currentClient == null) {
               return AppErrorState(
                 message: controller.errorMessage!,
-                onRetry: controller.loadData,
+                onRetry: controller.loadProfileData,
               );
             }
 
@@ -42,7 +42,7 @@ class ClientProfilePage extends StatelessWidget {
                 title: 'Perfil no encontrado',
                 message: 'No hay datos de perfil guardados en este dispositivo.',
                 actionLabel: 'Recargar',
-                onAction: controller.loadData,
+                onAction: controller.loadProfileData,
               );
             }
 
@@ -62,7 +62,9 @@ class ClientProfilePage extends StatelessWidget {
                     _InfoRow(
                       icon: Icons.phone_outlined,
                       label: 'Teléfono',
-                      value: '${client.countryCode} ${client.phone}',
+                      value: client.phone.startsWith('+')
+                              ? client.phone
+                              : '${client.countryCode} ${client.phone}',
                     ),
                     _InfoRow(
                       icon: Icons.email_outlined,

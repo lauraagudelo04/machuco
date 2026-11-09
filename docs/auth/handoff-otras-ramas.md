@@ -111,7 +111,7 @@ También cambia lo siguiente:
 
 | Tema | Con quién | Acción |
 | --- | --- | --- |
-| Versión 13 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | Reservar la 13 antes del merge a `develop` |
+| Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14. Quien agregue una migración usa la 15 |
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
 | `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
 | Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |

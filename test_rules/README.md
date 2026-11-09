@@ -53,7 +53,7 @@ reglas que conviene revisar; no son errores de la prueba.
 ```bash
 flutter test                                   # todo
 flutter test test/database/auth_migration_test.dart          # migraciones SQLite [MIG-xx]
-flutter test test/repositories/auth                          # caché SQLite, catálogo, 12 -> 13
+flutter test test/repositories/auth                          # caché SQLite, catálogo, 13 -> 14
 flutter test test/service/auth                               # servicios [SOC-xx]
 flutter test test/views/auth                                 # pantallas [SOC-UI-xx]
 ```
