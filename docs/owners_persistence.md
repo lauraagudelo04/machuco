@@ -50,9 +50,19 @@ depende de `supabase_flutter`.
 ## Supabase: maestro de tipos de documento
 
 La tabla remota se crea con
-`supabase/migrations/202611070001_create_document_types.sql`. El profesor o el
-administrador del proyecto debe aplicarla en el panel de Supabase; el archivo no
-se ejecuta desde la app.
+`supabase/migrations/202611070001_create_document_types.sql`, que se aplica a
+mano desde el SQL Editor de Supabase; el archivo no se ejecuta desde la app.
+
+### Estado de aplicación
+
+- Aplicada el **2026-11-08** en el proyecto `ogrbbuwtsyezegkpwtsl`.
+- Tabla `public.document_types`: 7 columnas y 5 filas (CC, CE, NIT, PAS y TI),
+  con RLS activo y política de solo lectura para `anon` y `authenticated`.
+- Verificada con `curl` contra el endpoint REST: responde `200` con los cinco
+  tipos ordenados por `sort_order`.
+- El maestro de indicativos que consume el formulario es
+  `country_phone_codes` (10 filas). `phone_country_codes` es el maestro antiguo
+  y quedó vacío; ambos endpoints responden `200`.
 
 ```http
 GET <SUPABASE_URL>/rest/v1/document_types?select=id,code,name,pattern,example,is_active,sort_order&is_active=eq.true&order=sort_order.asc
@@ -137,6 +147,11 @@ Los valores por defecto de `SupabaseRoomConfig` apuntan al proyecto de
 desarrollo y permiten `flutter run` sin argumentos. Firebase se configura con
 los archivos de `firebase_options.dart` / `.firebaserc` que ya usa la app.
 
+> `flutter run` sin argumentos usa las cuentas de prueba quemadas
+> (`AUTH_USE_HARDCODED_AUTH_USERS` vale `true` por defecto). Para entrar con
+> Firebase Auth hay que agregar
+> `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`.
+
 ## Pruebas
 
 ```bash
@@ -154,20 +169,63 @@ real.
 
 ## Verificación manual
 
-1. Iniciar sesión como administrador con Firebase Auth.
-2. Abrir Propietarios: debe verse «Sesión: correo@…» y la lista local.
-3. Crear un propietario con conexión: revisar en la consola de Firestore que el
-   documento aparece en `owners` y que la fila local queda `synchronized = 1`.
-4. Activar modo avión, crear otro propietario: debe guardarse localmente y
+Completada el **2026-11-09** con la app real, en línea y en modo avión.
+
+> Para usar Firebase Auth hay que arrancar sin los usuarios de prueba:
+> `flutter run --dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. El
+> administrador necesita `role: "admin"` y `accountStatus: "active"` en
+> `users/{uid}`, y el id de ese documento debe ser igual al UID de Firebase
+> Auth; si no coincide, la app cae en rol cliente.
+
+1. ✅ Iniciar sesión como administrador con Firebase Auth.
+2. ✅ Abrir Propietarios: debe verse «Sesión: correo@…» y la lista local.
+3. ✅ Crear un propietario con conexión: revisar en la consola de Firestore que
+   el documento aparece en `owners` y que la fila local queda
+   `synchronized = 1`.
+4. ✅ Activar modo avión, crear otro propietario: debe guardarse localmente y
    mostrarse el aviso de sincronización.
-5. Recuperar la conexión y pulsar «Reintentar»: el documento pendiente debe
+5. ✅ Recuperar la conexión y pulsar «Reintentar»: el documento pendiente debe
    aparecer en Firestore.
-6. Eliminar un propietario con conexión: el documento debe desaparecer de
+6. ✅ Eliminar un propietario con conexión: el documento debe desaparecer de
    Firestore y de la lista local.
+
+## Por qué no hay `owners` en Supabase ni carpeta `persistencia/nube`
+
+### Datos de dominio frente a catálogos
+
+La decisión del 2026-10-27 (`docs/decisions_log.md`) separa **datos de dominio**
+(Firestore) de **maestros o catálogos** (Supabase). Un propietario es dato de
+dominio, igual que el perfil del usuario, así que vive en la colección `owners`.
+Las 14 tablas publicadas en Supabase no incluyen `owners`: son catálogos
+(`document_types`, `country_phone_codes`, `phone_country_codes`, `review_types`,
+`reservation_categories`, `room_included_services`, …) y tablas de otros módulos
+(`motels`, `clients`, `invoices`, `subscription_plans`, …).
+
+### Convención de carpetas
+
+La convención vigente del repositorio es `lib/database/repository/<entidad>/`
+para el acceso local y `lib/repositories/<entidad>/` para los clientes de nube;
+la decisión del 2026-10-20 lo deja escrito para los maestros. El cliente de
+Firestore de propietarios vive en `lib/repositories/owner/`. La carpeta
+`lib/database/persistencia_nube/` solo aparece en instantáneas locales
+abandonadas (commits «untracked files on cline checkpoint» del 2026-11-06, con
+un `supabase_sync_service.dart` que nunca se versionó); en `HEAD` estaba vacía y
+se eliminó en el commit `7aab56e`.
+
+### Llaves foráneas y esquema SQL completo
+
+- `document_types` es un catálogo independiente: no referencia otras tablas, así
+  que no necesita llaves foráneas.
+- Un esquema de propietarios en Supabase exigiría una tabla `owners` con
+  `document_type_id → document_types(id)` y
+  `country_code_id → country_phone_codes(id)`, además de RLS y políticas de
+  escritura. Eso duplicaría la colección `owners` de Firestore y contradice la
+  decisión vigente, por eso no se creó.
+- El SQL versionado por este módulo se limita a
+  `supabase/migrations/202611070001_create_document_types.sql`. Los esquemas de
+  las otras 13 tablas pertenecen a sus respectivos módulos.
 
 ## Fuera de alcance
 
-- La tabla `owners` en Supabase: los propietarios son datos de dominio y van a
-  Firestore.
 - `supabase_flutter`.
 - Otros módulos (moteles, pagos, reservas, PQRS).
