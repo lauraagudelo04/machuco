@@ -29,7 +29,7 @@ abstract final class AuthConfig {
   /// builds with `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`.
   static const useHardcodedAuthUsers = bool.fromEnvironment(
     'AUTH_USE_HARDCODED_AUTH_USERS',
-    defaultValue: true,
+    defaultValue: false,
   );
 
   /// Whether [usersApiBaseUrl] was provided, i.e. whether

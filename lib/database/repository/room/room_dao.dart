@@ -12,6 +12,14 @@ class RoomDao {
 
   final DatabaseProvider _databaseProvider;
 
+  Future<String> getDatabasePath() async => (await _databaseProvider()).path;
+
+  /// También limpia bases ya abiertas durante una sesión de desarrollo.
+  Future<void> removeLegacyMockData() async {
+    final database = await _databaseProvider();
+    await database.transaction(deleteLegacyRoomMockData);
+  }
+
   Future<List<RoomVisualData>> getRooms() async {
     final database = await _databaseProvider();
     final rows = await database.query('rooms', orderBy: 'room_number ASC');
@@ -64,7 +72,25 @@ class RoomDao {
 
   Future<void> deleteRoomType(String typeId) async {
     final database = await _databaseProvider();
-    await database.delete('room_types', where: 'id = ?', whereArgs: [typeId]);
+    await database.transaction((transaction) async {
+      final rooms = await transaction.query(
+        'rooms',
+        columns: ['id'],
+        where: 'type_id = ?',
+        whereArgs: [typeId],
+        limit: 1,
+      );
+      if (rooms.isNotEmpty) {
+        throw StateError(
+          'No puedes eliminar un tipo con habitaciones asociadas.',
+        );
+      }
+      await transaction.delete(
+        'room_types',
+        where: 'id = ?',
+        whereArgs: [typeId],
+      );
+    });
   }
 
   Future<List<RoomService>> getIncludedServices() async {
@@ -156,4 +182,20 @@ class RoomDao {
     );
     if (updated == 0) await database.insert('room_types', values);
   }
+}
+
+/// Los identificadores del antiguo mock están reservados para datos de ejemplo.
+Future<void> deleteLegacyRoomMockData(DatabaseExecutor database) async {
+  await database.rawDelete('DELETE FROM rooms WHERE id IN (?, ?, ?, ?, ?)', [
+    'room-101',
+    'room-204',
+    'room-206',
+    'room-305',
+    'room-402',
+  ]);
+  await database.rawDelete(
+    'DELETE FROM room_types WHERE id IN (?, ?, ?, ?) '
+    'AND NOT EXISTS (SELECT 1 FROM rooms WHERE rooms.type_id = room_types.id)',
+    ['type-suite', 'type-loft', 'type-cabin', 'type-studio'],
+  );
 }
