@@ -1,4 +1,5 @@
 import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
@@ -95,6 +96,51 @@ class OwnerService {
     return null;
   }
 
+  /// Registra un propietario en SQLite que ya existe en `users/{uid}`.
+  Future<void> guardarCreado(Owner owner) =>
+      _repository.insertSynchronized(owner);
+
+  /// Construye y valida un propietario nuevo sin persistirlo.
+  ///
+  /// La creación real la completa el controlador: primero crea la cuenta en
+  /// Firebase Auth y después guarda la fila local ya con el uid definitivo.
+  Owner prepararPropietario({
+    required String fullName,
+    required DocumentType documentType,
+    required String documentNumber,
+    required String email,
+    required String phone,
+    String? countryCode,
+    String? countryName,
+    String? address,
+    bool isActive = true,
+    AccountStatus? accountStatus,
+  }) {
+    if (email.isEmpty) {
+      throw StateError('Ingresa el correo electrónico.');
+    }
+    if (!_emailPattern.hasMatch(email)) {
+      throw StateError(
+        'Ingresa un correo válido, por ejemplo nombre@dominio.com.',
+      );
+    }
+
+    return Owner(
+      // Provisional hasta que Firebase Auth asigne el uid.
+      id: 'owner-${DateTime.now().microsecondsSinceEpoch}',
+      fullName: fullName,
+      documentType: documentType,
+      documentNumber: documentNumber,
+      email: email,
+      phone: phone,
+      countryCode: countryCode,
+      countryName: countryName,
+      address: address,
+      isActive: isActive,
+      accountStatus: accountStatus,
+    );
+  }
+
   /// Registra un propietario validando correo y duplicados.
   ///
   /// [countryCode] y [countryName] viajan aparte de [phone] para que la nube y
@@ -110,23 +156,12 @@ class OwnerService {
     String? address,
     bool isActive = true,
   }) async {
-    if (email.isEmpty) {
-      throw StateError('Ingresa el correo electrónico.');
-    }
-    if (!_emailPattern.hasMatch(email)) {
-      throw StateError(
-        'Ingresa un correo válido, por ejemplo nombre@dominio.com.',
-      );
-    }
-
     final dupMsg = await validarDuplicado(documentType, documentNumber);
     if (dupMsg != null) {
       throw StateError(dupMsg);
     }
 
-    final owner = Owner(
-      // Identificador provisional: el definitivo lo asignará el backend.
-      id: 'owner-${DateTime.now().microsecondsSinceEpoch}',
+    final owner = prepararPropietario(
       fullName: fullName,
       documentType: documentType,
       documentNumber: documentNumber,
@@ -136,10 +171,46 @@ class OwnerService {
       countryName: countryName,
       address: address,
       isActive: isActive,
+      accountStatus: isActive ? AccountStatus.active : AccountStatus.disabled,
     );
 
     await _repository.insert(owner);
     return owner;
+  }
+
+  /// Actualiza los datos editables de un propietario.
+  Future<Owner> actualizarPropietario({
+    required String ownerId,
+    required String fullName,
+    required DocumentType documentType,
+    required String documentNumber,
+    required String phone,
+    String? countryCode,
+    String? countryName,
+    String? address,
+    bool? isActive,
+    AccountStatus? accountStatus,
+  }) async {
+    final owner = await _repository.findById(ownerId);
+    if (owner == null) {
+      throw StateError('El propietario ya no existe.');
+    }
+    final updated = Owner(
+      id: owner.id,
+      fullName: fullName,
+      documentType: documentType,
+      documentNumber: documentNumber,
+      email: owner.email,
+      phone: phone,
+      countryCode: countryCode,
+      countryName: countryName,
+      address: address,
+      isActive: isActive ?? owner.isActive,
+      accountStatus: accountStatus ?? owner.accountStatus,
+      isSynchronized: owner.isSynchronized,
+    );
+    await _repository.update(updated);
+    return updated;
   }
 
   /// Actualiza el teléfono de un propietario existente.
@@ -171,7 +242,10 @@ class OwnerService {
     if (owner == null) {
       throw StateError('El propietario ya no existe.');
     }
-    final updated = owner.copyWith(isActive: isActive);
+    final updated = owner.copyWith(
+      isActive: isActive,
+      accountStatus: isActive ? AccountStatus.active : AccountStatus.disabled,
+    );
     await _repository.update(updated);
     return updated;
   }

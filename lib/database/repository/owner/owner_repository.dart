@@ -1,6 +1,7 @@
 import 'package:floor/floor.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/owner/owner_entry.dart';
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
@@ -148,6 +149,13 @@ class OwnerRepository {
     await database.ownerDao.insertOwner(_toEntry(owner));
   }
 
+  /// Inserta un propietario que ya existe en la nube (recién creado con su
+  /// cuenta de Firebase Auth), por lo que nace sincronizado.
+  Future<void> insertSynchronized(Owner owner) async {
+    final database = await _database;
+    await database.ownerDao.insertOwner(_toEntry(owner, synchronized: 1));
+  }
+
   Future<void> update(Owner owner) async {
     final database = await _database;
     final existing = await database.ownerDao.findById(owner.id);
@@ -169,6 +177,7 @@ class OwnerRepository {
         address: owner.address,
         isActive: owner.isActive ? 1 : 0,
         synchronized: 0,
+        accountStatus: owner.accountStatus?.storageValue,
         pendingDelete: existing.pendingDelete,
         createdAt: existing.createdAt,
         updatedAt: DateTime.now(),
@@ -182,12 +191,15 @@ class OwnerRepository {
   }
 
   /// Inserta los datos semilla sólo si la tabla está vacía.
+  ///
+  /// Nacen sincronizados porque son solo demostración local: nunca deben
+  /// crear cuentas reales en Firebase Auth.
   Future<void> seedIfEmpty(List<Owner> seeds) async {
     final database = await _database;
     final total = await database.ownerDao.count() ?? 0;
     if (total > 0) return;
     for (final seed in seeds) {
-      await database.ownerDao.insertOwner(_toEntry(seed));
+      await database.ownerDao.insertOwner(_toEntry(seed, synchronized: 1));
     }
   }
 
@@ -205,6 +217,7 @@ class OwnerRepository {
     countryName: entry.countryName,
     address: entry.address,
     isActive: entry.isActive == 1,
+    accountStatus: accountStatusFromStorage(entry.accountStatus),
     isSynchronized: entry.synchronized == 1,
   );
 
@@ -230,6 +243,7 @@ class OwnerRepository {
       address: owner.address,
       isActive: owner.isActive ? 1 : 0,
       synchronized: synchronized,
+      accountStatus: owner.accountStatus?.storageValue,
       pendingDelete: pendingDelete,
       createdAt: createdAt ?? now,
       updatedAt: updatedAt ?? now,

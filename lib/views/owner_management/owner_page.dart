@@ -674,7 +674,10 @@ class _OwnerCard extends StatelessWidget {
                 child: Text(owner.fullName, style: textTheme.titleMedium),
               ),
               const SizedBox(width: AppSpacing.s2),
-              OwnerStatusChip(isActive: owner.isActive),
+              OwnerStatusChip(
+                isActive: owner.isActive,
+                status: owner.accountStatus,
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.s2),

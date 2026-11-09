@@ -13,6 +13,7 @@ import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
 import 'package:machuco/widgets/form/app_phone_field.dart';
 
 import 'owner_summary.dart';
@@ -49,7 +50,10 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   late final TextEditingController _addressController;
 
   late DocumentType _documentType;
-  late bool _isActive;
+
+  // Estado inicial que elige el administrador al crear la cuenta. En edición
+  // el estado se cambia desde la lista de propietarios.
+  bool _pendingApproval = false;
 
   // `AppTextField` expone `errorText` y no un `validator`, por lo que el estado
   // de validación se conserva aquí. Los errores aparecen tras el primer envío y
@@ -63,6 +67,9 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   // Al crear, el formulario cede su lugar a un resumen de lo registrado: deja
   // de ser editable y confirma exactamente qué información quedó guardada.
   Owner? _createdOwner;
+
+  /// Contraseña temporal de la cuenta recién creada: se muestra una sola vez.
+  String? _temporaryPassword;
 
   // Mientras la persistencia está en curso se bloquean los botones para evitar
   // envíos duplicados.
@@ -91,7 +98,6 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _phoneController = TextEditingController(text: initialData?.phone);
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
-    _isActive = initialData?.isActive ?? true;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
   }
 
@@ -105,18 +111,14 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     super.dispose();
   }
 
-  /// En edición solo el teléfono es editable, así que los demás campos no se
-  /// validan: no pueden haber cambiado desde esta pantalla.
+  /// En edición se validan los datos editables; el correo no se toca porque
+  /// identifica la cuenta de Firebase Auth.
   void _updateErrors() {
-    _fullNameError = _isEditing
-        ? null
-        : OwnerController.validateFullName(_fullNameController.text);
-    _documentNumberError = _isEditing
-        ? null
-        : OwnerController.validateDocumentNumber(
-            _documentNumberController.text,
-            _documentType,
-          );
+    _fullNameError = OwnerController.validateFullName(_fullNameController.text);
+    _documentNumberError = OwnerController.validateDocumentNumber(
+      _documentNumberController.text,
+      _documentType,
+    );
     _emailError = _isEditing
         ? null
         : OwnerController.validateEmail(_emailController.text);
@@ -217,8 +219,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     });
   }
 
-  void _toggleActiveState(bool isActive) =>
-      setState(() => _isActive = isActive);
+  void _selectInitialStatus(bool pendingApproval) =>
+      setState(() => _pendingApproval = pendingApproval);
 
   void _focusNextField() => FocusScope.of(context).nextFocus();
 
@@ -246,17 +248,24 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     final selectedCountryCode = widget.controller.selectedCountryCode;
     final countryCode = selectedCountryCode?.dialCode;
     final countryName = selectedCountryCode?.countryName;
-    final Owner? saved;
+    Owner? saved;
+    CreatedOwner? created;
     if (initialData != null) {
-      saved = await widget.controller.updateOwnerPhone(
+      saved = await widget.controller.updateOwner(
         initialData.id,
-        _phoneController.text.trim(),
+        fullName: _fullNameController.text.trim(),
+        documentType: _documentType,
+        documentNumber: _documentNumberController.text.trim(),
+        phone: _phoneController.text.trim(),
         countryCode: countryCode,
         countryName: countryName,
+        address: _addressController.text.trim().isEmpty
+            ? null
+            : _addressController.text.trim(),
       );
     } else {
       final address = _addressController.text.trim();
-      saved = await widget.controller.createOwner(
+      created = await widget.controller.createOwner(
         fullName: _fullNameController.text.trim(),
         documentType: _documentType,
         documentNumber: _documentNumberController.text.trim(),
@@ -265,8 +274,9 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         countryCode: countryCode,
         countryName: countryName,
         address: address.isEmpty ? null : address,
-        isActive: _isActive,
+        pendingApproval: _pendingApproval,
       );
+      saved = created?.owner;
     }
 
     if (!mounted) return;
@@ -296,7 +306,10 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       return;
     }
 
-    setState(() => _createdOwner = saved);
+    setState(() {
+      _createdOwner = saved;
+      _temporaryPassword = created?.temporaryPassword;
+    });
   }
 
   void _cancelForm() => Navigator.of(context).maybePop();
@@ -342,7 +355,12 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
                     ),
                     children: createdOwner == null
                         ? _buildFormFields()
-                        : [_OwnerCreatedSummary(owner: createdOwner)],
+                        : [
+                            _OwnerCreatedSummary(
+                              owner: createdOwner,
+                              temporaryPassword: _temporaryPassword,
+                            ),
+                          ],
                   ),
                 ),
               );
@@ -375,7 +393,6 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             controller: _fullNameController,
             hint: 'Ej.: Laura Gómez Restrepo',
             errorText: _fullNameError,
-            enabled: !_isEditing,
             keyboardType: TextInputType.name,
             textInputAction: TextInputAction.next,
             autofillHints: const [AutofillHints.name],
@@ -386,7 +403,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
           _DocumentTypeSelector(
             selectedType: _documentType,
             documentTypes: widget.controller.documentTypes,
-            onSelected: _isEditing ? null : _selectDocumentType,
+            onSelected: _selectDocumentType,
           ),
           const SizedBox(height: AppSpacing.s4),
           AppTextField(
@@ -394,7 +411,6 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             controller: _documentNumberController,
             hint: 'Ej.: ${_documentType.example}',
             errorText: _documentNumberError,
-            enabled: !_isEditing,
             keyboardType: _documentType.keyboardType,
             textInputAction: TextInputAction.next,
             onChanged: (_) => _revalidateAfterChange(),
@@ -411,6 +427,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             controller: _emailController,
             hint: 'nombre@dominio.com',
             errorText: _emailError,
+            // El correo identifica la cuenta de Firebase Auth: no se edita.
             enabled: !_isEditing,
             keyboardType: TextInputType.emailAddress,
             textInputAction: TextInputAction.next,
@@ -447,7 +464,6 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             label: 'Dirección (opcional)',
             controller: _addressController,
             hint: 'Ej.: Calle 10 # 43-25',
-            enabled: !_isEditing,
             keyboardType: TextInputType.streetAddress,
             textInputAction: TextInputAction.done,
             autofillHints: const [AutofillHints.fullStreetAddress],
@@ -459,18 +475,23 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       _FormSection(
         title: 'Estado',
         children: [
-          _ActiveStateField(
-            isActive: _isActive,
-            // En edición el estado se cambia desde la lista de propietarios.
-            onChanged: _isEditing ? null : _toggleActiveState,
-          ),
+          if (_isEditing)
+            _ActiveStateField(
+              isActive: widget.initialData?.isActive ?? true,
+              onChanged: null,
+            )
+          else
+            _InitialStatusField(
+              pendingApproval: _pendingApproval,
+              onChanged: _selectInitialStatus,
+            ),
         ],
       ),
     ];
   }
 }
 
-/// Aviso de por qué la mayoría de los campos están bloqueados en edición.
+/// Aviso de qué se puede modificar en edición.
 class _EditingNotice extends StatelessWidget {
   const _EditingNotice();
 
@@ -488,8 +509,9 @@ class _EditingNotice extends StatelessWidget {
           const SizedBox(width: AppSpacing.s3),
           Expanded(
             child: Text(
-              'Solo puedes actualizar el teléfono. Los demás datos identifican '
-              'al propietario y se muestran como referencia.',
+              'Puedes actualizar los datos legales y de contacto. El correo '
+              'identifica la cuenta de acceso y no se edita; el estado se '
+              'cambia desde la lista de propietarios.',
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color: context.appColors.textSecondary,
               ),
@@ -501,15 +523,70 @@ class _EditingNotice extends StatelessWidget {
   }
 }
 
-/// Confirmación con el resumen de la información que quedó registrada.
-class _OwnerCreatedSummary extends StatelessWidget {
-  const _OwnerCreatedSummary({required this.owner});
+/// Estado con el que nace la cuenta de acceso del propietario.
+class _InitialStatusField extends StatelessWidget {
+  const _InitialStatusField({
+    required this.pendingApproval,
+    required this.onChanged,
+  });
 
-  final Owner owner;
+  final bool pendingApproval;
+  final ValueChanged<bool> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final textTheme = Theme.of(context).textTheme;
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Estado inicial de la cuenta', style: textTheme.bodyLarge),
+          const SizedBox(height: AppSpacing.s3),
+          Wrap(
+            spacing: AppSpacing.s2,
+            children: [
+              ChoiceChip(
+                label: const Text('Activo'),
+                selected: !pendingApproval,
+                onSelected: (_) => onChanged(false),
+              ),
+              ChoiceChip(
+                label: const Text('Pendiente de aprobación'),
+                selected: pendingApproval,
+                onSelected: (_) => onChanged(true),
+              ),
+            ],
+          ),
+          const SizedBox(height: AppSpacing.s2),
+          Text(
+            pendingApproval
+                ? 'La cuenta podrá iniciar sesión cuando otro administrador '
+                      'la apruebe.'
+                : 'El propietario puede administrar sus moteles de inmediato, '
+                      'tras cambiar la contraseña temporal.',
+            style: textTheme.bodySmall?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Confirmación con el resumen de la información que quedó registrada.
+class _OwnerCreatedSummary extends StatelessWidget {
+  const _OwnerCreatedSummary({required this.owner, this.temporaryPassword});
+
+  final Owner owner;
+
+  /// Contraseña temporal de la cuenta; se muestra una sola vez.
+  final String? temporaryPassword;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final password = temporaryPassword;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -540,6 +617,27 @@ class _OwnerCreatedSummary extends StatelessWidget {
           ),
         ),
         const SizedBox(height: AppSpacing.s6),
+        if (password != null) ...[
+          AppCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Contraseña temporal', style: textTheme.bodyLarge),
+                const SizedBox(height: AppSpacing.s2),
+                SelectableText(password, style: textTheme.headlineSmall),
+                const SizedBox(height: AppSpacing.s2),
+                Text(
+                  'Se muestra una sola vez. Entrégasela al propietario para su '
+                  'primer inicio de sesión; la app le pedirá cambiarla.',
+                  style: textTheme.bodySmall?.copyWith(
+                    color: context.appColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s6),
+        ],
         OwnerSummary(owner: owner),
       ],
     );

@@ -37,7 +37,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 17,
+  version: 18,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -100,6 +100,7 @@ class AppDatabaseProvider {
         migration14To15,
         migration15To16,
         migration16To17,
+        migration17To18,
       ])
       .addCallback(
         Callback(
@@ -457,6 +458,20 @@ final migration16To17 = Migration(16, 17, (database) async {
   await _addOwnerPendingDeleteColumn(database);
   await _createDocumentTypeSchema(database);
   await _seedDocumentTypes(database);
+});
+
+/// Estado de la cuenta del propietario tal como vive en `users/{uid}`.
+///
+/// Los propietarios pasan a ser usuarios registrados: la columna permite
+/// mostrar si la cuenta está activa, pendiente de aprobación o deshabilitada
+/// sin consultar la nube. Las filas anteriores quedan con el estado activo que
+/// ya representaba `isActive`.
+final migration17To18 = Migration(17, 18, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('accountStatus')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN accountStatus TEXT');
+  }
 });
 
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.

@@ -6,6 +6,7 @@ import 'package:machuco/core/design_system/tokens/app_colors.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
 /// Resumen de solo lectura con los datos de un propietario.
@@ -43,7 +44,10 @@ class OwnerSummary extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s2),
-                OwnerStatusChip(isActive: owner.isActive),
+                OwnerStatusChip(
+                  isActive: owner.isActive,
+                  status: owner.accountStatus,
+                ),
               ],
             ),
           ),
@@ -92,14 +96,21 @@ class _SummaryRow extends StatelessWidget {
 /// No usa `StatusBadge` porque ese componente describe estados de habitaciones
 /// y reservas, no de personas.
 class OwnerStatusChip extends StatelessWidget {
-  const OwnerStatusChip({super.key, required this.isActive});
+  const OwnerStatusChip({super.key, required this.isActive, this.status});
 
   final bool isActive;
 
+  /// Estado de la cuenta en `users/{uid}`; permite distinguir una cuenta
+  /// pendiente de aprobación de una deshabilitada.
+  final AccountStatus? status;
+
   @override
   Widget build(BuildContext context) {
-    final color = isActive ? AppColors.available : AppColors.blocked;
-    final label = isActive ? 'Activo' : 'Inactivo';
+    final pending = status == AccountStatus.pendingApproval;
+    final color = pending
+        ? AppColors.maintenance
+        : (isActive ? AppColors.available : AppColors.blocked);
+    final label = pending ? 'Pendiente' : (isActive ? 'Activo' : 'Inactivo');
     return Semantics(
       label: 'Estado: $label',
       child: ExcludeSemantics(
@@ -117,7 +128,11 @@ class OwnerStatusChip extends StatelessWidget {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Icon(
-                  isActive ? Icons.check_circle_outline : Icons.block_outlined,
+                  pending
+                      ? Icons.hourglass_top_outlined
+                      : (isActive
+                            ? Icons.check_circle_outline
+                            : Icons.block_outlined),
                   size: 16,
                   color: color,
                 ),

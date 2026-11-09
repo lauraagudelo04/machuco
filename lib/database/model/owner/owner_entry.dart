@@ -1,10 +1,11 @@
 import 'package:floor/floor.dart';
 
-/// Fila de la tabla `owners`: refleja 1:1 al modelo de dominio `Owner`.
+/// Fila de la tabla `owners`: caché local del documento `users/{uid}`.
 ///
 /// Floor no almacena booleanos ni enums sin convertidor, así que el estado
-/// activo y la marca de sincronización viajan como entero (0/1) y el tipo de
-/// documento como su nombre (`DocumentType.name`); el mapeo al modelo de
+/// activo y la marca de sincronización viajan como entero (0/1), el tipo de
+/// documento como su nombre (`DocumentType.name`) y el estado de la cuenta
+/// como el valor de `AccountStatus.storageValue`; el mapeo al modelo de
 /// dominio vive en `OwnerRepository`.
 @Entity(tableName: 'owners')
 class OwnerEntry {
@@ -22,6 +23,7 @@ class OwnerEntry {
     required this.synchronized,
     required this.createdAt,
     required this.updatedAt,
+    this.accountStatus,
     this.pendingDelete = 0,
   });
 
@@ -43,11 +45,14 @@ class OwnerEntry {
 
   final String? address;
 
-  /// 1 = activo, 0 = inactivo.
+  /// 1 = activo, 0 = inactivo (derivado de [accountStatus]).
   final int isActive;
 
   /// 0 = pendiente de enviar a la nube, 1 = ya sincronizado.
   final int synchronized;
+
+  /// `active`, `pending_approval`, `disabled`... tal como está en Firestore.
+  final String? accountStatus;
 
   /// 1 = el usuario lo eliminó sin conexión y falta borrarlo en Firestore.
   ///

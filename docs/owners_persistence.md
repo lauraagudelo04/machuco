@@ -7,7 +7,7 @@ combina las tres capas de persistencia acordadas por el equipo:
 
 | Necesidad | Tecnología | Dónde |
 |---|---|---|
-| Datos de dominio del propietario | **Cloud Firestore** | colección `owners` |
+| Datos de dominio del propietario | **Cloud Firestore** | colección `users` (`role = owner`) |
 | Caché local y funcionamiento sin conexión | **SQLite (Floor)** | tablas `owners` y `document_types` |
 | Maestro de tipos de documento | **Supabase REST** | tabla `document_types` |
 | Preferencias de la interfaz | **shared_preferences** | namespace `owners` y `auth` |
@@ -23,8 +23,11 @@ depende de `supabase_flutter`.
 2. `OwnerController.init()` siembra los datos demo la primera vez, recarga la
    tabla local y después intenta la sincronización con Firestore. La nube nunca
    bloquea el listado: si falla, se muestra un banner con «Reintentar».
-3. Crear, editar el teléfono o cambiar el estado escribe primero en SQLite; la
-   fila nace con `synchronized = 0`. Al terminar, el envío a Firestore se lanza
+3. Crear un propietario crea también su cuenta de acceso, así que **exige
+   conexión**: el panel pide el correo, genera una contraseña temporal y crea
+   `users/{uid}` con `role = owner` y el estado inicial que elija el
+   administrador (activo o pendiente de aprobación). Editar o cambiar el estado
+   sí es offline-first: SQLite queda con `synchronized = 0` y el envío se lanza
    en segundo plano.
 4. El formulario abre el maestro de indicativos y el de tipos de documento. El
    último indicativo usado se recuerda en `shared_preferences` y se
@@ -35,25 +38,28 @@ depende de `supabase_flutter`.
 
 ## SQLite
 
-- `owners`: `id`, `fullName`, `documentType` (nombre del enum), `documentNumber`,
-  `email`, `phone` (número nacional), `countryCode`, `countryName`, `address`,
-  `isActive`, `synchronized`, `pendingDelete`, `createdAt`, `updatedAt`.
+- `owners` (caché local de `users/{uid}`): `id` = **uid**, `fullName`,
+  `documentType` (nombre del enum), `documentNumber`, `email`, `phone` (número
+  nacional), `countryCode`, `countryName`, `address`, `isActive`,
+  `accountStatus`, `synchronized`, `pendingDelete`, `createdAt`, `updatedAt`.
 - `document_types`: `id`, `code`, `name`, `pattern`, `example`, `isActive`,
   `sortOrder`. Se siembra con CC, CE, NIT, PAS y TI; es la fuente del selector.
 - `synchronized = 0` significa «pendiente de enviar». `OwnerDao.markSynchronized`
   lo pasa a 1 cuando Firestore confirma la escritura.
+- `accountStatus` guarda el estado de la cuenta tal como está en Firestore
+  (`active`, `pending_approval`, `disabled`...). `isActive` se deriva de él.
+- Los datos demo (ids `owner-...`) se marcan como sincronizados y **nunca** se
+  envían: crearlos en Firebase implicaría cuentas de mentira.
 - `pendingDelete = 1` significa «el usuario lo eliminó sin conexión y falta
   borrarlo en Firestore». La fila no se lista ni cuenta como alta; cuando la
   nube confirma el delete, se borra por completo.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
   se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
-- La versión local es la **17**, con las tres migraciones del módulo
-  apiladas después de la 14 de develop: la 14→15 crea `owners` (con
+- La versión local es la **18**: la 14→15 crea `owners` (con
   `countryCode`/`countryName`) y `document_types` sembrada; la 15→16 agrega
-  `pendingDelete`; y la 16→17 reconcilia una base que ya estaba en la 16 de
-  esta rama antes del merge (crea `auth_user_profile` y repite la limpieza de
-  los ejemplos de room). Todas son idempotentes.
+  `pendingDelete`; la 16→17 reconcilia una base v16 de esta rama antes del
+  merge; y la 17→18 agrega `accountStatus`. Todas son idempotentes.
 
 ## Supabase: maestro de tipos de documento
 
@@ -88,41 +94,70 @@ Accept: application/json
 - El formulario consulta el refresco al abrirse en segundo plano: pinta la
   caché local de inmediato y conserva el enum como último respaldo.
 
-## Cloud Firestore
+## Cloud Firestore: `users/{uid}`
 
-- Colección: `owners`, declarada en `FirestoreCollections.owners`.
-- El id del documento es el mismo id de la fila SQLite, así que subir dos veces
-  el mismo propietario es idempotente.
-- Campos: `fullName`, `documentType` (nombre del enum), `documentNumber`,
-  `email`, `phone`, `countryCode?`, `countryName?`, `address?`, `isActive`,
-  `updatedBy` (uid del administrador) y `updatedAt` asignado por el servidor.
-- `OwnerFirestoreDocument` valida tipos, cadenas no vacías y el tipo de
-  documento. Un documento inválido se reporta como error de datos, no se
-  importa a medias.
-- `OwnerCloudRepository` es la interfaz que consume el controlador;
-  `FirestoreOwnerCloudRepository` es la implementación real, con timeout de
-  10 segundos, errores tipados y mensajes en español.
-- Sincronización:
-  1. Borrar en Firestore los pendientes de eliminar (`pendingDelete = 1`) y
-     quitar la fila local cuando la nube confirma.
-  2. Subir los registros con `synchronized = 0` y marcarlos.
-  3. Descargar la colección completa.
-  4. Mezclar en SQLite sin pisar cambios locales pendientes ni borrados
-     pendientes.
-- Firestore mantiene su propia cola de escrituras sin conexión. La app agrega
-  el tombstone local `pendingDelete` para que el borrado también se reintente.
+Un propietario **es un usuario registrado**: vive en `users/{uid}` con
+`role = 'owner'`, igual que clientes y administradores. No existe una colección
+`owners`; la anterior quedó obsoleta y se borra a mano desde la consola.
+
+| Campo del perfil | Origen |
+|---|---|
+| `role` | `'owner'` |
+| `accountStatus` | lo elige el admin al crear (`active` o `pending_approval`); luego `active`/`disabled` |
+| `fullName`, `email` | formulario (el correo no se edita después) |
+| `phoneNumber` | indicativo + número nacional |
+| `phoneCountryCodeId` | id del maestro de indicativos |
+| `phone` | número nacional (solo lo usa el módulo) |
+| `documentType` | enum del selector (`citizenshipCard`, `taxId`...) |
+| `documentNumber` | número de documento |
+| `nit`, `personType` | espejo de `documentNumber`/`documentType` (`taxId` → `juridica`) para que el documento siga siendo válido para el registro y la aprobación |
+| `countryCode`, `countryName`, `address` | datos de contacto legales |
+| `mustChangePassword` | `true` al crear: la cuenta nace con contraseña temporal |
+| `createdBy`, `createdAt`, `updatedBy`, `updatedAt` | auditoría |
+
+- **Crear**: `AuthAccountProvisioner` crea la cuenta en Firebase Auth (app
+  secundaria, sin cerrar la sesión del administrador) con
+  `TemporaryPasswordGenerator`; después se escribe `users/{uid}`. Si la
+  escritura falla se hace `rollback` de la cuenta. La contraseña temporal se
+  muestra **una sola vez** en el resumen del formulario.
+- **Editar**: se actualizan nombre, documento, dirección y teléfono; el correo,
+  el rol y el estado no se tocan desde esa pantalla.
+- **Estado**: activar/desactivar escribe solo `accountStatus`. Las cuentas
+  `pending_approval` se resuelven con el módulo de aprobación existente, no con
+  el interruptor.
+- **Listar**: `where('role', '==', 'owner')`; el orden y los filtros se aplican
+  en la app (no hace falta un índice compuesto).
+- **Eliminar**: borra el documento `users/{uid}`. La cuenta de Firebase Auth
+  **no** se puede borrar desde el cliente (no hay Admin SDK): queda huérfana y
+  su correo sigue tomado; se elimina desde la consola cuando haga falta. Es la
+  misma limitación documentada para `anonymizeAdministrator`.
+- `OwnerUserDocument` valida tipos y cadenas; un documento inválido se reporta
+  como error de datos y no se importa a medias.
+- `FirestoreOwnerCloudRepository` implementa `OwnerCloudRepository` con timeout
+  de 10 segundos, errores tipados (incluido `emailInUse`) y mensajes en español.
+- Sincronización: borrar los `pendingDelete`, subir los `synchronized = 0`
+  (update + cambio de estado), descargar `users` y mezclar en SQLite sin pisar
+  cambios locales ni borrados pendientes.
 
 ### Seguridad
 
-`firestore.rules` restringe `/owners/{ownerId}` al rol `admin`. El propietario
-no se autogestiona desde la app, por eso la colección no se expone a
-`isActiveOwner()`. Las reglas exigen que `updatedBy` sea el uid de la sesión y
-que las claves del documento estén en la lista permitida.
+`firestore.rules` conserva las reglas de `users` y agrega:
 
-Para publicarlas:
+- `isAdminOwnerCreation(uid)`: un admin activo crea un `role = owner` con los
+  campos legales, `mustChangePassword = true`, `createdBy` y
+  `createdAt == request.time`.
+- `isAdminOwnerEdit()`: un admin activo edita los datos legales y de contacto;
+  nunca el correo, el rol ni el estado.
+- `allow delete`: un admin activo borra cuentas que no son de administrador.
+  Los administradores no se borran: se anonimizan.
+
+`nit` debe ser igual a `documentNumber` y `personType` coherente con el tipo de
+documento; el resto de campos queda en la lista permitida.
+
+Para publicarlas (y los índices):
 
 ```bash
-firebase deploy --only firestore:rules
+firebase deploy --only firestore:rules,indexes
 ```
 
 ## shared_preferences
@@ -140,7 +175,8 @@ firebase deploy --only firestore:rules
 | Situación | Resultado |
 |---|---|
 | Se abre la lista sin red | Se muestran los propietarios de SQLite |
-| Se crea o edita sin red | Queda guardado con `synchronized = 0` y aparece el aviso |
+| Se edita sin red | Queda guardado con `synchronized = 0` y aparece el aviso |
+| Se crea sin red | Se informa que hace falta conexión (la cuenta de acceso no se puede crear offline) |
 | Firestore rechaza la escritura | El registro local se conserva y el aviso permite reintentar |
 | Se elimina sin red | Se oculta con `pendingDelete = 1`; el borrado se envía solo al volver la red |
 | Firestore rechaza un borrado por permisos | El registro local se conserva y se informa; no se reintenta solo |
@@ -189,7 +225,7 @@ los archivos de `firebase_options.dart` / `.firebaserc` que ya usa la app.
 
 ```bash
 flutter test \
-  test/models/owner/owner_firestore_document_test.dart \
+  test/models/owner/owner_user_document_test.dart \
   test/repositories/document_type/document_type_repository_test.dart \
   test/service/owner/owner_preferences_test.dart \
   test/service/owner/owner_sync_scheduler_test.dart \
@@ -211,26 +247,26 @@ Completada el **2026-11-09** con la app real, en línea y en modo avión.
 
 1. ✅ Iniciar sesión como administrador con Firebase Auth.
 2. ✅ Abrir Propietarios: debe verse «Sesión: correo@…» y la lista local.
-3. ✅ Crear un propietario con conexión: revisar en la consola de Firestore que
-   el documento aparece en `owners` y que la fila local queda
+3. Crear un propietario con conexión: aparece en `users` con `role = owner`,
+   el resumen muestra la contraseña temporal una sola vez y la fila local queda
    `synchronized = 1`.
-4. ✅ Activar modo avión, crear otro propietario: debe guardarse localmente y
-   mostrarse el aviso de sincronización con el contador de reintentos.
-5. ✅ Recuperar la conexión: la sincronización debe reanudarse sola (sin pulsar
-   «Reintentar») y el documento pendiente debe aparecer en Firestore.
-6. ✅ Eliminar un propietario con conexión: el documento debe desaparecer de
-   Firestore y de la lista local.
-7. ✅ Eliminar con el modo avión activo: el propietario desaparece del listado y,
-   al volver la conexión, su documento se borra de Firestore.
+4. Activar modo avión y editar un propietario: el cambio queda local con aviso
+   y contador de reintentos.
+5. Recuperar la conexión: la sincronización se reanuda sola y el cambio llega a
+   `users`.
+6. Eliminar un propietario con conexión: el documento desaparece de `users` y
+   de la lista local.
+7. Eliminar con el modo avión activo: el propietario desaparece del listado y,
+   al volver la conexión, su documento se borra de `users`.
 
 ## Por qué no hay `owners` en Supabase ni carpeta `persistencia/nube`
 
 ### Datos de dominio frente a catálogos
 
 La decisión del 2026-10-27 (`docs/decisions_log.md`) separa **datos de dominio**
-(Firestore) de **maestros o catálogos** (Supabase). Un propietario es dato de
-dominio, igual que el perfil del usuario, así que vive en la colección `owners`.
-Las 14 tablas publicadas en Supabase no incluyen `owners`: son catálogos
+(Firestore) de **maestros o catálogos** (Supabase). Un propietario es un perfil
+de usuario con datos legales, así que vive en `users/{uid}` de Firestore.
+Las tablas publicadas en Supabase no incluyen propietarios: son catálogos
 (`document_types`, `country_phone_codes`, `phone_country_codes`, `review_types`,
 `reservation_categories`, `room_included_services`, …) y tablas de otros módulos
 (`motels`, `clients`, `invoices`, `subscription_plans`, …).
@@ -253,8 +289,8 @@ se eliminó en el commit `7aab56e`.
 - Un esquema de propietarios en Supabase exigiría una tabla `owners` con
   `document_type_id → document_types(id)` y
   `country_code_id → country_phone_codes(id)`, además de RLS y políticas de
-  escritura. Eso duplicaría la colección `owners` de Firestore y contradice la
-  decisión vigente, por eso no se creó.
+  escritura. Eso duplicaría el documento `users/{uid}` de Firestore y
+  contradice la decisión vigente, por eso no se creó.
 - El SQL versionado por este módulo se limita a
   `supabase/migrations/202611070001_create_document_types.sql`. Los esquemas de
   las otras 13 tablas pertenecen a sus respectivos módulos.

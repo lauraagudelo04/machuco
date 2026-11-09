@@ -591,3 +591,28 @@ propietarios se re-apilan por encima, todas idempotentes:
   ejecutaron el 13→14 de `develop`.
 
 La versión local queda en **17**; la próxima rama que migre usa la 18.
+
+## 2026-11-09 — Los propietarios viven en `users/{uid}` (rama `feature_juliang`)
+
+**Contexto:** el módulo de propietarios escribía en una colección `owners`
+propia, separada de los usuarios registrados. Eso duplicaba identidades: un
+propietario que se registraba desde la app quedaba en `users` y otro creado por
+el administrador quedaba en `owners`, sin cuenta de acceso.
+
+**Decisión:** un propietario **es un usuario registrado**. El módulo lee
+`users` con `role == 'owner'` y el panel de administración hace el CRUD ahí:
+
+- Crear crea la cuenta en Firebase Auth con `AuthAccountProvisioner` y una
+  contraseña temporal (se muestra una sola vez), y escribe `users/{uid}` con
+  `role = owner`, `mustChangePassword = true` y el estado inicial que elija el
+  administrador (`active` o `pending_approval`).
+- Los datos legales se guardan en `documentType`/`documentNumber`/`address` y
+  se mantienen sincronizados con `nit`/`personType` (NIT → `juridica`) para no
+  romper el registro público ni las reglas de aprobación existentes.
+- Editar solo toca datos legales y de contacto (nunca correo, rol ni estado).
+- Eliminar borra el documento `users/{uid}`. La cuenta de Firebase Auth no se
+  puede borrar desde el cliente (no hay Admin SDK); queda huérfana y su correo
+  sigue tomado, igual que en `anonymizeAdministrator`.
+- La colección `owners` queda obsoleta y se borra a mano desde la consola.
+- El estado local de SQLite sube a la versión **18** (`accountStatus`); la
+  próxima rama que migre usa la 19.

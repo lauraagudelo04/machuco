@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
@@ -360,11 +361,13 @@ class OwnerController extends ChangeNotifier {
     }
   }
 
-  /// Registra un propietario y devuelve el resultado ya persistido.
+  /// Crea la cuenta del propietario en `users/{uid}` y devuelve el resultado
+  /// con su contraseña temporal.
   ///
-  /// Devuelve `null` si la validación de negocio falla; el motivo queda en
-  /// [lastError].
-  Future<Owner?> createOwner({
+  /// Crear un propietario implica crear una cuenta de Firebase Auth, así que
+  /// necesita conexión: no se puede completar sin red. Devuelve `null` si la
+  /// validación o la nube fallan; el motivo queda en [lastError].
+  Future<CreatedOwner?> createOwner({
     required String fullName,
     required DocumentType documentType,
     required String documentNumber,
@@ -373,18 +376,83 @@ class OwnerController extends ChangeNotifier {
     String? countryCode,
     String? countryName,
     String? address,
-    bool isActive = true,
+    bool pendingApproval = false,
+  }) async {
+    _isLoading = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final duplicate = await _service.validarDuplicado(
+        documentType,
+        documentNumber,
+      );
+      if (duplicate != null) throw StateError(duplicate);
+
+      final cloud = _cloudRepository;
+      final adminId = _currentUserId();
+      if (cloud == null || adminId == null || adminId.trim().isEmpty) {
+        throw StateError(
+          'Inicia sesión con Firebase para crear la cuenta del propietario.',
+        );
+      }
+
+      final status = pendingApproval
+          ? AccountStatus.pendingApproval
+          : AccountStatus.active;
+      final draft = _service.prepararPropietario(
+        fullName: fullName,
+        documentType: documentType,
+        documentNumber: documentNumber,
+        email: email,
+        phone: phone,
+        countryCode: countryCode,
+        countryName: countryName,
+        address: address,
+        isActive: !pendingApproval,
+        accountStatus: status,
+      );
+
+      final created = await cloud.createOwner(
+        adminId: adminId,
+        owner: draft,
+        accountStatus: status,
+        phoneCountryCodeId: _selectedCountryCode?.id,
+      );
+      await _service.guardarCreado(created.owner);
+      await _reload();
+      return created;
+    } on OwnerCloudRepositoryException catch (error) {
+      _lastError = error.message;
+      return null;
+    } catch (error) {
+      _lastError = _messageFor(error);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Actualiza los datos editables de un propietario.
+  Future<Owner?> updateOwner(
+    String ownerId, {
+    required String fullName,
+    required DocumentType documentType,
+    required String documentNumber,
+    required String phone,
+    String? countryCode,
+    String? countryName,
+    String? address,
   }) => _runAction(
-    () => _service.crearPropietario(
+    () => _service.actualizarPropietario(
+      ownerId: ownerId,
       fullName: fullName,
       documentType: documentType,
       documentNumber: documentNumber,
-      email: email,
       phone: phone,
       countryCode: countryCode,
       countryName: countryName,
       address: address,
-      isActive: isActive,
     ),
   );
 
@@ -394,20 +462,43 @@ class OwnerController extends ChangeNotifier {
     String phone, {
     String? countryCode,
     String? countryName,
-  }) => _runAction(
-    () => _service.actualizarTelefono(
+  }) async {
+    final owner = _findOwner(ownerId);
+    if (owner == null) {
+      _lastError = 'El propietario ya no existe.';
+      notifyListeners();
+      return null;
+    }
+    return updateOwner(
       ownerId,
-      phone,
-      countryCode: countryCode,
-      countryName: countryName,
-    ),
-  );
+      fullName: owner.fullName,
+      documentType: owner.documentType,
+      documentNumber: owner.documentNumber,
+      phone: phone,
+      countryCode: countryCode ?? owner.countryCode,
+      countryName: countryName ?? owner.countryName,
+      address: owner.address,
+    );
+  }
 
   /// Activa o inactiva a un propietario y devuelve cómo quedó.
   ///
-  /// Un propietario inactivo no administra sus moteles ni recibe reservas.
-  Future<Owner?> setActiveState(String ownerId, {required bool isActive}) =>
-      _runAction(() => _service.cambiarEstado(ownerId, isActive: isActive));
+  /// Un propietario inactivo no administra sus moteles ni recibe reservas. Las
+  /// cuentas pendientes de aprobación se resuelven desde el módulo de
+  /// aprobación, no desde este interruptor.
+  Future<Owner?> setActiveState(String ownerId, {required bool isActive}) {
+    final owner = _findOwner(ownerId);
+    if (owner != null && owner.isPendingApproval && isActive) {
+      _lastError =
+          'La cuenta está pendiente de aprobación. Apruébala desde el módulo '
+          'de propietarios pendientes.';
+      notifyListeners();
+      return Future.value();
+    }
+    return _runAction(
+      () => _service.cambiarEstado(ownerId, isActive: isActive),
+    );
+  }
 
   /// Elimina un propietario de forma permanente y devuelve el que se quitó.
   ///
@@ -626,9 +717,33 @@ class OwnerController extends ChangeNotifier {
 
     final pending = await _service.propietariosSinSincronizar();
     for (final owner in pending) {
-      await cloud.saveOwner(adminId: adminId, owner: owner);
+      // Los datos demo viven solo en SQLite: nunca crean cuentas reales.
+      if (owner.isLocalDemo) {
+        await _service.marcarSincronizado(owner.id);
+        continue;
+      }
+      await cloud.updateOwner(
+        adminId: adminId,
+        owner: owner,
+        phoneCountryCodeId: _countryCodeIdFor(owner),
+      );
+      // Una cuenta pendiente de aprobación no se deshabilita desde el
+      // interruptor: su estado lo decide el módulo de aprobación.
+      if (!owner.isPendingApproval) {
+        await cloud.setOwnerStatus(ownerId: owner.id, isActive: owner.isActive);
+      }
       await _service.marcarSincronizado(owner.id);
     }
+  }
+
+  /// Id del maestro de indicativos que corresponde al país del propietario.
+  int? _countryCodeIdFor(Owner owner) {
+    final dial = owner.countryCode;
+    if (dial == null) return null;
+    for (final code in _countryPhoneCodes) {
+      if (code.dialCode == dial) return code.id;
+    }
+    return null;
   }
 
   Owner? _findOwner(String id) {

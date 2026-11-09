@@ -315,7 +315,7 @@ void main() {
     },
   );
 
-  test('la migración 13->17 agrega el indicativo y pendingDelete sin perder '
+  test('la migración 13->18 agrega el indicativo, pendingDelete y el estado sin perder '
       'los teléfonos', () async {
     final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
     sqfliteFfiInit();
@@ -361,11 +361,16 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 17);
+    expect(await raw.getVersion(), 18);
     final columns = await raw.rawQuery('PRAGMA table_info(owners)');
     expect(
       columns.map((column) => column['name']),
-      containsAll(['countryCode', 'countryName', 'pendingDelete']),
+      containsAll([
+          'countryCode',
+          'countryName',
+          'pendingDelete',
+          'accountStatus',
+        ]),
     );
     final rows = await raw.query('owners');
     expect(rows.single['phone'], '+57 300 123 4567');
@@ -437,7 +442,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 17);
+    expect(await raw.getVersion(), 18);
     expect(
       await raw.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table' "

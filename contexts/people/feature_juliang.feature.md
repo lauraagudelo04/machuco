@@ -62,23 +62,23 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
 
 - **Carpetas donde trabajo**:
   - `lib/controllers/owner_management/` — `OwnerController` (estado de la vista, validación por país, sincronización)
-  - `lib/models/owner_management/` — modelos `Owner`, `DocumentType`, `OwnerStatusFilter` y `OwnerFirestoreDocument`
+  - `lib/models/owner_management/` — modelos `Owner`, `DocumentType`, `OwnerStatusFilter` y `OwnerUserDocument`
   - `lib/service/owner/` — `OwnerService` (reglas de negocio) y `OwnerPreferences` (shared_preferences)
   - `lib/repositories/owner/` — `OwnerCloudRepository` y la implementación Firestore
   - `lib/views/owner_management/` — vistas `owner_page`, `owner_form_page`, `owner_detail_page`, `owner_summary`
   - `lib/database/model/owner/`, `lib/database/model/document_type/` y sus repositorios — entidades Floor y DAOs
-- **Firestore (datos de dominio)**: colección `owners`, documento `owner_firestore_document.dart`, repositorio de nube, reglas de seguridad y sincronización push + pull + merge.
+- **Firestore (datos de dominio)**: cada propietario es un usuario registrado en `users/{uid}` con `role = owner`; documento `owner_user_document.dart`, repositorio de nube, reglas de seguridad y sincronización push + pull + merge.
 - **Supabase (solo maestros)**: tabla `document_types` con su SQL en `supabase/migrations/`, consultada por **REST + `http`**. No se instala `supabase_flutter`.
 - **shared_preferences**: namespace `owners` para el último indicativo; namespace `auth` para el correo del administrador.
 - **Fuera de alcance**:
   - Tabla `owners` en Supabase (los propietarios van a Firestore).
   - Tareas Supabase/Firebase de otras entidades (pagos, clientes, reservas, moteles).
   - Cambios en archivos compartidos (`lib/database/app_database.dart`, `app_database.g.dart`) sin coordinación previa de número de migración.
-- **Migraciones**: tras el merge con `develop` (que dejó la 14 con `auth_user_profile`), el módulo ocupa `14→15` (crea `owners` con indicativo y `document_types`), `15→16` (`pendingDelete`) y `16→17` (reconcilia una base v16 de esta rama). Esquema local en **17**.
+- **Migraciones**: tras el merge con `develop` (que dejó la 14 con `auth_user_profile`), el módulo ocupa `14→15` (crea `owners` con indicativo y `document_types`), `15→16` (`pendingDelete`), `16→17` (reconcilia una base v16 de esta rama) y `17→18` (`accountStatus`). Esquema local en **18**.
 
 ## Definiciones de datos
 
-- **Owner**: `id`, `fullName`, `documentType`, `documentNumber`, `email`, `phone` (número nacional), `countryCode` (`+57`), `countryName` (`Colombia`), `address`, `isActive`, `isSynchronized`.
+- **Owner**: `id` (uid de Firebase Auth), `fullName`, `documentType`, `documentNumber`, `email`, `phone` (número nacional), `countryCode` (`+57`), `countryName` (`Colombia`), `address`, `isActive`, `accountStatus`, `isSynchronized`.
 - **phoneWithDialCode**: teléfono listo para mostrar, por ejemplo `+57 300 123 4567`.
 - **DocumentType**: enum { citizenshipCard (CC), foreignerCard (CE), taxId (NIT), passport (PAS), identityCard (TI) }. El maestro local `document_types` guarda `code`, `name`, `pattern`, `example`, `isActive` y `sortOrder`; es la fuente del selector y se siembra con los cinco códigos.
 - **OwnerStatusFilter**: filtro { all, active, inactive }.
@@ -100,22 +100,28 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     Then El sistema bloquea el envío
     And Muestra un mensaje indicando cuántos dígitos se esperan para Colombia
 
-  Scenario: Sincronizar un propietario nuevo con Firestore
+  Scenario: Crear un propietario desde el panel
     Given El usuario está autenticado como administrador con Firebase
     When El usuario registra un propietario con conexión
-    Then El propietario se guarda primero en SQLite con synchronized = 0
-    And Se envía a la colección owners de Firestore
-    And La fila local queda con synchronized = 1
-    And El correo del administrador aparece como "Sesión: correo@..."
+    Then Se crea su cuenta de Firebase Auth con una contraseña temporal
+    And Se escribe users/{uid} con role = owner y los datos legales
+    And El resumen muestra la contraseña temporal una sola vez
+    And La fila local queda con synchronized = 1 y el uid como id
 
-  Scenario: Trabajar sin conexión y recuperar la sincronización sola
+  Scenario: Crear un propietario sin conexión
     Given El dispositivo está en modo avión
-    When El usuario registra un propietario
-    Then El propietario se conserva en SQLite con synchronized = 0
+    When El usuario intenta registrar un propietario
+    Then El sistema explica que necesita conexión para crear la cuenta de acceso
+    And No se guarda ninguna fila local
+
+  Scenario: Editar sin conexión y recuperar la sincronización sola
+    Given El dispositivo está en modo avión
+    When El usuario edita los datos de un propietario
+    Then El cambio se conserva en SQLite con synchronized = 0
     And La pantalla muestra un aviso con el intento automático en curso
     When El usuario recupera la conexión
     Then La app reintenta sola con retroceso (2 s, 5 s, 10 s, 30 s, 60 s)
-    And El propietario pendiente se envía a Firestore
+    And El cambio pendiente se envía a users
     And El aviso desaparece
 
   Scenario: Eliminar un propietario sin conexión
@@ -123,14 +129,14 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And Existe un propietario sincronizado en Firestore
     When El usuario elimina el propietario
     Then La fila local queda con pendingDelete = 1 y se oculta del listado
-    And El documento remoto sigue en Firestore
+    And El documento users/{uid} sigue en Firestore
     When El usuario recupera la conexión
-    Then La sincronización borra el documento remoto
+    Then La sincronización borra el documento users/{uid}
     And La fila local se elimina por completo
     And El pull posterior no resucita al propietario
 
   Scenario: Incorporar propietarios creados en otro dispositivo
-    Given Existe un propietario en la colección owners de Firestore
+    Given Existe un usuario con role = owner en users de Firestore
     And No existe en el SQLite de este dispositivo
     When El usuario abre la pantalla de propietarios
     Then El propietario remoto se inserta en SQLite ya marcado como sincronizado
