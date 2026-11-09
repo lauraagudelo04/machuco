@@ -29,23 +29,27 @@ depende de `supabase_flutter`.
 4. El formulario abre el maestro de indicativos y el de tipos de documento. El
    último indicativo usado se recuerda en `shared_preferences` y se
    preselecciona en la siguiente creación.
-5. Eliminar exige borrar el documento remoto antes que la fila local, para que
-   el siguiente pull no lo vuelva a insertar.
+5. Eliminar con conexión borra primero el documento remoto y después la fila
+   local. Sin conexión la fila se oculta con `pendingDelete = 1` y el borrado se
+   reintenta solo cuando vuelve la red.
 
 ## SQLite
 
 - `owners`: `id`, `fullName`, `documentType` (nombre del enum), `documentNumber`,
   `email`, `phone` (número nacional), `countryCode`, `countryName`, `address`,
-  `isActive`, `synchronized`, `createdAt`, `updatedAt`.
+  `isActive`, `synchronized`, `pendingDelete`, `createdAt`, `updatedAt`.
 - `document_types`: `id`, `code`, `name`, `pattern`, `example`, `isActive`,
   `sortOrder`. Se siembra con CC, CE, NIT, PAS y TI; es la fuente del selector.
 - `synchronized = 0` significa «pendiente de enviar». `OwnerDao.markSynchronized`
   lo pasa a 1 cuando Firestore confirma la escritura.
+- `pendingDelete = 1` significa «el usuario lo eliminó sin conexión y falta
+  borrarlo en Firestore». La fila no se lista ni cuenta como alta; cuando la
+  nube confirma el delete, se borra por completo.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
-  se sube en el siguiente envío.
-- No se agregó ninguna migración: `document_types` viaja en la versión 15 y
-  `markSynchronized` es solo una consulta `@Query`.
+  se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
+- La versión local es la **16**: `document_types` viaja en la 15 y la 15→16
+  agrega `pendingDelete` a `owners` con `DEFAULT 0`.
 
 ## Supabase: maestro de tipos de documento
 
@@ -95,11 +99,14 @@ Accept: application/json
   `FirestoreOwnerCloudRepository` es la implementación real, con timeout de
   10 segundos, errores tipados y mensajes en español.
 - Sincronización:
-  1. Subir los registros con `synchronized = 0` y marcarlos.
-  2. Descargar la colección completa.
-  3. Mezclar en SQLite sin pisar cambios locales pendientes.
-- Firestore mantiene su propia cola de escrituras sin conexión. La app no
-  agrega otra tabla ni cambia la versión de la base.
+  1. Borrar en Firestore los pendientes de eliminar (`pendingDelete = 1`) y
+     quitar la fila local cuando la nube confirma.
+  2. Subir los registros con `synchronized = 0` y marcarlos.
+  3. Descargar la colección completa.
+  4. Mezclar en SQLite sin pisar cambios locales pendientes ni borrados
+     pendientes.
+- Firestore mantiene su propia cola de escrituras sin conexión. La app agrega
+  el tombstone local `pendingDelete` para que el borrado también se reintente.
 
 ### Seguridad
 
@@ -131,9 +138,31 @@ firebase deploy --only firestore:rules
 | Se abre la lista sin red | Se muestran los propietarios de SQLite |
 | Se crea o edita sin red | Queda guardado con `synchronized = 0` y aparece el aviso |
 | Firestore rechaza la escritura | El registro local se conserva y el aviso permite reintentar |
-| Se elimina sin red | Se conserva el registro y se informa; se reintenta cuando haya conexión |
+| Se elimina sin red | Se oculta con `pendingDelete = 1`; el borrado se envía solo al volver la red |
+| Firestore rechaza un borrado por permisos | El registro local se conserva y se informa; no se reintenta solo |
 | Supabase no responde | El formulario usa la caché local de tipos de documento |
 | No hay sesión de Firebase | No se sincroniza; el listado local sigue operativo |
+
+## Reintentos automáticos
+
+`OwnerSyncRetryScheduler` (`lib/service/owner/owner_sync_scheduler.dart`) vuelve
+a sincronizar sin que el usuario pulse «Reintentar»:
+
+- Solo se activa con fallos de red (`OwnerCloudFailureType.network`). Un
+  `permission-denied` o un dato inválido no se reintenta.
+- Retroceso de **8 intentos**: 2 s, 5 s, 10 s, 30 s y 60 s desde el quinto.
+  Agotados los intentos queda el botón manual.
+- Cada intento ejecuta el ciclo completo: borrados pendientes, altas/cambios
+  pendientes y pull con merge.
+- Se cancela al primer éxito, al `dispose` del controlador y cuando no hay
+  sesión de Firebase.
+- Además de los timers, la pantalla (`owner_page.dart`) escucha
+  `didChangeAppLifecycleState`: al volver del segundo plano intenta sincronizar
+  de inmediato.
+- El banner muestra el número de intento en curso
+  (`autoRetryAttempt`/`autoRetryMaxAttempts`).
+- No se agregó ninguna dependencia: se usa `Timer` de Dart; `Math.random` no
+  interviene (el retroceso es determinista).
 
 ## Configuración
 
@@ -159,6 +188,7 @@ flutter test \
   test/models/owner/owner_firestore_document_test.dart \
   test/repositories/document_type/document_type_repository_test.dart \
   test/service/owner/owner_preferences_test.dart \
+  test/service/owner/owner_sync_scheduler_test.dart \
   test/database/owner_database_test.dart \
   test/controllers/owner_management/owner_controller_test.dart
 ```
@@ -183,11 +213,13 @@ Completada el **2026-11-09** con la app real, en línea y en modo avión.
    el documento aparece en `owners` y que la fila local queda
    `synchronized = 1`.
 4. ✅ Activar modo avión, crear otro propietario: debe guardarse localmente y
-   mostrarse el aviso de sincronización.
-5. ✅ Recuperar la conexión y pulsar «Reintentar»: el documento pendiente debe
-   aparecer en Firestore.
+   mostrarse el aviso de sincronización con el contador de reintentos.
+5. ✅ Recuperar la conexión: la sincronización debe reanudarse sola (sin pulsar
+   «Reintentar») y el documento pendiente debe aparecer en Firestore.
 6. ✅ Eliminar un propietario con conexión: el documento debe desaparecer de
    Firestore y de la lista local.
+7. ✅ Eliminar con el modo avión activo: el propietario desaparece del listado y,
+   al volver la conexión, su documento se borra de Firestore.
 
 ## Por qué no hay `owners` en Supabase ni carpeta `persistencia/nube`
 

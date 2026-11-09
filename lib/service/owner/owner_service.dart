@@ -66,9 +66,18 @@ class OwnerService {
   Future<List<Owner>> propietariosSinSincronizar() =>
       _repository.findUnsynchronized();
 
+  /// Propietarios eliminados en este dispositivo que faltan por borrar en
+  /// Firestore.
+  Future<List<Owner>> propietariosPendientesDeEliminar() =>
+      _repository.findPendingDeletes();
+
   /// Confirma que la nube ya recibió al propietario.
   Future<void> marcarSincronizado(String ownerId) =>
       _repository.markSynchronized(ownerId);
+
+  /// Deja el borrado pendiente sin perder la fila (para reintentarlo después).
+  Future<void> marcarPendienteDeEliminar(String ownerId) =>
+      _repository.markPendingDelete(ownerId);
 
   /// Incorpora a SQLite los propietarios que existen en la nube.
   Future<void> incorporarRemotos(List<Owner> owners) =>

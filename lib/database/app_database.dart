@@ -36,7 +36,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 15,
+  version: 16,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -100,6 +100,7 @@ class AppDatabaseProvider {
         migration12To13,
         migration13To14,
         migration14To15,
+        migration15To16,
       ])
       .addCallback(
         Callback(
@@ -447,6 +448,22 @@ final migration13To14 = Migration(13, 14, (database) async {
 final migration14To15 = Migration(14, 15, (database) async {
   await _createDocumentTypeSchema(database);
   await _seedDocumentTypes(database);
+});
+
+/// Borrados diferidos de propietarios.
+///
+/// Antes, eliminar sin conexión obligaba a conservar el registro. Ahora la fila
+/// queda oculta con `pendingDelete = 1` hasta que Firestore confirme el
+/// borrado, de modo que la sincronización puede reintentarlo sola.
+final migration15To16 = Migration(15, 16, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('pendingDelete')) {
+    await database.execute(
+      'ALTER TABLE owners ADD COLUMN pendingDelete INTEGER NOT NULL '
+      'DEFAULT 0',
+    );
+  }
 });
 
 Future<void> _createDocumentTypeSchema(

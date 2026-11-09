@@ -13,6 +13,7 @@ import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
 import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
+import 'package:machuco/service/owner/owner_sync_scheduler.dart';
 
 const _minimumFullNameLength = 3;
 
@@ -47,13 +48,21 @@ class OwnerController extends ChangeNotifier {
     this._preferences,
     OwnerCloudRepository? cloudRepository,
     String? Function()? currentUserId,
+    OwnerSyncRetryScheduler? syncRetryScheduler,
   }) : _service = service ?? OwnerService(),
        _documentTypeRepository =
            documentTypeRepository ?? DocumentTypeRepository(),
        _cloudRepository =
            cloudRepository ??
            (service == null ? FirestoreOwnerCloudRepository() : null),
-       _currentUserId = currentUserId ?? (() => CurrentUser.uid);
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
+    _syncRetry =
+        syncRetryScheduler ??
+        OwnerSyncRetryScheduler(
+          attempt: _synchronizeWithCloud,
+          onStateChanged: _notifySyncRetryChanged,
+        );
+  }
 
   /// Instancia compartida por las pantallas del módulo (listado, formulario y
   /// moteles del propietario) para que todas vean el mismo estado.
@@ -90,6 +99,9 @@ class OwnerController extends ChangeNotifier {
   bool _isSyncing = false;
   bool _disposed = false;
   String? _syncWarningMessage;
+  late final OwnerSyncRetryScheduler _syncRetry;
+  bool _lastDeletionIsPending = false;
+  Future<void>? _backgroundSync;
 
   List<CountryPhoneCode> _countryPhoneCodes = const [];
   CountryPhoneCode? _selectedCountryCode;
@@ -132,6 +144,24 @@ class OwnerController extends ChangeNotifier {
   /// Aviso no bloqueante cuando la nube falló pero los datos locales siguen
   /// disponibles. La pantalla lo muestra como banner, sin tapar el listado.
   String? get syncWarningMessage => _syncWarningMessage;
+
+  /// `true` mientras hay un reintento automático programado.
+  bool get isAutoRetrying => _syncRetry.isScheduled;
+
+  /// Número del intento automático en curso (1..8).
+  int get autoRetryAttempt => _syncRetry.attempt;
+
+  /// Total de intentos automáticos antes de rendirse.
+  int get autoRetryMaxAttempts => _syncRetry.maxAttempts;
+
+  /// `true` si la última eliminación quedó pendiente de borrar en Firestore.
+  bool get lastDeletionIsPending => _lastDeletionIsPending;
+
+  /// Completa cuando termina el envío en segundo plano de la última escritura.
+  ///
+  /// La interfaz no lo espera (el guardado local ya terminó), pero los tests
+  /// lo usan para verificar el resultado sin depender de tiempos.
+  Future<void> get pendingSync => _backgroundSync ?? Future<void>.value();
 
   bool get hasOwners => _owners.isNotEmpty;
 
@@ -381,10 +411,11 @@ class OwnerController extends ChangeNotifier {
 
   /// Elimina un propietario de forma permanente y devuelve el que se quitó.
   ///
-  /// A diferencia de [setActiveState], la operación no se puede deshacer. Si
-  /// hay sesión y nube, primero se elimina el documento remoto: así el próximo
-  /// pull no lo resucita en este dispositivo. Sin conexión se conserva el
-  /// registro local y se informa el motivo.
+  /// A diferencia de [setActiveState], la operación no se puede deshacer. Con
+  /// conexión se borra primero el documento remoto; sin conexión la fila se
+  /// oculta con `pendingDelete = 1` y la sincronización la borra en Firestore
+  /// cuando vuelva la red. Así el próximo pull no la resucita y el usuario ve
+  /// el listado consistente de inmediato.
   Future<Owner?> deleteOwner(String ownerId) async {
     final owner = _findOwner(ownerId);
     if (owner == null) {
@@ -393,27 +424,70 @@ class OwnerController extends ChangeNotifier {
       return null;
     }
 
+    _lastDeletionIsPending = false;
     final cloud = _cloudRepository;
     final adminId = _currentUserId();
-    if (cloud != null && adminId != null && adminId.trim().isNotEmpty) {
-      try {
-        await cloud.deleteOwner(ownerId);
-      } on OwnerCloudRepositoryException catch (error) {
-        _lastError = '${error.message} No se eliminó en este dispositivo.';
-        notifyListeners();
-        return null;
-      } catch (_) {
-        _lastError =
-            'No se pudo eliminar el propietario de la nube. Intenta de nuevo.';
-        notifyListeners();
-        return null;
+    final hasSession =
+        cloud != null && adminId != null && adminId.trim().isNotEmpty;
+
+    if (!hasSession) {
+      await _markPendingDeletion(
+        owner,
+        '${owner.fullName} se eliminó en este dispositivo. Inicia sesión para '
+        'borrarlo de Firebase.',
+        scheduleRetry: false,
+      );
+      return owner;
+    }
+
+    try {
+      await cloud.deleteOwner(ownerId);
+    } on OwnerCloudRepositoryException catch (error) {
+      if (error.type == OwnerCloudFailureType.network) {
+        await _markPendingDeletion(
+          owner,
+          '${error.message} Se borrará de Firebase cuando vuelva la conexión.',
+        );
+        return owner;
       }
+      _lastError = '${error.message} No se eliminó en este dispositivo.';
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _lastError =
+          'No se pudo eliminar el propietario de la nube. Intenta de nuevo.';
+      notifyListeners();
+      return null;
     }
 
     return _runAction(() async {
       await _service.eliminarPropietario(ownerId);
       return owner;
     }, sync: false);
+  }
+
+  /// Oculta el propietario y deja su borrado pendiente de Firestore.
+  Future<void> _markPendingDeletion(
+    Owner owner,
+    String message, {
+    bool scheduleRetry = true,
+  }) async {
+    try {
+      await _service.marcarPendienteDeEliminar(owner.id);
+      await _reload();
+      _lastDeletionIsPending = true;
+      _syncWarningMessage = message;
+      if (scheduleRetry) _syncRetry.notifyNetworkFailure();
+    } catch (error) {
+      _lastError = _messageFor(error);
+    }
+    notifyListeners();
+  }
+
+  /// Fuerza un intento de sincronización (banner y vuelta del segundo plano).
+  Future<void> retrySynchronization() {
+    _syncRetry.cancel();
+    return _synchronizeWithCloud();
   }
 
   bool _matchesQuery(Owner owner, String normalizedQuery) {
@@ -445,7 +519,11 @@ class OwnerController extends ChangeNotifier {
     try {
       final result = await action();
       await _reload();
-      if (sync && result != null) unawaited(_synchronizePending());
+      if (sync && result != null) {
+        final pending = _synchronizePending();
+        _backgroundSync = pending;
+        unawaited(pending);
+      }
       return result;
     } catch (error) {
       _lastError = _messageFor(error);
@@ -460,9 +538,10 @@ class OwnerController extends ChangeNotifier {
   /// guardado. La base local manda mientras haya cambios sin sincronizar.
   Future<void> _synchronizeWithCloud() async {
     final cloud = _cloudRepository;
-    if (cloud == null || _disposed) return;
+    if (cloud == null || _disposed || _isSyncing) return;
     final adminId = _currentUserId();
     if (adminId == null || adminId.trim().isEmpty) {
+      _syncRetry.cancel();
       _syncWarningMessage =
           'Inicia sesión con Firebase para sincronizar los propietarios.';
       notifyListeners();
@@ -477,8 +556,12 @@ class OwnerController extends ChangeNotifier {
       final remote = await cloud.listOwners();
       await _service.incorporarRemotos(remote);
       await _reload();
+      _syncRetry.notifySuccess();
     } on OwnerCloudRepositoryException catch (error) {
       _syncWarningMessage = error.message;
+      if (error.type == OwnerCloudFailureType.network) {
+        _syncRetry.notifyNetworkFailure();
+      }
     } on OwnerRepositoryException catch (error) {
       _syncWarningMessage =
           'Los propietarios están en Firebase, pero no se pudieron '
@@ -487,18 +570,20 @@ class OwnerController extends ChangeNotifier {
       _syncWarningMessage =
           'Los propietarios locales están disponibles, pero no se pudieron '
           'sincronizar con Firebase.';
+      _syncRetry.notifyNetworkFailure();
     } finally {
       _isSyncing = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
   /// Envía solo los registros nuevos o modificados (`synchronized = 0`).
   Future<void> _synchronizePending() async {
     final cloud = _cloudRepository;
-    if (cloud == null || _disposed) return;
+    if (cloud == null || _disposed || _isSyncing) return;
     final adminId = _currentUserId();
     if (adminId == null || adminId.trim().isEmpty) {
+      _syncRetry.cancel();
       _syncWarningMessage =
           'El propietario quedó guardado localmente. Inicia sesión para '
           'sincronizarlo.';
@@ -512,19 +597,33 @@ class OwnerController extends ChangeNotifier {
     try {
       await _pushPending(cloud, adminId);
       await _reload();
+      _syncRetry.notifySuccess();
     } on OwnerCloudRepositoryException catch (error) {
       _syncWarningMessage = error.message;
+      if (error.type == OwnerCloudFailureType.network) {
+        _syncRetry.notifyNetworkFailure();
+      }
     } catch (_) {
       _syncWarningMessage =
           'El propietario quedó guardado localmente y se sincronizará al '
           'reintentar.';
+      _syncRetry.notifyNetworkFailure();
     } finally {
       _isSyncing = false;
-      notifyListeners();
+      if (!_disposed) notifyListeners();
     }
   }
 
+  /// Borra primero lo que el usuario eliminó sin conexión y después sube los
+  /// cambios. El orden importa: un pendiente de borrado no debe reenviarse
+  /// como alta.
   Future<void> _pushPending(OwnerCloudRepository cloud, String adminId) async {
+    final pendingDeletes = await _service.propietariosPendientesDeEliminar();
+    for (final owner in pendingDeletes) {
+      await cloud.deleteOwner(owner.id);
+      await _service.eliminarPropietario(owner.id);
+    }
+
     final pending = await _service.propietariosSinSincronizar();
     for (final owner in pending) {
       await cloud.saveOwner(adminId: adminId, owner: owner);
@@ -602,9 +701,14 @@ class OwnerController extends ChangeNotifier {
     return null;
   }
 
+  void _notifySyncRetryChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
   @override
   void dispose() {
     _disposed = true;
+    _syncRetry.dispose();
     super.dispose();
   }
 }

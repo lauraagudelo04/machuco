@@ -22,6 +22,7 @@ class OwnerEntry {
     required this.synchronized,
     required this.createdAt,
     required this.updatedAt,
+    this.pendingDelete = 0,
   });
 
   @PrimaryKey()
@@ -47,6 +48,12 @@ class OwnerEntry {
 
   /// 0 = pendiente de enviar a la nube, 1 = ya sincronizado.
   final int synchronized;
+
+  /// 1 = el usuario lo eliminó sin conexión y falta borrarlo en Firestore.
+  ///
+  /// Mientras valga 1 la fila no se muestra ni se envía como alta; cuando la
+  /// nube confirma el borrado, la fila se elimina por completo.
+  final int pendingDelete;
   final DateTime createdAt;
   final DateTime updatedAt;
 }

@@ -31,13 +31,18 @@ void main() {
     OwnerPreferences? preferences,
     OwnerCloudRepository? cloudRepository,
     String? currentUserId = 'admin-1',
-  }) => OwnerController(
-    service: OwnerService(repository: OwnerRepository(database: database)),
-    documentTypeRepository: DocumentTypeRepository(database: database),
-    preferences: preferences,
-    cloudRepository: cloudRepository,
-    currentUserId: () => currentUserId,
-  );
+  }) {
+    final controller = OwnerController(
+      service: OwnerService(repository: OwnerRepository(database: database)),
+      documentTypeRepository: DocumentTypeRepository(database: database),
+      preferences: preferences,
+      cloudRepository: cloudRepository,
+      currentUserId: () => currentUserId,
+    );
+    // Cancela el temporizador de reintentos al terminar cada prueba.
+    addTearDown(controller.dispose);
+    return controller;
+  }
 
   setUp(() async {
     directory = await Directory.systemTemp.createTemp('machuco_owner_ctl_');
@@ -363,15 +368,34 @@ void main() {
       );
     });
 
-    test('si la nube falla conserva los locales y muestra el aviso', () async {
-      final cloud = _FakeOwnerCloudRepository()..failSave = true;
+    test(
+      'si la nube falla conserva los locales y programa el reintento',
+      () async {
+        final cloud = _FakeOwnerCloudRepository()..failSave = true;
+        final controller = buildController(cloudRepository: cloud);
+
+        await controller.init();
+
+        expect(controller.owners, hasLength(3));
+        expect(
+          controller.owners.every((owner) => !owner.isSynchronized),
+          isTrue,
+        );
+        expect(controller.syncWarningMessage, isNotNull);
+        expect(controller.isAutoRetrying, isTrue);
+        expect(controller.autoRetryAttempt, 1);
+      },
+    );
+
+    test('un error de permisos no programa reintentos automáticos', () async {
+      final cloud = _FakeOwnerCloudRepository()..failSaveForbidden = true;
       final controller = buildController(cloudRepository: cloud);
 
       await controller.init();
 
-      expect(controller.owners, hasLength(3));
-      expect(controller.owners.every((owner) => !owner.isSynchronized), isTrue);
       expect(controller.syncWarningMessage, isNotNull);
+      expect(controller.isAutoRetrying, isFalse);
+      expect(controller.autoRetryAttempt, 0);
     });
 
     test('crear un propietario lo envía a la nube', () async {
@@ -388,9 +412,9 @@ void main() {
         countryCode: '+57',
         countryName: 'Colombia',
       );
-      // El envío posterior a la escritura es en segundo plano: se espera con
-      // una carga completa, que también reintenta los pendientes.
-      await controller.init();
+      // El envío posterior a la escritura es en segundo plano: el test espera
+      // a que termine para no depender de tiempos.
+      await controller.pendingSync;
 
       expect(created, isNotNull);
       expect(cloud.remote.containsKey(created!.id), isTrue);
@@ -413,19 +437,70 @@ void main() {
       expect(controller.owners.any((owner) => owner.id == target.id), isFalse);
     });
 
-    test('si la nube no puede borrar, conserva el propietario local', () async {
+    test(
+      'si no hay conexión deja el borrado pendiente y oculta al propietario',
+      () async {
+        final cloud = _FakeOwnerCloudRepository();
+        final controller = buildController(cloudRepository: cloud);
+        await controller.init();
+        final target = controller.owners.first;
+        cloud.failDelete = true;
+
+        final deleted = await controller.deleteOwner(target.id);
+
+        expect(deleted, isNotNull);
+        expect(controller.lastDeletionIsPending, isTrue);
+        expect(
+          controller.owners.any((owner) => owner.id == target.id),
+          isFalse,
+        );
+        expect(cloud.remote.containsKey(target.id), isTrue);
+        expect(controller.isAutoRetrying, isTrue);
+        expect(
+          await OwnerRepository(database: database).findPendingDeletes(),
+          hasLength(1),
+        );
+      },
+    );
+
+    test(
+      'el reintento borra en Firestore los pendientes de eliminar',
+      () async {
+        final cloud = _FakeOwnerCloudRepository();
+        final controller = buildController(cloudRepository: cloud);
+        await controller.init();
+        final target = controller.owners.first;
+        cloud.failDelete = true;
+        await controller.deleteOwner(target.id);
+
+        cloud.failDelete = false;
+        await controller.retrySynchronization();
+
+        expect(cloud.remote.containsKey(target.id), isFalse);
+        expect(controller.syncWarningMessage, isNull);
+        expect(controller.isAutoRetrying, isFalse);
+        expect(
+          await OwnerRepository(database: database).findPendingDeletes(),
+          isEmpty,
+        );
+      },
+    );
+
+    test('el pull remoto no resucita un borrado pendiente', () async {
       final cloud = _FakeOwnerCloudRepository();
       final controller = buildController(cloudRepository: cloud);
       await controller.init();
       final target = controller.owners.first;
       cloud.failDelete = true;
+      await controller.deleteOwner(target.id);
 
-      final deleted = await controller.deleteOwner(target.id);
+      final repository = OwnerRepository(database: database);
+      await repository.mergeRemoteOwners([target]);
 
-      expect(deleted, isNull);
-      expect(controller.lastError, isNotNull);
-      expect(controller.owners.any((owner) => owner.id == target.id), isTrue);
-      expect(cloud.remote.containsKey(target.id), isTrue);
+      expect(
+        (await repository.findAll()).any((owner) => owner.id == target.id),
+        isFalse,
+      );
     });
   });
 }
@@ -434,6 +509,7 @@ void main() {
 class _FakeOwnerCloudRepository implements OwnerCloudRepository {
   final Map<String, Owner> remote = {};
   bool failSave = false;
+  bool failSaveForbidden = false;
   bool failList = false;
   bool failDelete = false;
 
@@ -442,6 +518,12 @@ class _FakeOwnerCloudRepository implements OwnerCloudRepository {
     required String adminId,
     required Owner owner,
   }) async {
+    if (failSaveForbidden) {
+      throw const OwnerCloudRepositoryException(
+        OwnerCloudFailureType.permissionDenied,
+        'Sin permisos.',
+      );
+    }
     if (failSave) {
       throw const OwnerCloudRepositoryException(
         OwnerCloudFailureType.network,

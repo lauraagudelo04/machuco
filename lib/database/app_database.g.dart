@@ -94,7 +94,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 15,
+      version: 16,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -128,7 +128,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `motels` (`id` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `name` TEXT NOT NULL, `email` TEXT NOT NULL, `room_count` INTEGER NOT NULL, `nit` TEXT NOT NULL, `address` TEXT NOT NULL, `phone` TEXT NOT NULL, `description` TEXT, `general_location` TEXT, `payment_methods_json` TEXT NOT NULL, `image_urls_json` TEXT NOT NULL, `is_available` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `pendingDelete` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `document_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL, `example` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -714,6 +714,7 @@ class _$OwnerDao extends OwnerDao {
                   'address': item.address,
                   'isActive': item.isActive,
                   'synchronized': item.synchronized,
+                  'pendingDelete': item.pendingDelete,
                   'createdAt':
                       _subscriptionDateConverter.encode(item.createdAt),
                   'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
@@ -734,6 +735,7 @@ class _$OwnerDao extends OwnerDao {
                   'address': item.address,
                   'isActive': item.isActive,
                   'synchronized': item.synchronized,
+                  'pendingDelete': item.pendingDelete,
                   'createdAt':
                       _subscriptionDateConverter.encode(item.createdAt),
                   'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
@@ -751,7 +753,8 @@ class _$OwnerDao extends OwnerDao {
 
   @override
   Future<List<OwnerEntry>> findAll() async {
-    return _queryAdapter.queryList('SELECT * FROM owners ORDER BY fullName ASC',
+    return _queryAdapter.queryList(
+        'SELECT * FROM owners WHERE pendingDelete = 0 ORDER BY fullName ASC',
         mapper: (Map<String, Object?> row) => OwnerEntry(
             id: row['id'] as String,
             fullName: row['fullName'] as String,
@@ -767,7 +770,8 @@ class _$OwnerDao extends OwnerDao {
             createdAt:
                 _subscriptionDateConverter.decode(row['createdAt'] as int),
             updatedAt:
-                _subscriptionDateConverter.decode(row['updatedAt'] as int)));
+                _subscriptionDateConverter.decode(row['updatedAt'] as int),
+            pendingDelete: row['pendingDelete'] as int));
   }
 
   @override
@@ -788,7 +792,8 @@ class _$OwnerDao extends OwnerDao {
             createdAt:
                 _subscriptionDateConverter.decode(row['createdAt'] as int),
             updatedAt:
-                _subscriptionDateConverter.decode(row['updatedAt'] as int)),
+                _subscriptionDateConverter.decode(row['updatedAt'] as int),
+            pendingDelete: row['pendingDelete'] as int),
         arguments: [id]);
   }
 
@@ -798,8 +803,8 @@ class _$OwnerDao extends OwnerDao {
     String documentNumber,
   ) async {
     return _queryAdapter.query(
-        'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 LIMIT 1',
-        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, countryCode: row['countryCode'] as String?, countryName: row['countryName'] as String?, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int)),
+        'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 AND pendingDelete = 0 LIMIT 1',
+        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, countryCode: row['countryCode'] as String?, countryName: row['countryName'] as String?, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int), pendingDelete: row['pendingDelete'] as int),
         arguments: [documentType, documentNumber]);
   }
 
@@ -812,7 +817,7 @@ class _$OwnerDao extends OwnerDao {
   @override
   Future<List<OwnerEntry>> findUnsynchronized() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM owners WHERE synchronized = 0 ORDER BY createdAt ASC',
+        'SELECT * FROM owners WHERE synchronized = 0 AND pendingDelete = 0 ORDER BY createdAt ASC',
         mapper: (Map<String, Object?> row) => OwnerEntry(
             id: row['id'] as String,
             fullName: row['fullName'] as String,
@@ -828,13 +833,44 @@ class _$OwnerDao extends OwnerDao {
             createdAt:
                 _subscriptionDateConverter.decode(row['createdAt'] as int),
             updatedAt:
-                _subscriptionDateConverter.decode(row['updatedAt'] as int)));
+                _subscriptionDateConverter.decode(row['updatedAt'] as int),
+            pendingDelete: row['pendingDelete'] as int));
+  }
+
+  @override
+  Future<List<OwnerEntry>> findPendingDeletes() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM owners WHERE pendingDelete = 1 ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => OwnerEntry(
+            id: row['id'] as String,
+            fullName: row['fullName'] as String,
+            documentType: row['documentType'] as String,
+            documentNumber: row['documentNumber'] as String,
+            email: row['email'] as String,
+            phone: row['phone'] as String,
+            countryCode: row['countryCode'] as String?,
+            countryName: row['countryName'] as String?,
+            address: row['address'] as String?,
+            isActive: row['isActive'] as int,
+            synchronized: row['synchronized'] as int,
+            createdAt:
+                _subscriptionDateConverter.decode(row['createdAt'] as int),
+            updatedAt:
+                _subscriptionDateConverter.decode(row['updatedAt'] as int),
+            pendingDelete: row['pendingDelete'] as int));
   }
 
   @override
   Future<void> markSynchronized(String id) async {
     await _queryAdapter.queryNoReturn(
         'UPDATE owners SET synchronized = 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> markPendingDelete(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE owners SET pendingDelete = 1, synchronized = 0 WHERE id = ?1',
         arguments: [id]);
   }
 

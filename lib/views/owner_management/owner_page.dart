@@ -37,7 +37,7 @@ class OwnerPage extends StatefulWidget {
   State<OwnerPage> createState() => _OwnerPageState();
 }
 
-class _OwnerPageState extends State<OwnerPage> {
+class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
   // Instancia compartida: el detalle, el formulario y la gestión de moteles
   // deben ver el mismo estado del módulo.
   final OwnerController _controller = OwnerController.instance;
@@ -51,8 +51,18 @@ class _OwnerPageState extends State<OwnerPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _controller.init();
     _loadAdminEmail();
+  }
+
+  /// Al volver del segundo plano se intenta sincronizar de inmediato: cubre
+  /// el caso de recuperar la conexión mientras la app estaba minimizada.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _controller.retrySynchronization();
+    }
   }
 
   Future<void> _loadAdminEmail() async {
@@ -67,6 +77,7 @@ class _OwnerPageState extends State<OwnerPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     // No se libera el controlador: lo comparten varias pantallas del módulo.
     super.dispose();
@@ -86,6 +97,14 @@ class _OwnerPageState extends State<OwnerPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Aviso del banner; añade el estado del reintento automático cuando aplica.
+  String _retryBannerMessage() {
+    final message = _controller.syncWarningMessage ?? '';
+    if (!_controller.isAutoRetrying) return message;
+    return '$message Reintentando automáticamente '
+        '(${_controller.autoRetryAttempt}/${_controller.autoRetryMaxAttempts}).';
   }
 
   Future<void> _createOwner() async {
@@ -172,6 +191,13 @@ class _OwnerPageState extends State<OwnerPage> {
     if (deleted == null) {
       _showMessage(
         _controller.lastError ?? 'No se pudo eliminar el propietario.',
+      );
+      return;
+    }
+    if (_controller.lastDeletionIsPending) {
+      _showMessage(
+        '${deleted.fullName} se eliminará de Firebase cuando vuelva la '
+        'conexión.',
       );
       return;
     }
@@ -317,14 +343,16 @@ class _OwnerPageState extends State<OwnerPage> {
                                     const SizedBox(width: AppSpacing.s2),
                                     Expanded(
                                       child: Text(
-                                        _controller.syncWarningMessage!,
+                                        _retryBannerMessage(),
                                         style: Theme.of(
                                           context,
                                         ).textTheme.bodySmall,
                                       ),
                                     ),
                                     TextButton(
-                                      onPressed: _controller.init,
+                                      onPressed: _controller.isSyncing
+                                          ? null
+                                          : _controller.retrySynchronization,
                                       child: const Text('Reintentar'),
                                     ),
                                   ],

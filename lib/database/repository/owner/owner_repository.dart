@@ -6,7 +6,7 @@ import 'package:machuco/models/owner_management/owner.dart';
 
 @dao
 abstract class OwnerDao {
-  @Query('SELECT * FROM owners ORDER BY fullName ASC')
+  @Query('SELECT * FROM owners WHERE pendingDelete = 0 ORDER BY fullName ASC')
   Future<List<OwnerEntry>> findAll();
 
   @Query('SELECT * FROM owners WHERE id = :id LIMIT 1')
@@ -14,7 +14,7 @@ abstract class OwnerDao {
 
   @Query(
     'SELECT * FROM owners WHERE documentType = :documentType '
-    'AND documentNumber = :documentNumber LIMIT 1',
+    'AND documentNumber = :documentNumber AND pendingDelete = 0 LIMIT 1',
   )
   Future<OwnerEntry?> findByDocument(
     String documentType,
@@ -25,12 +25,23 @@ abstract class OwnerDao {
   Future<int?> count();
 
   /// Registros que aún no han viajado a la nube (`synchronized = 0`).
-  @Query('SELECT * FROM owners WHERE synchronized = 0 ORDER BY createdAt ASC')
+  @Query(
+    'SELECT * FROM owners WHERE synchronized = 0 AND pendingDelete = 0 '
+    'ORDER BY createdAt ASC',
+  )
   Future<List<OwnerEntry>> findUnsynchronized();
+
+  /// Registros eliminados localmente que aún existen en Firestore.
+  @Query('SELECT * FROM owners WHERE pendingDelete = 1 ORDER BY createdAt ASC')
+  Future<List<OwnerEntry>> findPendingDeletes();
 
   /// Marca una fila como confirmada por la nube.
   @Query('UPDATE owners SET synchronized = 1 WHERE id = :id')
   Future<void> markSynchronized(String id);
+
+  /// Marca el borrado pendiente: la fila se oculta y deja de contar como alta.
+  @Query('UPDATE owners SET pendingDelete = 1, synchronized = 0 WHERE id = :id')
+  Future<void> markPendingDelete(String id);
 
   @insert
   Future<void> insertOwner(OwnerEntry owner);
@@ -90,17 +101,32 @@ class OwnerRepository {
     return entries.map(_toOwner).toList(growable: false);
   }
 
+  /// Propietarios eliminados en este dispositivo que aún existen en la nube.
+  Future<List<Owner>> findPendingDeletes() async {
+    final database = await _database;
+    final entries = await database.ownerDao.findPendingDeletes();
+    return entries.map(_toOwner).toList(growable: false);
+  }
+
   /// Confirma que la nube ya recibió el propietario.
   Future<void> markSynchronized(String id) async {
     final database = await _database;
     await database.ownerDao.markSynchronized(id);
   }
 
+  /// Oculta la fila y la deja pendiente de borrar en Firestore.
+  Future<void> markPendingDelete(String id) async {
+    final database = await _database;
+    await database.ownerDao.markPendingDelete(id);
+  }
+
   /// Incorpora los propietarios que existen en la nube.
   ///
   /// Un cambio local pendiente (`synchronized = 0`) nunca se pisa: se subirá
-  /// en el siguiente envío. Los registros nuevos se insertan ya marcados como
-  /// sincronizados para que no se vuelvan a enviar.
+  /// en el siguiente envío. Un borrado pendiente (`pendingDelete = 1`) tampoco
+  /// se resucita: la fila se conserva hasta que Firestore confirme el delete.
+  /// Los registros nuevos se insertan ya marcados como sincronizados para que
+  /// no se vuelvan a enviar.
   Future<void> mergeRemoteOwners(List<Owner> owners) async {
     final database = await _database;
     for (final remote in owners) {
@@ -109,6 +135,7 @@ class OwnerRepository {
         await database.ownerDao.insertOwner(_toEntry(remote, synchronized: 1));
         continue;
       }
+      if (existing.pendingDelete == 1) continue;
       if (existing.synchronized == 0) continue;
       await database.ownerDao.updateOwner(
         _toEntry(remote, synchronized: 1, createdAt: existing.createdAt),
@@ -142,6 +169,7 @@ class OwnerRepository {
         address: owner.address,
         isActive: owner.isActive ? 1 : 0,
         synchronized: 0,
+        pendingDelete: existing.pendingDelete,
         createdAt: existing.createdAt,
         updatedAt: DateTime.now(),
       ),
@@ -185,6 +213,7 @@ class OwnerRepository {
   OwnerEntry _toEntry(
     Owner owner, {
     int synchronized = 0,
+    int pendingDelete = 0,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) {
@@ -201,6 +230,7 @@ class OwnerRepository {
       address: owner.address,
       isActive: owner.isActive ? 1 : 0,
       synchronized: synchronized,
+      pendingDelete: pendingDelete,
       createdAt: createdAt ?? now,
       updatedAt: updatedAt ?? now,
     );

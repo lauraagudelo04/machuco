@@ -362,15 +362,16 @@ void main() {
       addTearDown(migrated.close);
       final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 15);
+      expect(await raw.getVersion(), 16);
       final columns = await raw.rawQuery('PRAGMA table_info(owners)');
       expect(
         columns.map((column) => column['name']),
-        containsAll(['countryCode', 'countryName']),
+        containsAll(['countryCode', 'countryName', 'pendingDelete']),
       );
       final rows = await raw.query('owners');
       expect(rows.single['phone'], '+57 300 123 4567');
       expect(rows.single['countryCode'], isNull);
+      expect(rows.single['pendingDelete'], 0);
       expect(await raw.query('document_types'), hasLength(5));
     },
   );

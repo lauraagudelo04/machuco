@@ -108,14 +108,26 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And La fila local queda con synchronized = 1
     And El correo del administrador aparece como "Sesión: correo@..."
 
-  Scenario: Trabajar sin conexión y reintentar la sincronización
+  Scenario: Trabajar sin conexión y recuperar la sincronización sola
     Given El dispositivo está en modo avión
     When El usuario registra un propietario
     Then El propietario se conserva en SQLite con synchronized = 0
-    And La pantalla muestra un aviso de sincronización con "Reintentar"
-    When El usuario recupera la conexión y pulsa "Reintentar"
-    Then El propietario pendiente se envía a Firestore
+    And La pantalla muestra un aviso con el intento automático en curso
+    When El usuario recupera la conexión
+    Then La app reintenta sola con retroceso (2 s, 5 s, 10 s, 30 s, 60 s)
+    And El propietario pendiente se envía a Firestore
     And El aviso desaparece
+
+  Scenario: Eliminar un propietario sin conexión
+    Given El dispositivo está en modo avión
+    And Existe un propietario sincronizado en Firestore
+    When El usuario elimina el propietario
+    Then La fila local queda con pendingDelete = 1 y se oculta del listado
+    And El documento remoto sigue en Firestore
+    When El usuario recupera la conexión
+    Then La sincronización borra el documento remoto
+    And La fila local se elimina por completo
+    And El pull posterior no resucita al propietario
 
   Scenario: Incorporar propietarios creados en otro dispositivo
     Given Existe un propietario en la colección owners de Firestore
