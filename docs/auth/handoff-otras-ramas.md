@@ -73,13 +73,29 @@ Navigator.of(context).pushNamed(AppRoutes.adminOwnerApprovals);
   llamar `loadPendingOwners()`, leer `pendingCount` y pasar el mismo
   controller como `arguments` para no volver a consultar.
 - Otras rutas disponibles: `AppRoutes.adminOwnerApprovalDetail` (la abre la
-  lista) y `AppRoutes.adminAdministrators` (por ahora "Próximamente").
-- **Requisitos para que funcione** (ver la sección 7 del plan):
-  - desplegar `firestore.rules` y `firestore.indexes.json`;
-  - que cada documento `users/{uid}` de administrador tenga
-    `accountStatus: 'active'`.
+  lista) y `AppRoutes.adminAdministrators` (gestión de administradores).
+- **Requisito para que funcione:** que cada documento `users/{uid}` de
+  administrador tenga `accountStatus: 'active'`. Las reglas y el índice de
+  `users` ya están desplegados; quien despliegue `firestore.rules` desde otra
+  rama debe partir de esta versión para no sobrescribirlos.
 
-## 4. Lo que cambia para todas las ramas con Google y GitHub (planeado, no implementado)
+## 4. Lo que cambia para todas las ramas con Google y GitHub
+
+Google y GitHub ya están implementados y habilitados en Firebase.
+
+**Para usarlos no hay que registrar nada en Firebase.** Todo el equipo firma
+con el mismo keystore de desarrollo, cuyo SHA-1 ya está registrado:
+
+1. Lleva estos cambios a tu rama.
+2. Pide a Juan Pablo `debug.keystore` y `key.properties`, que se comparten de
+   forma privada, y cópialos en `android/`.
+3. Verifica la firma con `cd android && ./gradlew :app:signingReport`.
+
+Detalle en [android-setup.md](android-setup.md), sección 3. **Nunca subas esos
+dos archivos al repositorio**: es público. Sin ellos la app compila, pero
+Google y GitHub fallan.
+
+También cambia lo siguiente:
 
 - Una sesión con perfil incompleto no debe llegar a ninguna vista de rol.
   Mientras no exista el guard común (Etapa 5), las ramas no deben abrir sus
@@ -97,5 +113,5 @@ Navigator.of(context).pushNamed(AppRoutes.adminOwnerApprovals);
 | --- | --- | --- |
 | Versión 13 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | Reservar la 13 antes del merge a `develop` |
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
-| `applicationId` definitivo | Todo el equipo | Fijarlo antes de registrar SHA y OAuth (D2 del plan) |
-| SHA-1 de debug de cada integrante | Cada integrante | Registrar su huella en Firebase para que Google funcione en su equipo |
+| `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
+| Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |

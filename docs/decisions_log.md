@@ -538,3 +538,21 @@ registro directamente (las reglas solo limitan el cambio a +-1).
 
 **Estado:** implementado en cliente y reglas; las reglas se despliegan antes
 que la nueva versión de la app.
+
+## 2026-11-09 — Distribución privada del keystore compartido (rama `feature-juan_pablo`)
+
+**Contexto:** el equipo debe poder entrar con Google y GitHub sin registrar
+huellas propias en Firebase. El repositorio es público.
+
+**Decisión:** `android/debug.keystore` y `android/key.properties` no se
+versionan. El responsable de la rama los comparte de forma privada, solo con
+los integrantes. Quien solo instala la app recibe un APK ya firmado y no
+necesita el keystore.
+
+**Motivo:** con el keystore en un repositorio público, cualquiera podría firmar
+una app que Firebase aceptaría como `co.machuco.app`. Retirarlo después no
+bastaría, porque quedaría en el historial de Git.
+
+**Actualiza el pendiente del 2026-11-04:** el SHA-1/SHA-256 compartido está
+registrado (2026-11-05) y el responsable de la rama confirmó que Google y GitHub
+están habilitados en Firebase. Sigue pendiente el keystore de release.
