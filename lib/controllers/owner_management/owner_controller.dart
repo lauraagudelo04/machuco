@@ -42,16 +42,14 @@ String _normalize(String value) {
 class OwnerController extends ChangeNotifier {
   OwnerController({
     OwnerService? service,
-    AuthCatalogRepository? catalogRepository,
+    this._catalogRepository,
     DocumentTypeRepository? documentTypeRepository,
-    OwnerPreferences? preferences,
+    this._preferences,
     OwnerCloudRepository? cloudRepository,
     String? Function()? currentUserId,
   }) : _service = service ?? OwnerService(),
-       _catalogRepository = catalogRepository,
        _documentTypeRepository =
            documentTypeRepository ?? DocumentTypeRepository(),
-       _preferences = preferences,
        _cloudRepository =
            cloudRepository ??
            (service == null ? FirestoreOwnerCloudRepository() : null),
