@@ -65,7 +65,9 @@ abstract final class OwnerUserDocument {
       _optionalString(data, 'accountStatus'),
     );
     final documentNumber =
-        _optionalString(data, 'documentNumber') ?? _requiredString(data, 'nit');
+        _optionalString(data, 'documentNumber') ??
+        _optionalString(data, 'nit') ??
+        '';
     final documentType =
         _parseDocumentType(_optionalString(data, 'documentType')) ??
         _documentTypeFromPersonType(_optionalString(data, 'personType'));

@@ -57,7 +57,9 @@ class Owner {
   final bool isSynchronized;
 
   /// Documento completo listo para mostrar, por ejemplo `CC 1020304050`.
-  String get documentLabel => '${documentType.shortLabel} $documentNumber';
+  String get documentLabel => documentNumber.isEmpty
+      ? 'Sin documento registrado'
+      : '${documentType.shortLabel} $documentNumber';
 
   /// Teléfono listo para mostrar, con su indicativo cuando se conoce.
   String get phoneWithDialCode {

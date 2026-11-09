@@ -67,6 +67,24 @@ void main() {
       expect(result.isPendingApproval, isTrue);
     });
 
+    test('un perfil antiguo sin nit ni documento se puede leer', () {
+      // Así están los propietarios creados antes de este módulo: solo perfil.
+      final result = OwnerUserDocument.fromFirestore('uid-4', {
+        'accountStatus': 'active',
+        'email': 'juan.garcia2061@uco.net.co',
+        'fullName': 'Juan Camilo Garcia',
+        'phoneNumber': '+573102781291',
+        'role': 'owner',
+      });
+
+      expect(result.fullName, 'Juan Camilo Garcia');
+      expect(result.documentNumber, isEmpty);
+      expect(result.documentLabel, 'Sin documento registrado');
+      expect(result.phone, '+573102781291');
+      expect(result.countryCode, isNull);
+      expect(result.isActive, isTrue);
+    });
+
     test('falla si falta el nombre', () {
       expect(
         () => OwnerUserDocument.fromFirestore('uid-3', {

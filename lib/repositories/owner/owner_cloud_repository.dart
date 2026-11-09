@@ -208,22 +208,25 @@ class FirestoreOwnerCloudRepository implements OwnerCloudRepository {
           .where('role', isEqualTo: RegisteredUserRole.owner.metadataValue)
           .get()
           .timeout(requestTimeout);
-      return List.unmodifiable(
-        snapshot.docs.map((document) {
-          return OwnerUserDocument.fromFirestore(document.id, document.data());
-        }),
-      );
+      final owners = <Owner>[];
+      for (final document in snapshot.docs) {
+        try {
+          owners.add(
+            OwnerUserDocument.fromFirestore(document.id, document.data()),
+          );
+        } on FormatException catch (error) {
+          // Un perfil antiguo o incompleto no debe tumbar el listado entero:
+          // se omite y queda el aviso en el log de depuración.
+          debugPrint('Propietario ${document.id} omitido: $error');
+        }
+      }
+      return List.unmodifiable(owners);
     } on FirebaseException catch (error) {
       throw _map(error);
     } on TimeoutException {
       throw const OwnerCloudRepositoryException(
         OwnerCloudFailureType.network,
         'Sin conexión: se muestran los propietarios guardados en este dispositivo.',
-      );
-    } on FormatException {
-      throw const OwnerCloudRepositoryException(
-        OwnerCloudFailureType.invalidData,
-        'Firebase devolvió propietarios con datos inválidos. Inténtalo nuevamente.',
       );
     }
   }

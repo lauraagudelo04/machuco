@@ -131,8 +131,10 @@ Un propietario **es un usuario registrado**: vive en `users/{uid}` con
   **no** se puede borrar desde el cliente (no hay Admin SDK): queda huérfana y
   su correo sigue tomado; se elimina desde la consola cuando haga falta. Es la
   misma limitación documentada para `anonymizeAdministrator`.
-- `OwnerUserDocument` valida tipos y cadenas; un documento inválido se reporta
-  como error de datos y no se importa a medias.
+- `OwnerUserDocument` tolera los perfiles creados antes de este módulo (solo
+  `fullName`, `email`, `phoneNumber`, `role`, `accountStatus`): quedan con
+  documento vacío («Sin documento registrado») y se pueden completar al
+  editarlos. Un documento realmente ilegible se omite y no tumba el listado.
 - `FirestoreOwnerCloudRepository` implementa `OwnerCloudRepository` con timeout
   de 10 segundos, errores tipados (incluido `emailInUse`) y mensajes en español.
 - Sincronización: borrar los `pendingDelete`, subir los `synchronized = 0`
