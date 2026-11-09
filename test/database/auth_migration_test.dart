@@ -1,6 +1,6 @@
-// Migraciones SQLite del módulo de autenticación (versión 14,
-// `auth_user_profile`). Complementa la prueba 13 -> 14 de
-// test/repositories/auth/auth_user_profile_repository_test.dart.
+// Migraciones SQLite del módulo de autenticación (`auth_user_profile`), que
+// llegaron en la versión 14 y hoy viajan hasta la 17. Complementa la prueba
+// 13 -> 14 de test/repositories/auth/auth_user_profile_repository_test.dart.
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -60,9 +60,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 14 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 17 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 14);
+    expect(await raw().getVersion(), 17);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -75,7 +75,7 @@ void main() {
   });
 
   test(
-    '[MIG-02] de v11 a v14 aplica todas las migraciones sin perder datos',
+    '[MIG-02] de v11 a v17 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
@@ -98,7 +98,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 14);
+      expect(await raw().getVersion(), 17);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _columns(raw(), 'clients'), isNot(contains('password')));
       final clients = await raw().query('clients');
@@ -121,7 +121,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 14);
+    expect(await raw().getVersion(), 17);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
     final clients = await raw().query('clients');
     expect(clients.single['email'], 'ana@example.com');
@@ -142,7 +142,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 14);
+    expect(await raw().getVersion(), 17);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 

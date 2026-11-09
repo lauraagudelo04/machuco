@@ -22,6 +22,7 @@ import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
 import 'package:machuco/database/model/owner/owner_entry.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
@@ -36,7 +37,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 17,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -48,6 +49,8 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
+    OwnerEntry,
+    DocumentTypeEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -94,6 +97,9 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
+        migration15To16,
+        migration16To17,
       ])
       .addCallback(
         Callback(
@@ -401,7 +407,11 @@ final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 /// Es idempotente porque esta tabla se creó antes como v13 en la rama de
 /// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
 /// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
-final migration13To14 = Migration(13, 14, (database) async {
+final migration13To14 = Migration(13, 14, _createAuthUserProfileSchema);
+
+Future<void> _createAuthUserProfileSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
     '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
@@ -410,4 +420,180 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
   );
+}
+
+/// Propietarios y tipos de documento (módulo de propietarios).
+///
+/// Es idempotente porque las versiones 12→13 y 13→14 de esta rama también
+/// crearon `owners`, y porque develop llegó hasta la 14 sin ninguna de las dos
+/// tablas. Aquí se garantiza el esquema completo que necesita la app:
+/// `owners` con el indicativo separado y `document_types` sembrada.
+final migration14To15 = Migration(14, 15, (database) async {
+  await _createOwnerSchema(database);
+  await _addOwnerCountryColumns(database);
+  await _createDocumentTypeSchema(database);
+  await _seedDocumentTypes(database);
 });
+
+/// Borrados diferidos de propietarios.
+///
+/// Antes, eliminar sin conexión obligaba a conservar el registro. Ahora la fila
+/// queda oculta con `pendingDelete = 1` hasta que Firestore confirme el
+/// borrado, de modo que la sincronización puede reintentarlo sola.
+final migration15To16 = Migration(15, 16, _addOwnerPendingDeleteColumn);
+
+/// Reconciliación de las dos ramas en una sola base.
+///
+/// Una instalación de esta rama llegó al merge ya en la versión 16, así que se
+/// saltó los pasos de develop (12→13 y 13→14). Esta migración aplica sus
+/// efectos pendientes —perfil del usuario y limpieza de los ejemplos de room—
+/// y vuelve a garantizar el esquema de propietarios. Todo es idempotente: en
+/// una base que viene de develop las tablas ya existen y no se toca nada.
+final migration16To17 = Migration(16, 17, (database) async {
+  await _createAuthUserProfileSchema(database);
+  await _deleteLegacyRoomMockDataIfPresent(database);
+  await _createOwnerSchema(database);
+  await _addOwnerCountryColumns(database);
+  await _addOwnerPendingDeleteColumn(database);
+  await _createDocumentTypeSchema(database);
+  await _seedDocumentTypes(database);
+});
+
+/// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
+///
+/// Algunas bases mínimas (pruebas de migración de propietarios) no lo tienen y
+/// `DELETE FROM rooms` fallaría.
+Future<void> _deleteLegacyRoomMockDataIfPresent(
+  sqflite.DatabaseExecutor database,
+) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' "
+    "AND name IN ('rooms', 'room_types')",
+  );
+  if (tables.length < 2) return;
+  await deleteLegacyRoomMockData(database);
+}
+
+Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT NOT NULL PRIMARY KEY,
+      fullName TEXT NOT NULL,
+      documentType TEXT NOT NULL,
+      documentNumber TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT,
+      isActive INTEGER NOT NULL,
+      synchronized INTEGER NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Separa el indicativo del país del número nacional.
+///
+/// `owners` se creó sin estas columnas; se consulta `PRAGMA table_info` porque
+/// una base nueva ya nace con ellas y una de la 12→13 no las tiene.
+Future<void> _addOwnerCountryColumns(sqflite.DatabaseExecutor database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+
+  if (!names.contains('countryCode')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryCode TEXT');
+  }
+  if (!names.contains('countryName')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryName TEXT');
+  }
+}
+
+/// Marca de borrado diferido; `DEFAULT 0` deja válidas las filas anteriores.
+Future<void> _addOwnerPendingDeleteColumn(
+  sqflite.DatabaseExecutor database,
+) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('pendingDelete')) {
+    await database.execute(
+      'ALTER TABLE owners ADD COLUMN pendingDelete INTEGER NOT NULL '
+      'DEFAULT 0',
+    );
+  }
+}
+
+Future<void> _createDocumentTypeSchema(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS document_types (
+      id INTEGER NOT NULL PRIMARY KEY,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      pattern TEXT NOT NULL,
+      example TEXT NOT NULL,
+      isActive INTEGER NOT NULL,
+      sortOrder INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Semillas del maestro; `INSERT OR IGNORE` permite correrla también en bases
+/// nuevas, donde Floor ya creó la tabla vacía.
+Future<void> _seedDocumentTypes(sqflite.DatabaseExecutor database) async {
+  const rows = [
+    {
+      'id': 1,
+      'code': 'CC',
+      'name': 'Cédula de ciudadanía',
+      'pattern': r'^\d{6,10}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 1,
+    },
+    {
+      'id': 2,
+      'code': 'CE',
+      'name': 'Cédula de extranjería',
+      'pattern': r'^\d{6,12}$',
+      'example': '345678',
+      'isActive': 1,
+      'sortOrder': 2,
+    },
+    {
+      'id': 3,
+      'code': 'NIT',
+      'name': 'Número de identificación tributaria',
+      'pattern': r'^\d{9,10}(-\d)?$',
+      'example': '900123456-7',
+      'isActive': 1,
+      'sortOrder': 3,
+    },
+    {
+      'id': 4,
+      'code': 'PAS',
+      'name': 'Pasaporte',
+      'pattern': r'^[A-Za-z0-9]{6,12}$',
+      'example': 'AV123456',
+      'isActive': 1,
+      'sortOrder': 4,
+    },
+    {
+      'id': 5,
+      'code': 'TI',
+      'name': 'Tarjeta de identidad',
+      'pattern': r'^\d{6,11}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 5,
+    },
+  ];
+
+  for (final row in rows) {
+    await database.insert(
+      'document_types',
+      row,
+      conflictAlgorithm: sqflite.ConflictAlgorithm.ignore,
+    );
+  }
+}

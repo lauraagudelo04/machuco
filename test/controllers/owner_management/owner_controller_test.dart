@@ -165,7 +165,6 @@ void main() {
         dialCode: '+34',
         phoneMinLength: 9,
         phoneMaxLength: 9,
-        sortOrder: 99,
       ),
     );
 

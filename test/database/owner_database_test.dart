@@ -315,17 +315,16 @@ void main() {
     },
   );
 
-  test(
-    'la migración 13->14 agrega el indicativo sin perder los teléfonos',
-    () async {
-      final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
-      sqfliteFfiInit();
-      final legacy = await databaseFactoryFfi.openDatabase(
-        legacyPath,
-        options: sqflite.OpenDatabaseOptions(
-          version: 13,
-          onCreate: (db, version) async {
-            await db.execute('''
+  test('la migración 13->17 agrega el indicativo y pendingDelete sin perder '
+      'los teléfonos', () async {
+    final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
+    sqfliteFfiInit();
+    final legacy = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: sqflite.OpenDatabaseOptions(
+        version: 13,
+        onCreate: (db, version) async {
+          await db.execute('''
             CREATE TABLE owners (
               id TEXT NOT NULL PRIMARY KEY,
               fullName TEXT NOT NULL,
@@ -340,39 +339,115 @@ void main() {
               updatedAt INTEGER NOT NULL
             )
           ''');
-          },
-        ),
-      );
-      await legacy.insert('owners', {
-        'id': 'owner-legacy',
-        'fullName': 'Laura Gómez Restrepo',
-        'documentType': DocumentType.citizenshipCard.name,
-        'documentNumber': '1020304050',
-        'email': 'laura.gomez@machuco.com',
-        'phone': '+57 300 123 4567',
-        'address': 'Calle 10 # 43-25',
-        'isActive': 1,
-        'synchronized': 0,
-        'createdAt': 1,
-        'updatedAt': 1,
-      });
-      await legacy.close();
+        },
+      ),
+    );
+    await legacy.insert('owners', {
+      'id': 'owner-legacy',
+      'fullName': 'Laura Gómez Restrepo',
+      'documentType': DocumentType.citizenshipCard.name,
+      'documentNumber': '1020304050',
+      'email': 'laura.gomez@machuco.com',
+      'phone': '+57 300 123 4567',
+      'address': 'Calle 10 # 43-25',
+      'isActive': 1,
+      'synchronized': 0,
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
+    await legacy.close();
 
-      final migrated = await AppDatabaseProvider.open(name: legacyPath);
-      addTearDown(migrated.close);
-      final raw = migrated.database as sqflite.Database;
+    final migrated = await AppDatabaseProvider.open(name: legacyPath);
+    addTearDown(migrated.close);
+    final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 16);
-      final columns = await raw.rawQuery('PRAGMA table_info(owners)');
-      expect(
-        columns.map((column) => column['name']),
-        containsAll(['countryCode', 'countryName', 'pendingDelete']),
-      );
-      final rows = await raw.query('owners');
-      expect(rows.single['phone'], '+57 300 123 4567');
-      expect(rows.single['countryCode'], isNull);
-      expect(rows.single['pendingDelete'], 0);
-      expect(await raw.query('document_types'), hasLength(5));
-    },
-  );
+    expect(await raw.getVersion(), 17);
+    final columns = await raw.rawQuery('PRAGMA table_info(owners)');
+    expect(
+      columns.map((column) => column['name']),
+      containsAll(['countryCode', 'countryName', 'pendingDelete']),
+    );
+    final rows = await raw.query('owners');
+    expect(rows.single['phone'], '+57 300 123 4567');
+    expect(rows.single['countryCode'], isNull);
+    expect(rows.single['pendingDelete'], 0);
+    expect(await raw.query('document_types'), hasLength(5));
+  });
+
+  test('una base v16 de esta rama recibe auth_user_profile sin perder '
+      'propietarios', () async {
+    final legacyPath = '${directory.path}${Platform.pathSeparator}v16.db';
+    sqfliteFfiInit();
+    final legacy = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: sqflite.OpenDatabaseOptions(
+        version: 16,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE owners (
+              id TEXT NOT NULL PRIMARY KEY,
+              fullName TEXT NOT NULL,
+              documentType TEXT NOT NULL,
+              documentNumber TEXT NOT NULL,
+              email TEXT NOT NULL,
+              phone TEXT NOT NULL,
+              countryCode TEXT,
+              countryName TEXT,
+              address TEXT,
+              isActive INTEGER NOT NULL,
+              synchronized INTEGER NOT NULL,
+              pendingDelete INTEGER NOT NULL DEFAULT 0,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+          await db.execute('''
+            CREATE TABLE document_types (
+              id INTEGER NOT NULL PRIMARY KEY,
+              code TEXT NOT NULL,
+              name TEXT NOT NULL,
+              pattern TEXT NOT NULL,
+              example TEXT NOT NULL,
+              isActive INTEGER NOT NULL,
+              sortOrder INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    await legacy.insert('owners', {
+      'id': 'owner-v16',
+      'fullName': 'Laura Gómez Restrepo',
+      'documentType': DocumentType.citizenshipCard.name,
+      'documentNumber': '1020304050',
+      'email': 'laura.gomez@machuco.com',
+      'phone': '300 123 4567',
+      'countryCode': '+57',
+      'countryName': 'Colombia',
+      'address': 'Calle 10 # 43-25',
+      'isActive': 1,
+      'synchronized': 1,
+      'pendingDelete': 0,
+      'createdAt': 1,
+      'updatedAt': 1,
+    });
+    await legacy.close();
+
+    final migrated = await AppDatabaseProvider.open(name: legacyPath);
+    addTearDown(migrated.close);
+    final raw = migrated.database as sqflite.Database;
+
+    expect(await raw.getVersion(), 17);
+    expect(
+      await raw.rawQuery(
+        "SELECT name FROM sqlite_master WHERE type = 'table' "
+        "AND name = 'auth_user_profile'",
+      ),
+      hasLength(1),
+    );
+    final owners = await migrated.ownerDao.findAll();
+    expect(owners.single.fullName, 'Laura Gómez Restrepo');
+    expect(owners.single.pendingDelete, 0);
+    expect(await raw.query('document_types'), hasLength(5));
+  });
 }

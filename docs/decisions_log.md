@@ -569,3 +569,25 @@ con su fila. Estas últimas no ejecutan el 12 -> 13: sus ejemplos de room los
 limpia `RoomDao.removeLegacyMockData`.
 
 La próxima migración de cualquier rama usa la versión 15.
+
+## 2026-11-09 — Propietarios ocupa las versiones 15, 16 y 17 de SQLite (rama `feature_juliang`)
+
+**Contexto:** al fusionar `develop` en `feature_juliang`, la base compartida
+quedó en la versión 14 (`auth_user_profile`) y el merge eliminó las migraciones
+del módulo de propietarios. Algunas instalaciones de esta rama ya estaban en la
+versión 16 (sus propias 12→13 `owners`, 13→14 indicativo, 14→15
+`document_types` y 15→16 `pendingDelete`), de modo que se saltaron los pasos de
+`develop`.
+
+**Decisión:** se conservan el 12→13 y el 13→14 de `develop` y las migraciones de
+propietarios se re-apilan por encima, todas idempotentes:
+
+- `14→15`: crea `owners` con `countryCode`/`countryName` y `document_types` con
+  sus cinco semillas.
+- `15→16`: agrega `pendingDelete` a `owners`.
+- `16→17`: reconciliación. Crea `auth_user_profile`, repite la limpieza de los
+  ejemplos de room (sólo si existen las tablas de habitaciones) y reasegura el
+  esquema de propietarios. Cubre las bases v16 de esta rama, que nunca
+  ejecutaron el 13→14 de `develop`.
+
+La versión local queda en **17**; la próxima rama que migre usa la 18.

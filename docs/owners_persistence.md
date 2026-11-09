@@ -48,8 +48,12 @@ depende de `supabase_flutter`.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
   se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
-- La versión local es la **16**: `document_types` viaja en la 15 y la 15→16
-  agrega `pendingDelete` a `owners` con `DEFAULT 0`.
+- La versión local es la **17**, con las tres migraciones del módulo
+  apiladas después de la 14 de develop: la 14→15 crea `owners` (con
+  `countryCode`/`countryName`) y `document_types` sembrada; la 15→16 agrega
+  `pendingDelete`; y la 16→17 reconcilia una base que ya estaba en la 16 de
+  esta rama antes del merge (crea `auth_user_profile` y repite la limpieza de
+  los ejemplos de room). Todas son idempotentes.
 
 ## Supabase: maestro de tipos de documento
 
@@ -176,10 +180,10 @@ Los valores por defecto de `SupabaseRoomConfig` apuntan al proyecto de
 desarrollo y permiten `flutter run` sin argumentos. Firebase se configura con
 los archivos de `firebase_options.dart` / `.firebaserc` que ya usa la app.
 
-> `flutter run` sin argumentos usa las cuentas de prueba quemadas
-> (`AUTH_USE_HARDCODED_AUTH_USERS` vale `true` por defecto). Para entrar con
-> Firebase Auth hay que agregar
-> `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`.
+> `flutter run` usa siempre Firebase Auth: las cuentas quemadas
+> (`AUTH_USE_HARDCODED_AUTH_USERS`) se retiraron con el módulo de
+> administradores. El usuario administrador necesita `role: "admin"` y
+> `accountStatus: "active"` en `users/{uid}`.
 
 ## Pruebas
 
@@ -201,9 +205,7 @@ real.
 
 Completada el **2026-11-09** con la app real, en línea y en modo avión.
 
-> Para usar Firebase Auth hay que arrancar sin los usuarios de prueba:
-> `flutter run --dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. El
-> administrador necesita `role: "admin"` y `accountStatus: "active"` en
+> El administrador necesita `role: "admin"` y `accountStatus: "active"` en
 > `users/{uid}`, y el id de ese documento debe ser igual al UID de Firebase
 > Auth; si no coincide, la app cae en rol cliente.
 
