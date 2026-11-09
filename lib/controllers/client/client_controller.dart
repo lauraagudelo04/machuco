@@ -6,6 +6,7 @@ import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/client/client_model.dart';
 import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
@@ -31,14 +32,12 @@ class ClientController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
-  /// Indica si el usuario autenticado se registró con correo/contraseña.
   bool get canChangePassword {
     final user = _auth.currentUser;
     if (user == null) return false;
     return user.providerData.any((info) => info.providerId == 'password');
   }
 
-  /// Retorna el nombre del proveedor de inicio de sesión social si no usa contraseña.
   String get authProviderName {
     final user = _auth.currentUser;
     if (user == null) return '';
@@ -129,6 +128,12 @@ class ClientController extends ChangeNotifier {
           .get();
 
       final guestIds = reservationsSnapshot.docs
+          .where((doc) {
+            final data = doc.data();
+            final status = (data['status'] ?? '').toString().toLowerCase().trim();
+            return status != ReservationStatus.cancelled.name &&
+                  status != ReservationStatus.completed.name;
+          })
           .map((doc) => doc.data()['guestId'] as String?)
           .where((id) => id != null && id.isNotEmpty)
           .cast<String>()
