@@ -1,67 +1,59 @@
-/// Registro del maestro `country_phone_codes` (indicativo telefónico por
-/// país) expuesto por Supabase y cacheado en SQLite.
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
+
+/// Indicativo telefónico por país que usa el formulario de registro.
+///
+/// Se construye a partir del maestro `phone_country_codes` de Supabase
+/// (cacheado en SQLite con la entidad compartida [PhoneCountryCode]). La
+/// bandera se dibuja en la UI con `country_flags` a partir de [isoCode].
 class CountryPhoneCode {
   const CountryPhoneCode({
     required this.id,
     required this.isoCode,
     required this.countryName,
     required this.dialCode,
-    required this.phoneMinLength,
-    required this.phoneMaxLength,
-    required this.sortOrder,
-    this.flagEmoji,
+    this.phoneMinLength = defaultPhoneMinLength,
+    this.phoneMaxLength = defaultPhoneMaxLength,
     this.isActive = true,
     this.isDevelopmentSeed = false,
   });
 
+  /// El maestro de Supabase todavía no publica la longitud del celular por
+  /// país; mientras tanto se usa el rango del plan de numeración E.164.
+  static const defaultPhoneMinLength = 7;
+  static const defaultPhoneMaxLength = 15;
+
+  /// Convierte la fila cacheada en SQLite (o recibida de Supabase).
+  factory CountryPhoneCode.fromEntry(PhoneCountryCode entry) {
+    return CountryPhoneCode(
+      id: entry.id,
+      isoCode: entry.countryCode.trim().toUpperCase(),
+      countryName: entry.countryName.trim(),
+      dialCode: entry.callingCode.trim(),
+      isActive: entry.active,
+    );
+  }
+
   final int id;
+
+  /// Código ISO 3166-1 alfa-2, p. ej. `CO`.
   final String isoCode;
   final String countryName;
+
+  /// Con `+`, p. ej. `+57`.
   final String dialCode;
-  final String? flagEmoji;
   final int phoneMinLength;
   final int phoneMaxLength;
   final bool isActive;
-  final int sortOrder;
 
   /// `true` solo para la semilla local usada cuando Supabase no está
   /// configurado y no hay caché. No se persiste en SQLite.
   final bool isDevelopmentSeed;
 
-  /// Texto compacto para el selector, p. ej. `🇨🇴 +57` o `CO +57`.
-  String get shortLabel => '${flagEmoji ?? isoCode} $dialCode';
-
-  /// Acepta tanto la respuesta REST de Supabase (`is_active` booleano) como
-  /// una fila de SQLite (`is_active` 0/1).
-  factory CountryPhoneCode.fromMap(Map<String, Object?> map) {
-    final rawActive = map['is_active'];
-    return CountryPhoneCode(
-      id: (map['id']! as num).toInt(),
-      isoCode: (map['iso_code']! as String).toUpperCase(),
-      countryName: map['country_name']! as String,
-      dialCode: map['dial_code']! as String,
-      flagEmoji: map['flag_emoji'] as String?,
-      phoneMinLength: (map['phone_min_length']! as num).toInt(),
-      phoneMaxLength: (map['phone_max_length']! as num).toInt(),
-      isActive: rawActive == true || rawActive == 1,
-      sortOrder: (map['sort_order']! as num).toInt(),
-    );
-  }
-
-  /// Fila para SQLite.
-  Map<String, Object?> toMap() => {
-    'id': id,
-    'iso_code': isoCode,
-    'country_name': countryName,
-    'dial_code': dialCode,
-    'flag_emoji': flagEmoji,
-    'phone_min_length': phoneMinLength,
-    'phone_max_length': phoneMaxLength,
-    'is_active': isActive ? 1 : 0,
-    'sort_order': sortOrder,
-  };
+  /// Texto compacto para lectores de pantalla y pruebas, p. ej. `CO +57`.
+  String get shortLabel => '$isoCode $dialCode';
 
   /// `true` si [query] coincide con el nombre, el código ISO o el indicativo.
+  /// El filtro es en memoria: caracteres como `%`, `'` o `--` son texto.
   bool matches(String query) {
     final normalized = query.trim().toLowerCase();
     if (normalized.isEmpty) return true;
@@ -78,9 +70,7 @@ const developmentCountryPhoneCodeSeed = CountryPhoneCode(
   isoCode: 'CO',
   countryName: 'Colombia',
   dialCode: '+57',
-  flagEmoji: '🇨🇴',
   phoneMinLength: 10,
   phoneMaxLength: 10,
-  sortOrder: 0,
   isDevelopmentSeed: true,
 );

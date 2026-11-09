@@ -25,6 +25,9 @@ class AuthPreferences {
   static const _lastCountryCodeIdKey = 'lastCountryCodeId';
   static const _catalogsSyncedAtKey = 'catalogsSyncedAt';
 
+  static const _rememberEmailKey = 'rememberEmail';
+  static const _rememberedEmailKey = 'rememberedEmail';
+
   final LocalPreferencesService _preferences;
 
   /// Normaliza el correo antes de guardarlo: sin espacios y en minúsculas.
@@ -48,6 +51,42 @@ class AuthPreferences {
 
   Future<void> clearCurrentUserEmail() =>
       _preferences.remove(_currentUserEmailKey);
+
+  /// Estado de "Recordar mi correo": si la opción está marcada y el último
+  /// correo guardado (`null` si no hay). Solo para precargar el formulario.
+  Future<({bool remember, String? email})> loadRememberedEmail() async {
+    final remember = await _preferences.getBool(_rememberEmailKey) ?? false;
+    if (!remember) return (remember: false, email: null);
+    final email = await _preferences.getString(_rememberedEmailKey);
+    return (
+      remember: true,
+      email: email == null || email.trim().isEmpty ? null : email,
+    );
+  }
+
+  /// Marca "Recordar mi correo" y guarda [email] normalizado.
+  Future<void> saveRememberedEmail(String email) async {
+    final normalized = normalizeEmail(email);
+    if (normalized.isEmpty) {
+      await clearRememberedEmail();
+      return;
+    }
+    await _preferences.setBool(_rememberEmailKey, true);
+    await _preferences.setString(_rememberedEmailKey, normalized);
+  }
+
+  /// Desmarca "Recordar mi correo" y elimina el correo recordado. Cerrar
+  /// sesión no la llama (se conserva); [clearAll] sí lo borra todo.
+  Future<void> clearRememberedEmail() async {
+    await _preferences.remove(_rememberEmailKey);
+    await _preferences.remove(_rememberedEmailKey);
+  }
+
+  /// Borra TODO el namespace `auth` (correo de sesión, correo recordado,
+  /// último indicativo, marca de sincronización...). Se usa al eliminar la
+  /// cuenta; no toca las preferencias de otros módulos ni los maestros en
+  /// SQLite.
+  Future<void> clearAll() => _preferences.clear();
 
   Future<int?> loadLastCountryCodeId() =>
       _preferences.getInt(_lastCountryCodeIdKey);

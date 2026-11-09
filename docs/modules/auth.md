@@ -24,9 +24,11 @@ de prueba es provisional. Guía de uso de Firebase para otras ramas en
   `rejected`, `disabled`) y funciones puras `isPublicRegistrationRole` (solo
   `client`/`owner`) e `initialAccountStatusFor` (propietario →
   `pending_approval`, cliente → `active`), espejo de `firestore.rules`.
-- `country_phone_code.dart` — `CountryPhoneCode`: maestro de indicativos
-  (Supabase REST, caché SQLite, semilla Colombia +57 si no hay Supabase ni
-  caché).
+- `country_phone_code.dart` — `CountryPhoneCode`: indicativo por país
+  construido desde la entidad compartida `PhoneCountryCode` (tabla
+  `phone_country_codes`). Semilla Colombia +57 si no hay Supabase ni caché.
+  Longitud del celular por defecto 7 a 15 dígitos (Supabase aún no la
+  publica).
 
 ### Esquema `users/{uid}` (Cloud Firestore)
 
@@ -69,21 +71,21 @@ esquema.
   `createProfile` y `getProfile`. Traduce errores de Firebase a
   `UserProfileRepositoryException` (`permissionDenied`, `network`,
   `unknown`) con mensajes en español.
-- `AuthCatalogRepository` + `AuthCatalogDao`
-  (`lib/database/repository/auth/`): indicativos telefónicos desde Supabase
-  con caché en SQLite.
+- `AuthCatalogRepository` (`lib/database/repository/auth/`): mismo patrón
+  que `ClientRepository`. Consulta `GET /rest/v1/phone_country_codes`, guarda
+  todos los registros en SQLite con el DAO Floor compartido
+  `PhoneCountryCodeDao` y responde siempre desde SQLite (solo activos,
+  ordenados por nombre, caché de 24 h).
+- `AppCountryFlag` (`lib/widgets/form/app_country_flag.dart`): bandera a
+  partir del código ISO con la librería `country_flags`; la usa
+  `AppPhoneField` en el campo y en la lista de países.
 - `AuthPreferences` (`auth_preferences.dart`): correo del usuario actual,
   último indicativo y fecha de sincronización de maestros en
   `shared_preferences` (namespace `auth`). Solo para mostrar o precargar,
   nunca para autorizar.
 - `CurrentUser` (`lib/service/firebase/current_user.dart`): uid/correo de la
   sesión de Firebase para otras ramas. Identifica, no autoriza.
-- `HardcodedAuthService`: **placeholder de pruebas.** Cuentas fijas en el
-  código, solo con `AUTH_USE_HARDCODED_AUTH_USERS=true` (apagado por
-  defecto). No soporta registro, Google ni recuperación de contraseña. Ver
-  hallazgo de seguridad en [../decisions_log.md](../decisions_log.md).
-- `AuthConfig`: flags de `--dart-define` (usuarios de prueba y API de
-  usuarios), documentados en
+- `AuthConfig`: flags de `--dart-define` (API de usuarios), documentados en
   [README.md#configuración-de-la-autenticación](../../README.md#configuración-de-la-autenticación).
   Firebase se configura con `lib/firebase_options.dart`.
 
@@ -142,7 +144,6 @@ Referenciadas en `firebase.json`. Para `users/{uid}`:
   registrado" (`email-already-in-use`), lo que permite enumerar correos. Se
   acepta por usabilidad; login y recuperación de contraseña sí usan mensajes
   genéricos.
-- `HardcodedAuthService` no debe activarse fuera de desarrollo/QA local.
 - `BackendRegisteredUserDirectory` es de solo lectura en la práctica y su
   API no tiene contrato documentado.
 - Pruebas: `test/widget_test.dart`, `test/controllers/auth/` y

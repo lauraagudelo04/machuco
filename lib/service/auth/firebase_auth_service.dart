@@ -1,9 +1,14 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
+import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/service/auth/account_profile_removal.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 
 /// [AuthService] implementation backed by Firebase Authentication
@@ -13,18 +18,23 @@ import 'package:machuco/service/auth/auth_service.dart';
 /// stores it. The [RegisteredUserRole] and [AccountStatus] come from the
 /// Firestore profile `users/{uid}`, protected by `firestore.rules` (the
 /// authoritative authorization; this class only reflects it in the session).
-/// A user without a profile document is treated as an active
-/// [RegisteredUserRole.client] (least privilege).
+/// A user without a profile document gets no session: it fails with
+/// [AuthFailureType.profileIncomplete] and keeps the Firebase session so the
+/// "Completar perfil" flow (`FirebaseSocialAuthService`) can resume it.
 final class FirebaseAuthService implements AuthService {
   FirebaseAuthService({
     FirebaseAuth? firebaseAuth,
     UserProfileRepository? profileRepository,
+    AdministratorsRepository? administratorsRepository,
   }) : _firebaseAuth = firebaseAuth ?? FirebaseAuth.instance,
        _profileRepository =
-           profileRepository ?? FirestoreUserProfileRepository();
+           profileRepository ?? FirestoreUserProfileRepository(),
+       _administrators =
+           administratorsRepository ?? FirestoreAdministratorsRepository();
 
   final FirebaseAuth _firebaseAuth;
   final UserProfileRepository _profileRepository;
+  final AdministratorsRepository _administrators;
 
   @override
   Future<AuthSession?> restoreSession() async {
@@ -91,6 +101,83 @@ final class FirebaseAuthService implements AuthService {
     );
   }
 
+  /// Registro histórico con nombre completo. Se conserva por compatibilidad;
+  /// el flujo vigente es [registerAccount].
+  @override
+  Future<void> register({
+    required String fullName,
+    required String email,
+    required String phoneNumber,
+    required String password,
+    required RegisteredUserRole role,
+  }) {
+    final normalizedEmail = AuthInputNormalizer.email(email);
+    return _createAccount(
+      role: role,
+      email: normalizedEmail,
+      password: password,
+      displayName: fullName.trim(),
+      profile: (uid) => UserProfile(
+        uid: uid,
+        fullName: fullName.trim(),
+        email: normalizedEmail,
+        phoneNumber: phoneNumber,
+        role: role,
+        accountStatus: initialAccountStatusFor(role),
+      ),
+    );
+  }
+
+  /// Registro por rol: guarda en `users/{uid}` nombres, apellidos, indicativo,
+  /// y los campos propios del rol (fecha de nacimiento para el cliente;
+  /// tipo de persona, NIT, razón social y plan para el propietario). Esos
+  /// datos sensibles solo viven en Firestore.
+  ///
+  /// Simulado en el cliente: el formato ya fue validado por el controller; la
+  /// autoridad real son las reglas de `firestore.rules`.
+  @override
+  Future<void> registerAccount(RegistrationData data) {
+    final normalizedEmail = AuthInputNormalizer.email(data.email);
+    final firstNames = AuthInputNormalizer.text(data.firstNames);
+    final lastNames = AuthInputNormalizer.text(data.lastNames);
+    final isOwner = data.role == RegisteredUserRole.owner;
+    final personType = data.personType;
+    if (isOwner &&
+        (personType == null ||
+            AuthInputNormalizer.nit(data.nit) == null ||
+            data.planId == null)) {
+      throw const AuthFailure(
+        AuthFailureType.invalidInput,
+        'Faltan datos obligatorios de la cuenta de propietario.',
+      );
+    }
+    final companyName = AuthInputNormalizer.text(data.companyName);
+    return _createAccount(
+      role: data.role,
+      email: normalizedEmail,
+      password: data.password,
+      displayName: '$firstNames $lastNames'.trim(),
+      profile: (uid) => UserProfile(
+        uid: uid,
+        fullName: '$firstNames $lastNames'.trim(),
+        email: normalizedEmail,
+        phoneNumber: data.phoneNumber,
+        role: data.role,
+        accountStatus: initialAccountStatusFor(data.role),
+        firstNames: firstNames,
+        lastNames: lastNames,
+        phoneCountryCodeId: data.phoneCountryCodeId,
+        birthDate: isOwner ? null : data.birthDate,
+        personType: isOwner ? personType : null,
+        nit: isOwner ? AuthInputNormalizer.nit(data.nit) : null,
+        companyName: isOwner && personType == PersonType.juridica
+            ? (companyName.isEmpty ? null : companyName)
+            : null,
+        planId: isOwner ? data.planId : null,
+      ),
+    );
+  }
+
   /// Crea la cuenta en Firebase Auth, guarda el perfil `users/{uid}` y cierra
   /// la sesión que el SDK abre automáticamente, para que el usuario inicie
   /// sesión de forma explícita.
@@ -101,13 +188,12 @@ final class FirebaseAuthService implements AuthService {
   /// mensaje claro: la regla real está en `firestore.rules`. Si el perfil no
   /// se puede guardar, se elimina la cuenta recién creada para no dejarla
   /// huérfana.
-  @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
+  Future<void> _createAccount({
     required RegisteredUserRole role,
+    required String email,
+    required String password,
+    required String displayName,
+    required UserProfile Function(String uid) profile,
   }) async {
     if (!isPublicRegistrationRole(role)) {
       throw const AuthFailure(
@@ -115,10 +201,9 @@ final class FirebaseAuthService implements AuthService {
         'El tipo de cuenta seleccionado no está disponible para registro.',
       );
     }
-    final normalizedEmail = email.trim().toLowerCase();
     try {
       final credential = await _firebaseAuth.createUserWithEmailAndPassword(
-        email: normalizedEmail,
+        email: email,
         password: password,
       );
       final user = credential.user;
@@ -129,17 +214,8 @@ final class FirebaseAuthService implements AuthService {
         );
       }
       try {
-        await user.updateDisplayName(fullName.trim());
-        await _profileRepository.createProfile(
-          UserProfile(
-            uid: user.uid,
-            fullName: fullName.trim(),
-            email: normalizedEmail,
-            phoneNumber: phoneNumber,
-            role: role,
-            accountStatus: initialAccountStatusFor(role),
-          ),
-        );
+        await user.updateDisplayName(displayName);
+        await _profileRepository.createProfile(profile(user.uid));
       } catch (error) {
         debugPrint('No fue posible guardar el perfil, se revierte: $error');
         await _rollbackAccount(user);
@@ -183,6 +259,42 @@ final class FirebaseAuthService implements AuthService {
   @override
   Future<void> logout() => _firebaseAuth.signOut();
 
+  /// Reautentica con la contraseña, borra `users/{uid}` y luego el usuario de
+  /// Firebase Auth. Si el perfil ya no existe (intento anterior que falló al
+  /// borrar el usuario) la operación continúa: es idempotente.
+  ///
+  /// Un administrador no borra su perfil: lo anonimiza (falla con
+  /// [AuthFailureType.lastAdministrator], sin cambios, si es el último activo)
+  /// y después se borra su usuario de Auth.
+  ///
+  /// No comprueba reservas activas: sin backend confiable no es garantizable
+  /// desde el cliente (ver contexto de la rama).
+  @override
+  Future<void> deleteAccount({required String password}) async {
+    final user = _firebaseAuth.currentUser;
+    final email = user?.email;
+    if (user == null || email == null || email.isEmpty) {
+      throw const AuthFailure(
+        AuthFailureType.unknown,
+        'No hay una sesión activa. Inicia sesión e intenta nuevamente.',
+      );
+    }
+    try {
+      await user.reauthenticateWithCredential(
+        EmailAuthProvider.credential(email: email, password: password),
+      );
+      await removeOrAnonymizeProfile(
+        profiles: _profileRepository,
+        administrators: _administrators,
+        uid: user.uid,
+      );
+      await user.delete();
+      await _firebaseAuth.signOut();
+    } on FirebaseAuthException catch (e) {
+      throw _mapDeleteException(e);
+    }
+  }
+
   /// Elimina la cuenta recién creada; si no se puede, al menos cierra sesión.
   Future<void> _rollbackAccount(User user) async {
     try {
@@ -194,7 +306,10 @@ final class FirebaseAuthService implements AuthService {
   }
 
   /// Construye la sesión a partir del perfil de Firestore. Si el estado de la
-  /// cuenta no permite el acceso, cierra sesión y lanza [AuthFailure].
+  /// cuenta no permite el acceso, cierra sesión y lanza [AuthFailure]. Un
+  /// propietario pendiente de aprobación SÍ obtiene sesión (con
+  /// [AccountStatus.pendingApproval]) para ver la pantalla de revisión; las
+  /// reglas de Firestore le impiden operar mientras no esté activo.
   Future<AuthSession> _toSession(User user) async {
     final UserProfile? profile;
     try {
@@ -209,25 +324,27 @@ final class FirebaseAuthService implements AuthService {
       throw AuthFailure(AuthFailureType.unknown, e.message);
     }
 
-    // TODO(auth): falta la pantalla "Cuenta en revisión" para propietarios
-    // pendientes; por ahora se informa con un mensaje en el login.
-    var role = RegisteredUserRole.client;
-    String? profileName;
     if (profile == null) {
-      debugPrint('Usuario sin perfil en Firestore; se usa rol cliente.');
-    } else {
-      role = profile.role;
-      profileName = profile.fullName.trim();
-      final blocked = _blockedFailure(profile.accountStatus);
-      if (blocked != null) {
-        await _firebaseAuth.signOut();
-        throw blocked;
-      }
+      // Riesgo R1 del plan: sin perfil no hay rol ni términos aceptados, así
+      // que nunca se concede acceso de cliente por omisión. La sesión de
+      // Firebase se conserva para reanudar "Completar perfil".
+      throw const AuthFailure(
+        AuthFailureType.profileIncomplete,
+        'Completa tu perfil para continuar.',
+      );
     }
+    final role = profile.role;
+    final String profileName = profile.fullName.trim();
+    final blocked = _blockedFailure(profile);
+    if (blocked != null) {
+      await _firebaseAuth.signOut();
+      throw blocked;
+    }
+    final status = profile.accountStatus ?? AccountStatus.active;
 
     final tokenResult = await user.getIdTokenResult();
     final idToken = tokenResult.token ?? '';
-    final name = (profileName != null && profileName.isNotEmpty)
+    final name = profileName.isNotEmpty
         ? profileName
         : user.displayName?.trim();
     final email = user.email?.trim();
@@ -238,33 +355,69 @@ final class FirebaseAuthService implements AuthService {
       role: role,
       accessToken: idToken,
       idToken: idToken,
+      accountStatus: status,
+      profile: profile,
     );
   }
 
-  /// `null` si el estado permite iniciar sesión. Un estado faltante o
-  /// desconocido se bloquea (nunca se concede acceso por omisión).
-  AuthFailure? _blockedFailure(AccountStatus? status) {
-    return switch (status) {
+  /// `null` si el estado permite abrir sesión (activo, o propietario
+  /// pendiente). Un estado faltante o desconocido se bloquea (nunca se
+  /// concede acceso por omisión).
+  AuthFailure? _blockedFailure(UserProfile profile) =>
+      accountAccessFailure(profile);
+
+  /// Regla compartida con `FirebaseSocialAuthService`: `null` si el estado
+  /// permite abrir sesión. Un admin sin `accountStatus` se informa como
+  /// configuración inválida (las reglas tampoco lo dejan operar).
+  static AuthFailure? accountAccessFailure(UserProfile profile) {
+    return switch (profile.accountStatus) {
       AccountStatus.active => null,
+      AccountStatus.pendingApproval =>
+        profile.role == RegisteredUserRole.owner
+            ? null
+            : const AuthFailure(
+                AuthFailureType.unknown,
+                'No pudimos verificar el estado de tu cuenta. Comunícate con '
+                'el administrador.',
+              ),
       AccountStatus.disabled => const AuthFailure(
-        AuthFailureType.unknown,
+        AuthFailureType.accountDisabled,
         'Tu cuenta está deshabilitada. Comunícate con el administrador.',
       ),
-      AccountStatus.rejected => const AuthFailure(
-        AuthFailureType.unknown,
-        'Tu solicitud de cuenta fue rechazada. Comunícate con el '
-        'administrador.',
+      AccountStatus.rejected => AuthFailure(
+        AuthFailureType.accountRejected,
+        'Tu solicitud de cuenta fue rechazada.',
+        rejectionReason: profile.rejectionReason,
       ),
-      AccountStatus.pendingApproval => const AuthFailure(
-        AuthFailureType.unknown,
-        'Tu cuenta de propietario está en revisión. Te avisaremos cuando '
-        'sea aprobada.',
+      // Neutro: no revela que fue un administrador ni quién lo eliminó.
+      AccountStatus.anonymized => const AuthFailure(
+        AuthFailureType.accountDeleted,
+        'Esta cuenta ya no existe.',
+      ),
+      null when profile.role == RegisteredUserRole.admin => const AuthFailure(
+        AuthFailureType.invalidConfiguration,
+        'Tu cuenta de administrador no está activa; contacta a otro '
+        'administrador.',
       ),
       null => const AuthFailure(
         AuthFailureType.unknown,
         'No pudimos verificar el estado de tu cuenta. Comunícate con el '
         'administrador.',
       ),
+    };
+  }
+
+  AuthFailure _mapDeleteException(FirebaseAuthException exception) {
+    return switch (exception.code) {
+      'wrong-password' || 'invalid-credential' => const AuthFailure(
+        AuthFailureType.invalidCredentials,
+        'La contraseña es incorrecta.',
+      ),
+      'requires-recent-login' => const AuthFailure(
+        AuthFailureType.requiresRecentLogin,
+        'Por seguridad, inicia sesión de nuevo antes de eliminar tu cuenta.',
+      ),
+      _ => _mapException(exception),
     };
   }
 
@@ -278,7 +431,7 @@ final class FirebaseAuthService implements AuthService {
         'Correo o contraseña incorrectos.',
       ),
       'user-disabled' => const AuthFailure(
-        AuthFailureType.unknown,
+        AuthFailureType.accountDisabled,
         'Tu cuenta está deshabilitada. Comunícate con el administrador.',
       ),
       'email-already-in-use' => const AuthFailure(
@@ -294,8 +447,12 @@ final class FirebaseAuthService implements AuthService {
         'No hay conexión. Revisa tu internet e intenta nuevamente.',
       ),
       'too-many-requests' => const AuthFailure(
-        AuthFailureType.network,
+        AuthFailureType.tooManyRequests,
         'Demasiados intentos. Espera un momento e intenta nuevamente.',
+      ),
+      'requires-recent-login' => const AuthFailure(
+        AuthFailureType.requiresRecentLogin,
+        'Por seguridad, inicia sesión de nuevo para continuar.',
       ),
       'operation-not-allowed' => const AuthFailure(
         AuthFailureType.invalidConfiguration,
