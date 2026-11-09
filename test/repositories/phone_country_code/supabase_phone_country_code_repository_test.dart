@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:machuco/database/app_database.dart';
-import 'package:machuco/database/repository/motel/phone_country_code_repository.dart';
+import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Respuesta con el mismo formato que devuelve Supabase.

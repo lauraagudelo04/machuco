@@ -26,9 +26,16 @@ abstract class PaymentDao {
   @insert
   Future<void> insertPayment(PaymentRecord payment);
 
-  /// Solo para la carga explícita de ejemplos: nunca reemplaza pagos guardados.
-  @Insert(onConflict: OnConflictStrategy.ignore)
-  Future<void> insertMissingDemoPayments(List<PaymentRecord> payments);
+  @update
+  Future<void> updatePayment(PaymentRecord payment);
+
+  /// Retira fixtures históricos que llegaron a SQLite antes de habilitar la
+  /// sincronización real. No coincide con IDs UUID de pagos reales.
+  @Query(
+    "DELETE FROM payments WHERE id IN ('pay-001', 'pay-002', 'pay-003', "
+    "'owner-pay-001', 'owner-pay-002', 'owner-pay-003')",
+  )
+  Future<void> deleteLegacyDemoPayments();
 
   @Query('SELECT * FROM payment_method_catalog ORDER BY id')
   Future<List<PaymentCatalogEntry>> findCatalogEntries();
@@ -85,5 +92,27 @@ abstract class PaymentDao {
       receiptNumber,
     );
     return await findAffectedRows() ?? 0;
+  }
+
+  /// Imports cloud records without letting an older pending copy regress a
+  /// payment that was already processed on this device.
+  @transaction
+  Future<void> mergeRemotePayments(List<PaymentRecord> payments) async {
+    for (final remote in payments) {
+      final local = await findById(remote.id);
+      if (local == null) {
+        await insertPayment(remote);
+        continue;
+      }
+      if (_acceptRemoteStatus(local.status, remote.status)) {
+        await updatePayment(remote);
+      }
+    }
+  }
+
+  bool _acceptRemoteStatus(PaymentStatus local, PaymentStatus remote) {
+    if (local == remote) return true;
+    if (local == PaymentStatus.pending) return true;
+    return local == PaymentStatus.paid && remote == PaymentStatus.refunded;
   }
 }

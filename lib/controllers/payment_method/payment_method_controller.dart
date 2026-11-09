@@ -2,6 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 
+export 'package:machuco/models/payment_method/payment_method_model.dart'
+    show CardNetwork, CardPaymentKind;
+
 class CardNumberInputFormatter extends TextInputFormatter {
   const CardNumberInputFormatter();
 
@@ -60,6 +63,7 @@ class PaymentMethodController extends ChangeNotifier {
   String get cardNumber => _model.cardNumber;
   String get expiry => _model.expiry;
   int get installments => _model.installments;
+  CardPaymentKind get cardKind => _model.cardKind;
   PaymentProcessStatus get status => _model.status;
   String? get message => _model.message;
   String? get cardHolderError => _model.cardHolderError;
@@ -81,6 +85,41 @@ class PaymentMethodController extends ChangeNotifier {
       (_) => '.',
     );
     return '\$$formatted COP';
+  }
+
+  CardNetwork get detectedNetwork {
+    final digits = _digitsOnly(cardNumber);
+    if (digits.isEmpty) return CardNetwork.unknown;
+    if (digits.startsWith('4')) return CardNetwork.visa;
+    if (digits.length >= 2) {
+      final twoDigits = int.tryParse(digits.substring(0, 2)) ?? 0;
+      if (twoDigits >= 51 && twoDigits <= 55) return CardNetwork.mastercard;
+      if (twoDigits == 34 || twoDigits == 37) return CardNetwork.amex;
+      if (twoDigits == 65) return CardNetwork.discover;
+    }
+    if (digits.length >= 4) {
+      final fourDigits = int.tryParse(digits.substring(0, 4)) ?? 0;
+      if (fourDigits == 6011) return CardNetwork.discover;
+      if (fourDigits >= 2221 && fourDigits <= 2720) {
+        return CardNetwork.mastercard;
+      }
+    }
+    return CardNetwork.unknown;
+  }
+
+  String get detectedNetworkLabel {
+    switch (detectedNetwork) {
+      case CardNetwork.visa:
+        return 'VISA';
+      case CardNetwork.mastercard:
+        return 'MASTERCARD';
+      case CardNetwork.amex:
+        return 'AMEX';
+      case CardNetwork.discover:
+        return 'DISCOVER';
+      case CardNetwork.unknown:
+        return 'TARJETA';
+    }
   }
 
   String get cardPreviewNumber {
@@ -135,6 +174,14 @@ class PaymentMethodController extends ChangeNotifier {
   void changeInstallments(int? value) {
     if (value == null || value == installments) return;
     _model.installments = value;
+    _resetResult();
+    notifyListeners();
+  }
+
+  void changeCardKind(CardPaymentKind value) {
+    if (value == cardKind) return;
+    _model.cardKind = value;
+    if (value == CardPaymentKind.debit) _model.installments = 1;
     _resetResult();
     notifyListeners();
   }

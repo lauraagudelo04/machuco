@@ -1,38 +1,46 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
-import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
+import 'package:machuco/repositories/payment/payment_cloud_repository.dart';
+import 'package:machuco/service/firebase/current_user.dart';
 
 class OwnerPaymentController extends ChangeNotifier {
   OwnerPaymentController({
     required this.motelId,
     PaymentRepository? repository,
-    PaymentStore? store,
-    this.useDemoData = const bool.fromEnvironment('PAYMENT_USE_DEMO_DATA'),
+    PaymentCloudRepository? cloudRepository,
+    String? Function()? currentUserId,
   }) : _repository = repository ?? PaymentRepository(),
-       _demoPayments = useDemoData
-           ? (store ?? PaymentStore.shared).payments
-           : const [] {
+       _cloudRepository =
+           cloudRepository ??
+           (repository == null ? FirestorePaymentCloudRepository() : null),
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
     ready = load();
   }
 
   final String motelId;
-  final bool useDemoData;
   final PaymentRepository _repository;
-  final List<PaymentRecord> _demoPayments;
+  final PaymentCloudRepository? _cloudRepository;
+  final String? Function() _currentUserId;
   late final Future<void> ready;
   List<PaymentRecord> _payments = [];
   final Map<int, String> _methodNames = {};
   bool _isLoading = false;
   bool _isSaving = false;
+  bool _isSyncing = false;
   bool _disposed = false;
   String? _errorMessage;
+  String? _syncWarningMessage;
 
   List<PaymentRecord> get payments => List.unmodifiable(_payments);
   bool get isLoading => _isLoading;
   bool get isSaving => _isSaving;
+  bool get isSyncing => _isSyncing;
   String? get errorMessage => _errorMessage;
+  String? get syncWarningMessage => _syncWarningMessage;
 
   List<PaymentRecord> get pendingPayments => List.unmodifiable(
     payments.where((payment) => payment.status == PaymentStatus.pending),
@@ -107,17 +115,13 @@ class OwnerPaymentController extends ChangeNotifier {
   }
 
   Future<void> load() async {
-    if (_isLoading || _isSaving || _disposed) return;
+    if (_isLoading || _isSaving || _isSyncing || _disposed) return;
     _isLoading = true;
     _errorMessage = null;
+    var localLoaded = false;
     _notify();
     try {
-      if (useDemoData) {
-        await _repository.seedDemoPayments(
-          motelId: motelId,
-          payments: _demoPayments,
-        );
-      }
+      await _repository.deleteLegacyDemoPayments();
       final payments = await _repository.findPaymentsByMotel(motelId);
       final methods = await _repository.findCachedPaymentMethods();
       if (_disposed) return;
@@ -125,6 +129,7 @@ class OwnerPaymentController extends ChangeNotifier {
       _methodNames.addEntries(
         methods.map((entry) => MapEntry(entry.id, entry.name)),
       );
+      localLoaded = true;
     } on PaymentRepositoryException catch (error) {
       _errorMessage = error.message;
     } catch (_) {
@@ -134,6 +139,7 @@ class OwnerPaymentController extends ChangeNotifier {
       _isLoading = false;
       _notify();
     }
+    if (localLoaded) await _synchronizeWithCloud();
   }
 
   Future<List<PaymentCatalogEntry>> loadPaymentMethods() async {
@@ -171,11 +177,106 @@ class OwnerPaymentController extends ChangeNotifier {
             if (payment.id == saved.id) saved else payment,
         ];
       }
+      unawaited(_synchronizePayment(saved));
       return saved;
     } finally {
       _isSaving = false;
       _notify();
     }
+  }
+
+  Future<void> _synchronizeWithCloud() async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed) return;
+    final ownerId = _currentUserId();
+    if (ownerId == null || ownerId.trim().isEmpty) {
+      _syncWarningMessage =
+          'Inicia sesión con Firebase para sincronizar los pagos.';
+      _notify();
+      return;
+    }
+
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    _notify();
+    try {
+      try {
+        final methods = await _repository.findPaymentMethods();
+        _methodNames.addEntries(
+          methods.map((entry) => MapEntry(entry.id, entry.name)),
+        );
+      } on PaymentRepositoryException {
+        // La caché existente sigue siendo válida; Firebase se reintenta sin
+        // convertir un fallo del maestro en pérdida de los pagos locales.
+      }
+      for (final payment in _payments) {
+        await cloud.savePayment(
+          ownerId: ownerId,
+          payment: payment,
+          paymentMethodName: _paymentMethodNameForCloud(payment),
+        );
+      }
+      final remote = await cloud.listForOwnerAndMotel(
+        ownerId: ownerId,
+        motelId: motelId,
+      );
+      await _repository.mergeRemotePayments(motelId: motelId, payments: remote);
+      final merged = await _repository.findPaymentsByMotel(motelId);
+      if (!_disposed) _payments = merged;
+    } on PaymentCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+    } on PaymentRepositoryException catch (error) {
+      _syncWarningMessage =
+          'Los pagos están en Firebase, pero no se pudieron actualizar en '
+          'este dispositivo: ${error.message}';
+    } catch (_) {
+      _syncWarningMessage =
+          'Los pagos locales están disponibles, pero no se pudieron '
+          'sincronizar con Firebase.';
+    } finally {
+      _isSyncing = false;
+      _notify();
+    }
+  }
+
+  Future<void> _synchronizePayment(PaymentRecord payment) async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed) return;
+    final ownerId = _currentUserId();
+    if (ownerId == null || ownerId.trim().isEmpty) {
+      _syncWarningMessage =
+          'El pago quedó guardado localmente. Inicia sesión para sincronizarlo.';
+      _notify();
+      return;
+    }
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    _notify();
+    try {
+      await cloud.savePayment(
+        ownerId: ownerId,
+        payment: payment,
+        paymentMethodName: _paymentMethodNameForCloud(payment),
+      );
+    } on PaymentCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+    } catch (_) {
+      _syncWarningMessage =
+          'El pago quedó guardado localmente y se sincronizará al reintentar.';
+    } finally {
+      _isSyncing = false;
+      _notify();
+    }
+  }
+
+  String? _paymentMethodNameForCloud(PaymentRecord payment) {
+    final methodId = payment.paymentMethodId;
+    if (methodId != null) return _methodNames[methodId];
+    return switch (payment.method) {
+      PaymentMethod.cash => 'Efectivo',
+      PaymentMethod.online => 'Pago en línea',
+      null => null,
+    };
   }
 
   void _notify() {

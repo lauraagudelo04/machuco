@@ -113,7 +113,7 @@ abstract final class AppRoutes {
                 motelName: (settings.arguments! as Motel).name,
               )
             : const OwnerPaymentsPage(
-                motelId: PaymentStore.demoOwnerMotelId,
+                motelId: PaymentStore.fallbackMotelId,
                 motelName: 'Motel Paraíso Élite',
               ),
       ownerSubscription => const OwnerSubscriptionPage(),

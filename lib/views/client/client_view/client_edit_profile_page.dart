@@ -3,9 +3,9 @@ import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/components/app_text_field.dart';
+import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
-import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/models/client/client_model.dart';
 
 class ClientEditProfilePage extends StatefulWidget {
@@ -18,7 +18,6 @@ class ClientEditProfilePage extends StatefulWidget {
 class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
-  late final TextEditingController _passwordController;
   final _formKey = GlobalKey<FormState>();
 
   late String _selectedCountryCode;
@@ -29,7 +28,6 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
     final client = ClientController.instance.currentClient;
     _nameController = TextEditingController(text: client?.name ?? '');
     _phoneController = TextEditingController(text: client?.phone ?? '');
-    _passwordController = TextEditingController(text: client?.password ?? '');
     _selectedCountryCode = client?.countryCode ?? '+57';
   }
 
@@ -37,17 +35,15 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
-    _passwordController.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
     if (!_formKey.currentState!.validate()) return;
-    
+
     final success = await ClientController.instance.updateCurrentClient(
       name: _nameController.text.trim(),
       phone: _phoneController.text.trim(),
-      password: _passwordController.text,
       countryCode: _selectedCountryCode,
     );
 
@@ -79,21 +75,21 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
           builder: (context, _) {
             final client = ClientController.instance.currentClient;
             if (client == null) return const SizedBox.shrink();
-            
+
             final isSubmitting = ClientController.instance.isLoading;
             final availableCodes = ClientController.instance.countryCodes;
 
             List<DropdownMenuItem<String>> dropdownItems = [];
-            
+
             if (availableCodes.isNotEmpty) {
-              if (!availableCodes.any((c) => c.callingCode == _selectedCountryCode)) {
-                _selectedCountryCode = availableCodes.first.callingCode;
+              if (!availableCodes.any((c) => c.dialCode == _selectedCountryCode)) {
+                _selectedCountryCode = availableCodes.first.dialCode;
               }
-              
+
               dropdownItems = availableCodes.map((code) {
                 return DropdownMenuItem(
-                  value: code.callingCode,
-                  child: Text('${code.countryCode} ${code.callingCode}'),
+                  value: code.dialCode,
+                  child: Text('${code.isoCode} ${code.dialCode}'),
                 );
               }).toList();
             } else {
@@ -145,7 +141,9 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                               decoration: InputDecoration(
                                 labelText: 'Cód.',
                                 filled: true,
-                                fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                                fillColor: Theme.of(context)
+                                    .colorScheme
+                                    .surfaceContainerHighest,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(AppRadius.md),
                                   borderSide: BorderSide.none,
@@ -180,23 +178,6 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.s4),
-                      AppTextField(
-                        label: 'Contraseña',
-                        controller: _passwordController,
-                        enabled: !isSubmitting,
-                        obscureText: true,
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        validator: (value) {
-                          if (value == null || value.trim().isEmpty) {
-                            return 'La contraseña es obligatoria';
-                          }
-                          if (value.length < 4) {
-                            return 'Mínimo 4 caracteres';
-                          }
-                          return null;
-                        },
-                      ),
                     ],
                   ),
                 ),
@@ -215,7 +196,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                 ),
               ],
             );
-          }
+          },
         ),
       ),
     );
@@ -229,18 +210,19 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .10),
+              color: Theme.of(context)
+                  .colorScheme
+                  .primary
+                  .withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.xl),
             ),
             alignment: Alignment.center,
             child: Text(
               client.initials,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
+                    color: Theme.of(context).colorScheme.primary,
+                    fontWeight: FontWeight.w700,
+                  ),
             ),
           ),
           const SizedBox(height: AppSpacing.s3),
@@ -253,8 +235,8 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
           Text(
             client.email,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: context.appColors.textSecondary,
-            ),
+                  color: context.appColors.textSecondary,
+                ),
           ),
         ],
       ),

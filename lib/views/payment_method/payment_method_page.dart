@@ -3,6 +3,7 @@ import 'package:machuco/controllers/payment_method/payment_method_controller.dar
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/widgets/payment_method/card_network_logo.dart';
 
 class PaymentMethodPage extends StatefulWidget {
   const PaymentMethodPage({
@@ -100,6 +101,27 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                     ),
                   ),
                   const SizedBox(height: AppSpacing.s3),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<CardPaymentKind>(
+                      segments: const [
+                        ButtonSegment(
+                          value: CardPaymentKind.credit,
+                          label: Text('Crédito'),
+                          icon: Icon(Icons.credit_card_outlined),
+                        ),
+                        ButtonSegment(
+                          value: CardPaymentKind.debit,
+                          label: Text('Débito'),
+                          icon: Icon(Icons.account_balance_wallet_outlined),
+                        ),
+                      ],
+                      selected: {_controller.cardKind},
+                      onSelectionChanged: (selection) =>
+                          _controller.changeCardKind(selection.first),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
                   AppTextField(
                     label: 'Nombre del titular',
                     errorText: _controller.cardHolderError,
@@ -159,22 +181,24 @@ class _PaymentMethodPageState extends State<PaymentMethodPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.s3),
-                  DropdownButtonFormField<int>(
-                    initialValue: _controller.installments,
-                    decoration: const InputDecoration(labelText: 'Cuotas'),
-                    items: List.generate(12, (index) => index + 1)
-                        .map(
-                          (value) => DropdownMenuItem(
-                            value: value,
-                            child: Text(
-                              value == 1 ? '1 cuota' : '$value cuotas',
+                  if (_controller.cardKind == CardPaymentKind.credit) ...[
+                    const SizedBox(height: AppSpacing.s3),
+                    DropdownButtonFormField<int>(
+                      initialValue: _controller.installments,
+                      decoration: const InputDecoration(labelText: 'Cuotas'),
+                      items: List.generate(12, (index) => index + 1)
+                          .map(
+                            (value) => DropdownMenuItem(
+                              value: value,
+                              child: Text(
+                                value == 1 ? '1 cuota' : '$value cuotas',
+                              ),
                             ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: _controller.changeInstallments,
-                  ),
+                          )
+                          .toList(),
+                      onChanged: _controller.changeInstallments,
+                    ),
+                  ],
                   if (_controller.message case final message?) ...[
                     const SizedBox(height: AppSpacing.s4),
                     _PaymentResult(
@@ -224,17 +248,26 @@ class _CardPreview extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
-        const Row(
+        Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Icon(Icons.nfc, color: Colors.white, size: 32),
-            Text(
-              'TARJETA',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-              ),
+            const Icon(Icons.nfc, color: Colors.white, size: 32),
+            AnimatedSwitcher(
+              duration: const Duration(milliseconds: 200),
+              child: controller.detectedNetwork == CardNetwork.unknown
+                  ? const Text(
+                      'TARJETA',
+                      key: ValueKey('unknown'),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    )
+                  : CardNetworkLogo(
+                      key: ValueKey(controller.detectedNetwork),
+                      network: controller.detectedNetwork,
+                    ),
             ),
           ],
         ),

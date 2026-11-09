@@ -328,6 +328,39 @@ void main() {
   });
 
   test(
+    'importa pagos remotos sin regresar un pago local a pendiente',
+    () async {
+      final repo = repository();
+      await repo.createPayment(payment(status: PaymentStatus.paid));
+      await repo.mergeRemotePayments(
+        motelId: 'motel-1',
+        payments: [payment(status: PaymentStatus.pending)],
+      );
+      await repo.mergeRemotePayments(
+        motelId: 'motel-1',
+        payments: [payment(id: 'remote-pay')],
+      );
+
+      expect((await repo.findPayment('pay-1'))!.status, PaymentStatus.paid);
+      expect(
+        (await repo.findPayment('remote-pay'))!.status,
+        PaymentStatus.pending,
+      );
+    },
+  );
+
+  test('rechaza pagos remotos pertenecientes a otro motel', () async {
+    final repo = repository();
+    await expectLater(
+      repo.mergeRemotePayments(
+        motelId: 'motel-1',
+        payments: [payment(motelId: 'motel-2')],
+      ),
+      throwsA(repositoryError(PaymentRepositoryError.invalidPayment)),
+    );
+  });
+
+  test(
     'registra y conserva un pago en el local sin consultar Supabase',
     () async {
       await repository().findPaymentMethods();
