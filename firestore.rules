@@ -103,45 +103,241 @@ service cloud.firestore {
         && data.phoneNumber.size() >= 4 && data.phoneNumber.size() <= 20;
     }
 
+    // Administrador con cuenta activa (no basta con tener el rol). Uno creado
+    // con contrasena temporal (mustChangePassword) aun no cuenta como activo
+    // para estas reglas: primero debe cambiarla.
+    function isActiveAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('mustChangePassword', false) != true;
+    }
+
+    // Registro de administradores activos (system/adminRegistry). Cuenta todo
+    // admin con accountStatus == 'active', incluso con contrasena temporal
+    // pendiente. Crear un admin lo sube 1 y anonimizar lo baja 1, en la misma
+    // transaccion (getAfter ve el estado resultante del lote).
+    function adminRegistryPath() {
+      return /databases/$(database)/documents/system/adminRegistry;
+    }
+
+    function registryCountBefore() {
+      return get(adminRegistryPath()).data.activeAdminCount;
+    }
+
+    function registryCountAfter() {
+      return getAfter(adminRegistryPath()).data.activeAdminCount;
+    }
+
+    // Un admin activo crea a otro admin: activo, con contrasena temporal
+    // pendiente, auditado y sumando 1 al registro.
+    function isAdminCreation(uid) {
+      let data = request.resource.data;
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'mustChangePassword', 'createdBy'])
+        && data.keys().hasAll([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'mustChangePassword', 'createdBy'])
+        && hasValidContactFields(data)
+        && hasValidCommonExtras(data)
+        && data.email is string
+        && data.email.size() <= 254
+        && data.email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')
+        && data.role == 'admin'
+        && data.accountStatus == 'active'
+        && data.mustChangePassword == true
+        && data.createdBy == request.auth.uid
+        && data.createdAt == request.time
+        && registryCountAfter() == registryCountBefore() + 1;
+    }
+
+    // Un admin activo edita datos de contacto de un admin activo (no del
+    // correo, el rol ni el estado). Nunca sobre uno anonimizado.
+    function isAdminContactEdit() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'admin'
+        && before.accountStatus == 'active'
+        && after.diff(before).affectedKeys().hasOnly([
+          'firstNames', 'lastNames', 'fullName', 'phoneCountryCodeId',
+          'phoneNumber'])
+        && hasValidContactFields(after)
+        && hasValidCommonExtras(after);
+    }
+
+    // Anonimizar un admin activo (a otro o a si mismo): el documento queda solo
+    // con los campos permitidos y el registro baja 1 sin quedar por debajo de 1.
+    function isAdminAnonymization() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'admin'
+        && before.accountStatus == 'active'
+        && after.keys().hasOnly([
+          'fullName', 'role', 'accountStatus', 'createdAt', 'createdBy',
+          'anonymizedAt', 'anonymizedBy'])
+        && after.keys().hasAll([
+          'fullName', 'role', 'accountStatus', 'anonymizedAt', 'anonymizedBy'])
+        && after.fullName == 'Administrador eliminado'
+        && after.role == 'admin'
+        && after.accountStatus == 'anonymized'
+        && after.get('createdAt', null) == before.get('createdAt', null)
+        && after.get('createdBy', null) == before.get('createdBy', null)
+        && after.anonymizedAt == request.time
+        && after.anonymizedBy == request.auth.uid
+        && registryCountAfter() == registryCountBefore() - 1
+        && registryCountAfter() >= 1;
+    }
+
+    // Campos comunes opcionales del registro por rol (los perfiles antiguos
+    // solo traen fullName, email y phoneNumber).
+    function hasValidCommonExtras(data) {
+      return (!('firstNames' in data)
+          || (data.firstNames is string
+            && data.firstNames.size() >= 2 && data.firstNames.size() <= 50))
+        && (!('lastNames' in data)
+          || (data.lastNames is string
+            && data.lastNames.size() >= 2 && data.lastNames.size() <= 50))
+        && (!('phoneCountryCodeId' in data)
+          || (data.phoneCountryCodeId is int && data.phoneCountryCodeId > 0));
+    }
+
+    // Cliente: sin campos de propietario; fecha de nacimiento real, no futura
+    // y de mayor de edad (18 * 365 dias: nunca rechaza a un adulto por bisiestos).
+    function hasValidClientExtras(data) {
+      return !('personType' in data)
+        && !('nit' in data)
+        && !('companyName' in data)
+        && !('planId' in data)
+        && (!('birthDate' in data)
+          || (data.birthDate is timestamp
+            && data.birthDate <= request.time - duration.value(6570, 'd')
+            && data.birthDate.year() >= 1900));
+    }
+
+    // Propietario: tipo de persona y NIT (base 6-10 digitos + guion + DV)
+    // obligatorios; sin fecha de nacimiento; razon social solo juridica.
+    function hasValidOwnerExtras(data) {
+      return !('birthDate' in data)
+        && 'personType' in data
+        && data.personType in ['natural', 'juridica']
+        && 'nit' in data
+        && data.nit is string
+        && data.nit.matches('^[0-9]{6,10}-[0-9]$')
+        && (!('companyName' in data)
+          || (data.personType == 'juridica'
+            && data.companyName is string
+            && data.companyName.size() >= 2
+            && data.companyName.size() <= 120))
+        && (!('planId' in data)
+          || (data.planId is int && data.planId > 0));
+    }
+
+    // Un admin activo atiende una solicitud de propietario SOLO si sigue en
+    // pending_approval, y solo escribe estado + auditoria (nunca el rol).
+    function isOwnerApprovalDecision(uid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changed = after.diff(before).affectedKeys();
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && before.role == 'owner'
+        && before.accountStatus == 'pending_approval'
+        && (
+          (after.accountStatus == 'active'
+            && changed.hasOnly(['accountStatus', 'approvedBy', 'approvedAt'])
+            && changed.hasAll(['accountStatus', 'approvedBy', 'approvedAt'])
+            && after.approvedBy == request.auth.uid
+            && after.approvedAt == request.time)
+          ||
+          (after.accountStatus == 'rejected'
+            && changed.hasOnly(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && changed.hasAll(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && after.rejectionReason is string
+            && after.rejectionReason.size() >= 10
+            && after.rejectionReason.size() <= 300
+            && after.rejectedBy == request.auth.uid
+            && after.rejectedAt == request.time)
+        );
+    }
+
+    // Registro publico: nunca admin; cliente activo, propietario pendiente.
+    function isPublicRegistration(uid) {
+      return isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(
+          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
+        && request.resource.data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'birthDate', 'personType', 'nit', 'companyName', 'planId'])
+        && hasValidContactFields(request.resource.data)
+        && hasValidCommonExtras(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['client', 'owner']
+        && (
+          (request.resource.data.role == 'client'
+            && request.resource.data.accountStatus == 'active'
+            && hasValidClientExtras(request.resource.data))
+          ||
+          (request.resource.data.role == 'owner'
+            && request.resource.data.accountStatus == 'pending_approval'
+            && hasValidOwnerExtras(request.resource.data))
+        )
+        && request.resource.data.createdAt == request.time;
+    }
+
     // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
     // se pueden asignar en la creacion (valores iniciales) o por un admin.
     match /users/{uid} {
       allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
 
-      // Registro publico: nunca admin; cliente activo, propietario pendiente.
-      allow create: if isSignedIn()
-        && request.auth.uid == uid
-        && request.resource.data.keys().hasOnly(
-          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
-        && hasValidContactFields(request.resource.data)
-        && request.resource.data.email == request.auth.token.email
-        && request.resource.data.role in ['client', 'owner']
-        && (
-          (request.resource.data.role == 'client'
-            && request.resource.data.accountStatus == 'active')
-          ||
-          (request.resource.data.role == 'owner'
-            && request.resource.data.accountStatus == 'pending_approval')
-        )
-        && request.resource.data.createdAt == request.time;
+      // Registro publico (nunca admin; cliente activo, propietario pendiente)
+      // o creacion de un administrador por otro administrador activo.
+      allow create: if isPublicRegistration(uid) || isAdminCreation(uid);
 
-      // Un admin solo cambia el estado de la cuenta (aprobar, rechazar,
-      // deshabilitar); nunca el rol, ni siquiera el suyo. Si la aprobacion de
-      // propietarios necesita mas campos (p. ej. motivo de rechazo), se
-      // agregan aqui de forma explicita.
-      // El propio usuario solo puede cambiar su nombre y su celular.
-      allow update: if (isAdmin()
+      // Un admin activo (a) atiende solicitudes de propietarios pendientes
+      // (ver isOwnerApprovalDecision), (b) habilita/deshabilita cuentas que
+      // no son de administrador, (c) edita datos de contacto de un admin
+      // activo o (d) anonimiza un admin activo; nunca cambia el rol ni el
+      // correo. El propio usuario solo puede cambiar su nombre y su celular y,
+      // si es un admin con contrasena temporal, limpiar mustChangePassword.
+      // Ninguna rama modifica una cuenta anonimizada.
+      allow update: if resource.data.get('accountStatus', '') != 'anonymized'
+        && (isOwnerApprovalDecision(uid)
+        || (isActiveAdmin()
+          && resource.data.role != 'admin'
+          && resource.data.accountStatus in ['active', 'disabled']
           && request.resource.data.diff(resource.data).affectedKeys()
               .hasOnly(['accountStatus'])
-          && request.resource.data.accountStatus
-              in ['active', 'pending_approval', 'rejected', 'disabled'])
+          && request.resource.data.accountStatus in ['active', 'disabled'])
+        || isAdminContactEdit()
+        || isAdminAnonymization()
         || (isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['fullName', 'phoneNumber'])
-          && hasValidContactFields(request.resource.data));
+              .hasOnly(['fullName', 'phoneNumber', 'mustChangePassword'])
+          && hasValidContactFields(request.resource.data)
+          && (!('mustChangePassword' in request.resource.data.diff(resource.data).affectedKeys())
+            || (resource.data.get('mustChangePassword', false) == true
+              && request.resource.data.mustChangePassword == false))));
 
-      allow delete: if false;
+      // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
+      // tras reautenticarse). Las subcolecciones no se borran en cascada.
+      // Un admin no lo borra: se anonimiza (ver isAdminAnonymization) para
+      // conservar la auditoria y respetar "siempre hay un admin activo".
+      allow delete: if isSignedIn()
+        && request.auth.uid == uid
+        && resource.data.role != 'admin'
+        && resource.data.get('accountStatus', '') != 'anonymized';
 
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
@@ -161,6 +357,26 @@ service cloud.firestore {
           allow delete: if false;
         }
       }
+    }
+
+    // Contador de administradores activos ("siempre debe existir uno"). Solo
+    // un admin activo lo lee; lo crea con un conteo >= 1 y solo lo cambia en
+    // +-1 sin bajar de 1. La app lo cambia en la misma transaccion que crea o
+    // anonimiza un admin (ver isAdminCreation e isAdminAnonymization, que
+    // exigen ese cambio).
+    match /system/adminRegistry {
+      allow read: if isActiveAdmin();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly(['activeAdminCount'])
+        && request.resource.data.activeAdminCount is int
+        && request.resource.data.activeAdminCount >= 1;
+      allow update: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly(['activeAdminCount'])
+        && request.resource.data.activeAdminCount is int
+        && request.resource.data.activeAdminCount >= 1
+        && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
+          || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1);
+      allow delete: if false;
     }
 
     // Pagos sincronizados con Cloud Firestore. El propietario los lee y los
@@ -196,7 +412,7 @@ service cloud.firestore {
     }
 
     // Propietarios: dato de dominio administrado solo por el rol admin. El
-    // propietario no se autogestiona desde la app, por eso la colección no se
+    // propietario no se autogestiona desde la app, por eso la coleccion no se
     // expone a isActiveOwner().
     function hasValidOwnerFields(data) {
       return data.keys().hasOnly([

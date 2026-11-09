@@ -4,12 +4,12 @@ import 'dart:async';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
+import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/document_type/document_type_entry.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
-import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
-import 'package:machuco/database/repository/document_type/document_type_repository.dart';
+import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
@@ -36,7 +36,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 16,
+  version: 14,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -47,13 +47,11 @@ part 'app_database.g.dart';
     ClientEntry,
     PhoneCountryCode,
     MotelEntity,
-    OwnerEntry,
-    DocumentTypeEntry,
+    AuthUserProfileEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
-  AuthCatalogDao? _authCatalogDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
@@ -66,11 +64,8 @@ abstract class AppDatabase extends FloorDatabase {
 
   ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
-
-  AuthCatalogDao get authCatalogDao => _authCatalogDao ??= AuthCatalogDao(
-    () async => database as sqflite.Database,
-  );
   MotelDao get motelDao;
+  AuthUserProfileDao get authUserProfileDao;
 }
 
 class AppDatabaseProvider {
@@ -99,8 +94,6 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
-        migration14To15,
-        migration15To16,
       ])
       .addCallback(
         Callback(
@@ -359,7 +352,10 @@ Future<void> _createClientSchema(sqflite.Database database) async {
   );
 }
 
-/// Maestros del módulo de autenticación (caché local de Supabase).
+/// Tabla obsoleta: el registro ahora usa `phone_country_codes` (entidad
+/// compartida `PhoneCountryCode`), que es la tabla que existe en Supabase.
+/// Se sigue creando para no cambiar el esquema compartido sin coordinar una
+/// migración con las demás ramas; retirarla en una migración acordada.
 Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
   await database.execute('''
     CREATE TABLE IF NOT EXISTS country_phone_codes (
@@ -395,149 +391,23 @@ final migration11To12 = Migration(11, 12, (database) async {
   }
 });
 
-/// Agrega la tabla de propietarios del módulo de administración de dueños.
-///
-/// La rama de propietarios publicó esto como 9->10, pero develop reclamó esa
-/// versión para `motels`; por eso viaja como 12->13 y usa `IF NOT EXISTS` para
-/// ser segura sobre bases que ya la tuvieran.
-final migration12To13 = Migration(12, 13, (database) async {
-  await _createOwnerSchema(database);
-});
+/// Retira únicamente los identificadores de los antiguos ejemplos de room.
+final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 
-Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS owners (
-      id TEXT NOT NULL PRIMARY KEY,
-      fullName TEXT NOT NULL,
-      documentType TEXT NOT NULL,
-      documentNumber TEXT NOT NULL,
-      email TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      address TEXT,
-      isActive INTEGER NOT NULL,
-      synchronized INTEGER NOT NULL,
-      createdAt INTEGER NOT NULL,
-      updatedAt INTEGER NOT NULL
-    )
-  ''');
-}
-
-/// Separa el indicativo del país del número nacional.
+/// Agrega la caché de una sola fila del perfil del usuario autenticado
+/// (módulo de autenticación). Mismo DDL que genera Floor para la entidad
+/// `AuthUserProfileEntry`; no guarda NIT ni fecha de nacimiento.
 ///
-/// `owners` se creó en 12->13 con el teléfono concatenado; aquí se agregan las
-/// columnas que lo dividen y el nombre del país para mostrarlo sin consultar
-/// el maestro. Se consulta `PRAGMA table_info` porque una base nueva ya nace
-/// con ambas columnas.
+/// Es idempotente porque esta tabla se creó antes como v13 en la rama de
+/// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
+/// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
 final migration13To14 = Migration(13, 14, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(owners)');
-  final names = columns.map((column) => column['name']).toSet();
-
-  if (!names.contains('countryCode')) {
-    await database.execute('ALTER TABLE owners ADD COLUMN countryCode TEXT');
-  }
-  if (!names.contains('countryName')) {
-    await database.execute('ALTER TABLE owners ADD COLUMN countryName TEXT');
-  }
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
+    '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
+    '`first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, '
+    '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
+    '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
+    '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
 });
-
-/// Maestro de tipos de documento que alimenta el selector del formulario.
-///
-/// Antes vivía solo en el enum `DocumentType`. La tabla permite retirar o
-/// reordenar opciones sin recompilar y es la contraparte local de la tabla
-/// remota. Las filas usan `code` para mapearse al enum del dominio.
-final migration14To15 = Migration(14, 15, (database) async {
-  await _createDocumentTypeSchema(database);
-  await _seedDocumentTypes(database);
-});
-
-/// Borrados diferidos de propietarios.
-///
-/// Antes, eliminar sin conexión obligaba a conservar el registro. Ahora la fila
-/// queda oculta con `pendingDelete = 1` hasta que Firestore confirme el
-/// borrado, de modo que la sincronización puede reintentarlo sola.
-final migration15To16 = Migration(15, 16, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(owners)');
-  final names = columns.map((column) => column['name']).toSet();
-  if (!names.contains('pendingDelete')) {
-    await database.execute(
-      'ALTER TABLE owners ADD COLUMN pendingDelete INTEGER NOT NULL '
-      'DEFAULT 0',
-    );
-  }
-});
-
-Future<void> _createDocumentTypeSchema(
-  sqflite.DatabaseExecutor database,
-) async {
-  await database.execute('''
-    CREATE TABLE IF NOT EXISTS document_types (
-      id INTEGER NOT NULL PRIMARY KEY,
-      code TEXT NOT NULL,
-      name TEXT NOT NULL,
-      pattern TEXT NOT NULL,
-      example TEXT NOT NULL,
-      isActive INTEGER NOT NULL,
-      sortOrder INTEGER NOT NULL
-    )
-  ''');
-}
-
-/// Semillas del maestro; `INSERT OR IGNORE` permite correrla también en bases
-/// nuevas, donde Floor ya creó la tabla vacía.
-Future<void> _seedDocumentTypes(sqflite.DatabaseExecutor database) async {
-  const rows = [
-    {
-      'id': 1,
-      'code': 'CC',
-      'name': 'Cédula de ciudadanía',
-      'pattern': r'^\d{6,10}$',
-      'example': '1020304050',
-      'isActive': 1,
-      'sortOrder': 1,
-    },
-    {
-      'id': 2,
-      'code': 'CE',
-      'name': 'Cédula de extranjería',
-      'pattern': r'^\d{6,12}$',
-      'example': '345678',
-      'isActive': 1,
-      'sortOrder': 2,
-    },
-    {
-      'id': 3,
-      'code': 'NIT',
-      'name': 'Número de identificación tributaria',
-      'pattern': r'^\d{9,10}(-\d)?$',
-      'example': '900123456-7',
-      'isActive': 1,
-      'sortOrder': 3,
-    },
-    {
-      'id': 4,
-      'code': 'PAS',
-      'name': 'Pasaporte',
-      'pattern': r'^[A-Za-z0-9]{6,12}$',
-      'example': 'AV123456',
-      'isActive': 1,
-      'sortOrder': 4,
-    },
-    {
-      'id': 5,
-      'code': 'TI',
-      'name': 'Tarjeta de identidad',
-      'pattern': r'^\d{6,11}$',
-      'example': '1020304050',
-      'isActive': 1,
-      'sortOrder': 5,
-    },
-  ];
-
-  for (final row in rows) {
-    await database.insert(
-      'document_types',
-      row,
-      conflictAlgorithm: sqflite.ConflictAlgorithm.ignore,
-    );
-  }
-}
