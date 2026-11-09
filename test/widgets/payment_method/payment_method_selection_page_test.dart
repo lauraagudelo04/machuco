@@ -35,7 +35,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Pago en recepción'), findsOneWidget);
-    expect(find.text('Paga cuando llegues al establecimiento.'), findsOneWidget);
+    expect(
+      find.text('Paga cuando llegues al establecimiento.'),
+      findsOneWidget,
+    );
     expect(find.text('Finalizar'), findsOneWidget);
   });
 

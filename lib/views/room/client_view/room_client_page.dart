@@ -1,3 +1,4 @@
+import 'package:machuco/controllers/room/room_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/room/room_client_controller.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
@@ -25,16 +26,37 @@ class RoomClientPage extends StatefulWidget {
 }
 
 class _RoomClientPageState extends State<RoomClientPage> {
-  late final RoomClientController _controller;
+  late RoomClientController _controller;
+  bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     _controller = RoomClientController(
       motelId: widget.motel.id,
-      seedRooms: widget.rooms,
-      seedTypes: widget.types,
+      seedRooms: widget.rooms ?? const [],
+      seedTypes: widget.types ?? const [],
     );
+    _loadRooms();
+  }
+
+  Future<void> _loadRooms() async {
+    final data = RoomController.fromEnvironment();
+    try {
+      await data.loadLocalData();
+      if (!mounted) return;
+      _controller = RoomClientController(
+        motelId: widget.motel.id,
+        seedRooms: widget.rooms ?? data.rooms,
+        seedTypes: widget.types ?? data.roomTypes,
+      );
+    } catch (_) {
+      _loadError = 'No fue posible cargar las habitaciones guardadas.';
+    } finally {
+      data.dispose();
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -42,117 +64,129 @@ class _RoomClientPageState extends State<RoomClientPage> {
     final types = _controller.activeRoomTypes;
     return Scaffold(
       appBar: AppBar(title: const Text('Tipos de habitación')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? Center(child: Text(_loadError!))
+          : SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(AppSpacing.screen),
                 children: [
-                  Text(
-                    'Cliente',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s1),
-                  Text(
-                    'Tipos disponibles',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.s2),
-                  Text(
-                    'Consulta los tipos que tienen habitaciones activas. La habitación y el horario se asignan al crear la reserva.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: AppSpacing.s3),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: context.appColors.elevated,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
-                    ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.s3,
-                        vertical: AppSpacing.s2,
-                      ),
-                      child: Text(widget.motel.name),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            Text(
-              '${types.length} tipos disponibles',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            if (types.isEmpty)
-              const _EmptyState()
-            else
-              ...types.map(
-                (type) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: AppCard(
-                    onTap: () {
-                      final room = _controller.firstActiveRoomForType(type.id);
-                      if (room == null) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            backgroundColor: AppColors.maintenance,
-                            content: Row(
-                              children: [
-                                Icon(
-                                  Icons.warning_amber_rounded,
-                                  color: Colors.black87,
-                                ),
-                                SizedBox(width: AppSpacing.s2),
-                                Expanded(
-                                  child: Text(
-                                    'Este tipo ya no tiene habitaciones disponibles. Actualiza la lista.',
-                                    style: TextStyle(color: Colors.black87),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      Navigator.of(context).pushNamed(
-                        AppRoutes.clientCreateBooking,
-                        arguments: room,
-                      );
-                    },
-                    child: Row(
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _TypePreview(
-                          imageUrl: _controller.previewImageForType(type.id),
+                        Text(
+                          'Cliente',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
                         ),
-                        const SizedBox(width: AppSpacing.s3),
-                        Expanded(
-                          child: Text(
-                            type.name,
-                            style: Theme.of(context).textTheme.titleLarge,
+                        const SizedBox(height: AppSpacing.s1),
+                        Text(
+                          'Tipos disponibles',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.s2),
+                        Text(
+                          'Consulta los tipos que tienen habitaciones activas. La habitación y el horario se asignan al crear la reserva.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: context.appColors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.s3),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: context.appColors.elevated,
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
                           ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 16,
-                          color: context.appColors.textSecondary,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.s3,
+                              vertical: AppSpacing.s2,
+                            ),
+                            child: Text(widget.motel.name),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ),
+                  const SizedBox(height: AppSpacing.s5),
+                  Text(
+                    '${types.length} tipos disponibles',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
+                  if (types.isEmpty)
+                    const _EmptyState()
+                  else
+                    ...types.map(
+                      (type) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                        child: AppCard(
+                          onTap: () {
+                            final room = _controller.firstActiveRoomForType(
+                              type.id,
+                            );
+                            if (room == null) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  backgroundColor: AppColors.maintenance,
+                                  content: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.black87,
+                                      ),
+                                      SizedBox(width: AppSpacing.s2),
+                                      Expanded(
+                                        child: Text(
+                                          'Este tipo ya no tiene habitaciones disponibles. Actualiza la lista.',
+                                          style: TextStyle(
+                                            color: Colors.black87,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+                            Navigator.of(context).pushNamed(
+                              AppRoutes.clientCreateBooking,
+                              arguments: room,
+                            );
+                          },
+                          child: Row(
+                            children: [
+                              _TypePreview(
+                                imageUrl: _controller.previewImageForType(
+                                  type.id,
+                                ),
+                              ),
+                              const SizedBox(width: AppSpacing.s3),
+                              Expanded(
+                                child: Text(
+                                  type.name,
+                                  style: Theme.of(context).textTheme.titleLarge,
+                                ),
+                              ),
+                              Icon(
+                                Icons.arrow_forward_ios_rounded,
+                                size: 16,
+                                color: context.appColors.textSecondary,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
               ),
-          ],
-        ),
-      ),
+            ),
     );
   }
 }

@@ -1,4 +1,3 @@
-import 'package:machuco/controllers/room/room_mock_data.dart';
 import 'package:machuco/models/room/room_models.dart';
 
 class RoomOwnerController {
@@ -6,8 +5,8 @@ class RoomOwnerController {
     required this.motelId,
     List<RoomVisualData>? seedRooms,
     List<RoomTypeData>? seedTypes,
-  }) : _rooms = List.of(seedRooms ?? buildRoomMockData()),
-       _types = List.of(seedTypes ?? buildRoomTypeMockData());
+  }) : _rooms = List.of(seedRooms ?? const []),
+       _types = List.of(seedTypes ?? const []);
 
   final String motelId;
   final List<RoomVisualData> _rooms;
@@ -59,6 +58,10 @@ class RoomOwnerController {
           _normalize(room.roomNumber) == normalizedNumber,
     );
   }
+
+  void deleteRoom(String roomId) => _rooms.removeWhere(
+    (room) => room.id == roomId && room.motelId == motelId,
+  );
 
   void addRoom(RoomVisualData room) => _rooms.add(room);
 

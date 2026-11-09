@@ -3,7 +3,9 @@ import 'package:machuco/models/auth/registered_user.dart';
 /// Lifecycle state of a user account.
 ///
 /// Stored in `users/{uid}.accountStatus` using [storageValue] (snake_case).
-enum AccountStatus { active, pendingApproval, rejected, disabled }
+/// [anonymized] is final: an administrator that was deleted keeps its uid and
+/// audit trail but no personal data, and can never sign in again.
+enum AccountStatus { active, pendingApproval, rejected, disabled, anonymized }
 
 /// Maps an [AccountStatus] to the snake_case value stored in Firestore.
 extension AccountStatusStorage on AccountStatus {
@@ -12,6 +14,7 @@ extension AccountStatusStorage on AccountStatus {
     AccountStatus.pendingApproval => 'pending_approval',
     AccountStatus.rejected => 'rejected',
     AccountStatus.disabled => 'disabled',
+    AccountStatus.anonymized => 'anonymized',
   };
 }
 
@@ -23,6 +26,7 @@ AccountStatus? accountStatusFromStorage(String? value) {
     'pending_approval' => AccountStatus.pendingApproval,
     'rejected' => AccountStatus.rejected,
     'disabled' => AccountStatus.disabled,
+    'anonymized' => AccountStatus.anonymized,
     _ => null,
   };
 }

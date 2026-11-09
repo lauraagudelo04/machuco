@@ -1,3 +1,4 @@
+import 'package:machuco/controllers/room/room_controller.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/room/room_admin_controller.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
@@ -14,12 +15,7 @@ import 'package:machuco/views/room/room_status_badge.dart';
 /// Consulta de habitaciones para el administrador del sistema.
 /// Los tipos se expanden como en la vista de propietario, sin acciones de edición.
 class RoomAdminPage extends StatefulWidget {
-  const RoomAdminPage({
-    super.key,
-    required this.motel,
-    this.rooms,
-    this.types,
-  });
+  const RoomAdminPage({super.key, required this.motel, this.rooms, this.types});
   final Motel motel;
   final List<RoomVisualData>? rooms;
   final List<RoomTypeData>? types;
@@ -31,16 +27,37 @@ class RoomAdminPage extends StatefulWidget {
 class _RoomAdminPageState extends State<RoomAdminPage> {
   final _searchController = TextEditingController();
   final Set<String> _expandedTypeIds = <String>{};
-  late final RoomAdminController _controller;
+  late RoomAdminController _controller;
+  bool _loading = true;
+  String? _loadError;
 
   @override
   void initState() {
     super.initState();
     _controller = RoomAdminController(
       motelId: widget.motel.id,
-      seedRooms: widget.rooms,
-      seedTypes: widget.types,
+      seedRooms: widget.rooms ?? const [],
+      seedTypes: widget.types ?? const [],
     );
+    _loadRooms();
+  }
+
+  Future<void> _loadRooms() async {
+    final data = RoomController.fromEnvironment();
+    try {
+      await data.loadLocalData();
+      if (!mounted) return;
+      _controller = RoomAdminController(
+        motelId: widget.motel.id,
+        seedRooms: widget.rooms ?? data.rooms,
+        seedTypes: widget.types ?? data.roomTypes,
+      );
+    } catch (_) {
+      _loadError = 'No fue posible cargar las habitaciones guardadas.';
+    } finally {
+      data.dispose();
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override
@@ -54,101 +71,111 @@ class _RoomAdminPageState extends State<RoomAdminPage> {
     final types = _controller.roomTypes;
     return Scaffold(
       appBar: AppBar(title: const Text('Habitaciones')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
-          children: [
-            AppCard(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      body: _loading
+          ? const Center(child: CircularProgressIndicator())
+          : _loadError != null
+          ? Center(child: Text(_loadError!))
+          : SafeArea(
+              child: ListView(
+                padding: const EdgeInsets.all(AppSpacing.screen),
                 children: [
-                  Text(
-                    'Administración',
-                    style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      color: Theme.of(context).colorScheme.primary,
+                  AppCard(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Administración',
+                          style: Theme.of(context).textTheme.labelLarge
+                              ?.copyWith(
+                                color: Theme.of(context).colorScheme.primary,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.s1),
+                        Text(
+                          'Tipos y habitaciones',
+                          style: Theme.of(context).textTheme.headlineMedium,
+                        ),
+                        const SizedBox(height: AppSpacing.s2),
+                        Text(
+                          'Consulta los tipos del motel y despliega sus habitaciones. Esta vista es solo de lectura.',
+                          style: Theme.of(context).textTheme.bodyMedium
+                              ?.copyWith(
+                                color: context.appColors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(height: AppSpacing.s3),
+                        DecoratedBox(
+                          decoration: BoxDecoration(
+                            color: context.appColors.elevated,
+                            borderRadius: BorderRadius.circular(AppRadius.pill),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: AppSpacing.s3,
+                              vertical: AppSpacing.s2,
+                            ),
+                            child: Text(widget.motel.name),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.s1),
+                  const SizedBox(height: AppSpacing.s5),
                   Text(
-                    'Tipos y habitaciones',
-                    style: Theme.of(context).textTheme.headlineMedium,
-                  ),
-                  const SizedBox(height: AppSpacing.s2),
-                  Text(
-                    'Consulta los tipos del motel y despliega sus habitaciones. Esta vista es solo de lectura.',
-                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      color: context.appColors.textSecondary,
-                    ),
+                    'Tipos de habitación',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
                   const SizedBox(height: AppSpacing.s3),
-                  DecoratedBox(
-                    decoration: BoxDecoration(
-                      color: context.appColors.elevated,
-                      borderRadius: BorderRadius.circular(AppRadius.pill),
+                  if (types.isEmpty)
+                    const _AdminEmptyState(
+                      message: 'No hay tipos registrados para este motel.',
+                    )
+                  else ...[
+                    AppTextField(
+                      label: 'Buscar habitación',
+                      controller: _searchController,
+                      hint: 'Nombre, número o descripción',
+                      prefixIcon: const Icon(Icons.search),
+                      onChanged: (_) => setState(() {}),
                     ),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: AppSpacing.s3,
-                        vertical: AppSpacing.s2,
-                      ),
-                      child: Text(widget.motel.name),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: AppSpacing.s5),
-            Text(
-              'Tipos de habitación',
-              style: Theme.of(context).textTheme.titleLarge,
-            ),
-            const SizedBox(height: AppSpacing.s3),
-            if (types.isEmpty)
-              const _AdminEmptyState(
-                message: 'No hay tipos registrados para este motel.',
-              )
-            else ...[
-              AppTextField(
-                label: 'Buscar habitación',
-                controller: _searchController,
-                hint: 'Nombre, número o descripción',
-                prefixIcon: const Icon(Icons.search),
-                onChanged: (_) => setState(() {}),
-              ),
-              const SizedBox(height: AppSpacing.s4),
-              ...types.map(
-                (type) => Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                  child: _AdminTypeCard(
-                    type: type,
-                    expanded: _expandedTypeIds.contains(type.id),
-                    rooms: _controller.roomsForType(
-                      type.id,
-                      query: _searchController.text,
-                    ),
-                    totalRoomCount: _controller.roomsForType(type.id).length,
-                    hasSearchQuery: _searchController.text.trim().isNotEmpty,
-                    onToggle: () => setState(() {
-                      if (!_expandedTypeIds.add(type.id)) {
-                        _expandedTypeIds.remove(type.id);
-                      }
-                    }),
-                    onRoomTap: (room) => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => RoomDetailPage(
-                          room: room,
-                          role: RoomPageRole.admin,
-                          typeName: type.name,
+                    const SizedBox(height: AppSpacing.s4),
+                    ...types.map(
+                      (type) => Padding(
+                        padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+                        child: _AdminTypeCard(
+                          type: type,
+                          expanded: _expandedTypeIds.contains(type.id),
+                          rooms: _controller.roomsForType(
+                            type.id,
+                            query: _searchController.text,
+                          ),
+                          totalRoomCount: _controller
+                              .roomsForType(type.id)
+                              .length,
+                          hasSearchQuery: _searchController.text
+                              .trim()
+                              .isNotEmpty,
+                          onToggle: () => setState(() {
+                            if (!_expandedTypeIds.add(type.id)) {
+                              _expandedTypeIds.remove(type.id);
+                            }
+                          }),
+                          onRoomTap: (room) => Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => RoomDetailPage(
+                                room: room,
+                                role: RoomPageRole.admin,
+                                typeName: type.name,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ),
+                  ],
+                ],
               ),
-            ],
-          ],
-        ),
-      ),
+            ),
     );
   }
 }

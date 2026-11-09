@@ -1,123 +1,104 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/core/design_system/components/app_card.dart';
-import 'package:machuco/core/design_system/tokens/app_radius.dart';
-import 'package:machuco/core/design_system/tokens/app_spacing.dart';
-import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
-import 'package:machuco/models/client/client_model.dart';
+import '../../../core/design_system/design_system.dart';
+import '../../../models/client/client_model.dart';
 
 class ClientDetailPage extends StatelessWidget {
-  const ClientDetailPage({super.key, required this.client});
+  const ClientDetailPage({
+    super.key,
+    required this.client,
+  });
 
   final ClientModel client;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Detalle del cliente')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.screen),
+      appBar: AppBar(
+        title: const Text('Detalle del Cliente'),
+        centerTitle: true,
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(AppSpacing.s4),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _buildHeader(context),
-            const SizedBox(height: AppSpacing.s6),
-            _DetailSection(
-              title: 'Información personal',
-              children: [
-                _InfoRow(
-                  icon: Icons.person_outline,
-                  label: 'Nombre',
-                  value: client.name,
-                ),
-                _InfoRow(
-                  icon: Icons.phone_outlined,
-                  label: 'Teléfono',
-                  value: '${client.countryCode} ${client.phone}',
-                ),
-                _InfoRow(
-                  icon: Icons.email_outlined,
-                  label: 'Correo electrónico',
-                  value: client.email,
-                ),
-              ],
+            Center(
+              child: Column(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    child: Text(
+                      client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                      style: TextStyle(
+                        fontSize: 32,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
+                  Text(
+                    client.name,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
+                  const SizedBox(height: AppSpacing.s1),
+                  Chip(
+                    label: const Text('Cliente', style: TextStyle(fontSize: 12)),
+                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: AppSpacing.s5),
+            Text(
+              'Información personal',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: AppSpacing.s3),
+            AppCard(
+              padding: const EdgeInsets.all(AppSpacing.s3),
+              child: Column(
+                children: [
+                  _DetailTile(
+                    icon: Icons.person_outline,
+                    label: 'Nombre completo',
+                    value: client.name,
+                  ),
+                  const Divider(),
+                  _DetailTile(
+                    icon: Icons.email_outlined,
+                    label: 'Correo electrónico',
+                    value: client.email,
+                  ),
+                  const Divider(),
+                  _DetailTile(
+                    icon: Icons.phone_outlined,
+                    label: 'Teléfono',
+                    value: '${client.countryCode} ${client.phone}',
+                  ),
+                  if (client.uid != null) ...[
+                    const Divider(),
+                    _DetailTile(
+                      icon: Icons.badge_outlined,
+                      label: 'ID de Usuario (UID)',
+                      value: client.uid!,
+                    ),
+                  ],
+                ],
+              ),
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildHeader(BuildContext context) {
-    return AppCard(
-      child: Column(
-        children: [
-          Container(
-            width: 72,
-            height: 72,
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .10),
-              borderRadius: BorderRadius.circular(AppRadius.xl),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              client.initials,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: Theme.of(context).colorScheme.primary,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          Text(
-            client.name,
-            style: Theme.of(context).textTheme.headlineSmall,
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: AppSpacing.s1),
-          Text(
-            client.email,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: context.appColors.textSecondary,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
-class _DetailSection extends StatelessWidget {
-  const _DetailSection({required this.title, required this.children});
-
-  final String title;
-  final List<Widget> children;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: Theme.of(context).textTheme.headlineSmall),
-        const SizedBox(height: AppSpacing.s3),
-        AppCard(
-          padding: const EdgeInsets.all(AppSpacing.s1),
-          child: Column(
-            children: [
-              for (var i = 0; i < children.length; i++) ...[
-                if (i > 0) const Divider(height: 1),
-                children[i],
-              ],
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _InfoRow extends StatelessWidget {
-  const _InfoRow({
+class _DetailTile extends StatelessWidget {
+  const _DetailTile({
     required this.icon,
     required this.label,
     required this.value,
@@ -130,27 +111,10 @@ class _InfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.s4,
-        vertical: AppSpacing.s3,
-      ),
+      padding: const EdgeInsets.symmetric(vertical: AppSpacing.s2),
       child: Row(
         children: [
-          Container(
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: Theme.of(
-                context,
-              ).colorScheme.primary.withValues(alpha: .10),
-              borderRadius: BorderRadius.circular(AppRadius.sm),
-            ),
-            child: Icon(
-              icon,
-              size: 20,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
+          Icon(icon, color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: AppSpacing.s3),
           Expanded(
             child: Column(
@@ -158,16 +122,16 @@ class _InfoRow extends StatelessWidget {
               children: [
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                    color: context.appColors.textMuted,
-                  ),
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: context.appColors.textSecondary,
+                      ),
                 ),
-                const SizedBox(height: AppSpacing.s1),
+                const SizedBox(height: 2),
                 Text(
                   value,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
                 ),
               ],
             ),
