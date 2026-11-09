@@ -67,10 +67,6 @@ class Owner {
     return dialCode == null ? phone : '$dialCode $phone';
   }
 
-  /// `true` si es un dato demo sembrado en SQLite: nunca viaja a Firebase para
-  /// no crear cuentas de acceso de mentira.
-  bool get isLocalDemo => id.startsWith('owner-');
-
   /// `true` mientras la cuenta espera la decisión de un administrador.
   bool get isPendingApproval => accountStatus == AccountStatus.pendingApproval;
 

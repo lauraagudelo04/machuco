@@ -96,7 +96,6 @@ class OwnerController extends ChangeNotifier {
   bool _isLoading = false;
   String? _lastError;
   Future<void>? _load;
-  bool _seededOnce = false;
   bool _isSyncing = false;
   bool _disposed = false;
   String? _syncWarningMessage;
@@ -198,7 +197,7 @@ class OwnerController extends ChangeNotifier {
 
   String? get documentTypesError => _documentTypesError;
 
-  /// Carga los propietarios guardados. La primera vez siembra los datos demo.
+  /// Carga los propietarios guardados en la caché local.
   ///
   /// Varias pantallas comparten esta instancia, así que si ya hay una carga en
   /// curso se reutiliza el mismo futuro en lugar de lanzar otra consulta.
@@ -210,12 +209,6 @@ class OwnerController extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
-      // La siembra es solo para la primera carga del proceso: si el usuario
-      // elimina todos los propietarios, volver a la pantalla no los repone.
-      if (!_seededOnce) {
-        await _service.sembrarDatosDemo();
-        _seededOnce = true;
-      }
       await _reload();
     } catch (error) {
       _lastError = _messageFor(error);
@@ -717,11 +710,6 @@ class OwnerController extends ChangeNotifier {
 
     final pending = await _service.propietariosSinSincronizar();
     for (final owner in pending) {
-      // Los datos demo viven solo en SQLite: nunca crean cuentas reales.
-      if (owner.isLocalDemo) {
-        await _service.marcarSincronizado(owner.id);
-        continue;
-      }
       await cloud.updateOwner(
         adminId: adminId,
         owner: owner,

@@ -60,9 +60,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 18 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 19 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 18);
+    expect(await raw().getVersion(), 19);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -75,7 +75,7 @@ void main() {
   });
 
   test(
-    '[MIG-02] de v11 a v18 aplica todas las migraciones sin perder datos',
+    '[MIG-02] de v11 a v19 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
@@ -98,7 +98,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 18);
+      expect(await raw().getVersion(), 19);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _columns(raw(), 'clients'), isNot(contains('password')));
       final clients = await raw().query('clients');
@@ -121,7 +121,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 18);
+    expect(await raw().getVersion(), 19);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
     final clients = await raw().query('clients');
     expect(clients.single['email'], 'ana@example.com');
@@ -142,7 +142,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 18);
+    expect(await raw().getVersion(), 19);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 

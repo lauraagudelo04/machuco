@@ -74,7 +74,7 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
   - Tabla `owners` en Supabase (los propietarios van a Firestore).
   - Tareas Supabase/Firebase de otras entidades (pagos, clientes, reservas, moteles).
   - Cambios en archivos compartidos (`lib/database/app_database.dart`, `app_database.g.dart`) sin coordinación previa de número de migración.
-- **Migraciones**: tras el merge con `develop` (que dejó la 14 con `auth_user_profile`), el módulo ocupa `14→15` (crea `owners` con indicativo y `document_types`), `15→16` (`pendingDelete`), `16→17` (reconcilia una base v16 de esta rama) y `17→18` (`accountStatus`). Esquema local en **18**.
+- **Migraciones**: tras el merge con `develop` (que dejó la 14 con `auth_user_profile`), el módulo ocupa `14→15` (crea `owners` con indicativo y `document_types`), `15→16` (`pendingDelete`), `16→17` (reconcilia una base v16 de esta rama), `17→18` (`accountStatus`) y `18→19` (borra filas locales heredadas `owner-*`). Esquema local en **19**.
 
 ## Definiciones de datos
 

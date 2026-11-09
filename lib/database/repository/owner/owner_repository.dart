@@ -190,19 +190,6 @@ class OwnerRepository {
     await database.ownerDao.deleteById(id);
   }
 
-  /// Inserta los datos semilla sólo si la tabla está vacía.
-  ///
-  /// Nacen sincronizados porque son solo demostración local: nunca deben
-  /// crear cuentas reales en Firebase Auth.
-  Future<void> seedIfEmpty(List<Owner> seeds) async {
-    final database = await _database;
-    final total = await database.ownerDao.count() ?? 0;
-    if (total > 0) return;
-    for (final seed in seeds) {
-      await database.ownerDao.insertOwner(_toEntry(seed, synchronized: 1));
-    }
-  }
-
   Owner _toOwner(OwnerEntry entry) => Owner(
     id: entry.id,
     fullName: entry.fullName,

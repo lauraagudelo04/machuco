@@ -262,30 +262,6 @@ void main() {
     },
   );
 
-  test('seedIfEmpty siembra la primera vez y no duplica después', () async {
-    final seeds = buildSeedOwners();
-
-    await repository.seedIfEmpty(seeds);
-    await repository.seedIfEmpty(seeds);
-
-    final all = await repository.findAll();
-    expect(all, hasLength(seeds.length));
-    // findAll ordena por nombre, no por orden de siembra: se compara como
-    // conjunto para no acoplarse al orden alfabético.
-    expect(
-      all.map((owner) => owner.documentNumber).toSet(),
-      seeds.map((owner) => owner.documentNumber).toSet(),
-    );
-  });
-
-  test('seedIfEmpty no toca datos existentes', () async {
-    await repository.insert(buildOwner());
-
-    await repository.seedIfEmpty(buildSeedOwners());
-
-    expect(await repository.findAll(), hasLength(1));
-  });
-
   test(
     'el servicio registra un propietario que sobrevive a una nueva sesión',
     () async {
@@ -315,16 +291,18 @@ void main() {
     },
   );
 
-  test('la migración 13->18 agrega el indicativo, pendingDelete y el estado sin perder '
-      'los teléfonos', () async {
-    final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
-    sqfliteFfiInit();
-    final legacy = await databaseFactoryFfi.openDatabase(
-      legacyPath,
-      options: sqflite.OpenDatabaseOptions(
-        version: 13,
-        onCreate: (db, version) async {
-          await db.execute('''
+  test(
+    'la migración 13->19 agrega el indicativo, pendingDelete y el estado sin perder '
+    'los teléfonos',
+    () async {
+      final legacyPath = '${directory.path}${Platform.pathSeparator}legacy.db';
+      sqfliteFfiInit();
+      final legacy = await databaseFactoryFfi.openDatabase(
+        legacyPath,
+        options: sqflite.OpenDatabaseOptions(
+          version: 13,
+          onCreate: (db, version) async {
+            await db.execute('''
             CREATE TABLE owners (
               id TEXT NOT NULL PRIMARY KEY,
               fullName TEXT NOT NULL,
@@ -339,45 +317,46 @@ void main() {
               updatedAt INTEGER NOT NULL
             )
           ''');
-        },
-      ),
-    );
-    await legacy.insert('owners', {
-      'id': 'owner-legacy',
-      'fullName': 'Laura Gómez Restrepo',
-      'documentType': DocumentType.citizenshipCard.name,
-      'documentNumber': '1020304050',
-      'email': 'laura.gomez@machuco.com',
-      'phone': '+57 300 123 4567',
-      'address': 'Calle 10 # 43-25',
-      'isActive': 1,
-      'synchronized': 0,
-      'createdAt': 1,
-      'updatedAt': 1,
-    });
-    await legacy.close();
+          },
+        ),
+      );
+      await legacy.insert('owners', {
+        'id': 'uid-legacy-1',
+        'fullName': 'Laura Gómez Restrepo',
+        'documentType': DocumentType.citizenshipCard.name,
+        'documentNumber': '1020304050',
+        'email': 'laura.gomez@machuco.com',
+        'phone': '+57 300 123 4567',
+        'address': 'Calle 10 # 43-25',
+        'isActive': 1,
+        'synchronized': 0,
+        'createdAt': 1,
+        'updatedAt': 1,
+      });
+      await legacy.close();
 
-    final migrated = await AppDatabaseProvider.open(name: legacyPath);
-    addTearDown(migrated.close);
-    final raw = migrated.database as sqflite.Database;
+      final migrated = await AppDatabaseProvider.open(name: legacyPath);
+      addTearDown(migrated.close);
+      final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 18);
-    final columns = await raw.rawQuery('PRAGMA table_info(owners)');
-    expect(
-      columns.map((column) => column['name']),
-      containsAll([
+      expect(await raw.getVersion(), 19);
+      final columns = await raw.rawQuery('PRAGMA table_info(owners)');
+      expect(
+        columns.map((column) => column['name']),
+        containsAll([
           'countryCode',
           'countryName',
           'pendingDelete',
           'accountStatus',
         ]),
-    );
-    final rows = await raw.query('owners');
-    expect(rows.single['phone'], '+57 300 123 4567');
-    expect(rows.single['countryCode'], isNull);
-    expect(rows.single['pendingDelete'], 0);
-    expect(await raw.query('document_types'), hasLength(5));
-  });
+      );
+      final rows = await raw.query('owners');
+      expect(rows.single['phone'], '+57 300 123 4567');
+      expect(rows.single['countryCode'], isNull);
+      expect(rows.single['pendingDelete'], 0);
+      expect(await raw.query('document_types'), hasLength(5));
+    },
+  );
 
   test('una base v16 de esta rama recibe auth_user_profile sin perder '
       'propietarios', () async {
@@ -421,7 +400,7 @@ void main() {
       ),
     );
     await legacy.insert('owners', {
-      'id': 'owner-v16',
+      'id': 'uid-v16-1',
       'fullName': 'Laura Gómez Restrepo',
       'documentType': DocumentType.citizenshipCard.name,
       'documentNumber': '1020304050',
@@ -442,7 +421,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 18);
+    expect(await raw.getVersion(), 19);
     expect(
       await raw.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table' "
@@ -454,5 +433,62 @@ void main() {
     expect(owners.single.fullName, 'Laura Gómez Restrepo');
     expect(owners.single.pendingDelete, 0);
     expect(await raw.query('document_types'), hasLength(5));
+  });
+
+  test('la migración 18->19 borra las filas locales heredadas', () async {
+    final legacyPath = '${directory.path}${Platform.pathSeparator}v18.db';
+    sqfliteFfiInit();
+    final legacy = await databaseFactoryFfi.openDatabase(
+      legacyPath,
+      options: sqflite.OpenDatabaseOptions(
+        version: 18,
+        onCreate: (db, version) async {
+          await db.execute('''
+            CREATE TABLE owners (
+              id TEXT NOT NULL PRIMARY KEY,
+              fullName TEXT NOT NULL,
+              documentType TEXT NOT NULL,
+              documentNumber TEXT NOT NULL,
+              email TEXT NOT NULL,
+              phone TEXT NOT NULL,
+              countryCode TEXT,
+              countryName TEXT,
+              address TEXT,
+              isActive INTEGER NOT NULL,
+              synchronized INTEGER NOT NULL,
+              pendingDelete INTEGER NOT NULL DEFAULT 0,
+              accountStatus TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+        },
+      ),
+    );
+    Map<String, Object?> row(String id) => {
+      'id': id,
+      'fullName': 'Propietario $id',
+      'documentType': DocumentType.citizenshipCard.name,
+      'documentNumber': '1020304050',
+      'email': '$id@machuco.com',
+      'phone': '300 123 4567',
+      'isActive': 1,
+      'synchronized': 1,
+      'pendingDelete': 0,
+      'accountStatus': 'active',
+      'createdAt': 1,
+      'updatedAt': 1,
+    };
+    await legacy.insert('owners', row('owner-1794194642864312'));
+    await legacy.insert('owners', row('AbCdEfGhIjKlMnOpQrStUvWxYz12'));
+    await legacy.close();
+
+    final migrated = await AppDatabaseProvider.open(name: legacyPath);
+    addTearDown(migrated.close);
+    final raw = migrated.database as sqflite.Database;
+
+    expect(await raw.getVersion(), 19);
+    final ids = (await raw.query('owners')).map((r) => r['id']).toList();
+    expect(ids, ['AbCdEfGhIjKlMnOpQrStUvWxYz12']);
   });
 }

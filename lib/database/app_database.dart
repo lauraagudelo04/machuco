@@ -37,7 +37,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 18,
+  version: 19,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -101,6 +101,7 @@ class AppDatabaseProvider {
         migration15To16,
         migration16To17,
         migration17To18,
+        migration18To19,
       ])
       .addCallback(
         Callback(
@@ -472,6 +473,21 @@ final migration17To18 = Migration(17, 18, (database) async {
   if (!names.contains('accountStatus')) {
     await database.execute('ALTER TABLE owners ADD COLUMN accountStatus TEXT');
   }
+});
+
+/// Limpieza de filas locales heredadas de la versión anterior.
+///
+/// Antes el módulo sembraba tres propietarios de demostración y guardaba ids
+/// temporales `owner-...` porque los documentos vivían en la colección
+/// `owners`. Ahora cada fila es un usuario de Firebase Auth y su id es el uid,
+/// así que esas filas solo ensuciaban el listado. Es idempotente porque un uid
+/// nunca empieza por `owner-`.
+final migration18To19 = Migration(18, 19, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'owners'",
+  );
+  if (tables.isEmpty) return;
+  await database.delete('owners', where: "id LIKE 'owner-%'");
 });
 
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.

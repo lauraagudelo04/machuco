@@ -20,9 +20,10 @@ depende de `supabase_flutter`.
 
 1. `OwnerPage` carga el listado desde SQLite y muestra el correo del
    administrador guardado por el login (`AuthPreferences.loadCurrentUserEmail`).
-2. `OwnerController.init()` siembra los datos demo la primera vez, recarga la
-   tabla local y después intenta la sincronización con Firestore. La nube nunca
-   bloquea el listado: si falla, se muestra un banner con «Reintentar».
+2. `OwnerController.init()` recarga la caché local y después intenta la
+   sincronización con Firestore. La nube nunca bloquea el listado: si falla, se
+   muestra un banner con «Reintentar». Ya no se siembran datos demo: el listado
+   solo muestra usuarios reales con `role = owner`.
 3. Crear un propietario crea también su cuenta de acceso, así que **exige
    conexión**: el panel pide el correo, genera una contraseña temporal y crea
    `users/{uid}` con `role = owner` y el estado inicial que elija el
@@ -48,18 +49,20 @@ depende de `supabase_flutter`.
   lo pasa a 1 cuando Firestore confirma la escritura.
 - `accountStatus` guarda el estado de la cuenta tal como está en Firestore
   (`active`, `pending_approval`, `disabled`...). `isActive` se deriva de él.
-- Los datos demo (ids `owner-...`) se marcan como sincronizados y **nunca** se
-  envían: crearlos en Firebase implicaría cuentas de mentira.
+- Las filas con id `owner-...` eran datos demo o ids temporales de la versión
+  anterior (cuando los documentos vivían en la colección `owners`). La
+  migración 18→19 las elimina del dispositivo.
 - `pendingDelete = 1` significa «el usuario lo eliminó sin conexión y falta
   borrarlo en Firestore». La fila no se lista ni cuenta como alta; cuando la
   nube confirma el delete, se borra por completo.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
   se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
-- La versión local es la **18**: la 14→15 crea `owners` (con
+- La versión local es la **19**: la 14→15 crea `owners` (con
   `countryCode`/`countryName`) y `document_types` sembrada; la 15→16 agrega
   `pendingDelete`; la 16→17 reconcilia una base v16 de esta rama antes del
-  merge; y la 17→18 agrega `accountStatus`. Todas son idempotentes.
+  merge; la 17→18 agrega `accountStatus`; y la 18→19 borra las filas heredadas
+  con id `owner-...`. Todas son idempotentes.
 
 ## Supabase: maestro de tipos de documento
 

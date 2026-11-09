@@ -50,6 +50,11 @@ void main() {
     database = await AppDatabaseProvider.open(
       name: '${directory.path}${Platform.pathSeparator}owners.db',
     );
+    // Caché local equivalente a tres usuarios con role owner ya descargados.
+    final repository = OwnerRepository(database: database);
+    for (final owner in _localOwners) {
+      await repository.insertSynchronized(owner);
+    }
   });
 
   tearDown(() async {
@@ -57,7 +62,7 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('init siembra los datos demo la primera vez', () async {
+  test('init carga los propietarios de SQLite', () async {
     final controller = buildController();
 
     await controller.init();
@@ -356,7 +361,7 @@ void main() {
   });
 
   group('sincronización con Firestore', () {
-    test('los datos demo no se envían a la nube', () async {
+    test('no reenvía propietarios que ya están sincronizados', () async {
       final cloud = _FakeOwnerCloudRepository();
       final controller = buildController(cloudRepository: cloud);
 
@@ -468,11 +473,9 @@ void main() {
         ).findById(created.owner.id);
         expect(persisted!.isSynchronized, isTrue);
         expect(persisted.accountStatus, AccountStatus.active);
-        // El borrador local (owner-<micros>) no quedó guardado.
-        expect(
-          controller.owners.where((owner) => owner.isLocalDemo),
-          hasLength(3),
-        );
+        // El borrador local no quedó guardado: solo los 3 de la caché y el
+        // nuevo propietario.
+        expect(controller.owners, hasLength(4));
       },
     );
 
@@ -643,6 +646,49 @@ void main() {
     });
   });
 }
+
+/// Caché local de tres usuarios con `role = owner` ya sincronizados.
+const _localOwners = <Owner>[
+  Owner(
+    id: 'uid-local-1',
+    fullName: 'Inversiones Machuco S.A.S.',
+    documentType: DocumentType.taxId,
+    documentNumber: '900123456-7',
+    email: 'contacto@inversionesmachuco.com',
+    phone: '604 444 5566',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    address: 'Carrera 50 # 12-80, Rionegro',
+    accountStatus: AccountStatus.active,
+    isSynchronized: true,
+  ),
+  Owner(
+    id: 'uid-local-2',
+    fullName: 'Laura Gómez Restrepo',
+    documentType: DocumentType.citizenshipCard,
+    documentNumber: '1020304050',
+    email: 'laura.gomez@machuco.com',
+    phone: '300 123 4567',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    address: 'Calle 10 # 43-25, Medellín',
+    accountStatus: AccountStatus.active,
+    isSynchronized: true,
+  ),
+  Owner(
+    id: 'uid-local-3',
+    fullName: 'Simón Restrepo Vélez',
+    documentType: DocumentType.foreignerCard,
+    documentNumber: '345678',
+    email: 'simon.restrepo@machuco.com',
+    phone: '311 987 6543',
+    countryCode: '+57',
+    countryName: 'Colombia',
+    isActive: false,
+    accountStatus: AccountStatus.disabled,
+    isSynchronized: true,
+  ),
+];
 
 /// Propietario que ya existe en `users/{uid}`, para los tests de sincronización.
 Owner remoteOwner({

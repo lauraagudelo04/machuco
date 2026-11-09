@@ -616,3 +616,15 @@ el administrador quedaba en `owners`, sin cuenta de acceso.
 - La colección `owners` queda obsoleta y se borra a mano desde la consola.
 - El estado local de SQLite sube a la versión **18** (`accountStatus`); la
   próxima rama que migre usa la 19.
+
+## 2026-11-09 — Se retiran los datos demo de propietarios
+
+**Contexto:** el módulo sembraba tres propietarios de demostración en SQLite y
+la versión anterior guardaba ids temporales `owner-...` para documentos que
+vivían en la colección `owners`. Al pasar el listado a `users`, esas filas
+aparecían como propietarios que no existen en Firebase.
+
+**Decisión:** ya no se siembran datos demo; el listado refleja únicamente los
+usuarios con `role = owner`. La migración **18→19** borra del dispositivo las
+filas con id `owner-...` (idempotente: un uid de Firebase Auth nunca empieza
+por ese prefijo). La próxima rama que migre usa la 20.

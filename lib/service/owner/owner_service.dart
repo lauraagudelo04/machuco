@@ -5,62 +5,20 @@ import 'package:machuco/models/owner_management/owner.dart';
 
 final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
 
-/// Datos demo que se siembran la primera vez que se abre el módulo.
-///
-/// Se quedan en la base local mientras no exista backend; no se pierden al
-/// reiniciar la aplicación porque viven en SQLite.
-List<Owner> buildSeedOwners() => const [
-  Owner(
-    id: 'owner-1020304050',
-    fullName: 'Laura Gómez Restrepo',
-    documentType: DocumentType.citizenshipCard,
-    documentNumber: '1020304050',
-    email: 'laura.gomez@machuco.com',
-    countryCode: '+57',
-    countryName: 'Colombia',
-    phone: '300 123 4567',
-    address: 'Calle 10 # 43-25, Medellín',
-  ),
-  Owner(
-    id: 'owner-900123456',
-    fullName: 'Inversiones Machuco S.A.S.',
-    documentType: DocumentType.taxId,
-    documentNumber: '900123456-7',
-    email: 'contacto@inversionesmachuco.com',
-    countryCode: '+57',
-    countryName: 'Colombia',
-    phone: '604 444 5566',
-    address: 'Carrera 50 # 12-80, Rionegro',
-  ),
-  Owner(
-    id: 'owner-345678',
-    fullName: 'Simón Restrepo Vélez',
-    documentType: DocumentType.foreignerCard,
-    documentNumber: '345678',
-    email: 'simon.restrepo@machuco.com',
-    countryCode: '+57',
-    countryName: 'Colombia',
-    phone: '311 987 6543',
-    isActive: false,
-  ),
-];
-
 /// Capa de servicio que concentra la lógica de negocio del módulo de
 /// propietarios.
 ///
 /// Orquesta el repositorio local (SQLite vía Floor): valida antes de
-/// persistir, evita documentos duplicados y siembra los datos demo la
-/// primera vez. El controlador llama a esta capa y presenta el resultado.
+/// persistir y evita documentos duplicados. El controlador llama a esta capa
+/// y presenta el resultado. Ya no siembra datos demo: el listado refleja
+/// únicamente los usuarios con `role = owner` de Firestore.
 class OwnerService {
   OwnerService({OwnerRepository? repository})
     : _repository = repository ?? OwnerRepository();
 
   final OwnerRepository _repository;
 
-  /// Carga los propietarios guardados.
-  ///
-  /// La siembra inicial vive en [sembrarDatosDemo] para que una lectura (por
-  /// ejemplo tras eliminar al último propietario) no reponga datos borrados.
+  /// Carga los propietarios guardados en la caché local.
   Future<List<Owner>> cargarPropietarios() => _repository.findAll();
 
   /// Propietarios que todavía no se enviaron a Firestore.
@@ -83,9 +41,6 @@ class OwnerService {
   /// Incorpora a SQLite los propietarios que existen en la nube.
   Future<void> incorporarRemotos(List<Owner> owners) =>
       _repository.mergeRemoteOwners(owners);
-
-  /// Siembra los datos demo solo la primera vez, cuando la tabla está vacía.
-  Future<void> sembrarDatosDemo() => _repository.seedIfEmpty(buildSeedOwners());
 
   /// Devuelve un mensaje si ya existe un propietario con ese documento.
   Future<String?> validarDuplicado(DocumentType tipo, String numero) async {
