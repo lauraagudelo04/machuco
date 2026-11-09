@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
@@ -106,13 +107,26 @@ class RoomSyncRepository {
       if (_currentUserId() != uid) return;
       final data =
           jsonDecode(event['payload']! as String) as Map<String, dynamic>;
-      await remote
-          .write(
-            event['collection_name']! as String,
-            event['document_id']! as String,
-            data,
-          )
-          .timeout(const Duration(seconds: 12));
+      try {
+        await remote
+            .write(
+              event['collection_name']! as String,
+              event['document_id']! as String,
+              data,
+            )
+            .timeout(const Duration(seconds: 12));
+      } on FirebaseException catch (error) {
+        if (kDebugMode) {
+          debugPrint(
+            'Room sync: code=${error.code}, uid=$uid, '
+            'collection=${event['collection_name']}, '
+            'document=${event['document_id']}, '
+            'motelId=${data['motelId']}, ownerId=${data['ownerId']}, '
+            'fields=${data.keys.toList()}',
+          );
+        }
+        rethrow;
+      }
       await dao.acknowledgeChange(event['sequence']! as int);
     }
     // Exigir servidor evita interpretar un caché vacío como una base remota vacía.
