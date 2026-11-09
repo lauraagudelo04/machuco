@@ -17,7 +17,13 @@ import 'package:machuco/views/room/room_status_badge.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
 class RoomOwnerPage extends StatefulWidget {
-  const RoomOwnerPage({super.key, required this.motel, this.rooms, this.types, this.dataController});
+  const RoomOwnerPage({
+    super.key,
+    required this.motel,
+    this.rooms,
+    this.types,
+    this.dataController,
+  });
   final Motel motel;
   final RoomController? dataController;
   final List<RoomVisualData>? rooms;
@@ -43,7 +49,12 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       seedRooms: widget.rooms ?? const [],
       seedTypes: widget.types ?? const [],
     );
-    _dataController = widget.dataController ?? RoomController.fromEnvironment();
+    _dataController =
+        widget.dataController ??
+        RoomController.fromEnvironment(
+          motelId: widget.motel.id,
+          ownerId: widget.motel.ownerId,
+        );
     _dataController.addListener(_onDataChanged);
     _initializeData();
   }
@@ -51,21 +62,31 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   @override
   void dispose() {
     _dataController.removeListener(_onDataChanged);
-    if (widget.dataController == null) _dataController.dispose();
+    if (widget.dataController == null) {
+      _dataController.dispose();
+    }
     _searchController.dispose();
     super.dispose();
   }
 
   void _onDataChanged() {
-    if (mounted) setState(() {});
+    if (mounted) {
+      setState(() {
+        _controller = RoomOwnerController(
+          motelId: widget.motel.id,
+          seedRooms: _dataController.rooms,
+          seedTypes: _dataController.roomTypes,
+        );
+      });
+    }
   }
 
   Future<void> _initializeData() async {
     try {
       await _dataController.loadLocalData();
       if (_dataController.rooms.isEmpty && _dataController.roomTypes.isEmpty) {
-        await _dataController.saveRoomTypes(_controller.allTypes);
-        await _dataController.saveRooms(_controller.allRooms);
+        await _dataController.saveRoomTypes(widget.types ?? const []);
+        await _dataController.saveRooms(widget.rooms ?? const []);
       } else {
         _controller = RoomOwnerController(
           motelId: widget.motel.id,
@@ -92,6 +113,11 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
           child: ListView(
             padding: EdgeInsets.zero,
             children: [
+              if (_dataController.syncError != null)
+                Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: Text(_dataController.syncError!),
+                ),
               AppCard(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,7 +250,6 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     );
     if (!await _persist(() => _dataController.upsertRoomType(type))) return;
     setState(() {
-      _controller.addType(type);
       _expandedTypeIds.add(type.id);
     });
   }
@@ -615,18 +640,16 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     if (saved != null) {
       if (!await _persist(() => _dataController.upsertRoom(saved))) return;
       setState(() {
-        if (room == null) {
-          _controller.addRoom(saved);
-        } else {
-          _controller.updateRoom(room.id, saved);
-        }
         _expandedTypeIds.add(saved.idType);
       });
     }
   }
 
   Future<bool> _persist(Future<void> Function() action) async {
-    if (!mounted || _isSaving || _isLoadingLocalData || _localDataError != null) {
+    if (!mounted ||
+        _isSaving ||
+        _isLoadingLocalData ||
+        _localDataError != null) {
       return false;
     }
     setState(() => _isSaving = true);
@@ -639,14 +662,16 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       }
       return mounted;
     } catch (error, stackTrace) {
-      debugPrint('Error al guardar room en SQLite: $error\n$stackTrace');
+      debugPrint('Error al guardar habitaciones: $error\n$stackTrace');
       if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
+        SnackBar(
           backgroundColor: AppColors.rose,
           content: _SnackBarMessage(
             icon: Icons.storage_outlined,
-            message: 'No fue posible guardar el cambio en SQLite.',
+            message: error is StateError
+                ? error.message.toString()
+                : 'No fue posible guardar el cambio en SQLite.',
           ),
         ),
       );

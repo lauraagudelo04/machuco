@@ -27,6 +27,7 @@ class RoomClientPage extends StatefulWidget {
 
 class _RoomClientPageState extends State<RoomClientPage> {
   late RoomClientController _controller;
+  late final RoomController _data;
   bool _loading = true;
   String? _loadError;
 
@@ -38,25 +39,37 @@ class _RoomClientPageState extends State<RoomClientPage> {
       seedRooms: widget.rooms ?? const [],
       seedTypes: widget.types ?? const [],
     );
+    _data = RoomController.fromEnvironment();
+    _data.addListener(_onDataChanged);
     _loadRooms();
   }
 
-  Future<void> _loadRooms() async {
-    final data = RoomController.fromEnvironment();
-    try {
-      await data.loadLocalData();
-      if (!mounted) return;
+  void _onDataChanged() {
+    if (!mounted) return;
+    setState(() {
       _controller = RoomClientController(
         motelId: widget.motel.id,
-        seedRooms: widget.rooms ?? data.rooms,
-        seedTypes: widget.types ?? data.roomTypes,
+        seedRooms: widget.rooms ?? _data.rooms,
+        seedTypes: widget.types ?? _data.roomTypes,
       );
+    });
+  }
+
+  Future<void> _loadRooms() async {
+    try {
+      await _data.loadLocalData();
     } catch (_) {
       _loadError = 'No fue posible cargar las habitaciones guardadas.';
     } finally {
-      data.dispose();
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _data.removeListener(_onDataChanged);
+    _data.dispose();
+    super.dispose();
   }
 
   @override

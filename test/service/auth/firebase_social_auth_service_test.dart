@@ -194,6 +194,19 @@ void main() {
       );
     }
 
+    for (final code in ['unsupported-platform', 'unsupported-platform-operation']) {
+      test('$code explica la limitación de la plataforma', () async {
+        auth.signInError = FirebaseAuthException(code: code);
+        final result = expectType<SocialAuthError>(
+          await service.signInWithGitHub(),
+        );
+        expect(result.failure.type, AuthFailureType.providerMisconfigured);
+        expect(result.failure.message, contains('no está disponible'));
+        expect(result.failure.message, contains('versión web o Android'));
+        expect(profiles.created, isEmpty);
+      });
+    }
+
     test('[SOC-06] sin conexión: error de red', () async {
       auth.signInError = FirebaseAuthException(code: 'network-request-failed');
 
