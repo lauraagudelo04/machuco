@@ -8,12 +8,18 @@ import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/client/client_model.dart';
+import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/password_change_service.dart';
 import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 class ClientController extends ChangeNotifier {
-  ClientController._();
+  ClientController._({PasswordChangeService? passwordChangeService})
+      : _passwordChangeService =
+            passwordChangeService ?? FirebasePasswordChangeService();
+
   static final ClientController instance = ClientController._();
 
+  final PasswordChangeService _passwordChangeService;
   late PhoneCountryCodeRepository _phoneCountryCodeRepo;
   late UserProfileRepository _userProfileRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -54,7 +60,8 @@ class ClientController extends ChangeNotifier {
       _phoneCountryCodeRepo = PhoneCountryCodeRepository(
         baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
         apiKey: SupabasePhoneCountryCodeConfig.apiKey,
-        daoProvider: () async => (await AppDatabaseProvider.database).phoneCountryCodeDao,
+        daoProvider: () async =>
+            (await AppDatabaseProvider.database).phoneCountryCodeDao,
       );
       _userProfileRepo = FirestoreUserProfileRepository();
       _countryCodes = await _phoneCountryCodeRepo.getCountryCodes();
@@ -130,9 +137,10 @@ class ClientController extends ChangeNotifier {
       final guestIds = reservationsSnapshot.docs
           .where((doc) {
             final data = doc.data();
-            final status = (data['status'] ?? '').toString().toLowerCase().trim();
+            final status =
+                (data['status'] ?? '').toString().toLowerCase().trim();
             return status != ReservationStatus.cancelled.name &&
-                  status != ReservationStatus.completed.name;
+                status != ReservationStatus.completed.name;
           })
           .map((doc) => doc.data()['guestId'] as String?)
           .where((id) => id != null && id.isNotEmpty)
@@ -228,7 +236,8 @@ class ClientController extends ChangeNotifier {
     required String newPassword,
   }) async {
     if (!canChangePassword) {
-      _errorMessage = 'Tu cuenta está autenticada con $authProviderName. Debes administrar tu contraseña directamente en esa plataforma.';
+      _errorMessage =
+          'Tu cuenta está autenticada con $authProviderName. Debes administrar tu contraseña directamente en esa plataforma.';
       notifyListeners();
       return false;
     }
@@ -238,28 +247,12 @@ class ClientController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final user = _auth.currentUser;
-      if (user == null || user.email == null) {
-        throw Exception('No existe una sesión activa.');
-      }
-
-      final AuthCredential credential = EmailAuthProvider.credential(
-        email: user.email!,
-        password: currentPassword,
+      await _passwordChangeService.changePassword(
+        newPassword: newPassword,
       );
-      await user.reauthenticateWithCredential(credential);
-
-      await user.updatePassword(newPassword);
-
       return true;
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'wrong-password' || e.code == 'invalid-credential') {
-        _errorMessage = 'La contraseña actual no es correcta.';
-      } else if (e.code == 'weak-password') {
-        _errorMessage = 'La nueva contraseña debe tener al menos 6 caracteres.';
-      } else {
-        _errorMessage = e.message ?? 'No se pudo actualizar la contraseña.';
-      }
+    } on AuthFailure catch (e) {
+      _errorMessage = e.message;
       return false;
     } catch (e) {
       _errorMessage = 'Ocurrió un error inesperado. Inténtalo de nuevo.';
