@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/payment_method/payment_method_checkout_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/views/payment_method/payment_method_page.dart';
@@ -13,12 +15,14 @@ class PaymentMethodSelectionPage extends StatefulWidget {
     this.amount = 120000,
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
     this.onContinue,
+    this.checkoutController,
   });
 
   final Reservation? reservation;
   final int amount;
   final String concept;
   final ValueChanged<PaymentMethodModel>? onContinue;
+  final PaymentCheckoutController? checkoutController;
 
   @override
   State<PaymentMethodSelectionPage> createState() =>
@@ -28,6 +32,12 @@ class PaymentMethodSelectionPage extends StatefulWidget {
 class _PaymentMethodSelectionPageState
     extends State<PaymentMethodSelectionPage> {
   bool _isCashSelected = false;
+  bool _isRegistering = false;
+
+  // Perezoso: crear el controlador toca Firebase y SQLite, que no deben
+  // inicializarse mientras el usuario solo está eligiendo.
+  late final PaymentCheckoutController _checkout =
+      widget.checkoutController ?? PaymentCheckoutController();
 
   Reservation? get _reservation => widget.reservation;
 
@@ -75,14 +85,59 @@ class _PaymentMethodSelectionPageState
           amount: _effectiveAmount,
           concept: _effectiveConcept,
           reservation: _reservation,
-          onContinue: widget.onContinue ?? _goToInvoice,
+          onContinue: _continueAfterCard,
         ),
       ),
     );
   }
 
-  void _finishCashPayment() {
+  Future<void> _continueAfterCard(PaymentMethodModel model) async {
+    final reservation = _reservation;
+    if (reservation != null) {
+      final registered = await _registerPayment(
+        () => _checkout.registerCardPayment(reservation, kind: model.cardKind),
+      );
+      if (!registered) return;
+    }
+    if (!mounted) return;
+    (widget.onContinue ?? _goToInvoice)(model);
+  }
+
+  Future<void> _finishCashPayment() async {
+    final reservation = _reservation;
+    if (reservation != null) {
+      final registered = await _registerPayment(
+        () => _checkout.registerPendingLocalPayment(reservation),
+      );
+      if (!registered) return;
+    }
+    if (!mounted) return;
     _goToInvoice();
+  }
+
+  Future<bool> _registerPayment(
+    Future<PaymentCheckoutResult> Function() register,
+  ) async {
+    if (_isRegistering) return false;
+    setState(() => _isRegistering = true);
+    String? notice;
+    var registered = false;
+    try {
+      notice = (await register()).syncWarning;
+      registered = true;
+    } on PaymentRepositoryException catch (error) {
+      notice = error.message;
+    } catch (_) {
+      notice = 'No se pudo registrar el pago. Inténtalo nuevamente.';
+    } finally {
+      if (mounted) setState(() => _isRegistering = false);
+    }
+    if (notice != null && mounted) {
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(notice)));
+    }
+    return registered;
   }
 
   @override
@@ -138,7 +193,7 @@ class _PaymentMethodSelectionPageState
               const SizedBox(height: AppSpacing.s4),
               _PaymentOptionCard(
                 icon: Icons.payments_outlined,
-                title: 'Efectivo',
+                title: 'En el Local',
                 description: 'Paga el valor total en la recepción.',
                 selected: _isCashSelected,
                 onTap: _selectCash,
@@ -155,7 +210,11 @@ class _PaymentMethodSelectionPageState
                 const SizedBox(height: AppSpacing.s5),
                 _CashPaymentNotice(formattedAmount: _formattedAmount),
                 const SizedBox(height: AppSpacing.s5),
-                AppButton(label: 'Finalizar', onPressed: _finishCashPayment),
+                AppButton(
+                  label: 'Finalizar',
+                  loading: _isRegistering,
+                  onPressed: _isRegistering ? null : _finishCashPayment,
+                ),
               ],
             ],
           ),

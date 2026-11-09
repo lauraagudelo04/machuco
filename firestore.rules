@@ -1,0 +1,445 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isActiveOwner() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'owner'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    function isActiveClient() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'client'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
+    }
+
+    // Pago que un cliente registra al finalizar su reserva: en el local queda
+    // pendiente y sin metodo (lo confirma el propietario); con tarjeta nace
+    // pagado, con su metodo y fecha de pago.
+    function isClientPaymentCreate(data) {
+      return isActiveClient()
+        && data.clientId == request.auth.uid
+        && data.ownerId != request.auth.uid
+        && (
+          (data.status == 'pending'
+            && !('method' in data)
+            && !('paymentMethodId' in data)
+            && !('paidAt' in data)
+            && !('receiptNumber' in data))
+          ||
+          (data.status == 'paid'
+            && 'paymentMethodId' in data
+            && 'paidAt' in data)
+        );
+    }
+
+    function hasValidPaymentFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
+          'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
+          'status', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
+          'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
+          'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
+          'paymentMethodName', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.bookingId is string && data.bookingId.size() > 0
+        && data.bookingReference is string && data.bookingReference.size() > 0
+        && data.clientId is string && data.clientId.size() > 0
+        && data.client is string && data.client.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.motel is string && data.motel.size() > 0
+        && data.roomId is string && data.roomId.size() > 0
+        && data.room is string && data.room.size() > 0
+        && data.reservationDate is timestamp
+        && data.amount is int && data.amount > 0
+        && data.status in ['pending', 'paid', 'refunded', 'cancelled']
+        && (!('method' in data) || data.method in ['online', 'cash'])
+        && (!('paymentMethodId' in data)
+          || (data.paymentMethodId is int && data.paymentMethodId > 0))
+        && (!('paymentMethodName' in data)
+          || (data.paymentMethodName is string
+            && data.paymentMethodName.size() > 0
+            && data.paymentMethodName.size() <= 100))
+        && (!('paymentMethodId' in data) || 'paymentMethodName' in data)
+        && (!('paidAt' in data) || data.paidAt is timestamp)
+        && (!('receiptNumber' in data)
+          || (data.receiptNumber is string && data.receiptNumber.size() > 0))
+        && data.updatedAt == request.time;
+    }
+
+    function isValidPaymentTransition(previous, next) {
+      return previous == next
+        || (previous == 'pending' && next in ['paid', 'cancelled'])
+        || (previous == 'paid' && next == 'refunded');
+    }
+
+    function isLegacyDemoPaymentId(paymentId) {
+      return paymentId in [
+        'pay-001', 'pay-002', 'pay-003',
+        'owner-pay-001', 'owner-pay-002', 'owner-pay-003'
+      ];
+    }
+
+    // Nombre y celular con tipo y largo acotados (mismos limites que la app).
+    function hasValidContactFields(data) {
+      return data.fullName is string
+        && data.fullName.size() >= 3 && data.fullName.size() <= 100
+        && data.phoneNumber is string
+        && data.phoneNumber.size() >= 4 && data.phoneNumber.size() <= 20;
+    }
+
+    // Administrador con cuenta activa (no basta con tener el rol). Uno creado
+    // con contrasena temporal (mustChangePassword) aun no cuenta como activo
+    // para estas reglas: primero debe cambiarla.
+    function isActiveAdmin() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('mustChangePassword', false) != true;
+    }
+
+    // Registro de administradores activos (system/adminRegistry). Cuenta todo
+    // admin con accountStatus == 'active', incluso con contrasena temporal
+    // pendiente. Crear un admin lo sube 1 y anonimizar lo baja 1, en la misma
+    // transaccion (getAfter ve el estado resultante del lote).
+    function adminRegistryPath() {
+      return /databases/$(database)/documents/system/adminRegistry;
+    }
+
+    function registryCountBefore() {
+      return get(adminRegistryPath()).data.activeAdminCount;
+    }
+
+    function registryCountAfter() {
+      return getAfter(adminRegistryPath()).data.activeAdminCount;
+    }
+
+    // Un admin activo crea a otro admin: activo, con contrasena temporal
+    // pendiente, auditado y sumando 1 al registro.
+    function isAdminCreation(uid) {
+      let data = request.resource.data;
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'mustChangePassword', 'createdBy'])
+        && data.keys().hasAll([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'mustChangePassword', 'createdBy'])
+        && hasValidContactFields(data)
+        && hasValidCommonExtras(data)
+        && data.email is string
+        && data.email.size() <= 254
+        && data.email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')
+        && data.role == 'admin'
+        && data.accountStatus == 'active'
+        && data.mustChangePassword == true
+        && data.createdBy == request.auth.uid
+        && data.createdAt == request.time
+        && registryCountAfter() == registryCountBefore() + 1;
+    }
+
+    // Un admin activo edita datos de contacto de un admin activo (no del
+    // correo, el rol ni el estado). Nunca sobre uno anonimizado.
+    function isAdminContactEdit() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'admin'
+        && before.accountStatus == 'active'
+        && after.diff(before).affectedKeys().hasOnly([
+          'firstNames', 'lastNames', 'fullName', 'phoneCountryCodeId',
+          'phoneNumber'])
+        && hasValidContactFields(after)
+        && hasValidCommonExtras(after);
+    }
+
+    // Anonimizar un admin activo (a otro o a si mismo): el documento queda solo
+    // con los campos permitidos y el registro baja 1 sin quedar por debajo de 1.
+    function isAdminAnonymization() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'admin'
+        && before.accountStatus == 'active'
+        && after.keys().hasOnly([
+          'fullName', 'role', 'accountStatus', 'createdAt', 'createdBy',
+          'anonymizedAt', 'anonymizedBy'])
+        && after.keys().hasAll([
+          'fullName', 'role', 'accountStatus', 'anonymizedAt', 'anonymizedBy'])
+        && after.fullName == 'Administrador eliminado'
+        && after.role == 'admin'
+        && after.accountStatus == 'anonymized'
+        && after.get('createdAt', null) == before.get('createdAt', null)
+        && after.get('createdBy', null) == before.get('createdBy', null)
+        && after.anonymizedAt == request.time
+        && after.anonymizedBy == request.auth.uid
+        && registryCountAfter() == registryCountBefore() - 1
+        && registryCountAfter() >= 1;
+    }
+
+    // Campos comunes opcionales del registro por rol (los perfiles antiguos
+    // solo traen fullName, email y phoneNumber).
+    function hasValidCommonExtras(data) {
+      return (!('firstNames' in data)
+          || (data.firstNames is string
+            && data.firstNames.size() >= 2 && data.firstNames.size() <= 50))
+        && (!('lastNames' in data)
+          || (data.lastNames is string
+            && data.lastNames.size() >= 2 && data.lastNames.size() <= 50))
+        && (!('phoneCountryCodeId' in data)
+          || (data.phoneCountryCodeId is int && data.phoneCountryCodeId > 0));
+    }
+
+    // Cliente: sin campos de propietario; fecha de nacimiento real, no futura
+    // y de mayor de edad (18 * 365 dias: nunca rechaza a un adulto por bisiestos).
+    function hasValidClientExtras(data) {
+      return !('personType' in data)
+        && !('nit' in data)
+        && !('companyName' in data)
+        && !('planId' in data)
+        && (!('birthDate' in data)
+          || (data.birthDate is timestamp
+            && data.birthDate <= request.time - duration.value(6570, 'd')
+            && data.birthDate.year() >= 1900));
+    }
+
+    // Propietario: tipo de persona y NIT (base 6-10 digitos + guion + DV)
+    // obligatorios; sin fecha de nacimiento; razon social solo juridica.
+    function hasValidOwnerExtras(data) {
+      return !('birthDate' in data)
+        && 'personType' in data
+        && data.personType in ['natural', 'juridica']
+        && 'nit' in data
+        && data.nit is string
+        && data.nit.matches('^[0-9]{6,10}-[0-9]$')
+        && (!('companyName' in data)
+          || (data.personType == 'juridica'
+            && data.companyName is string
+            && data.companyName.size() >= 2
+            && data.companyName.size() <= 120))
+        && (!('planId' in data)
+          || (data.planId is int && data.planId > 0));
+    }
+
+    // Un admin activo atiende una solicitud de propietario SOLO si sigue en
+    // pending_approval, y solo escribe estado + auditoria (nunca el rol).
+    function isOwnerApprovalDecision(uid) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let changed = after.diff(before).affectedKeys();
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && before.role == 'owner'
+        && before.accountStatus == 'pending_approval'
+        && (
+          (after.accountStatus == 'active'
+            && changed.hasOnly(['accountStatus', 'approvedBy', 'approvedAt'])
+            && changed.hasAll(['accountStatus', 'approvedBy', 'approvedAt'])
+            && after.approvedBy == request.auth.uid
+            && after.approvedAt == request.time)
+          ||
+          (after.accountStatus == 'rejected'
+            && changed.hasOnly(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && changed.hasAll(
+              ['accountStatus', 'rejectionReason', 'rejectedBy', 'rejectedAt'])
+            && after.rejectionReason is string
+            && after.rejectionReason.size() >= 10
+            && after.rejectionReason.size() <= 300
+            && after.rejectedBy == request.auth.uid
+            && after.rejectedAt == request.time)
+        );
+    }
+
+    // Registro publico: nunca admin; cliente activo, propietario pendiente.
+    function isPublicRegistration(uid) {
+      return isSignedIn()
+        && request.auth.uid == uid
+        && request.resource.data.keys().hasAll(
+          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
+        && request.resource.data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'birthDate', 'personType', 'nit', 'companyName', 'planId'])
+        && hasValidContactFields(request.resource.data)
+        && hasValidCommonExtras(request.resource.data)
+        && request.resource.data.email == request.auth.token.email
+        && request.resource.data.role in ['client', 'owner']
+        && (
+          (request.resource.data.role == 'client'
+            && request.resource.data.accountStatus == 'active'
+            && hasValidClientExtras(request.resource.data))
+          ||
+          (request.resource.data.role == 'owner'
+            && request.resource.data.accountStatus == 'pending_approval'
+            && hasValidOwnerExtras(request.resource.data))
+        )
+        && request.resource.data.createdAt == request.time;
+    }
+
+    // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
+    // se pueden asignar en la creacion (valores iniciales) o por un admin.
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+
+      // Registro publico (nunca admin; cliente activo, propietario pendiente)
+      // o creacion de un administrador por otro administrador activo.
+      allow create: if isPublicRegistration(uid) || isAdminCreation(uid);
+
+      // Un admin activo (a) atiende solicitudes de propietarios pendientes
+      // (ver isOwnerApprovalDecision), (b) habilita/deshabilita cuentas que
+      // no son de administrador, (c) edita datos de contacto de un admin
+      // activo o (d) anonimiza un admin activo; nunca cambia el rol ni el
+      // correo. El propio usuario solo puede cambiar su nombre y su celular y,
+      // si es un admin con contrasena temporal, limpiar mustChangePassword.
+      // Ninguna rama modifica una cuenta anonimizada.
+      allow update: if resource.data.get('accountStatus', '') != 'anonymized'
+        && (isOwnerApprovalDecision(uid)
+        || (isActiveAdmin()
+          && resource.data.role != 'admin'
+          && resource.data.accountStatus in ['active', 'disabled']
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['accountStatus'])
+          && request.resource.data.accountStatus in ['active', 'disabled'])
+        || isAdminContactEdit()
+        || isAdminAnonymization()
+        || (isSignedIn()
+          && request.auth.uid == uid
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['fullName', 'phoneNumber', 'mustChangePassword'])
+          && hasValidContactFields(request.resource.data)
+          && (!('mustChangePassword' in request.resource.data.diff(resource.data).affectedKeys())
+            || (resource.data.get('mustChangePassword', false) == true
+              && request.resource.data.mustChangePassword == false))));
+
+      // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
+      // tras reautenticarse). Las subcolecciones no se borran en cascada.
+      // Un admin no lo borra: se anonimiza (ver isAdminAnonymization) para
+      // conservar la auditoria y respetar "siempre hay un admin activo".
+      allow delete: if isSignedIn()
+        && request.auth.uid == uid
+        && resource.data.role != 'admin'
+        && resource.data.get('accountStatus', '') != 'anonymized';
+
+      match /subscriptions/{subscriptionId} {
+        allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly([
+            'localId', 'userEmail', 'planId', 'planName', 'motelName',
+            'amount', 'billingPeriod', 'nextBillingDate', 'status',
+            'features', 'updatedAt']);
+        allow delete: if false;
+
+        match /payments/{paymentId} {
+          allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+          allow create, update: if isSignedIn() && request.auth.uid == uid
+            && request.resource.data.keys().hasOnly([
+              'localId', 'subscriptionLocalId', 'date', 'amount',
+              'paymentMethod', 'reference', 'status', 'updatedAt']);
+          allow delete: if false;
+        }
+      }
+    }
+
+    // Contador de administradores activos ("siempre debe existir uno"). Solo
+    // un admin activo lo lee; lo crea con un conteo >= 1 y solo lo cambia en
+    // +-1 sin bajar de 1. La app lo cambia en la misma transaccion que crea o
+    // anonimiza un admin (ver isAdminCreation e isAdminAnonymization, que
+    // exigen ese cambio).
+    match /system/adminRegistry {
+      allow read: if isActiveAdmin();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly(['activeAdminCount'])
+        && request.resource.data.activeAdminCount is int
+        && request.resource.data.activeAdminCount >= 1;
+      allow update: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly(['activeAdminCount'])
+        && request.resource.data.activeAdminCount is int
+        && request.resource.data.activeAdminCount >= 1
+        && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
+          || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1);
+      allow delete: if false;
+    }
+
+    // Pagos sincronizados con Cloud Firestore. El propietario los lee y los
+    // confirma; el cliente solo puede crear los suyos (ver
+    // isClientPaymentCreate) y no tiene historial de Payment en la app final.
+    match /payments/{paymentId} {
+      allow read: if isAdmin()
+        || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if !isLegacyDemoPaymentId(paymentId)
+        && hasValidPaymentFields(request.resource.data)
+        && (
+          (isActiveOwner()
+            && request.resource.data.ownerId == request.auth.uid)
+          || isClientPaymentCreate(request.resource.data)
+        );
+
+      allow update: if isActiveOwner()
+        && !isLegacyDemoPaymentId(paymentId)
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
+          'paymentMethodName', 'updatedAt'
+        ])
+        && isValidPaymentTransition(
+          resource.data.status,
+          request.resource.data.status
+        )
+        && hasValidPaymentFields(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    // Propietarios: dato de dominio administrado solo por el rol admin. El
+    // propietario no se autogestiona desde la app, por eso la coleccion no se
+    // expone a isActiveOwner().
+    function hasValidOwnerFields(data) {
+      return data.keys().hasOnly([
+          'fullName', 'documentType', 'documentNumber', 'email', 'phone',
+          'countryCode', 'countryName', 'address', 'isActive', 'updatedBy',
+          'updatedAt'
+        ])
+        && data.fullName is string && data.fullName.size() > 0
+        && data.documentType is string && data.documentType.size() > 0
+        && data.documentNumber is string && data.documentNumber.size() > 0
+        && data.email is string && data.email.size() > 0
+        && data.phone is string && data.phone.size() > 0
+        && data.updatedBy is string && data.updatedBy == request.auth.uid
+        && data.isActive is bool;
+    }
+
+    match /owners/{ownerId} {
+      allow read: if isAdmin();
+      allow create, update: if isAdmin()
+        && hasValidOwnerFields(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Denegado por defecto. Cada rama debe agregar su coleccion de forma
+    // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

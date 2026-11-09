@@ -2,17 +2,23 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/models/review/review_data.dart';
+// Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
+// dominio del mismo nombre dentro de la clase.
+import 'package:machuco/database/repository/review/review_repository.dart';
 
 /// Controlador de reseñas desde la perspectiva del propietario.
 ///
 /// Opera directamente sobre el modelo [Review]; la asociación con el motel
 /// se resuelve a través de [motelId] que ahora vive en el modelo.
 class OwnerReviewController extends ChangeNotifier {
-  OwnerReviewController({MotelController? motelController})
-    : _motelController = motelController ?? MotelController();
+  OwnerReviewController({
+    MotelController? motelController,
+    ReviewRepository? repository,
+  }) : _motelController = motelController ?? MotelController(),
+       _repository = repository ?? InMemoryReviewRepository.shared;
 
   final MotelController _motelController;
+  final ReviewRepository _repository;
 
   List<Motel> _myMotels = [];
   List<Review> _reviews = [];
@@ -33,13 +39,10 @@ class OwnerReviewController extends ChangeNotifier {
     notifyListeners();
     try {
       _myMotels = await _motelController.getMyMotels();
-      if (_reviews.isEmpty) {
-        // Filtrar reseñas que pertenezcan a los moteles del propietario
-        final motelIds = _myMotels.map((m) => m.id).toSet();
-        _reviews = ReviewData.all()
-            .where((r) => motelIds.contains(r.motelId))
-            .toList();
-      }
+      final motelIds = _myMotels.map((m) => m.id).toSet();
+      _reviews = (await _repository.getAll())
+          .where((r) => motelIds.contains(r.motelId))
+          .toList();
     } catch (_) {
       _errorMessage = 'No fue posible cargar las reseñas de tus moteles.';
     } finally {
@@ -50,24 +53,22 @@ class OwnerReviewController extends ChangeNotifier {
 
   List<Review> get reviews {
     final normalizedQuery = _query.trim().toLowerCase();
-    return _reviews.where((review) {
-      if (_selectedMotelId != null && review.motelId != _selectedMotelId) {
-        return false;
-      }
-      if (normalizedQuery.isEmpty) return true;
-      return review.authorName.toLowerCase().contains(normalizedQuery) ||
-          review.title.toLowerCase().contains(normalizedQuery) ||
-          review.body.toLowerCase().contains(normalizedQuery);
-    }).toList(growable: false);
+    return _reviews
+        .where((review) {
+          if (_selectedMotelId != null && review.motelId != _selectedMotelId) {
+            return false;
+          }
+          if (normalizedQuery.isEmpty) return true;
+          return review.authorName.toLowerCase().contains(normalizedQuery) ||
+              review.title.toLowerCase().contains(normalizedQuery) ||
+              review.body.toLowerCase().contains(normalizedQuery);
+        })
+        .toList(growable: false);
   }
 
   int get totalCount => reviews.length;
 
-  double get averageRating {
-    if (reviews.isEmpty) return 0;
-    return reviews.map((r) => r.rating).reduce((a, b) => a + b) /
-        reviews.length;
-  }
+  double get averageRating => averageRatingOf(reviews);
 
   void selectMotel(String? motelId) {
     _selectedMotelId = motelId;
@@ -79,15 +80,21 @@ class OwnerReviewController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void reply(String reviewId, String message) {
+  Future<void> reply(String reviewId, String message) async {
     final trimmed = message.trim();
-    if (trimmed.isEmpty) return;
-    final review = _reviews.firstWhere((r) => r.id == reviewId);
-    _reviews[_reviews.indexOf(review)] =
-        review.copyWith(ownerReply: trimmed);
+    final index = _reviews.indexWhere((r) => r.id == reviewId);
+    if (trimmed.isEmpty || index == -1) return;
+    final updated = _reviews[index].copyWith(ownerReply: trimmed);
+    await _repository.update(updated);
+    _reviews[index] = updated;
     notifyListeners();
   }
 
-  String getMotelName(String motelId) =>
-      _myMotels.firstWhere((m) => m.id == motelId, orElse: () => _myMotels.first).name;
+  /// Nombre del motel, o su [motelId] si no está entre los del propietario.
+  String getMotelName(String motelId) {
+    for (final motel in _myMotels) {
+      if (motel.id == motelId) return motel.name;
+    }
+    return motelId;
+  }
 }

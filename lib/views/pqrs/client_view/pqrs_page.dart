@@ -85,7 +85,7 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
       motelId: pqrsCurrentMotelId,
       motelName: motel?.name ?? 'Motel',
       clientId: pqrsCurrentClientId,
-      clientName: ClientController.currentClient.name,
+      clientName: ClientController.instance.currentClient!.name,
       type: _selectedType!,
       subject: _subjectController.text.trim(),
       description: _descriptionController.text.trim(),

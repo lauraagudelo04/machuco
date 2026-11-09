@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/room/room_controller.dart';
 import 'package:machuco/controllers/room/room_controller_support.dart';
@@ -16,8 +17,9 @@ import 'package:machuco/views/room/room_status_badge.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
 class RoomOwnerPage extends StatefulWidget {
-  const RoomOwnerPage({super.key, required this.motel, this.rooms, this.types});
+  const RoomOwnerPage({super.key, required this.motel, this.rooms, this.types, this.dataController});
   final Motel motel;
+  final RoomController? dataController;
   final List<RoomVisualData>? rooms;
   final List<RoomTypeData>? types;
   @override
@@ -31,16 +33,17 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   final Set<String> _expandedTypeIds = <String>{};
   bool _isLoadingLocalData = true;
   String? _localDataError;
+  bool _isSaving = false;
 
   @override
   void initState() {
     super.initState();
     _controller = RoomOwnerController(
       motelId: widget.motel.id,
-      seedRooms: widget.rooms,
-      seedTypes: widget.types,
+      seedRooms: widget.rooms ?? const [],
+      seedTypes: widget.types ?? const [],
     );
-    _dataController = RoomController.fromEnvironment();
+    _dataController = widget.dataController ?? RoomController.fromEnvironment();
     _dataController.addListener(_onDataChanged);
     _initializeData();
   }
@@ -48,6 +51,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
   @override
   void dispose() {
     _dataController.removeListener(_onDataChanged);
+    if (widget.dataController == null) _dataController.dispose();
     _searchController.dispose();
     super.dispose();
   }
@@ -69,12 +73,13 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
           seedTypes: _dataController.roomTypes,
         );
       }
-    } catch (_) {
+    } catch (error, stackTrace) {
+      debugPrint('Error al cargar room: $error\n$stackTrace');
       _localDataError = 'No fue posible abrir la base SQLite local.';
     } finally {
       if (mounted) setState(() => _isLoadingLocalData = false);
     }
-    await _dataController.loadIncludedServices(forceRefresh: true);
+    if (mounted) await _dataController.loadIncludedServices(forceRefresh: true);
   }
 
   @override
@@ -135,6 +140,10 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                         forceRefresh: true,
                       ),
                     ),
+                    if (kDebugMode && _dataController.databasePath != null) ...[
+                      const SizedBox(height: AppSpacing.s2),
+                      SelectableText('SQLite: ${_dataController.databasePath}'),
+                    ],
                   ],
                 ),
               ),
@@ -142,7 +151,10 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
               _ResponsiveSectionHeader(
                 title: 'Tipos de habitación',
                 actionLabel: 'Agregar tipo',
-                onAction: _createType,
+                onAction:
+                    _isLoadingLocalData || _localDataError != null || _isSaving
+                    ? () {}
+                    : _createType,
               ),
               const SizedBox(height: AppSpacing.s3),
               if (types.isEmpty)
@@ -179,6 +191,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                       onAddRoom: () => _openRoomForm(type: type),
                       onEdit: () => _editType(type),
                       onDelete: () => _deleteType(type),
+                      onRoomDelete: _deleteRoom,
                       onRoomEdit: (room) =>
                           _openRoomForm(room: room, type: type),
                       onRoomTap: (room) => Navigator.of(context).push(
@@ -209,11 +222,11 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       motelId: widget.motel.id,
       name: name,
     );
+    if (!await _persist(() => _dataController.upsertRoomType(type))) return;
     setState(() {
       _controller.addType(type);
       _expandedTypeIds.add(type.id);
     });
-    await _persist(() => _dataController.upsertRoomType(type));
   }
 
   Future<void> _editType(RoomTypeData type) async {
@@ -222,10 +235,12 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       excludingTypeId: type.id,
     );
     if (name != null) {
-      setState(() => _controller.updateType(type.id, name));
-      await _persist(
+      if (!await _persist(
         () => _dataController.upsertRoomType(type.copyWith(name: name)),
-      );
+      )) {
+        return;
+      }
+      setState(() => _controller.updateType(type.id, name));
     }
   }
 
@@ -324,12 +339,39 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       ),
     );
     if (confirmed == true) {
+      if (!await _persist(() => _dataController.deleteRoomType(type.id))) {
+        return;
+      }
       setState(() {
         _controller.deleteType(type.id);
         _expandedTypeIds.remove(type.id);
       });
-      await _persist(() => _dataController.deleteRoomType(type.id));
     }
+  }
+
+  Future<void> _deleteRoom(RoomVisualData room) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Eliminar habitación'),
+        content: Text(
+          '¿Eliminar la habitación ${room.roomNumber} (${room.name})?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Eliminar'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!await _persist(() => _dataController.deleteRoom(room.id))) return;
+    setState(() => _controller.deleteRoom(room.id));
   }
 
   Future<void> _openRoomForm({
@@ -356,9 +398,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
     final remoteServices = _dataController.includedServices
         .map((service) => service.name)
         .toList(growable: false);
-    final serviceCatalog = remoteServices.isEmpty
-        ? roomIncludedServiceCatalog
-        : remoteServices;
+    final serviceCatalog = {...remoteServices, ...services}.toList();
     final saved = await showModalBottomSheet<RoomVisualData>(
       context: context,
       isScrollControlled: true,
@@ -444,6 +484,10 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
                   'Servicios incluidos',
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
+                if (serviceCatalog.isEmpty)
+                  const Text(
+                    'No hay servicios disponibles. Sincroniza el maestro para seleccionarlos.',
+                  ),
                 Wrap(
                   spacing: AppSpacing.s2,
                   runSpacing: AppSpacing.s2,
@@ -569,6 +613,7 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
       ),
     );
     if (saved != null) {
+      if (!await _persist(() => _dataController.upsertRoom(saved))) return;
       setState(() {
         if (room == null) {
           _controller.addRoom(saved);
@@ -577,15 +622,25 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
         }
         _expandedTypeIds.add(saved.idType);
       });
-      await _persist(() => _dataController.upsertRoom(saved));
     }
   }
 
-  Future<void> _persist(Future<void> Function() action) async {
+  Future<bool> _persist(Future<void> Function() action) async {
+    if (!mounted || _isSaving || _isLoadingLocalData || _localDataError != null) {
+      return false;
+    }
+    setState(() => _isSaving = true);
     try {
       await action();
-    } catch (_) {
-      if (!mounted) return;
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Cambio guardado en SQLite.')),
+        );
+      }
+      return mounted;
+    } catch (error, stackTrace) {
+      debugPrint('Error al guardar room en SQLite: $error\n$stackTrace');
+      if (!mounted) return false;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           backgroundColor: AppColors.rose,
@@ -595,6 +650,9 @@ class _RoomOwnerPageState extends State<RoomOwnerPage> {
           ),
         ),
       );
+      return false;
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
     }
   }
 }
@@ -766,6 +824,7 @@ class _OwnerTypeCard extends StatelessWidget {
     required this.onAddRoom,
     required this.onEdit,
     required this.onDelete,
+    required this.onRoomDelete,
     required this.onRoomEdit,
     required this.onRoomTap,
   });
@@ -779,6 +838,7 @@ class _OwnerTypeCard extends StatelessWidget {
   final VoidCallback onAddRoom;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
+  final ValueChanged<RoomVisualData> onRoomDelete;
   final ValueChanged<RoomVisualData> onRoomEdit;
   final ValueChanged<RoomVisualData> onRoomTap;
 
@@ -891,6 +951,7 @@ class _OwnerTypeCard extends StatelessWidget {
                     child: _OwnerRoomCard(
                       room: room,
                       typeName: type.name,
+                      onDelete: () => onRoomDelete(room),
                       onEdit: () => onRoomEdit(room),
                       onTap: () => onRoomTap(room),
                     ),
@@ -908,11 +969,13 @@ class _OwnerRoomCard extends StatelessWidget {
   const _OwnerRoomCard({
     required this.room,
     required this.typeName,
+    required this.onDelete,
     required this.onEdit,
     required this.onTap,
   });
   final RoomVisualData room;
   final String typeName;
+  final VoidCallback onDelete;
   final VoidCallback onEdit;
   final VoidCallback onTap;
   @override
@@ -947,6 +1010,11 @@ class _OwnerRoomCard extends StatelessWidget {
           style: Theme.of(context).textTheme.labelMedium,
         ),
         const SizedBox(height: AppSpacing.s3),
+        TextButton.icon(
+          onPressed: onDelete,
+          icon: const Icon(Icons.delete_outline),
+          label: const Text('Eliminar habitación'),
+        ),
         TextButton.icon(
           onPressed: onEdit,
           icon: const Icon(Icons.edit_outlined),

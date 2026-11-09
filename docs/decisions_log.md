@@ -94,6 +94,9 @@ de autorizar una operación, como exige
 cerrada en `README.md`, y que la autorización por rol en backend se agregue
 explícitamente como pendiente (hoy queda implícita dentro del mismo punto).
 
+*(Superado el 2026-10-27: Auth0 se retiró y lo reemplazó Firebase
+Authentication; ver "Retiro del código de Auth0".)*
+
 ## 2026-09-15 — Modo de autenticación con usuarios de prueba embebidos en el código
 
 **Hallazgo:** `lib/service/auth/hardcoded_auth_service.dart` define una
@@ -253,3 +256,316 @@ la base de datos. Las 17 ramas comparten `AppDatabase`.
 `build_runner`) para los datos de dominio locales. No cubre el backend
 remoto, las preferencias de interfaz (`shared_preferences`) ni las
 credenciales.
+
+**Estado:** confirmado el 2026-10-27 como parte de la segunda etapa (ver la
+entrada "El proyecto entra en la segunda etapa").
+
+## 2026-10-27 — Decisión tomada: Firebase, Supabase y Firebase Authentication
+
+**Decisión del equipo (cerrada):**
+
+| Necesidad | Tecnología acordada |
+|---|---|
+| Base de datos principal (datos de dominio en la nube: reservas, moteles, habitaciones, pagos, PQRS, etc.) | **Firebase** |
+| Datos maestros (catálogos y listas de referencia, por ejemplo indicativos telefónicos, tipos de documento, ciudades) | **Supabase**, consultado mediante **API REST** |
+| Sistema de autenticación | **Firebase Authentication** (`firebase_auth`) |
+
+**Por qué importa:** `CLAUDE.md` y `README.md#estado-y-decisiones-pendientes`
+exigían una decisión documentada antes de fijar base de datos y
+autenticación. Con esta entrada esas dos decisiones dejan de estar
+pendientes para las 17 ramas.
+
+**Consecuencias:**
+
+- Firebase Authentication reemplaza a Auth0 como proveedor de autenticación
+  acordado. `auth0_flutter` y `Auth0AuthService` siguen en el código hasta
+  que se complete la migración; no se debe construir funcionalidad nueva
+  sobre Auth0. *(Completado el mismo día: ver "Retiro del código de
+  Auth0".)*
+- El acceso a Firebase y a Supabase va siempre detrás de servicios en
+  `lib/service/` y repositorios; ninguna vista los consulta directamente.
+- Las URL, llaves y configuración de Firebase/Supabase se inyectan por
+  entorno (`--dart-define` o archivos de configuración ignorados por Git);
+  nunca se versionan secretos.
+- La autorización por rol sigue validándose en el backend (reglas de
+  seguridad de Firebase / políticas de Supabase), no solo en la UI.
+
+**Estado:** cerrado. Siguen pendientes la pasarela de pagos, el
+almacenamiento de imágenes y la plataforma de despliegue.
+
+## 2026-10-27 — El proyecto entra en la segunda etapa
+
+**Cambio:** el proyecto pasa de la primera etapa (interfaz y datos mock) a la
+**segunda etapa**, en la que se implementan elementos funcionales:
+
+- **Consulta de maestros por API REST** contra Supabase.
+- **Servicios SQL** para almacenar datos localmente (Floor sobre SQLite,
+  `lib/database/app_database.dart`), lo que confirma la entrada
+  "2026-10-06 — Floor (SQLite)" de este registro.
+- **`shared_preferences`** para guardar o compartir datos locales no
+  sensibles, como el último correo usado, preferencias y otros valores
+  simples (ver [`shared_preferences.md`](shared_preferences.md)).
+
+Como se anticipó en la entrada del 2026-09-23, en esta etapa cada persona
+puede cambiar de funcionalidad; cada rama debe revisar su archivo en
+`contexts/people/`.
+
+**Estado:** cerrado.
+
+## 2026-10-27 — Retiro del código de Auth0 (rama `feature-juan_pablo`)
+
+**Cambio:** el login quedó conectado a Firebase Authentication
+(`FirebaseAuthService`) y se eliminó el código de Auth0:
+`auth0_auth_service.dart`, `auth0_config.dart`, la dependencia
+`auth0_flutter` y los `manifestPlaceholders` de Auth0 en
+`android/app/build.gradle.kts`. El contrato transitorio `AuthService` pasó a
+`lib/service/auth/auth_service.dart` y los flags que no eran de Auth0
+(`AUTH_USE_HARDCODED_AUTH_USERS`, `AUTH_USE_BACKEND_USERS`,
+`AUTH_USERS_API_*`) a `AuthConfig` (`auth_config.dart`), con los mismos
+nombres de `--dart-define`.
+
+**Verificación:** `git grep` sobre todas las ramas remotas no encontró
+imports de Auth0 fuera de los archivos propios del módulo de autenticación.
+
+**Pendiente:** asignar el custom claim `role` desde el backend (hoy todo
+usuario entra como Cliente) y definir dónde se guarda el perfil del usuario.
+*(Superado por la entrada siguiente: el rol y el perfil viven en Cloud
+Firestore; ya no se usa custom claim.)*
+
+**Estado:** cerrado.
+
+## 2026-10-27 — Cloud Firestore para perfiles de usuario y rol (rama `feature-juan_pablo`)
+
+**Decisión:** el perfil del usuario se guarda en **Cloud Firestore**, en
+`users/{uid}` (uid de Firebase Auth), y esa es la fuente del rol y del estado
+de la cuenta (reemplaza el custom claim `role`, que exigiría Cloud
+Functions). La autorización se valida en el backend con **reglas de
+seguridad** (`firestore.rules`, referenciadas en `firebase.json`), no en la
+UI.
+
+**Esquema de `users/{uid}`:** `fullName`, `email` (normalizado),
+`phoneNumber` (con indicativo), `role` (`client` | `owner` | `admin`),
+`accountStatus` (`active` | `pending_approval` | `rejected` | `disabled`) y
+`createdAt` (timestamp de servidor). No se guarda documento de identidad.
+
+**Estado inicial por rol:** el registro público solo crea `client`
+(`active`) u `owner` (`pending_approval`); nunca `admin`. El inicio de sesión
+se bloquea con mensaje claro si la cuenta está pendiente, rechazada o
+deshabilitada. Sin documento de perfil se asume cliente (mínimo privilegio).
+Si falla la escritura del perfil al registrarse, se elimina la cuenta recién
+creada. Un error de red al leer el perfil **no** cierra la sesión (el
+usuario puede reintentar). En las reglas, `create` exige
+`keys().hasOnly([...])` sobre los seis campos del esquema, `email` igual al
+del token y `createdAt == request.time`; el `update` propio solo admite
+`affectedKeys().hasOnly(['fullName', 'phoneNumber'])`, de modo que el usuario
+no puede modificar `role`, `accountStatus`, `email` ni `createdAt`. Un admin
+solo puede cambiar `accountStatus` (a `active`, `pending_approval`,
+`rejected` o `disabled`), nunca el rol. `fullName` (3 a 100 caracteres) y
+`phoneNumber` (4 a 20) se validan como texto al crear y al actualizar;
+`delete` está denegado y todo lo demás se deniega por
+defecto (cada rama agrega sus colecciones explícitamente, ver
+[firebase.md](firebase.md)). Los nombres de colecciones están en
+`lib/service/firebase/firestore_collections.dart`.
+
+**Pendiente:** pantalla "Cuenta en revisión" para propietarios; creación de
+administradores (manual en la consola o script, nunca desde la app);
+flujo de aprobación/rechazo de propietarios por el admin. Las reglas se
+desplegaron el 2026-10-27 (`firebase deploy --only firestore:rules`) y la
+base de datos Firestore ya existe; cada cambio en `firestore.rules` debe
+volver a desplegarse.
+
+**Estado:** cerrado.
+
+## 2026-10-20 — Maestro `phone_country_codes` (Supabase → caché SQLite)
+
+**Contexto:** la funcionalidad de administración de moteles necesita el
+maestro de códigos telefónicos de país. Se sigue el mismo patrón que el
+maestro de servicios incluidos de habitaciones (`room_included_services`).
+
+**Decisión:**
+- La tabla remota vive en Supabase y se consulta por REST
+  (`/rest/v1/phone_country_codes?select=*`) con el header `apikey`.
+- Las credenciales se inyectan con `--dart-define`
+  (`SUPABASE_URL`, `SUPABASE_ANON_KEY`), no se escriben en el repositorio.
+- El resultado se cachea en la tabla local `phone_country_codes` (SQLite) y,
+  si falla la red, se devuelve la caché.
+- Se usa `sqflite` con DAO manual (sin `@entity` ni codegen nuevo) y el DAO
+  se expone desde `AppDatabase` junto a los demás, con la migración `6 → 7`.
+- Las carpetas siguen la convención ya usada por el módulo de habitaciones
+  (`lib/database/repository/motel/`), no `lib/repositories/`.
+
+**Nota:** el maestro en Supabase puede estar vacío; en ese caso la lista se
+verá vacía hasta que se inserten filas en la tabla remota.
+
+**Estado:** implementado en `lib/models/phone_country_code/`,
+`lib/service/phone_country_code/`, `lib/database/repository/motel/` y
+`lib/controllers/motel/phone_country_code_controller.dart`.
+
+## 2026-10-28 — Moteles: Supabase + caché SQLite (Floor)
+
+**Decisión:**
+- Tabla remota `public.motels` con RLS (SELECT/INSERT/UPDATE para `anon`), sin DELETE (inhabilitación con `is_available = false`).
+- Credenciales por `--dart-define` vía `SupabasePhoneCountryCodeConfig` (`SUPABASE_URL`, `SUPABASE_ANON_KEY`).
+- Caché local con Floor: `MotelEntity` (listas como JSON, booleano como INTEGER), `MotelDao` con `replaceAll`, `AppDatabase` v10 + `migration9To10` (la versión actual es 11; ver la entrada "Versión 11 de la base local").
+- `MotelRepository`: red primero con `apikey`, `Prefer: return=representation`, decodificación UTF-8, fallback a caché en errores, excepción clara sin red/caché, 409 por NIT duplicado -> "Ya existe un motel con ese NIT", mapeo snake_case sin modificar `Motel`.
+- `MotelController`: constructor opcional con `MotelRepository`, factory `MotelController.persistent()`; comportamiento mock por defecto preservado para otros módulos y tests.
+
+**Estado:** implementado en `lib/database/model/motel/`, `lib/database/repository/motel/`, `lib/controllers/motel/`, vistas del propietario actualizadas con manejo de errores. Tests en `test/repositories/motel/`. Documentado en `docs/motels_persistence.md`.
+
+## 2026-10-28 — Versión 11 de la base local y ajustes del registro (rama `feature-juan_pablo`)
+
+**Base local:** la rama de moteles (PR #123) y esta rama publicaron cada una
+una migración `9 → 10` distinta (`motels` y `country_phone_codes`). Al
+fusionar se conservó la `9 → 10` de develop sin cambios y se agregó
+`migration10To11`, que crea `country_phone_codes` y completa `motels` con
+`IF NOT EXISTS`, de modo que ninguna base pierde datos venga de una rama o de
+la otra. Versión actual: **11**. Para evitar repetirlo, las ramas deben
+acordar el siguiente número de versión antes de crear una migración.
+
+**Registro público:** se retiró la opción "Administrador" del selector de
+tipo de cuenta (los administradores se crean en la consola de Firebase y las
+reglas ya rechazaban ese registro).
+
+**Contraseña:** login y registro exigen un mínimo de **8 caracteres**, sin
+reglas de complejidad, mientras el proyecto esté en desarrollo
+(`_passwordMinLength` en `lib/views/login/login_page.dart`). Endurecer antes
+de producción.
+
+**Firebase:** la base Firestore `(default)` existe (ubicación `nam5`), las
+reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
+`machuco`.
+
+**Estado:** cerrado.
+
+## 2026-11-04 — Retiro de las credenciales de prueba e indicativos con bandera (rama `feature-juan_pablo`)
+
+**Credenciales de prueba:** se eliminó `HardcodedAuthService`, el flag
+`AUTH_USE_HARDCODED_AUTH_USERS` (que estaba **encendido por defecto**) y el
+aviso con los usuarios de prueba del login. Firebase Authentication es el
+único proveedor; los integrantes crean sus cuentas con su correo. Las pruebas
+usan servicios falsos inyectados. Las contraseñas antiguas siguen en el
+historial de git: no deben reutilizarse en cuentas reales.
+
+**Indicativos:** la tabla real de Supabase es `phone_country_codes`
+(`country_code` ISO, `calling_code`); `country_phone_codes`, que consultaba
+el registro, no existe en Supabase, por lo que el selector siempre caía a la
+caché o a la semilla. `AuthCatalogRepository` ahora consulta
+`phone_country_codes` siguiendo el patrón de `ClientRepository` y cachea con
+el DAO compartido `PhoneCountryCodeDao`. La tabla local `country_phone_codes`
+queda sin uso; se retira en una migración coordinada.
+
+**Dependencia nueva:** `country_flags: ^4.1.2` (solicitada por la rama) para
+pintar la bandera desde el código ISO. Solo se usa a través de
+`AppCountryFlag`.
+
+**Estado:** implementado.
+
+## 2026-11-04 — Plan de autenticación social v1.0 y entorno Android (rama `feature-juan_pablo`)
+
+**Aprobación:** el responsable de la rama aprobó el "Plan de autenticación
+social v1.0" (`docs/auth/plan-auth-social.md`) el 2026-11-04, con las
+decisiones D1-D5 y D7-D11. D6 no se decidió explícitamente.
+
+**Implementado (etapa 7):**
+- `applicationId` de producción `co.machuco.app` y flavor `dev`
+  (`co.machuco.app.dev`), ambos en el proyecto Firebase `machuco`, con sus
+  apps Android registradas.
+- `google-services.json` único con los tres paquetes.
+- Firma de desarrollo compartida mediante `android/key.properties` (no
+  versionado), reutilizando `android/debug.keystore`
+  (SHA-1 `8F:EE:77:0B:B3:26:19:EF:C3:7A:A1:99:C6:98:58:92:79:D2:8A:FE`).
+- Se descartaron la ruta local de Java en `gradle.properties` y el bloque de
+  firma roto de `build.gradle.kts`; `google-services` sigue en 4.4.4.
+- `lib/firebase_options.dart` elige la app por `appFlavor`.
+- Pruebas de `firestore.rules` con Emulator Suite + Node (`test_rules/`).
+- Reglas e índice de `users` desplegados.
+
+**Pendiente:** registrar el SHA-1/SHA-256 compartido en las apps
+`co.machuco.app` y `co.machuco.app.dev`, el keystore de release, la OAuth
+App de GitHub y habilitar los proveedores. Ver la sección 7 del plan y
+`docs/auth/android-setup.md`.
+
+**Estado:** etapa 7 implementada; etapas 1-6 y 8 pendientes.
+
+## 2026-11-05 — Flavor por defecto `dev` (rama `feature-juan_pablo`)
+
+`pubspec.yaml` declara `flutter: default-flavor: dev` para que `flutter run`
+sin `--flavor` siga funcionando en Android en todas las ramas (sin él, Gradle
+compila todas las variantes y Flutter no encuentra el APK). Producción se
+compila siempre con `--flavor prod`. Aprobado por el responsable de la rama.
+
+
+## 2026-11-09 — Gestión de administradores sin Cloud Functions (rama `feature-juan_pablo`)
+
+**Contexto:** es un proyecto universitario y todo debe funcionar sin costos
+(plan Spark de Firebase). Cloud Functions y el Admin SDK exigen el plan
+Blaze, así que no se usan. Tampoco se agregan dependencias ni proveedores de
+correo.
+
+**Decisión (la autoridad son las reglas de Firestore, sin backend propio):**
+- **Crear un administrador:** la app lo crea con una instancia secundaria de
+  Firebase (`Firebase.initializeApp(name: ...)`), para no cerrar la sesión de
+  quien lo crea, y escribe `users/{uid}` con la sesión del administrador
+  principal. Genera una contraseña temporal (`Random.secure()`, 16
+  caracteres) que quien crea ve una sola vez y entrega por su cuenta; nunca
+  se guarda ni se registra. **No se envían correos ni SMS.** Si falla la
+  escritura del perfil, se borra el usuario recién creado (reversión).
+- **Primer ingreso:** el perfil nace con `mustChangePassword: true`. El
+  nuevo administrador va directo a cambiar su contraseña
+  (`AuthRoutes.adminChangePassword`); mientras tanto las reglas no lo tratan
+  como administrador activo. Si pierde la contraseña, usa "¿Olvidaste tu
+  contraseña?".
+- **Eliminar a otro administrador:** se anonimiza `users/{uid}` (queda
+  `fullName: 'Administrador eliminado'`, `accountStatus: 'anonymized'` y la
+  auditoría) y pierde el acceso. **Eliminar la propia cuenta:** anonimiza y
+  además borra su usuario con `User.delete()`. Los administradores ya no
+  pueden borrar su `users/{uid}` (las reglas lo niegan).
+- **Siempre debe existir un administrador activo:** `system/adminRegistry`
+  guarda `activeAdminCount`. Crear suma 1 y anonimizar resta 1, en una
+  transacción que lee el conteo; las reglas exigen ese cambio con `getAfter`
+  y que el resultado sea >= 1. Cuenta todo administrador con
+  `accountStatus == 'active'`, incluso con contraseña temporal pendiente
+  (reemplaza la definición anterior "ya definió su contraseña").
+
+**Limitación aceptada:** al eliminar a OTRO administrador su usuario sigue
+existiendo en Firebase Auth (solo el Admin SDK puede borrarlo): su correo
+queda ocupado y no se puede volver a crear un administrador con ese correo.
+Mientras `isAdmin()` en `firestore.rules` solo compruebe el rol, esa cuenta
+anonimizada conserva los accesos que dependan de `isAdmin()`; debe
+endurecerse con la rama dueña de esas reglas. El conteo de `adminRegistry`
+también puede desviarse si un administrador malintencionado escribe el
+registro directamente (las reglas solo limitan el cambio a +-1).
+
+**Estado:** implementado en cliente y reglas; las reglas se despliegan antes
+que la nueva versión de la app.
+
+## 2026-11-09 — Distribución privada del keystore compartido (rama `feature-juan_pablo`)
+
+**Contexto:** el equipo debe poder entrar con Google y GitHub sin registrar
+huellas propias en Firebase. El repositorio es público.
+
+**Decisión:** `android/debug.keystore` y `android/key.properties` no se
+versionan. El responsable de la rama los comparte de forma privada, solo con
+los integrantes. Quien solo instala la app recibe un APK ya firmado y no
+necesita el keystore.
+
+**Motivo:** con el keystore en un repositorio público, cualquiera podría firmar
+una app que Firebase aceptaría como `co.machuco.app`. Retirarlo después no
+bastaría, porque quedaría en el historial de Git.
+
+**Actualiza el pendiente del 2026-11-04:** el SHA-1/SHA-256 compartido está
+registrado (2026-11-05) y el responsable de la rama confirmó que Google y GitHub
+están habilitados en Firebase. Sigue pendiente el keystore de release.
+
+## 2026-11-09 — `auth_user_profile` pasa a la versión 14 de SQLite (rama `feature-juan_pablo`)
+
+**Contexto:** al fusionar `develop`, la versión 13 ya estaba ocupada por la
+limpieza de ejemplos de room (riesgo R10 del plan de autenticación).
+
+**Decisión:** se conserva el 12 -> 13 de `develop` y `auth_user_profile` se crea
+en un 13 -> 14 con `CREATE TABLE IF NOT EXISTS`. Así migran tanto las bases v13
+de `develop`, que no tienen la tabla, como las v13 de esta rama, que la conservan
+con su fila. Estas últimas no ejecutan el 12 -> 13: sus ejemplos de room los
+limpia `RoomDao.removeLegacyMockData`.
+
+La próxima migración de cualquier rama usa la versión 15.

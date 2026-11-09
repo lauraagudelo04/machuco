@@ -58,11 +58,7 @@ class _$AppDatabaseBuilder implements $AppDatabaseBuilderContract {
         ? await sqfliteDatabaseFactory.getDatabasePath(name!)
         : ':memory:';
     final database = _$AppDatabase();
-    database.database = await database.open(
-      path,
-      _migrations,
-      _callback,
-    );
+    database.database = await database.open(path, _migrations, _callback);
     return database;
   }
 }
@@ -76,13 +72,23 @@ class _$AppDatabase extends AppDatabase {
 
   NotificationDao? _notificationDaoInstance;
 
+  PaymentDao? _paymentDaoInstance;
+
+  ClientDao? _clientDaoInstance;
+
+  PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
+
+  MotelDao? _motelDaoInstance;
+
+  AuthUserProfileDao? _authUserProfileDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 6,
+      version: 14,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -92,23 +98,60 @@ class _$AppDatabase extends AppDatabase {
       },
       onUpgrade: (database, startVersion, endVersion) async {
         await MigrationAdapter.runMigrations(
-            database, startVersion, endVersion, migrations);
+          database,
+          startVersion,
+          endVersion,
+          migrations,
+        );
 
         await callback?.onUpgrade?.call(database, startVersion, endVersion);
       },
       onCreate: (database, version) async {
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `subscriptions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `userEmail` TEXT, `planId` INTEGER, `planName` TEXT NOT NULL, `motelName` TEXT NOT NULL, `amount` INTEGER NOT NULL, `billingPeriod` TEXT NOT NULL, `nextBillingDate` INTEGER NOT NULL, `status` TEXT NOT NULL, `features` TEXT NOT NULL)');
+          'CREATE TABLE IF NOT EXISTS `subscriptions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `userEmail` TEXT, `planId` INTEGER, `planName` TEXT NOT NULL, `motelName` TEXT NOT NULL, `amount` INTEGER NOT NULL, `billingPeriod` TEXT NOT NULL, `nextBillingDate` INTEGER NOT NULL, `status` TEXT NOT NULL, `features` TEXT NOT NULL)',
+        );
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
+          'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)',
+        );
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)');
+          'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)',
+        );
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
+          'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)',
+        );
         await database.execute(
-            'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
+          'CREATE TABLE IF NOT EXISTS `payment_method_catalog` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY (`id`))',
+        );
         await database.execute(
-            'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
+          'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `bookingId` TEXT NOT NULL, `bookingReference` TEXT NOT NULL, `clientId` TEXT NOT NULL, `client` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motel` TEXT NOT NULL, `roomId` TEXT NOT NULL, `room` TEXT NOT NULL, `reservationDate` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `status` TEXT NOT NULL, `method` TEXT, `paymentMethodId` INTEGER, `paidAt` INTEGER, `receiptNumber` TEXT, FOREIGN KEY (`paymentMethodId`) REFERENCES `payment_method_catalog` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))',
+        );
+        await database.execute(
+          'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL)',
+        );
+        await database.execute(
+          'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))',
+        );
+        await database.execute(
+          'CREATE TABLE IF NOT EXISTS `motels` (`id` TEXT NOT NULL, `owner_id` TEXT NOT NULL, `name` TEXT NOT NULL, `email` TEXT NOT NULL, `room_count` INTEGER NOT NULL, `nit` TEXT NOT NULL, `address` TEXT NOT NULL, `phone` TEXT NOT NULL, `description` TEXT, `general_location` TEXT, `payment_methods_json` TEXT NOT NULL, `image_urls_json` TEXT NOT NULL, `is_available` INTEGER NOT NULL, PRIMARY KEY (`id`))',
+        );
+        await database.execute(
+          'CREATE TABLE IF NOT EXISTS `auth_user_profile` (`uid` TEXT NOT NULL, `email` TEXT NOT NULL, `first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, `role` TEXT NOT NULL, `account_status` TEXT NOT NULL, `phone_country_code_id` INTEGER, `phone_number` TEXT, `company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+        );
+        await database.execute(
+          'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)',
+        );
+        await database.execute(
+          'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)',
+        );
+        await database.execute(
+          'CREATE INDEX `index_payments_clientId` ON `payments` (`clientId`)',
+        );
+        await database.execute(
+          'CREATE INDEX `index_payments_motelId` ON `payments` (`motelId`)',
+        );
+        await database.execute(
+          'CREATE INDEX `index_payments_paymentMethodId` ON `payments` (`paymentMethodId`)',
+        );
 
         await callback?.onCreate?.call(database, version);
       },
@@ -118,69 +161,105 @@ class _$AppDatabase extends AppDatabase {
 
   @override
   SubscriptionDao get subscriptionDao {
-    return _subscriptionDaoInstance ??=
-        _$SubscriptionDao(database, changeListener);
+    return _subscriptionDaoInstance ??= _$SubscriptionDao(
+      database,
+      changeListener,
+    );
   }
 
   @override
   NotificationDao get notificationDao {
-    return _notificationDaoInstance ??=
-        _$NotificationDao(database, changeListener);
+    return _notificationDaoInstance ??= _$NotificationDao(
+      database,
+      changeListener,
+    );
+  }
+
+  @override
+  PaymentDao get paymentDao {
+    return _paymentDaoInstance ??= _$PaymentDao(database, changeListener);
+  }
+
+  @override
+  ClientDao get clientDao {
+    return _clientDaoInstance ??= _$ClientDao(database, changeListener);
+  }
+
+  @override
+  PhoneCountryCodeDao get phoneCountryCodeDao {
+    return _phoneCountryCodeDaoInstance ??= _$PhoneCountryCodeDao(
+      database,
+      changeListener,
+    );
+  }
+
+  @override
+  MotelDao get motelDao {
+    return _motelDaoInstance ??= _$MotelDao(database, changeListener);
+  }
+
+  @override
+  AuthUserProfileDao get authUserProfileDao {
+    return _authUserProfileDaoInstance ??= _$AuthUserProfileDao(
+      database,
+      changeListener,
+    );
   }
 }
 
 class _$SubscriptionDao extends SubscriptionDao {
-  _$SubscriptionDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _subscriptionDetailsInsertionAdapter = InsertionAdapter(
-            database,
-            'subscriptions',
-            (SubscriptionDetails item) => <String, Object?>{
-                  'id': item.id,
-                  'userEmail': item.userEmail,
-                  'planId': item.planId,
-                  'planName': item.planName,
-                  'motelName': item.motelName,
-                  'amount': item.amount,
-                  'billingPeriod': item.billingPeriod,
-                  'nextBillingDate':
-                      _subscriptionDateConverter.encode(item.nextBillingDate),
-                  'status': _subscriptionStatusConverter.encode(item.status),
-                  'features':
-                      _subscriptionFeaturesConverter.encode(item.features)
-                }),
-        _subscriptionPaymentInsertionAdapter = InsertionAdapter(
-            database,
-            'subscription_payments',
-            (SubscriptionPayment item) => <String, Object?>{
-                  'id': item.id,
-                  'subscriptionId': item.subscriptionId,
-                  'date': _subscriptionDateConverter.encode(item.date),
-                  'amount': item.amount,
-                  'paymentMethod': item.paymentMethod,
-                  'reference': item.reference,
-                  'status': _subscriptionStatusConverter.encode(item.status)
-                }),
-        _subscriptionDetailsUpdateAdapter = UpdateAdapter(
-            database,
-            'subscriptions',
-            ['id'],
-            (SubscriptionDetails item) => <String, Object?>{
-                  'id': item.id,
-                  'userEmail': item.userEmail,
-                  'planId': item.planId,
-                  'planName': item.planName,
-                  'motelName': item.motelName,
-                  'amount': item.amount,
-                  'billingPeriod': item.billingPeriod,
-                  'nextBillingDate':
-                      _subscriptionDateConverter.encode(item.nextBillingDate),
-                  'status': _subscriptionStatusConverter.encode(item.status),
-                  'features':
-                      _subscriptionFeaturesConverter.encode(item.features)
-                });
+  _$SubscriptionDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _subscriptionDetailsInsertionAdapter = InsertionAdapter(
+        database,
+        'subscriptions',
+        (SubscriptionDetails item) => <String, Object?>{
+          'id': item.id,
+          'userEmail': item.userEmail,
+          'planId': item.planId,
+          'planName': item.planName,
+          'motelName': item.motelName,
+          'amount': item.amount,
+          'billingPeriod': item.billingPeriod,
+          'nextBillingDate': _subscriptionDateConverter.encode(
+            item.nextBillingDate,
+          ),
+          'status': _subscriptionStatusConverter.encode(item.status),
+          'features': _subscriptionFeaturesConverter.encode(item.features),
+        },
+      ),
+      _subscriptionPaymentInsertionAdapter = InsertionAdapter(
+        database,
+        'subscription_payments',
+        (SubscriptionPayment item) => <String, Object?>{
+          'id': item.id,
+          'subscriptionId': item.subscriptionId,
+          'date': _subscriptionDateConverter.encode(item.date),
+          'amount': item.amount,
+          'paymentMethod': item.paymentMethod,
+          'reference': item.reference,
+          'status': _subscriptionStatusConverter.encode(item.status),
+        },
+      ),
+      _subscriptionDetailsUpdateAdapter = UpdateAdapter(
+        database,
+        'subscriptions',
+        ['id'],
+        (SubscriptionDetails item) => <String, Object?>{
+          'id': item.id,
+          'userEmail': item.userEmail,
+          'planId': item.planId,
+          'planName': item.planName,
+          'motelName': item.motelName,
+          'amount': item.amount,
+          'billingPeriod': item.billingPeriod,
+          'nextBillingDate': _subscriptionDateConverter.encode(
+            item.nextBillingDate,
+          ),
+          'status': _subscriptionStatusConverter.encode(item.status),
+          'features': _subscriptionFeaturesConverter.encode(item.features),
+        },
+      );
 
   final sqflite.DatabaseExecutor database;
 
@@ -189,128 +268,152 @@ class _$SubscriptionDao extends SubscriptionDao {
   final QueryAdapter _queryAdapter;
 
   final InsertionAdapter<SubscriptionDetails>
-      _subscriptionDetailsInsertionAdapter;
+  _subscriptionDetailsInsertionAdapter;
 
   final InsertionAdapter<SubscriptionPayment>
-      _subscriptionPaymentInsertionAdapter;
+  _subscriptionPaymentInsertionAdapter;
 
   final UpdateAdapter<SubscriptionDetails> _subscriptionDetailsUpdateAdapter;
 
   @override
   Future<SubscriptionDetails?> findById(int id) async {
     return _queryAdapter.query(
-        'SELECT * FROM subscriptions WHERE id = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => SubscriptionDetails(
-            id: row['id'] as int?,
-            userEmail: row['userEmail'] as String?,
-            planId: row['planId'] as int?,
-            planName: row['planName'] as String,
-            motelName: row['motelName'] as String,
-            amount: row['amount'] as int,
-            billingPeriod: row['billingPeriod'] as String,
-            nextBillingDate: _subscriptionDateConverter
-                .decode(row['nextBillingDate'] as int),
-            status:
-                _subscriptionStatusConverter.decode(row['status'] as String),
-            features: _subscriptionFeaturesConverter
-                .decode(row['features'] as String)),
-        arguments: [id]);
+      'SELECT * FROM subscriptions WHERE id = ?1 LIMIT 1',
+      mapper: (Map<String, Object?> row) => SubscriptionDetails(
+        id: row['id'] as int?,
+        userEmail: row['userEmail'] as String?,
+        planId: row['planId'] as int?,
+        planName: row['planName'] as String,
+        motelName: row['motelName'] as String,
+        amount: row['amount'] as int,
+        billingPeriod: row['billingPeriod'] as String,
+        nextBillingDate: _subscriptionDateConverter.decode(
+          row['nextBillingDate'] as int,
+        ),
+        status: _subscriptionStatusConverter.decode(row['status'] as String),
+        features: _subscriptionFeaturesConverter.decode(
+          row['features'] as String,
+        ),
+      ),
+      arguments: [id],
+    );
   }
 
   @override
   Future<SubscriptionDetails?> findFirst() async {
     return _queryAdapter.query(
-        'SELECT * FROM subscriptions ORDER BY id LIMIT 1',
-        mapper: (Map<String, Object?> row) => SubscriptionDetails(
-            id: row['id'] as int?,
-            userEmail: row['userEmail'] as String?,
-            planId: row['planId'] as int?,
-            planName: row['planName'] as String,
-            motelName: row['motelName'] as String,
-            amount: row['amount'] as int,
-            billingPeriod: row['billingPeriod'] as String,
-            nextBillingDate: _subscriptionDateConverter
-                .decode(row['nextBillingDate'] as int),
-            status:
-                _subscriptionStatusConverter.decode(row['status'] as String),
-            features: _subscriptionFeaturesConverter
-                .decode(row['features'] as String)));
+      'SELECT * FROM subscriptions ORDER BY id LIMIT 1',
+      mapper: (Map<String, Object?> row) => SubscriptionDetails(
+        id: row['id'] as int?,
+        userEmail: row['userEmail'] as String?,
+        planId: row['planId'] as int?,
+        planName: row['planName'] as String,
+        motelName: row['motelName'] as String,
+        amount: row['amount'] as int,
+        billingPeriod: row['billingPeriod'] as String,
+        nextBillingDate: _subscriptionDateConverter.decode(
+          row['nextBillingDate'] as int,
+        ),
+        status: _subscriptionStatusConverter.decode(row['status'] as String),
+        features: _subscriptionFeaturesConverter.decode(
+          row['features'] as String,
+        ),
+      ),
+    );
   }
 
   @override
   Future<SubscriptionDetails?> findByEmail(String email) async {
     return _queryAdapter.query(
-        'SELECT * FROM subscriptions WHERE userEmail = ?1 ORDER BY id LIMIT 1',
-        mapper: (Map<String, Object?> row) => SubscriptionDetails(
-            id: row['id'] as int?,
-            userEmail: row['userEmail'] as String?,
-            planId: row['planId'] as int?,
-            planName: row['planName'] as String,
-            motelName: row['motelName'] as String,
-            amount: row['amount'] as int,
-            billingPeriod: row['billingPeriod'] as String,
-            nextBillingDate: _subscriptionDateConverter
-                .decode(row['nextBillingDate'] as int),
-            status:
-                _subscriptionStatusConverter.decode(row['status'] as String),
-            features: _subscriptionFeaturesConverter
-                .decode(row['features'] as String)),
-        arguments: [email]);
+      'SELECT * FROM subscriptions WHERE userEmail = ?1 ORDER BY id LIMIT 1',
+      mapper: (Map<String, Object?> row) => SubscriptionDetails(
+        id: row['id'] as int?,
+        userEmail: row['userEmail'] as String?,
+        planId: row['planId'] as int?,
+        planName: row['planName'] as String,
+        motelName: row['motelName'] as String,
+        amount: row['amount'] as int,
+        billingPeriod: row['billingPeriod'] as String,
+        nextBillingDate: _subscriptionDateConverter.decode(
+          row['nextBillingDate'] as int,
+        ),
+        status: _subscriptionStatusConverter.decode(row['status'] as String),
+        features: _subscriptionFeaturesConverter.decode(
+          row['features'] as String,
+        ),
+      ),
+      arguments: [email],
+    );
   }
 
   @override
   Future<List<SubscriptionPayment>> findPayments(int subscriptionId) async {
     return _queryAdapter.queryList(
-        'SELECT * FROM subscription_payments WHERE subscriptionId = ?1 ORDER BY date DESC, id DESC',
-        mapper: (Map<String, Object?> row) => SubscriptionPayment(id: row['id'] as int?, subscriptionId: row['subscriptionId'] as int, date: _subscriptionDateConverter.decode(row['date'] as int), amount: row['amount'] as int, paymentMethod: row['paymentMethod'] as String, reference: row['reference'] as String, status: _subscriptionStatusConverter.decode(row['status'] as String)),
-        arguments: [subscriptionId]);
+      'SELECT * FROM subscription_payments WHERE subscriptionId = ?1 ORDER BY date DESC, id DESC',
+      mapper: (Map<String, Object?> row) => SubscriptionPayment(
+        id: row['id'] as int?,
+        subscriptionId: row['subscriptionId'] as int,
+        date: _subscriptionDateConverter.decode(row['date'] as int),
+        amount: row['amount'] as int,
+        paymentMethod: row['paymentMethod'] as String,
+        reference: row['reference'] as String,
+        status: _subscriptionStatusConverter.decode(row['status'] as String),
+      ),
+      arguments: [subscriptionId],
+    );
   }
 
   @override
   Future<int> insertSubscription(SubscriptionDetails subscription) {
     return _subscriptionDetailsInsertionAdapter.insertAndReturnId(
-        subscription, OnConflictStrategy.abort);
+      subscription,
+      OnConflictStrategy.abort,
+    );
   }
 
   @override
   Future<int> insertPayment(SubscriptionPayment payment) {
     return _subscriptionPaymentInsertionAdapter.insertAndReturnId(
-        payment, OnConflictStrategy.abort);
+      payment,
+      OnConflictStrategy.abort,
+    );
   }
 
   @override
   Future<int> updateSubscription(SubscriptionDetails subscription) {
     return _subscriptionDetailsUpdateAdapter.updateAndReturnChangedRows(
-        subscription, OnConflictStrategy.abort);
+      subscription,
+      OnConflictStrategy.abort,
+    );
   }
 }
 
 class _$NotificationDao extends NotificationDao {
-  _$NotificationDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _notificationEntryInsertionAdapter = InsertionAdapter(
-            database,
-            'notifications',
-            (NotificationEntry item) => <String, Object?>{
-                  'id': item.id,
-                  'typeId': item.typeId,
-                  'title': item.title,
-                  'message': item.message,
-                  'sentAt': _subscriptionDateConverter.encode(item.sentAt),
-                  'target': item.target,
-                  'recipientUser': item.recipientUser
-                }),
-        _notificationReadInsertionAdapter = InsertionAdapter(
-            database,
-            'notification_reads',
-            (NotificationRead item) => <String, Object?>{
-                  'id': item.id,
-                  'notificationId': item.notificationId,
-                  'userId': item.userId,
-                  'readAt': _subscriptionDateConverter.encode(item.readAt)
-                });
+  _$NotificationDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _notificationEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'notifications',
+        (NotificationEntry item) => <String, Object?>{
+          'id': item.id,
+          'typeId': item.typeId,
+          'title': item.title,
+          'message': item.message,
+          'sentAt': _subscriptionDateConverter.encode(item.sentAt),
+          'target': item.target,
+          'recipientUser': item.recipientUser,
+        },
+      ),
+      _notificationReadInsertionAdapter = InsertionAdapter(
+        database,
+        'notification_reads',
+        (NotificationRead item) => <String, Object?>{
+          'id': item.id,
+          'notificationId': item.notificationId,
+          'userId': item.userId,
+          'readAt': _subscriptionDateConverter.encode(item.readAt),
+        },
+      );
 
   final sqflite.DatabaseExecutor database;
 
@@ -325,54 +428,781 @@ class _$NotificationDao extends NotificationDao {
   @override
   Future<List<NotificationEntry>> findAll() async {
     return _queryAdapter.queryList(
-        'SELECT * FROM notifications ORDER BY sentAt DESC, id DESC',
-        mapper: (Map<String, Object?> row) => NotificationEntry(
-            id: row['id'] as int?,
-            typeId: row['typeId'] as int,
-            title: row['title'] as String,
-            message: row['message'] as String,
-            sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
-            target: row['target'] as String,
-            recipientUser: row['recipientUser'] as String?));
+      'SELECT * FROM notifications ORDER BY sentAt DESC, id DESC',
+      mapper: (Map<String, Object?> row) => NotificationEntry(
+        id: row['id'] as int?,
+        typeId: row['typeId'] as int,
+        title: row['title'] as String,
+        message: row['message'] as String,
+        sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+        target: row['target'] as String,
+        recipientUser: row['recipientUser'] as String?,
+      ),
+    );
   }
 
   @override
   Future<List<NotificationEntry>> findForRecipient(String recipientUser) async {
     return _queryAdapter.queryList(
-        'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
-        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUser: row['recipientUser'] as String?),
-        arguments: [recipientUser]);
+      'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
+      mapper: (Map<String, Object?> row) => NotificationEntry(
+        id: row['id'] as int?,
+        typeId: row['typeId'] as int,
+        title: row['title'] as String,
+        message: row['message'] as String,
+        sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+        target: row['target'] as String,
+        recipientUser: row['recipientUser'] as String?,
+      ),
+      arguments: [recipientUser],
+    );
   }
 
   @override
   Future<List<int>> findReadNotificationIds(String userId) async {
     return _queryAdapter.queryList(
-        'SELECT notificationId FROM notification_reads WHERE userId = ?1',
-        mapper: (Map<String, Object?> row) => row.values.first as int,
-        arguments: [userId]);
+      'SELECT notificationId FROM notification_reads WHERE userId = ?1',
+      mapper: (Map<String, Object?> row) => row.values.first as int,
+      arguments: [userId],
+    );
   }
 
   @override
-  Future<NotificationRead?> findRead(
-    int notificationId,
-    String userId,
-  ) async {
+  Future<NotificationRead?> findRead(int notificationId, String userId) async {
     return _queryAdapter.query(
-        'SELECT * FROM notification_reads WHERE notificationId = ?1 AND userId = ?2 LIMIT 1',
-        mapper: (Map<String, Object?> row) => NotificationRead(id: row['id'] as int?, notificationId: row['notificationId'] as int, userId: row['userId'] as String, readAt: _subscriptionDateConverter.decode(row['readAt'] as int)),
-        arguments: [notificationId, userId]);
+      'SELECT * FROM notification_reads WHERE notificationId = ?1 AND userId = ?2 LIMIT 1',
+      mapper: (Map<String, Object?> row) => NotificationRead(
+        id: row['id'] as int?,
+        notificationId: row['notificationId'] as int,
+        userId: row['userId'] as String,
+        readAt: _subscriptionDateConverter.decode(row['readAt'] as int),
+      ),
+      arguments: [notificationId, userId],
+    );
   }
 
   @override
   Future<int> insertNotification(NotificationEntry notification) {
     return _notificationEntryInsertionAdapter.insertAndReturnId(
-        notification, OnConflictStrategy.abort);
+      notification,
+      OnConflictStrategy.abort,
+    );
   }
 
   @override
   Future<int> insertRead(NotificationRead notificationRead) {
     return _notificationReadInsertionAdapter.insertAndReturnId(
-        notificationRead, OnConflictStrategy.abort);
+      notificationRead,
+      OnConflictStrategy.abort,
+    );
+  }
+}
+
+class _$PaymentDao extends PaymentDao {
+  _$PaymentDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _paymentRecordInsertionAdapter = InsertionAdapter(
+        database,
+        'payments',
+        (PaymentRecord item) => <String, Object?>{
+          'id': item.id,
+          'bookingId': item.bookingId,
+          'bookingReference': item.bookingReference,
+          'clientId': item.clientId,
+          'client': item.client,
+          'motelId': item.motelId,
+          'motel': item.motel,
+          'roomId': item.roomId,
+          'room': item.room,
+          'reservationDate': _subscriptionDateConverter.encode(
+            item.reservationDate,
+          ),
+          'amount': item.amount,
+          'status': _paymentStatusConverter.encode(item.status),
+          'method': _paymentMethodConverter.encode(item.method),
+          'paymentMethodId': item.paymentMethodId,
+          'paidAt': _paymentOptionalDateConverter.encode(item.paidAt),
+          'receiptNumber': item.receiptNumber,
+        },
+      ),
+      _paymentCatalogEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'payment_method_catalog',
+        (PaymentCatalogEntry item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+        },
+      ),
+      _paymentRecordUpdateAdapter = UpdateAdapter(
+        database,
+        'payments',
+        ['id'],
+        (PaymentRecord item) => <String, Object?>{
+          'id': item.id,
+          'bookingId': item.bookingId,
+          'bookingReference': item.bookingReference,
+          'clientId': item.clientId,
+          'client': item.client,
+          'motelId': item.motelId,
+          'motel': item.motel,
+          'roomId': item.roomId,
+          'room': item.room,
+          'reservationDate': _subscriptionDateConverter.encode(
+            item.reservationDate,
+          ),
+          'amount': item.amount,
+          'status': _paymentStatusConverter.encode(item.status),
+          'method': _paymentMethodConverter.encode(item.method),
+          'paymentMethodId': item.paymentMethodId,
+          'paidAt': _paymentOptionalDateConverter.encode(item.paidAt),
+          'receiptNumber': item.receiptNumber,
+        },
+      ),
+      _paymentCatalogEntryUpdateAdapter = UpdateAdapter(
+        database,
+        'payment_method_catalog',
+        ['id'],
+        (PaymentCatalogEntry item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PaymentRecord> _paymentRecordInsertionAdapter;
+
+  final InsertionAdapter<PaymentCatalogEntry>
+  _paymentCatalogEntryInsertionAdapter;
+
+  final UpdateAdapter<PaymentRecord> _paymentRecordUpdateAdapter;
+
+  final UpdateAdapter<PaymentCatalogEntry> _paymentCatalogEntryUpdateAdapter;
+
+  @override
+  Future<List<PaymentRecord>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM payments ORDER BY reservationDate DESC, id DESC',
+      mapper: (Map<String, Object?> row) => PaymentRecord(
+        id: row['id'] as String,
+        bookingId: row['bookingId'] as String,
+        bookingReference: row['bookingReference'] as String,
+        clientId: row['clientId'] as String,
+        client: row['client'] as String,
+        motelId: row['motelId'] as String,
+        motel: row['motel'] as String,
+        roomId: row['roomId'] as String,
+        room: row['room'] as String,
+        reservationDate: _subscriptionDateConverter.decode(
+          row['reservationDate'] as int,
+        ),
+        amount: row['amount'] as int,
+        status: _paymentStatusConverter.decode(row['status'] as String),
+        method: _paymentMethodConverter.decode(row['method'] as String?),
+        paymentMethodId: row['paymentMethodId'] as int?,
+        paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+        receiptNumber: row['receiptNumber'] as String?,
+      ),
+    );
+  }
+
+  @override
+  Future<PaymentRecord?> findById(String id) async {
+    return _queryAdapter.query(
+      'SELECT * FROM payments WHERE id = ?1 LIMIT 1',
+      mapper: (Map<String, Object?> row) => PaymentRecord(
+        id: row['id'] as String,
+        bookingId: row['bookingId'] as String,
+        bookingReference: row['bookingReference'] as String,
+        clientId: row['clientId'] as String,
+        client: row['client'] as String,
+        motelId: row['motelId'] as String,
+        motel: row['motel'] as String,
+        roomId: row['roomId'] as String,
+        room: row['room'] as String,
+        reservationDate: _subscriptionDateConverter.decode(
+          row['reservationDate'] as int,
+        ),
+        amount: row['amount'] as int,
+        status: _paymentStatusConverter.decode(row['status'] as String),
+        method: _paymentMethodConverter.decode(row['method'] as String?),
+        paymentMethodId: row['paymentMethodId'] as int?,
+        paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+        receiptNumber: row['receiptNumber'] as String?,
+      ),
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<List<PaymentRecord>> findByClient(String clientId) async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM payments WHERE clientId = ?1 ORDER BY reservationDate DESC, id DESC',
+      mapper: (Map<String, Object?> row) => PaymentRecord(
+        id: row['id'] as String,
+        bookingId: row['bookingId'] as String,
+        bookingReference: row['bookingReference'] as String,
+        clientId: row['clientId'] as String,
+        client: row['client'] as String,
+        motelId: row['motelId'] as String,
+        motel: row['motel'] as String,
+        roomId: row['roomId'] as String,
+        room: row['room'] as String,
+        reservationDate: _subscriptionDateConverter.decode(
+          row['reservationDate'] as int,
+        ),
+        amount: row['amount'] as int,
+        status: _paymentStatusConverter.decode(row['status'] as String),
+        method: _paymentMethodConverter.decode(row['method'] as String?),
+        paymentMethodId: row['paymentMethodId'] as int?,
+        paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+        receiptNumber: row['receiptNumber'] as String?,
+      ),
+      arguments: [clientId],
+    );
+  }
+
+  @override
+  Future<List<PaymentRecord>> findByMotel(String motelId) async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM payments WHERE motelId = ?1 ORDER BY reservationDate DESC, id DESC',
+      mapper: (Map<String, Object?> row) => PaymentRecord(
+        id: row['id'] as String,
+        bookingId: row['bookingId'] as String,
+        bookingReference: row['bookingReference'] as String,
+        clientId: row['clientId'] as String,
+        client: row['client'] as String,
+        motelId: row['motelId'] as String,
+        motel: row['motel'] as String,
+        roomId: row['roomId'] as String,
+        room: row['room'] as String,
+        reservationDate: _subscriptionDateConverter.decode(
+          row['reservationDate'] as int,
+        ),
+        amount: row['amount'] as int,
+        status: _paymentStatusConverter.decode(row['status'] as String),
+        method: _paymentMethodConverter.decode(row['method'] as String?),
+        paymentMethodId: row['paymentMethodId'] as int?,
+        paidAt: _paymentOptionalDateConverter.decode(row['paidAt'] as int?),
+        receiptNumber: row['receiptNumber'] as String?,
+      ),
+      arguments: [motelId],
+    );
+  }
+
+  @override
+  Future<void> deleteLegacyDemoPayments() async {
+    await _queryAdapter.queryNoReturn(
+      'DELETE FROM payments WHERE id IN (\'pay-001\', \'pay-002\', \'pay-003\', \'owner-pay-001\', \'owner-pay-002\', \'owner-pay-003\')',
+    );
+  }
+
+  @override
+  Future<List<PaymentCatalogEntry>> findCatalogEntries() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM payment_method_catalog ORDER BY id',
+      mapper: (Map<String, Object?> row) => PaymentCatalogEntry(
+        id: row['id'] as int,
+        name: row['name'] as String,
+      ),
+    );
+  }
+
+  @override
+  Future<void> updatePendingPayment(
+    String id,
+    String motelId,
+    int paymentMethodId,
+    DateTime paidAt,
+    String receiptNumber,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+      'UPDATE payments SET status = \'paid\', method = NULL, paymentMethodId = ?3, paidAt = ?4, receiptNumber = ?5 WHERE id = ?1 AND motelId = ?2 AND status = \'pending\' AND EXISTS (SELECT 1 FROM payment_method_catalog WHERE id = ?3)',
+      arguments: [
+        id,
+        motelId,
+        paymentMethodId,
+        _subscriptionDateConverter.encode(paidAt),
+        receiptNumber,
+      ],
+    );
+  }
+
+  @override
+  Future<int?> findAffectedRows() async {
+    return _queryAdapter.query(
+      'SELECT changes()',
+      mapper: (Map<String, Object?> row) => row.values.first as int,
+    );
+  }
+
+  @override
+  Future<void> insertPayment(PaymentRecord payment) async {
+    await _paymentRecordInsertionAdapter.insert(
+      payment,
+      OnConflictStrategy.abort,
+    );
+  }
+
+  @override
+  Future<void> insertCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    await _paymentCatalogEntryInsertionAdapter.insertList(
+      entries,
+      OnConflictStrategy.ignore,
+    );
+  }
+
+  @override
+  Future<void> updatePayment(PaymentRecord payment) async {
+    await _paymentRecordUpdateAdapter.update(payment, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> updateCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    await _paymentCatalogEntryUpdateAdapter.updateList(
+      entries,
+      OnConflictStrategy.abort,
+    );
+  }
+
+  @override
+  Future<void> saveCatalogEntries(List<PaymentCatalogEntry> entries) async {
+    if (database is sqflite.Transaction) {
+      await super.saveCatalogEntries(entries);
+    } else {
+      await (database as sqflite.Database).transaction<void>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.paymentDao.saveCatalogEntries(entries);
+      });
+    }
+  }
+
+  @override
+  Future<int> registerLocalPayment(
+    String id,
+    String motelId,
+    int paymentMethodId,
+    DateTime paidAt,
+    String receiptNumber,
+  ) async {
+    if (database is sqflite.Transaction) {
+      return super.registerLocalPayment(
+        id,
+        motelId,
+        paymentMethodId,
+        paidAt,
+        receiptNumber,
+      );
+    } else {
+      return (database as sqflite.Database).transaction<int>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        return transactionDatabase.paymentDao.registerLocalPayment(
+          id,
+          motelId,
+          paymentMethodId,
+          paidAt,
+          receiptNumber,
+        );
+      });
+    }
+  }
+
+  @override
+  Future<void> mergeRemotePayments(List<PaymentRecord> payments) async {
+    if (database is sqflite.Transaction) {
+      await super.mergeRemotePayments(payments);
+    } else {
+      await (database as sqflite.Database).transaction<void>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.paymentDao.mergeRemotePayments(payments);
+      });
+    }
+  }
+}
+
+class _$ClientDao extends ClientDao {
+  _$ClientDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _clientEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'clients',
+        (ClientEntry item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+          'phone': item.phone,
+          'email': item.email,
+          'country_code': item.countryCode,
+        },
+      ),
+      _clientEntryUpdateAdapter = UpdateAdapter(
+        database,
+        'clients',
+        ['id'],
+        (ClientEntry item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+          'phone': item.phone,
+          'email': item.email,
+          'country_code': item.countryCode,
+        },
+      ),
+      _clientEntryDeletionAdapter = DeletionAdapter(
+        database,
+        'clients',
+        ['id'],
+        (ClientEntry item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+          'phone': item.phone,
+          'email': item.email,
+          'country_code': item.countryCode,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<ClientEntry> _clientEntryInsertionAdapter;
+
+  final UpdateAdapter<ClientEntry> _clientEntryUpdateAdapter;
+
+  final DeletionAdapter<ClientEntry> _clientEntryDeletionAdapter;
+
+  @override
+  Future<ClientEntry?> findById(int id) async {
+    return _queryAdapter.query(
+      'SELECT * FROM clients WHERE id = ?1 LIMIT 1',
+      mapper: (Map<String, Object?> row) => ClientEntry(
+        id: row['id'] as int?,
+        name: row['name'] as String,
+        phone: row['phone'] as String,
+        email: row['email'] as String,
+        countryCode: row['country_code'] as String,
+      ),
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<List<ClientEntry>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM clients',
+      mapper: (Map<String, Object?> row) => ClientEntry(
+        id: row['id'] as int?,
+        name: row['name'] as String,
+        phone: row['phone'] as String,
+        email: row['email'] as String,
+        countryCode: row['country_code'] as String,
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteById(int id) async {
+    await _queryAdapter.queryNoReturn(
+      'DELETE FROM clients WHERE id = ?1',
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<int> insertClient(ClientEntry client) {
+    return _clientEntryInsertionAdapter.insertAndReturnId(
+      client,
+      OnConflictStrategy.abort,
+    );
+  }
+
+  @override
+  Future<void> insertClients(List<ClientEntry> clients) async {
+    await _clientEntryInsertionAdapter.insertList(
+      clients,
+      OnConflictStrategy.replace,
+    );
+  }
+
+  @override
+  Future<int> updateClient(ClientEntry client) {
+    return _clientEntryUpdateAdapter.updateAndReturnChangedRows(
+      client,
+      OnConflictStrategy.abort,
+    );
+  }
+
+  @override
+  Future<int> deleteClient(ClientEntry client) {
+    return _clientEntryDeletionAdapter.deleteAndReturnChangedRows(client);
+  }
+}
+
+class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
+  _$PhoneCountryCodeDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _phoneCountryCodeInsertionAdapter = InsertionAdapter(
+        database,
+        'phone_country_codes',
+        (PhoneCountryCode item) => <String, Object?>{
+          'id': item.id,
+          'country_code': item.countryCode,
+          'country_name': item.countryName,
+          'calling_code': item.callingCode,
+          'active': item.active ? 1 : 0,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PhoneCountryCode> _phoneCountryCodeInsertionAdapter;
+
+  @override
+  Future<List<PhoneCountryCode>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM phone_country_codes',
+      mapper: (Map<String, Object?> row) => PhoneCountryCode(
+        id: row['id'] as int,
+        countryCode: row['country_code'] as String,
+        countryName: row['country_name'] as String,
+        callingCode: row['calling_code'] as String,
+        active: (row['active'] as int) != 0,
+      ),
+    );
+  }
+
+  @override
+  Future<List<PhoneCountryCode>> findActive() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM phone_country_codes WHERE active = 1',
+      mapper: (Map<String, Object?> row) => PhoneCountryCode(
+        id: row['id'] as int,
+        countryCode: row['country_code'] as String,
+        countryName: row['country_name'] as String,
+        callingCode: row['calling_code'] as String,
+        active: (row['active'] as int) != 0,
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM phone_country_codes');
+  }
+
+  @override
+  Future<void> insertCountryCodes(List<PhoneCountryCode> codes) async {
+    await _phoneCountryCodeInsertionAdapter.insertList(
+      codes,
+      OnConflictStrategy.replace,
+    );
+  }
+}
+
+class _$MotelDao extends MotelDao {
+  _$MotelDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _motelEntityInsertionAdapter = InsertionAdapter(
+        database,
+        'motels',
+        (MotelEntity item) => <String, Object?>{
+          'id': item.id,
+          'owner_id': item.ownerId,
+          'name': item.name,
+          'email': item.email,
+          'room_count': item.roomCount,
+          'nit': item.nit,
+          'address': item.address,
+          'phone': item.phone,
+          'description': item.description,
+          'general_location': item.generalLocation,
+          'payment_methods_json': item.paymentMethodsJson,
+          'image_urls_json': item.imageUrlsJson,
+          'is_available': item.isAvailable,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<MotelEntity> _motelEntityInsertionAdapter;
+
+  @override
+  Future<List<MotelEntity>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM motels ORDER BY name ASC',
+      mapper: (Map<String, Object?> row) => MotelEntity(
+        id: row['id'] as String,
+        ownerId: row['owner_id'] as String,
+        name: row['name'] as String,
+        email: row['email'] as String,
+        roomCount: row['room_count'] as int,
+        nit: row['nit'] as String,
+        address: row['address'] as String,
+        phone: row['phone'] as String,
+        description: row['description'] as String?,
+        generalLocation: row['general_location'] as String?,
+        paymentMethodsJson: row['payment_methods_json'] as String,
+        imageUrlsJson: row['image_urls_json'] as String,
+        isAvailable: row['is_available'] as int,
+      ),
+    );
+  }
+
+  @override
+  Future<MotelEntity?> findById(String id) async {
+    return _queryAdapter.query(
+      'SELECT * FROM motels WHERE id = ?1',
+      mapper: (Map<String, Object?> row) => MotelEntity(
+        id: row['id'] as String,
+        ownerId: row['owner_id'] as String,
+        name: row['name'] as String,
+        email: row['email'] as String,
+        roomCount: row['room_count'] as int,
+        nit: row['nit'] as String,
+        address: row['address'] as String,
+        phone: row['phone'] as String,
+        description: row['description'] as String?,
+        generalLocation: row['general_location'] as String?,
+        paymentMethodsJson: row['payment_methods_json'] as String,
+        imageUrlsJson: row['image_urls_json'] as String,
+        isAvailable: row['is_available'] as int,
+      ),
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM motels');
+  }
+
+  @override
+  Future<void> upsert(MotelEntity motel) async {
+    await _motelEntityInsertionAdapter.insert(
+      motel,
+      OnConflictStrategy.replace,
+    );
+  }
+
+  @override
+  Future<void> upsertAll(List<MotelEntity> motels) async {
+    await _motelEntityInsertionAdapter.insertList(
+      motels,
+      OnConflictStrategy.replace,
+    );
+  }
+
+  @override
+  Future<void> replaceAll(List<MotelEntity> motels) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(motels);
+    } else {
+      await (database as sqflite.Database).transaction<void>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.motelDao.replaceAll(motels);
+      });
+    }
+  }
+}
+
+class _$AuthUserProfileDao extends AuthUserProfileDao {
+  _$AuthUserProfileDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _authUserProfileEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'auth_user_profile',
+        (AuthUserProfileEntry item) => <String, Object?>{
+          'uid': item.uid,
+          'email': item.email,
+          'first_names': item.firstNames,
+          'last_names': item.lastNames,
+          'role': item.role,
+          'account_status': item.accountStatus,
+          'phone_country_code_id': item.phoneCountryCodeId,
+          'phone_number': item.phoneNumber,
+          'company_name': item.companyName,
+          'synced_at': item.syncedAt,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AuthUserProfileEntry>
+  _authUserProfileEntryInsertionAdapter;
+
+  @override
+  Future<AuthUserProfileEntry?> findCurrent() async {
+    return _queryAdapter.query(
+      'SELECT * FROM auth_user_profile LIMIT 1',
+      mapper: (Map<String, Object?> row) => AuthUserProfileEntry(
+        uid: row['uid'] as String,
+        email: row['email'] as String,
+        firstNames: row['first_names'] as String,
+        lastNames: row['last_names'] as String,
+        role: row['role'] as String,
+        accountStatus: row['account_status'] as String,
+        syncedAt: row['synced_at'] as String,
+        phoneCountryCodeId: row['phone_country_code_id'] as int?,
+        phoneNumber: row['phone_number'] as String?,
+        companyName: row['company_name'] as String?,
+      ),
+    );
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM auth_user_profile');
+  }
+
+  @override
+  Future<void> insertProfile(AuthUserProfileEntry entry) async {
+    await _authUserProfileEntryInsertionAdapter.insert(
+      entry,
+      OnConflictStrategy.replace,
+    );
+  }
+
+  @override
+  Future<void> replaceCurrent(AuthUserProfileEntry entry) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceCurrent(entry);
+    } else {
+      await (database as sqflite.Database).transaction<void>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.authUserProfileDao.replaceCurrent(entry);
+      });
+    }
   }
 }
 
@@ -380,3 +1210,6 @@ class _$NotificationDao extends NotificationDao {
 final _subscriptionDateConverter = SubscriptionDateConverter();
 final _subscriptionStatusConverter = SubscriptionStatusConverter();
 final _subscriptionFeaturesConverter = SubscriptionFeaturesConverter();
+final _paymentStatusConverter = PaymentStatusConverter();
+final _paymentMethodConverter = PaymentMethodConverter();
+final _paymentOptionalDateConverter = PaymentOptionalDateConverter();

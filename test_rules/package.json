@@ -1,0 +1,17 @@
+{
+  "name": "machuco-firestore-rules-tests",
+  "private": true,
+  "description": "Pruebas de firestore.rules con Firebase Emulator Suite (decisión D9, docs/auth/plan-auth-social.md).",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 users.rules.test.mjs account_status.rules.test.mjs admin_access.contract.test.mjs",
+    "test:emulator": "firebase emulators:exec --only firestore --project demo-machuco --config ../firebase.json \"npm test\""
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "6.0.0",
+    "firebase": "13.0.0"
+  }
+}

@@ -11,6 +11,7 @@ import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ void main() {
   final clients = <http.Client>[];
 
   setUp(() async {
+    SharedPreferences.setMockInitialValues({});
     directory = await Directory.systemTemp.createTemp('machuco_subscription_');
     path = '${directory.path}${Platform.pathSeparator}subscriptions.db';
   });
@@ -38,6 +40,18 @@ void main() {
     database = null;
     await directory.delete(recursive: true);
   });
+
+  // Estas pruebas crean sus propios usuarios; las del seed viven aparte.
+  Future<AppDatabase> openEmptyDatabase() async {
+    final db = await AppDatabaseProvider.open(name: path);
+    await db.database.delete('subscriptions');
+    await db.database.delete(
+      'sqlite_sequence',
+      where: 'name = ?',
+      whereArgs: ['subscriptions'],
+    );
+    return db;
+  }
 
   SubscriptionDetails subscription({
     int? id = 1,
@@ -85,7 +99,7 @@ void main() {
   test(
     'consulta Supabase, resuelve el plan de SQLite y conserva pagos al reabrir',
     () async {
-      database = await AppDatabaseProvider.open(name: path);
+      database = await openEmptyDatabase();
       final repo = repository(
         client: MockClient((request) async {
           expect(request.url.path, '/rest/v1/subscription_plans');
@@ -133,7 +147,7 @@ void main() {
   test(
     'consulta los métodos de pago y conserva los nombres de Supabase',
     () async {
-      database = await AppDatabaseProvider.open(name: path);
+      database = await openEmptyDatabase();
       final repo = repository(
         client: MockClient((request) async {
           expect(request.url.path, '/rest/v1/payment_method');
@@ -165,7 +179,7 @@ void main() {
   );
 
   test('genera IDs de suscripción 1 y 2 cuando no se indica un ID', () async {
-    database = await AppDatabaseProvider.open(name: path);
+    database = await openEmptyDatabase();
     final repo = repository();
     final firstId = await repo.saveSubscription(
       subscription(id: null, email: 'first@example.com'),
@@ -182,7 +196,7 @@ void main() {
   test(
     'cada ID consulta exclusivamente su suscripción y su historial',
     () async {
-      database = await AppDatabaseProvider.open(name: path);
+      database = await openEmptyDatabase();
       final repo = repository();
       await repo.saveSubscription(subscription());
       await repo.saveSubscription(
@@ -212,7 +226,7 @@ void main() {
   test(
     'una base sin suscripción muestra el catálogo sin asignar un plan',
     () async {
-      database = await AppDatabaseProvider.open(name: path);
+      database = await openEmptyDatabase();
       final repo = repository();
       final current = await controller(repo);
       expect(current.subscription, isNull);
@@ -230,22 +244,40 @@ void main() {
     },
   );
 
-  test(
-    'sin ID indicado consulta la primera suscripción guardada en SQLite',
-    () async {
-      database = await AppDatabaseProvider.open(name: path);
-      final repo = repository();
-      await repo.saveSubscription(subscription());
-      final current = await controller(repo, subscriptionId: null);
-      expect(current.errorMessage, isNull);
-      expect(current.subscription?.id, 1);
-      expect(current.subscription?.planName, 'Premium');
-      expect(current.payments, isEmpty);
-    },
-  );
+  test('sin ID consulta el correo dummy y no la primera suscripción', () async {
+    database = await openEmptyDatabase();
+    final repo = repository();
+    await repo.saveSubscription(subscription());
+    final current = await controller(repo, subscriptionId: null);
+    expect(current.subscription, isNull);
+    await repo.saveSubscription(
+      subscription(id: 2, email: 'propietario.test@machuco.com'),
+    );
+    await current.load();
+    expect(current.errorMessage, isNull);
+    expect(current.subscription?.id, 2);
+    expect(current.subscription?.planName, 'Premium');
+    expect(current.payments, isEmpty);
+  });
+
+  test('la vista consulta el correo almacenado cuando ya existe', () async {
+    database = await openEmptyDatabase();
+    final repo = repository();
+    await repo.saveSubscription(subscription());
+    await repo.saveSubscription(
+      subscription(id: 2, email: 'propietario.test@machuco.com'),
+    );
+    SharedPreferences.setMockInitialValues({
+      'subscription.userEmail': ' OWNER@EXAMPLE.COM ',
+    });
+    final current = await controller(repo, subscriptionId: null);
+    expect(current.errorMessage, isNull);
+    expect(current.subscription?.id, 1);
+    expect(current.subscription?.userEmail, 'owner@example.com');
+  });
 
   test('una escritura fallida no agrega pagos al historial', () async {
-    database = await AppDatabaseProvider.open(name: path);
+    database = await openEmptyDatabase();
     final client = MockClient(
       (_) async => http.Response('[{"id":2,"name":"Premium"}]', 200),
     );
@@ -269,7 +301,7 @@ void main() {
   test(
     'errores y respuestas inválidas de Supabase no inventan planes',
     () async {
-      database = await AppDatabaseProvider.open(name: path);
+      database = await openEmptyDatabase();
       for (final response in [
         http.Response('{}', 200),
         http.Response('[]', 401),

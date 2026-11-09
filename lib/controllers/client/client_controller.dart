@@ -1,88 +1,181 @@
-import 'package:machuco/models/client/client.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
-abstract final class ClientController {
-  static final List<Client> clients = [
-    const Client(
-      id: '1',
-      name: 'Valentina Gómez',
-      phone: '310 456 7890',
-      email: 'valentina.gomez@correo.com',
-      password: 'Val123',
-    ),
-    const Client(
-      id: '2',
-      name: 'Santiago Pérez',
-      phone: '320 123 4567',
-      email: 'santiago.perez@correo.com',
-      password: 'San456',
-    ),
-    const Client(
-      id: '3',
-      name: 'Mariana Torres',
-      phone: '301 987 6543',
-      email: 'mariana.torres@correo.com',
-      password: 'Mar789',
-    ),
-    const Client(
-      id: '4',
-      name: 'Andrés Ramírez',
-      phone: '315 654 3210',
-      email: 'andres.ramirez@correo.com',
-      password: 'And321',
-    ),
-    const Client(
-      id: '5',
-      name: 'Laura Restrepo',
-      phone: '300 111 2233',
-      email: 'laura.restrepo@correo.com',
-      password: 'Lau654',
-    ),
-    const Client(
-      id: '6',
-      name: 'Julián Castro',
-      phone: '317 888 9999',
-      email: 'julian.castro@correo.com',
-      password: 'Jul987',
-    ),
-  ];
+import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
+import 'package:machuco/database/repository/auth/user_profile_repository.dart';
+import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
+import 'package:machuco/models/client/client_model.dart';
+import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
-  static Client get currentClient => clients.first;
+class ClientController extends ChangeNotifier {
+  ClientController._();
+  static final ClientController instance = ClientController._();
 
-  static List<Client> search(String query) {
-    if (query.isEmpty) return clients;
-    final lower = query.toLowerCase();
-    return clients
-        .where(
-          (c) =>
-              c.name.toLowerCase().contains(lower) ||
-              c.email.toLowerCase().contains(lower),
-        )
-        .toList();
-  }
+  late PhoneCountryCodeRepository _phoneCountryCodeRepo;
+  late UserProfileRepository _userProfileRepo;
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  static Client? getById(String id) {
-    for (final client in clients) {
-      if (client.id == id) return client;
+  ClientModel? _currentClient;
+  List<ClientModel> _allClients = [];
+  List<PhoneCountryCode> _countryCodes = [];
+  bool _isInitialized = false;
+  bool _isLoading = false;
+  String? _errorMessage;
+
+  ClientModel? get currentClient => _currentClient;
+  List<ClientModel> get allClients => List.unmodifiable(_allClients);
+  List<PhoneCountryCode> get countryCodes => List.unmodifiable(_countryCodes);
+  bool get isLoading => _isLoading;
+  String? get errorMessage => _errorMessage;
+
+  Future<void> _initRepositories() async {
+    if (!_isInitialized) {
+      _phoneCountryCodeRepo = PhoneCountryCodeRepository(
+        baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
+        apiKey: SupabasePhoneCountryCodeConfig.apiKey,
+        daoProvider: () async => (await AppDatabaseProvider.database).phoneCountryCodeDao,
+      );
+      _userProfileRepo = FirestoreUserProfileRepository();
+      _countryCodes = await _phoneCountryCodeRepo.getCountryCodes();
+      _isInitialized = true;
     }
-    return null;
   }
 
-  static void updateClient({
-    required String id,
+  (String code, String number) _parsePhoneNumber(String fullPhone) {
+    String code = '+57';
+    String number = fullPhone.trim();
+
+    for (final country in _countryCodes) {
+      if (number.startsWith(country.callingCode)) {
+        code = country.callingCode;
+        number = number.substring(country.callingCode.length).trim();
+        break;
+      }
+    }
+    return (code, number);
+  }
+
+  Future<void> loadProfileData() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _initRepositories();
+      final firebaseUser = _auth.currentUser;
+
+      if (firebaseUser != null) {
+        final profile = await _userProfileRepo.getProfile(firebaseUser.uid);
+        if (profile != null) {
+          final (code, phone) = _parsePhoneNumber(profile.phoneNumber);
+
+          _currentClient = ClientModel(
+            uid: profile.uid,
+            name: profile.fullName,
+            phone: phone,
+            email: profile.email,
+            countryCode: code,
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('Error cargando perfil: $e');
+      _errorMessage = 'No pudimos cargar la información de tu perfil.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> loadAllClients() async {
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _initRepositories();
+      final querySnapshot = await _firestore
+          .collection('users')
+          .where('role', isEqualTo: 'client')
+          .get();
+
+      _allClients = querySnapshot.docs.map((doc) {
+        final data = doc.data();
+        final rawPhone = (data['phoneNumber'] ?? '') as String;
+        final (code, phone) = _parsePhoneNumber(rawPhone);
+
+        return ClientModel(
+          uid: doc.id,
+          name: (data['fullName'] ?? '') as String,
+          email: (data['email'] ?? '') as String,
+          phone: phone,
+          countryCode: code,
+        );
+      }).toList();
+    } catch (e) {
+      debugPrint('Error obteniendo clientes de Firestore: $e');
+      _errorMessage = 'No pudimos cargar el listado de clientes.';
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> updateCurrentClient({
     required String name,
     required String phone,
-    required String password,
-  }) {
-    final index = clients.indexWhere((c) => c.id == id);
-    if (index == -1) return;
-    clients[index] = clients[index].copyWith(
-      name: name,
-      phone: phone,
-      password: password,
-    );
+    required String countryCode,
+  }) async {
+    if (_currentClient == null) return false;
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      final updatedClientModel = _currentClient!.copyWith(
+        name: name,
+        phone: phone,
+        countryCode: countryCode,
+      );
+
+      final firebaseUser = _auth.currentUser;
+      if (firebaseUser != null) {
+        final fullPhoneNumber = '$countryCode$phone'.replaceAll(' ', '');
+        await _userProfileRepo.updateProfile(
+          uid: firebaseUser.uid,
+          fullName: name,
+          phoneNumber: fullPhoneNumber,
+        );
+      }
+
+      _currentClient = updatedClientModel;
+      return true;
+    } catch (e) {
+      _errorMessage = 'No fue posible actualizar el perfil.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  static void unlink(Client client) {
-    clients.remove(client);
+  List<ClientModel> search(String query) {
+    if (query.trim().isEmpty) return allClients;
+    final q = query.toLowerCase().trim();
+    return _allClients.where((c) {
+      return c.name.toLowerCase().contains(q) ||
+          c.email.toLowerCase().contains(q) ||
+          c.phone.contains(q);
+    }).toList();
+  }
+
+  void unlink(ClientModel client) {
+    _allClients.removeWhere((c) =>
+        (client.id != null && c.id == client.id) ||
+        (client.uid != null && c.uid == client.uid));
+    notifyListeners();
   }
 }

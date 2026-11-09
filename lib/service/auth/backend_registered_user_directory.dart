@@ -2,16 +2,16 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/service/auth/auth0_auth_service.dart';
+import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
 
 /// [RegisteredUserDirectory] implementation that reads users from an
 /// external HTTP API instead of in-memory seed data.
 ///
-/// Enabled via [Auth0Config.useBackendUsers]; the base URL and users path
-/// must be supplied per environment (see [Auth0Config.usersApiBaseUrl]) and
+/// Enabled via [AuthConfig.useBackendUsers]; the base URL and users path
+/// must be supplied per environment (see [AuthConfig.usersApiBaseUrl]) and
 /// are never hardcoded here. [upsertUser] intentionally does not write to
-/// this API: user creation/updates are expected to flow through Auth0
+/// this API: user creation/updates are expected to flow through Firebase
 /// instead, so this directory is currently read-only in practice.
 final class BackendRegisteredUserDirectory implements RegisteredUserDirectory {
   BackendRegisteredUserDirectory({
@@ -81,6 +81,6 @@ final class BackendRegisteredUserDirectory implements RegisteredUserDirectory {
 
   @override
   Future<void> upsertUser(RegisteredUser user) async {
-    // El backend/Auth0 es la fuente de verdad. Este paso no se persiste desde app.
+    // El backend/Firebase es la fuente de verdad. Este paso no se persiste desde app.
   }
 }

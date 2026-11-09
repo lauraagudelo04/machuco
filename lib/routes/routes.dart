@@ -1,4 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/auth/admin_access_controller.dart';
+import 'package:machuco/controllers/auth/administrators_controller.dart';
+import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
@@ -19,7 +22,6 @@ import 'package:machuco/views/additional_service/system_admin_view/additional_se
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_system_administrator_page.dart';
 import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
-import 'package:machuco/views/payment/client_view/client_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
 import 'package:machuco/controllers/payment/payment_store.dart';
@@ -41,6 +43,15 @@ import 'package:machuco/views/room/owner_view/room_owner_page.dart';
 import 'package:machuco/views/room/system_admin_view/room_admin_page.dart';
 
 import 'package:machuco/views/home/temporal_home_page.dart';
+import 'package:machuco/views/account_review/account_review_page.dart';
+import 'package:machuco/views/register/complete_profile_page.dart';
+import 'package:machuco/views/admin_access/admin_route_guard.dart';
+import 'package:machuco/views/admin_access/admin_change_password_page.dart';
+import 'package:machuco/views/admin_access/administrator_detail_page.dart';
+import 'package:machuco/views/admin_access/administrators_page.dart';
+import 'package:machuco/views/admin_access/create_admin_page.dart';
+import 'package:machuco/views/admin_access/owner_approval_detail_page.dart';
+import 'package:machuco/views/admin_access/owner_approvals_page.dart';
 
 /// Central registry of named routes for the app.
 ///
@@ -56,8 +67,6 @@ abstract final class AppRoutes {
   static const temporalHome = '/temporal';
 
   static const paymentMethod = '/payment/payment-method';
-  static const paymentConfirmation = '/payment/client/confirmation';
-  static const clientPayments = '/payment/client/history';
   static const ownerPayments = '/payment/owner';
   static const ownerSubscription = '/subscription/owner';
   static const adminPayments = '/payment/admin';
@@ -91,8 +100,15 @@ abstract final class AppRoutes {
   static const clientProfileEdit = '/client/profile/edit';
   static const invoice = '/invoice';
 
-  /// Alias conservado para los enlaces existentes desde las reservas.
-  static const payment = clientPayments;
+  // Autenticación (mismos valores que `AuthRoutes`, usados por el controller).
+  static const accountReview = AuthRoutes.accountReview;
+  static const completeProfile = AuthRoutes.completeProfile;
+  static const adminOwnerApprovals = AuthRoutes.adminOwnerApprovals;
+  static const adminOwnerApprovalDetail = AuthRoutes.adminOwnerApprovalDetail;
+  static const adminAdministrators = AuthRoutes.adminAdministrators;
+  static const adminCreateAdministrator = AuthRoutes.adminCreateAdministrator;
+  static const adminAdministratorDetail = AuthRoutes.adminAdministratorDetail;
+  static const adminChangePassword = AuthRoutes.adminChangePassword;
 
   /// Resolves a [RouteSettings.name] to its screen and wraps it in a
   /// [MaterialPageRoute].
@@ -112,11 +128,6 @@ abstract final class AppRoutes {
                 reservation: settings.arguments! as Reservation,
               )
             : const PaymentMethodSelectionPage(),
-      clientPayments => ClientPaymentsPage(
-        clientId: settings.arguments is String
-            ? settings.arguments! as String
-            : PaymentStore.demoClientId,
-      ),
       ownerPayments =>
         settings.arguments is Motel
             ? OwnerPaymentsPage(
@@ -124,7 +135,7 @@ abstract final class AppRoutes {
                 motelName: (settings.arguments! as Motel).name,
               )
             : const OwnerPaymentsPage(
-                motelId: PaymentStore.demoOwnerMotelId,
+                motelId: PaymentStore.fallbackMotelId,
                 motelName: 'Motel Paraíso Élite',
               ),
       ownerSubscription => const OwnerSubscriptionPage(),
@@ -257,6 +268,62 @@ abstract final class AppRoutes {
           'Se requiere un objeto Reservation para abrir la factura.',
         );
       }(),
+      accountReview => AccountReviewPage(
+        args: settings.arguments is AccountReviewArgs
+            ? settings.arguments! as AccountReviewArgs
+            : const AccountReviewArgs(email: ''),
+      ),
+      // Sin argumentos (p. ej. ruta abierta a mano) no hay perfil que
+      // completar: se muestra la ruta desconocida y el login lo retoma.
+      completeProfile =>
+        settings.arguments is CompleteProfileArgs
+            ? CompleteProfilePage(
+                args: settings.arguments! as CompleteProfileArgs,
+              )
+            : const _UnknownRoutePage(),
+      // Rutas de administración: la protección de UX está en el guard; la
+      // autorización real son las reglas de Firestore.
+      adminOwnerApprovals => AdminRouteGuard(
+        child: OwnerApprovalsPage(
+          controller: settings.arguments is AdminAccessController
+              ? settings.arguments! as AdminAccessController
+              : null,
+        ),
+      ),
+      adminOwnerApprovalDetail => AdminRouteGuard(
+        child: settings.arguments is OwnerApprovalDetailArgs
+            ? OwnerApprovalDetailPage(
+                uid: (settings.arguments! as OwnerApprovalDetailArgs).uid,
+                controller:
+                    (settings.arguments! as OwnerApprovalDetailArgs).controller,
+              )
+            : const OwnerApprovalsPage(),
+      ),
+      adminAdministrators => const AdminRouteGuard(child: AdministratorsPage()),
+      adminCreateAdministrator => AdminRouteGuard(
+        child: settings.arguments is AdministratorsController
+            ? CreateAdminPage(
+                controller: settings.arguments! as AdministratorsController,
+              )
+            : const AdministratorsPage(),
+      ),
+      adminAdministratorDetail => AdminRouteGuard(
+        child: settings.arguments is AdministratorDetailArgs
+            ? AdministratorDetailPage(
+                uid: (settings.arguments! as AdministratorDetailArgs).uid,
+                controller:
+                    (settings.arguments! as AdministratorDetailArgs).controller,
+                currentUid:
+                    (settings.arguments! as AdministratorDetailArgs).currentUid,
+              )
+            : const AdministratorsPage(),
+      ),
+      // La propia pantalla de cambio permite `mustChangePassword`; el resto de
+      // vistas de administración lo redirigen aquí.
+      adminChangePassword => const AdminRouteGuard(
+        allowPendingPasswordChange: true,
+        child: AdminChangePasswordPage(homeRoute: ownerManagement),
+      ),
       _ => const _UnknownRoutePage(),
     };
     return MaterialPageRoute<void>(settings: settings, builder: (_) => page);
