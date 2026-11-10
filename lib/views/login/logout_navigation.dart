@@ -12,8 +12,14 @@ Future<void> logoutAndGoToLogin(
   if (!context.mounted) {
     return;
   }
+  goToLogin(context);
+}
+
+/// Lleva al login limpiando la pila. [notice] se muestra como aviso breve
+/// (p. ej. "Tu cuenta fue eliminada").
+void goToLogin(BuildContext context, {String? notice}) {
   Navigator.of(context).pushAndRemoveUntil(
-    MaterialPageRoute<void>(builder: (_) => const LoginPage()),
+    MaterialPageRoute<void>(builder: (_) => LoginPage(notice: notice)),
     (_) => false,
   );
 }

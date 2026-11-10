@@ -116,6 +116,10 @@ final class _FakeUserProfileRepository implements UserProfileRepository {
     required String uid,
     required String fullName,
     required String phoneNumber,
-  }) async {
+  }) async {}
+
+  @override
+  Future<void> deleteProfile(String uid) async {
+    _profiles.remove(uid);
   }
 }

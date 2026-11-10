@@ -204,6 +204,10 @@ Parámetros opcionales (`--dart-define`):
 
 El ingreso con Google y GitHub está definido pero todavía no implementado.
 
-### Modo de usuarios de prueba (sin Firebase)
+### Android: flavors y firma
 
-Por defecto la app arranca con las cuentas de prueba definidas en el código (`lib/service/auth/hardcoded_auth_service.dart`), de modo que `flutter run` funciona sin argumentos adicionales. El modo se controla con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=<true|false>` y está pensado únicamente para desarrollo local y QA; en builds distribuidos debe desactivarse con `--dart-define=AUTH_USE_HARDCODED_AUTH_USERS=false`. Revise el archivo mencionado para conocer las credenciales de prueba disponibles; no se documentan aquí por tratarse de datos de acceso, aunque sean de prueba.
+La app Android tiene dos flavors: `dev` (`co.machuco.app.dev`) y `prod` (`co.machuco.app`). `flutter run` sin argumentos usa `dev` (`default-flavor` en `pubspec.yaml`); para producción use `--flavor prod`. La firma compartida, Java y `google-services.json` se configuran según [docs/auth/android-setup.md](docs/auth/android-setup.md).
+
+### Cuentas para probar la app
+
+Ya no hay usuarios de prueba en el código: la app solo autentica con Firebase Authentication. Cada integrante se registra con su correo desde la pantalla de registro (Cliente o Propietario). Para un Propietario activo o un Administrador, ajuste `accountStatus` o `role` en el documento `users/{uid}` desde la consola de Firebase hasta que existan las vistas del administrador.

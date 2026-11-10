@@ -1,9 +1,9 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
-import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
@@ -16,7 +16,6 @@ const _colombia = CountryPhoneCode(
   dialCode: '+57',
   phoneMinLength: 10,
   phoneMaxLength: 10,
-  sortOrder: 1,
 );
 
 const _argentina = CountryPhoneCode(
@@ -26,7 +25,6 @@ const _argentina = CountryPhoneCode(
   dialCode: '+54',
   phoneMinLength: 10,
   phoneMaxLength: 11,
-  sortOrder: 3,
 );
 
 void main() {
@@ -238,12 +236,7 @@ final class _FakeCatalogRepository extends AuthCatalogRepository {
     AuthPreferences preferences,
     this._codes, {
     this.shouldFail = false,
-  }) : super(
-         baseUrl: '',
-         apiKey: '',
-         catalogDao: AuthCatalogDao(() => throw UnimplementedError()),
-         preferences: preferences,
-       );
+  }) : super(supabaseUrl: '', publishableKey: '', preferences: preferences);
 
   final List<CountryPhoneCode> _codes;
   final bool shouldFail;
@@ -308,6 +301,12 @@ final class _FakeAuthService implements AuthService {
     registeredEmail = email;
     registeredPhoneNumber = phoneNumber;
   }
+
+  @override
+  Future<void> registerAccount(RegistrationData data) async {}
+
+  @override
+  Future<void> deleteAccount({required String password}) async {}
 
   @override
   Future<void> requestPasswordReset({required String email}) async {}

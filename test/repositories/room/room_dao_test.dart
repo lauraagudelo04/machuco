@@ -30,6 +30,88 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test(
+    'evento y cambio sobreviven reapertura y están separados por usuario',
+    () async {
+      const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Suite');
+      await dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) => local.upsertRoomType(type),
+      );
+      await database.close();
+      database = await AppDatabaseProvider.open(
+        name: '${directory.path}${Platform.pathSeparator}rooms.db',
+      );
+      dao = database.roomDao;
+      expect((await dao.getRoomTypes()).single.id, type.id);
+      expect(await dao.pendingChanges('owner-2'), isEmpty);
+      final pending = await dao.pendingChanges('owner-1');
+      expect(pending, hasLength(1));
+      await dao.acknowledgeChange(pending.single['sequence']! as int);
+      expect(await dao.pendingChanges('owner-1'), isEmpty);
+    },
+  );
+
+  test('fallo local revierte el cambio y su evento', () async {
+    const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Suite');
+    await expectLater(
+      dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) async {
+          await local.upsertRoomType(type);
+          throw StateError('fallo simulado');
+        },
+      ),
+      throwsStateError,
+    );
+    expect(await dao.getRoomTypes(), isEmpty);
+    expect(await dao.pendingChanges('owner-1'), isEmpty);
+  });
+
+  test(
+    'descarga no pisa un cambio pendiente y aplica borrados confirmados',
+    () async {
+      const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Local');
+      await dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) => local.upsertRoomType(type),
+      );
+      await dao.mergeRemote([type.copyWith(name: 'Remoto')], [], [], [type.id]);
+      expect((await dao.getRoomTypes()).single.name, 'Local');
+      final event = (await dao.pendingChanges('owner-1')).single;
+      await dao.acknowledgeChange(event['sequence']! as int);
+      await dao.mergeRemote([], [], [], [type.id]);
+      expect(await dao.getRoomTypes(), isEmpty);
+    },
+  );
+
+  test('migración 13 a 14 agrega cola sin perder tipos', () async {
+    const type = RoomTypeData(
+      id: 'migration-type',
+      motelId: 'm1',
+      name: 'Suite',
+    );
+    await dao.upsertRoomType(type);
+    await database.database.execute('DROP TABLE room_sync_queue');
+    await database.database.execute('PRAGMA user_version = 13');
+    await database.close();
+    database = await AppDatabaseProvider.open(
+      name: '${directory.path}${Platform.pathSeparator}rooms.db',
+    );
+    dao = database.roomDao;
+    expect((await dao.getRoomTypes()).single.id, type.id);
+    expect(await dao.pendingChanges('u1'), isEmpty);
+  });
+
   test('persiste y recupera habitaciones', () async {
     const room = RoomVisualData(
       id: 'room-1',
@@ -66,6 +148,106 @@ void main() {
     await dao.deleteRoomType(type.id);
     expect(await dao.getRoomTypes(), isEmpty);
   });
+
+  test(
+    'actualiza, reabre y elimina habitaciones sin afectar otro motel',
+    () async {
+      await dao.saveRoomTypes(const [
+        RoomTypeData(id: 't1', motelId: 'm1', name: 'Suite'),
+        RoomTypeData(id: 't2', motelId: 'm2', name: 'Suite'),
+      ]);
+      RoomVisualData room(String id, String motel, String type, int price) =>
+          RoomVisualData(
+            id: id,
+            motelId: motel,
+            name: 'Suite',
+            description: 'Descripción',
+            idType: type,
+            pricePerHour: price,
+            roomNumber: '101',
+            capacity: 2,
+            imageUrls: const [],
+            isActive: true,
+            includedServices: const ['Jacuzzi'],
+          );
+      await dao.upsertRoom(room('r1', 'm1', 't1', 100));
+      await dao.upsertRoom(room('r2', 'm2', 't2', 200));
+      await dao.upsertRoom(room('r1', 'm1', 't1', 300));
+      await expectLater(dao.deleteRoomType('t1'), throwsStateError);
+      await database.close();
+      database = await AppDatabaseProvider.open(
+        name: '${directory.path}${Platform.pathSeparator}rooms.db',
+      );
+      dao = database.roomDao;
+      expect(
+        (await dao.getRooms()).firstWhere((r) => r.id == 'r1').pricePerHour,
+        300,
+      );
+      await dao.deleteRoom('r1');
+      await dao.deleteRoomType('t1');
+      expect((await dao.getRooms()).single.motelId, 'm2');
+      expect((await dao.getRoomTypes()).single.motelId, 'm2');
+    },
+  );
+
+  test('migración elimina ejemplos y conserva habitaciones propias', () async {
+    await dao.saveRoomTypes(const [
+      RoomTypeData(id: 'type-suite', motelId: '1', name: 'Suite'),
+      RoomTypeData(id: 'type-loft', motelId: '1', name: 'Loft'),
+    ]);
+    RoomVisualData room(String id, String type, String number) =>
+        RoomVisualData(
+          id: id,
+          motelId: '1',
+          name: 'Habitación',
+          description: 'Descripción',
+          idType: type,
+          pricePerHour: 100,
+          roomNumber: number,
+          capacity: 2,
+          imageUrls: const [],
+          isActive: true,
+          includedServices: const [],
+        );
+    await dao.upsertRoom(room('room-101', 'type-suite', '101'));
+    await dao.upsertRoom(room('room-personal', 'type-loft', '999'));
+    await database.database.execute('PRAGMA user_version = 12');
+    await database.close();
+    database = await AppDatabaseProvider.open(
+      name: '${directory.path}${Platform.pathSeparator}rooms.db',
+    );
+    dao = database.roomDao;
+    expect((await dao.getRooms()).single.id, 'room-personal');
+    expect((await dao.getRoomTypes()).single.id, 'type-loft');
+  });
+
+  test(
+    'limpia ejemplos con la base abierta y permite repetir la limpieza',
+    () async {
+      await dao.upsertRoomType(
+        const RoomTypeData(id: 'type-suite', motelId: '1', name: 'Suite'),
+      );
+      await dao.upsertRoom(
+        const RoomVisualData(
+          id: 'room-101',
+          motelId: '1',
+          name: 'Suite Aurora',
+          description: 'Ejemplo',
+          idType: 'type-suite',
+          pricePerHour: 68000,
+          roomNumber: '101',
+          capacity: 2,
+          imageUrls: [],
+          isActive: true,
+          includedServices: [],
+        ),
+      );
+      await dao.removeLegacyMockData();
+      await dao.removeLegacyMockData();
+      expect(await dao.getRooms(), isEmpty);
+      expect(await dao.getRoomTypes(), isEmpty);
+    },
+  );
 
   test('persiste y recupera el maestro de servicios', () async {
     const services = [

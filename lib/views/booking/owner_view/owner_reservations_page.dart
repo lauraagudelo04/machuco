@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
@@ -32,6 +33,8 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
   String? _motelFilter;
   String? _roomFilter;
   ReservationStatus? _statusFilter;
+  int? _categoryFilter;
+  String? _clientFilter;
   bool _hasLoadedOnce = false;
   List<Reservation> _visibleReservations = const [];
 
@@ -62,7 +65,9 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       simulateError: simulateError,
       simulateOffline: simulateOffline,
     );
-    if (!simulateError && !simulateOffline) {
+    if (!simulateError &&
+        !simulateOffline &&
+        _controller.errorMessage == null) {
       _hasLoadedOnce = true;
       await _applyFilters();
     }
@@ -73,7 +78,8 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       motelId: _motelFilter,
       roomId: _roomFilter,
       status: _statusFilter,
-      clientId: widget.clientId,
+      categoryId: _categoryFilter,
+      clientId: widget.clientId ?? _clientFilter,
     );
     if (!mounted) return;
     setState(() => _visibleReservations = result);
@@ -84,6 +90,8 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
       _motelFilter = null;
       _roomFilter = null;
       _statusFilter = null;
+      _categoryFilter = null;
+      _clientFilter = null;
     });
     unawaited(_applyFilters());
   }
@@ -98,31 +106,33 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
               : 'Reservas de mis hoteles',
         ),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Herramientas de depuración (mock)',
-            icon: const Icon(Icons.bug_report_outlined),
-            onSelected: (action) {
-              switch (action) {
-                case 'reload':
-                  unawaited(_load());
-                case 'error':
-                  unawaited(_load(simulateError: true));
-                case 'offline':
-                  unawaited(_load(simulateOffline: true));
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'reload', child: Text('Recargar')),
-              PopupMenuItem(
-                value: 'error',
-                child: Text('Simular error de carga'),
-              ),
-              PopupMenuItem(
-                value: 'offline',
-                child: Text('Simular sin conexión'),
-              ),
-            ],
-          ),
+          // Mock failure simulation: development builds only.
+          if (kDebugMode)
+            PopupMenuButton<String>(
+              tooltip: 'Herramientas de depuración (mock)',
+              icon: const Icon(Icons.bug_report_outlined),
+              onSelected: (action) {
+                switch (action) {
+                  case 'reload':
+                    unawaited(_load());
+                  case 'error':
+                    unawaited(_load(simulateError: true));
+                  case 'offline':
+                    unawaited(_load(simulateOffline: true));
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'reload', child: Text('Recargar')),
+                PopupMenuItem(
+                  value: 'error',
+                  child: Text('Simular error de carga'),
+                ),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: Text('Simular sin conexión'),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(child: _buildBody(context)),
@@ -162,7 +172,12 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
     }
 
     final summary = _controller.operationalSummary(motelId: _motelFilter);
-    final hasAnyReservation = _controller.ownedReservations.isNotEmpty;
+    final hasActiveFilters =
+        _motelFilter != null ||
+        _roomFilter != null ||
+        _statusFilter != null ||
+        _categoryFilter != null ||
+        _clientFilter != null;
 
     return RefreshIndicator(
       onRefresh: _load,
@@ -202,7 +217,17 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                       ),
                   ],
                   onChanged: (value) {
-                    setState(() => _motelFilter = value);
+                    setState(() {
+                      _motelFilter = value;
+                      _roomFilter = _controller.reconcileRoomSelection(
+                        _roomFilter,
+                        motelId: value,
+                      );
+                      final stillListed = _controller
+                          .clientOptionsFor(motelId: value)
+                          .any((client) => client.clientId == _clientFilter);
+                      if (!stillListed) _clientFilter = null;
+                    });
                     unawaited(_applyFilters());
                   },
                 ),
@@ -231,7 +256,9 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                   label: 'Habitación',
                   selectedValue: _roomFilter,
                   options: [
-                    for (final room in _controller.roomOptions)
+                    for (final room in _controller.roomOptionsFor(
+                      motelId: _motelFilter,
+                    ))
                       ReservationFilterOption(
                         value: room.roomId,
                         label: room.label,
@@ -242,22 +269,59 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                     unawaited(_applyFilters());
                   },
                 ),
+                if (widget.clientId == null)
+                  ReservationFilterGroup(
+                    label: 'Cliente',
+                    selectedValue: _clientFilter,
+                    options: [
+                      for (final client in _controller.clientOptionsFor(
+                        motelId: _motelFilter,
+                      ))
+                        ReservationFilterOption(
+                          value: client.clientId,
+                          label: client.name,
+                        ),
+                    ],
+                    onChanged: (value) {
+                      setState(() => _clientFilter = value);
+                      unawaited(_applyFilters());
+                    },
+                  ),
+                ReservationFilterGroup(
+                  label: 'Categoría',
+                  selectedValue: _categoryFilter?.toString(),
+                  options: [
+                    for (final category in _controller.categories)
+                      ReservationFilterOption(
+                        value: category.id.toString(),
+                        label: category.name,
+                      ),
+                  ],
+                  onChanged: (value) {
+                    setState(
+                      () => _categoryFilter = value == null
+                          ? null
+                          : int.tryParse(value),
+                    );
+                    unawaited(_applyFilters());
+                  },
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.s4),
             if (_visibleReservations.isEmpty)
               AppEmptyState(
                 icon: Icons.event_busy_outlined,
-                title: hasAnyReservation
+                title: hasActiveFilters
                     ? 'Sin resultados'
                     : 'Todavía no hay reservas',
-                message: hasAnyReservation
+                message: hasActiveFilters
                     ? 'No hay reservas que coincidan con estos filtros.'
                     : widget.clientName != null
                     ? 'Este cliente todavía no tiene reservas registradas.'
                     : 'Cuando tus clientes reserven, las verás aquí.',
-                actionLabel: hasAnyReservation ? 'Limpiar filtros' : null,
-                onAction: hasAnyReservation ? _clearFilters : null,
+                actionLabel: hasActiveFilters ? 'Limpiar filtros' : null,
+                onAction: hasActiveFilters ? _clearFilters : null,
               )
             else
               for (final reservation in _visibleReservations)

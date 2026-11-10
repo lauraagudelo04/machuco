@@ -27,7 +27,7 @@ lib/
 │   ├── storage/             # Preferencias locales (shared_preferences)
 │   └── subscription/        # Preferencias de suscripción
 ├── database/
-│   ├── app_database.dart    # Base Floor/SQLite común, versión 11 (+ .g.dart generado)
+│   ├── app_database.dart    # Base Floor/SQLite común, versión 13 (+ .g.dart generado)
 │   ├── migrations/          # Seeds de migración (suscripcion)
 │   ├── model/               # Entidades Floor (client, motel, notification, phone_country_code, suscripcion)
 │   └── repository/          # Repositorios y DAO por feature (auth, client, invoice, motel,
@@ -107,8 +107,8 @@ recomienda `README_DISENO_FLUTTER.md#11-navegación`.
 ### `service`
 
 - `service/auth/`: `FirebaseAuthService` (Firebase Authentication + perfil en
-  Firestore), `HardcodedAuthService` (cuentas de prueba locales, apagado por
-  defecto), el contrato transitorio `AuthService`, `AuthConfig`
+  Firestore, único proveedor), el contrato `AuthService` (costura para fakes
+  en pruebas), `AuthConfig`
   (`--dart-define`), `AuthPreferences` (correo actual y otros datos no
   sensibles) y el directorio de usuarios (`RegisteredUserDirectory`,
   `InMemoryRegisteredUserDirectory`, `BackendRegisteredUserDirectory`).
@@ -134,18 +134,21 @@ No existe `lib/data/` ni `lib/repository/` de primer nivel. La capa de acceso
 a datos vive en `lib/database/`:
 
 - `app_database.dart`: base Floor/SQLite común (`AppDatabase`,
-  `AppDatabaseProvider`, **versión 11**) con DAO de suscripción,
+  `AppDatabaseProvider`, **versión 15**) con DAO de suscripción,
   notificaciones, pagos, habitaciones, clientes, indicativos
-  (`phoneCountryCodeDao`), moteles y maestros de autenticación
-  (`authCatalogDao`). Migraciones relevantes: 9 → 10 crea `motels` (rama de
+  (`phoneCountryCodeDao`, compartido también por el registro), moteles y
+  reservas (`reservationCategoryDao`, `reservationDao`).
+  Migraciones relevantes: 9 → 10 crea `motels` (rama de
   moteles) y 10 → 11 crea `country_phone_codes` y completa `motels` si falta
-  (ambas ramas habían publicado una versión 10). Las ramas deben acordar el
+  (ambas ramas habían publicado una versión 10), 11 → 12 elimina
+  `clients.password`, 12 → 13 retira los ejemplos de room, 13 → 14 crea
+  `auth_user_profile` y 14 → 15 crea las tablas de reservas. Las ramas deben acordar el
   siguiente número de versión antes de crear una migración.
 - `database/model/`: entidades Floor de `client`, `motel`, `notification`,
   `phone_country_code` y `suscripcion`.
 - `database/migrations/suscripcion/`: seed de la suscripción de prueba.
-- `database/repository/auth/`: `AuthCatalogRepository` + `AuthCatalogDao`
-  (indicativos telefónicos desde Supabase REST con caché SQLite) y
+- `database/repository/auth/`: `AuthCatalogRepository` (indicativos desde
+  Supabase `phone_country_codes` con caché en `phoneCountryCodeDao`) y
   `UserProfileRepository` (interfaz) + `FirestoreUserProfileRepository`
   (perfiles en Cloud Firestore, `users/{uid}`).
 - `database/repository/room/`: `RoomServiceRepository` (Supabase) y
@@ -161,11 +164,14 @@ a datos vive en `lib/database/`:
   maestros de indicativos en paralelo (`phone_country_codes` y
   `country_phone_codes` de autenticación); está pendiente unificarlos.
 - `database/repository/invoice/`: facturas.
+- `lib/repositories/booking/`: `BookingRepository` y
+  `ReservationCategoryRepository` (en memoria y Floor) con sus DAO, consumidos
+  por `BookingService`. Ver [modules/booking.md](modules/booking.md).
 - `lib/repositories/payment/`: repositorio y DAO de pagos. Está fuera de
   `lib/database/`, a diferencia del resto; ver
   [payment_persistence.md](payment_persistence.md).
 
-Fuera de estas features, los controladores (`booking`, `pqrs`, etc.) siguen
+Fuera de estas features, los controladores (`pqrs`, etc.) siguen
 conteniendo datos de ejemplo directamente (por ejemplo
 `controllers/room/room_mock_data.dart`, o listas `static` en cada
 `*Controller`), sin repositorio intermedio. `UserProfileRepository` es la
@@ -220,7 +226,7 @@ repositorio (reservas, PQRS, etc.) siguen operando sobre datos de ejemplo en
 memoria.
 
 Las dependencias se construyen en la vista: `LoginPage` crea el
-`FirebaseAuthService` (o `HardcodedAuthService`), el directorio de usuarios y
+`FirebaseAuthService`, el directorio de usuarios y
 `AuthCatalogRepository.fromEnvironment` y se los pasa al `LoginController`.
 La vista no consulta datos por sí misma, pero sí decide las implementaciones;
 no hay inyección de dependencias.
@@ -235,7 +241,7 @@ no hay inyección de dependencias.
   registrar, redirección por rol, logout, usuarios quemados; con servicios
   falsos, sin Firebase real).
 - Persistencia y servicios: `test/database/` (notificaciones, suscripción,
-  pagos y migraciones hasta la versión 11), `test/repositories/{invoice,motel,
+  pagos y migraciones hasta la versión 13), `test/repositories/{invoice,motel,
   payment,room}/`, `test/service/{storage,subscription}/`.
 - Controllers: `test/controllers/{invoice,payment}/`.
 - Rutas: `test/routes/`.

@@ -188,6 +188,11 @@ void main() {
         expect(find.text('Ya no podré asistir a la reserva.'), findsOneWidget);
         // Tras cancelar, la acción de cancelar deja de ofrecerse.
         expect(find.text('Cancelar reserva'), findsNothing);
+        // La sección de reseñas carga el motel tras cancelar (sin error).
+        expect(
+          find.textContaining('No pudimos cargar la información del motel'),
+          findsNothing,
+        );
       },
     );
   });

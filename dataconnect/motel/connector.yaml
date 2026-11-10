@@ -1,0 +1,5 @@
+connectorId: motel
+generate:
+  dartSdk:
+    outputDir: ../../lib/service/sql_connect/motel_connector
+    package: motel_connector

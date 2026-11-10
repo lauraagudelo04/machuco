@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/widgets/form/app_country_flag.dart';
 
 /// Campo de celular con selector de indicativo por país.
 ///
@@ -64,10 +65,20 @@ class AppPhoneField extends StatelessWidget {
         color: Theme.of(context).colorScheme.error,
       );
     } else {
-      dialCodeContent = Text(
-        selectedCountryCode?.shortLabel ?? '—',
-        style: textTheme.bodyLarge,
-      );
+      final code = selectedCountryCode;
+      dialCodeContent = code == null
+          ? Text('—', style: textTheme.bodyLarge)
+          : Semantics(
+              label: '${code.countryName} ${code.dialCode}',
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  AppCountryFlag(isoCode: code.isoCode),
+                  const SizedBox(width: AppSpacing.s2),
+                  Text(code.dialCode, style: textTheme.bodyLarge),
+                ],
+              ),
+            );
     }
 
     return Column(
@@ -218,9 +229,10 @@ class _CountryCodePickerSheetState extends State<_CountryCodePickerSheet> {
                         final selected =
                             code.id == widget.selectedCountryCode?.id;
                         return ListTile(
-                          leading: Text(
-                            code.flagEmoji ?? code.isoCode,
-                            style: textTheme.titleLarge,
+                          leading: AppCountryFlag(
+                            isoCode: code.isoCode,
+                            width: AppSpacing.s8,
+                            height: AppSpacing.s6,
                           ),
                           title: Text(code.countryName),
                           trailing: Text(

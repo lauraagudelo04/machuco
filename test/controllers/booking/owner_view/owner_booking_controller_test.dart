@@ -2,8 +2,12 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/service/booking/booking_service.dart';
 
 void main() {
+  _failureTests();
+
   group('OwnerBookingController.reservationsForOwner', () {
     test('devuelve solo reservas de los moteles del propietario, ordenadas '
         'de más reciente a más antigua', () async {
@@ -125,6 +129,42 @@ void main() {
         expect(result.every((r) => r.guestId == 'client-001'), isTrue);
       },
     );
+  });
+
+  group('OwnerBookingController.clientOptions', () {
+    test('lista los clientes con reservas en los moteles del propietario y '
+        'filtrar por uno devuelve solo su historial', () async {
+      final controller = OwnerBookingController();
+      await controller.loadReservations();
+
+      final options = controller.clientOptions;
+      expect(options, isNotEmpty);
+      expect(options.map((o) => o.clientId).toSet().length, options.length);
+
+      final first = options.first;
+      final filtered = await controller.filteredReservations(
+        clientId: first.clientId,
+      );
+      expect(filtered, isNotEmpty);
+      expect(filtered.every((r) => r.guestId == first.clientId), isTrue);
+      expect(
+        filtered,
+        await controller.reservationsForClient(
+          controller.ownerId,
+          first.clientId,
+        ),
+      );
+    });
+
+    test('un cliente ajeno a los moteles del propietario no devuelve '
+        'reservas', () async {
+      final controller = OwnerBookingController();
+
+      expect(
+        await controller.filteredReservations(clientId: 'cliente-ajeno'),
+        isEmpty,
+      );
+    });
   });
 
   group('OwnerBookingController.cancelReservation', () {
@@ -304,6 +344,84 @@ void main() {
 
       expect(summary['total'], expectedTotal);
       expect(summary['activeOrUpcoming'], expectedActiveOrUpcoming);
+    });
+  });
+}
+
+class _FailingBookingRepository implements BookingRepository {
+  @override
+  Future<List<Reservation>> getAll() => Future.error(StateError('offline'));
+
+  @override
+  Future<Reservation?> getById(String id) => Future.error(StateError('x'));
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) =>
+      Future.error(StateError('x'));
+
+  @override
+  Future<void> add(Reservation reservation) => Future.error(StateError('x'));
+
+  @override
+  Future<void> update(Reservation reservation) => Future.error(StateError('x'));
+}
+
+void _failureTests() {
+  group('OwnerBookingController con repositorio que falla', () {
+    test('loadReservations expone el error recuperable y reintenta', () async {
+      final controller = OwnerBookingController(
+        bookingService: BookingService(repository: _FailingBookingRepository()),
+      );
+
+      await controller.loadReservations();
+
+      expect(controller.errorMessage, isNotNull);
+      expect(controller.isLoading, isFalse);
+      expect(controller.ownedReservations, isEmpty);
+
+      // Retrying while the repository still fails keeps the error state.
+      await controller.loadReservations();
+      expect(controller.errorMessage, isNotNull);
+    });
+  });
+
+  group('OwnerBookingController filter options', () {
+    test(
+      'room options are scoped by motel and reset when not belonging',
+      () async {
+        final controller = OwnerBookingController();
+        await controller.loadReservations();
+
+        final all = controller.roomOptionsFor();
+        final motel1 = controller.roomOptionsFor(motelId: '1');
+        final motel2 = controller.roomOptionsFor(motelId: '2');
+        expect(motel1, isNotEmpty);
+        expect(motel2, isNotEmpty);
+        expect(motel1.length + motel2.length, all.length);
+
+        final room2 = motel2.first.roomId;
+        expect(controller.reconcileRoomSelection(room2, motelId: '2'), room2);
+        expect(controller.reconcileRoomSelection(room2, motelId: '1'), isNull);
+        expect(controller.reconcileRoomSelection(null, motelId: '1'), isNull);
+      },
+    );
+
+    test('client options have one entry per guestId', () async {
+      final controller = OwnerBookingController();
+      await controller.loadReservations();
+
+      final options = controller.clientOptionsFor();
+      final ids = options.map((o) => o.clientId).toList();
+      expect(ids.toSet().length, ids.length);
+      final expected = controller.ownedReservations
+          .map((r) => r.guestId)
+          .where((id) => id.isNotEmpty)
+          .toSet();
+      expect(ids.toSet(), expected);
+
+      final scoped = controller.clientOptionsFor(motelId: '1');
+      final scopedIds = scoped.map((o) => o.clientId).toList();
+      expect(scopedIds.toSet().length, scopedIds.length);
     });
   });
 }

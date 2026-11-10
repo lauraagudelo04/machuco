@@ -48,9 +48,7 @@ void main() {
     tester,
   ) async {
     final controller = OwnerReviewController(
-      motelController: _FakeMotelController([
-        _motel('3', 'Motel Eclipse'),
-      ]),
+      motelController: _FakeMotelController([_motel('3', 'Motel Eclipse')]),
       repository: InMemoryReviewRepository(),
     );
     addTearDown(controller.dispose);
@@ -97,7 +95,10 @@ void main() {
     await tester.pumpWidget(_wrap(OwnerReviewPage(controller: controller)));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Motel Paraíso Élite · 10/7/2026'), findsOneWidget);
+    expect(
+      find.textContaining('Motel Paraíso Élite · 10/7/2026'),
+      findsOneWidget,
+    );
     expect(find.textContaining('1 · 10/7/2026'), findsNothing);
   });
 }

@@ -136,3 +136,50 @@ defecto del CLI. Cada cambio en `firestore.rules` debe volver a
 desplegarse; coordina el despliegue con el equipo, porque el archivo de
 reglas es único y compartido por todas las ramas y desplegar reemplaza todas
 las reglas publicadas.
+
+## 5. Analytics (Firebase Analytics)
+
+La app reporta el uso con `firebase_analytics` a través de un único servicio,
+`lib/service/analytics/analytics_service.dart`. Ninguna vista llama a
+Firebase directamente: los controllers y servicios usan
+`AnalyticsServiceProvider.instance` (o reciben un `AnalyticsService` en el
+constructor). `main` activa Firebase con
+`AnalyticsServiceProvider.useFirebase()`; en las pruebas queda el
+`NoopAnalyticsService`, que descarta todo.
+
+Qué se reporta hoy:
+
+| Evento | Dónde | Parámetros |
+| --- | --- | --- |
+| `screen_view` | `AnalyticsRouteObserver` en `MaterialApp` (cada ruta con nombre; el `home` se llama `login`) | `screen_name` |
+| `login` | `LoginController.login` (correo), `FirebaseSocialAuthService` (Google, GitHub) | `method`: `password`, `google`, `github` |
+| `sign_up` | `LoginController.registerAccount`, `FirebaseSocialAuthService.completeProfile` | `method` |
+| `reservation_created` | `BookingService.createReservation` (no en reintentos del mismo `requestId`) | `motel_id`, `stay_mode`, `guest_count`, `value`, `currency` |
+| `reservation_paid` | `BookingService.confirmPayment` y `registerCashPayment` de una reserva pendiente | `payment_method`, `value`, `currency` |
+| `reservation_cancelled` | `BookingService.cancelReservation` | `previous_status` |
+
+Además se asocia el uid de Firebase (`setUserId`) y la propiedad de usuario
+`user_role` (`client`, `owner`, `admin`) al iniciar o restaurar la sesión, y
+se limpian al cerrar sesión.
+
+Para agregar un evento de tu módulo:
+
+1. Declara el nombre en `AnalyticsEvents` (snake_case, máximo 40
+   caracteres).
+2. Repórtalo desde el controller o servicio, después de que la operación
+   tuvo éxito: `unawaited(analytics.logEvent(AnalyticsEvents.x, {...}))`.
+   Los valores son `String` o números. **Nunca** envíes nombres, correos,
+   celulares, NIT ni otro dato personal.
+3. Pruébalo inyectando `RecordingAnalyticsService`
+   (`test/service/analytics/recording_analytics_service.dart`).
+
+Ver los datos:
+
+- **En vivo (DebugView):** con el emulador encendido,
+  `adb shell setprop debug.firebase.analytics.app co.machuco.app.dev` y abre
+  `Analytics > DebugView` en la consola. Para apagarlo:
+  `adb shell setprop debug.firebase.analytics.app .none.`
+- **Informes:** `Analytics > Dashboard`, `Events` y `Realtime` tardan de
+  minutos a 24 horas en reflejar los eventos. La propiedad `user_role` se
+  registra como dimensión personalizada (ámbito usuario) en
+  `Analytics > Custom definitions` para poder filtrar por rol.

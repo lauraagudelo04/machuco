@@ -4,18 +4,24 @@ import 'dart:async';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
+import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
-import 'package:machuco/database/repository/auth/auth_catalog_dao.dart';
+import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_line_item_entity.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/booking/reservation_category_dao.dart';
+import 'package:machuco/repositories/booking/reservation_dao.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
@@ -32,7 +38,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 12,
+  version: 16,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -43,11 +49,14 @@ part 'app_database.g.dart';
     ClientEntry,
     PhoneCountryCode,
     MotelEntity,
+    AuthUserProfileEntry,
+    ReservationCategory,
+    ReservationEntity,
+    ReservationLineItemEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
   RoomDao? _roomDao;
-  AuthCatalogDao? _authCatalogDao;
 
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
@@ -58,11 +67,12 @@ abstract class AppDatabase extends FloorDatabase {
 
   ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
-
-  AuthCatalogDao get authCatalogDao => _authCatalogDao ??= AuthCatalogDao(
-    () async => database as sqflite.Database,
-  );
   MotelDao get motelDao;
+  AuthUserProfileDao get authUserProfileDao;
+
+  ReservationCategoryDao get reservationCategoryDao;
+
+  ReservationDao get reservationDao;
 }
 
 class AppDatabaseProvider {
@@ -89,6 +99,10 @@ class AppDatabaseProvider {
         migration9To10,
         migration10To11,
         migration11To12,
+        migration12To13,
+        migration13To14,
+        migration14To15,
+        migration15To16,
       ])
       .addCallback(
         Callback(
@@ -106,6 +120,7 @@ Future<void> _createManualSchemas(
   int version,
 ) async {
   await _createRoomSchema(database, version);
+  await createRoomSyncSchema(database);
   await _createAuthCatalogSchema(database);
 }
 
@@ -346,7 +361,10 @@ Future<void> _createClientSchema(sqflite.Database database) async {
   );
 }
 
-/// Maestros del módulo de autenticación (caché local de Supabase).
+/// Tabla obsoleta: el registro ahora usa `phone_country_codes` (entidad
+/// compartida `PhoneCountryCode`), que es la tabla que existe en Supabase.
+/// Se sigue creando para no cambiar el esquema compartido sin coordinar una
+/// migración con las demás ramas; retirarla en una migración acordada.
 Future<void> _createAuthCatalogSchema(sqflite.DatabaseExecutor database) async {
   await database.execute('''
     CREATE TABLE IF NOT EXISTS country_phone_codes (
@@ -373,10 +391,109 @@ final migration10To11 = Migration(10, 11, (database) async {
 
 final migration11To12 = Migration(11, 12, (database) async {
   final columns = await database.rawQuery("PRAGMA table_info(clients)");
-  final hasPasswordColumn =
-      columns.any((column) => column['name'] == 'password');
+  final hasPasswordColumn = columns.any(
+    (column) => column['name'] == 'password',
+  );
 
   if (hasPasswordColumn) {
     await database.execute('ALTER TABLE clients DROP COLUMN password');
   }
 });
+
+/// Retira únicamente los identificadores de los antiguos ejemplos de room.
+final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
+
+/// Agrega la caché de una sola fila del perfil del usuario autenticado
+/// (módulo de autenticación). Mismo DDL que genera Floor para la entidad
+/// `AuthUserProfileEntry`; no guarda NIT ni fecha de nacimiento.
+///
+/// Es idempotente porque esta tabla se creó antes como v13 en la rama de
+/// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
+/// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
+Future<void> _createAuthUserProfileSchema(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
+    '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
+    '`first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, '
+    '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
+    '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
+    '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
+}
+
+Future<void> createRoomSyncSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''CREATE TABLE IF NOT EXISTS room_sync_queue (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    collection_name TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    payload TEXT NOT NULL
+  )''');
+}
+
+Future<void> _completeAuthAndRoomSyncSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
+  await _createAuthUserProfileSchema(database);
+  await createRoomSyncSchema(database);
+}
+
+final migration13To14 = Migration(13, 14, _completeAuthAndRoomSyncSchemas);
+
+/// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
+/// genera para `ReservationCategory`, `ReservationEntity` y
+/// `ReservationLineItemEntity`.
+Future<void> _createReservationSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
+    '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, '
+    '`requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, '
+    '`motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, '
+    '`roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, '
+    '`checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, '
+    '`stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, '
+    '`roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, '
+    '`status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, '
+    '`guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, '
+    '`categoryId` INTEGER, `cancellationReason` TEXT, '
+    '`invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, '
+    'PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_line_items` ('
+    '`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, '
+    '`itemId` TEXT NOT NULL, `name` TEXT NOT NULL, '
+    '`unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, '
+    '`position` INTEGER NOT NULL, '
+    'FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) '
+    'ON UPDATE NO ACTION ON DELETE CASCADE)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_requestId` '
+    'ON `reservations` (`requestId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_motelId` '
+    'ON `reservations` (`motelId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
+    'ON `reservation_line_items` (`reservationId`)',
+  );
+}
+
+Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
+  await _completeAuthAndRoomSyncSchemas(database);
+  await _createReservationSchema(database);
+}
+
+final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+
+/// Completa las dos variantes de v15 conservando los datos de ambas ramas.
+final migration15To16 = Migration(15, 16, _completeMergedSchemas);

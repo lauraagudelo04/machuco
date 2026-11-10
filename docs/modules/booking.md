@@ -1,9 +1,10 @@
 # Módulo: Reservas (`booking`)
 
-Estado general: **parcial, con datos mock**. Los flujos de creación,
-consulta, cancelación y pago en efectivo están implementados en memoria,
-sin backend ni pasarela de pagos real. La organización de archivos y el
-contexto funcional detallado de este módulo ya están documentados en:
+Estado general: **funcional con persistencia local**. Los flujos de
+creación, consulta, cancelación y pago en efectivo están implementados sobre
+una capa de servicio y un repositorio con SQLite (Floor), sin backend ni
+pasarela de pagos real. La organización de archivos y el contexto funcional
+detallado de este módulo ya están documentados en:
 
 - [`docs/booking_structure.md`](../booking_structure.md) — convención de
   carpetas por rol (`client_view`, `owner_view`, `system_admin_view`) y
@@ -22,6 +23,29 @@ contexto funcional detallado de este módulo ya están documentados en:
 Este archivo no repite ese contenido; describe el estado real de la
 implementación.
 
+## Capas
+
+```
+views -> controllers -> BookingService -> BookingRepository -> Floor DAO
+```
+
+- **Views** (`lib/views/booking/**`): solo presentación; no consultan datos
+  ni calculan reglas.
+- **Controllers** (`lib/controllers/booking/**`): estado de pantalla (carga,
+  error, caché) y delegación en el servicio.
+- **`BookingService`** (`lib/service/booking/booking_service.dart`): reglas de
+  negocio (disponibilidad, precios, transiciones de estado, cancelación,
+  filtros, ordenamiento y KPIs). No guarda estado propio y recibe el
+  repositorio y el reloj por inyección.
+- **`BookingRepository`** (`lib/repositories/booking/booking_repository.dart`):
+  interfaz de acceso a datos con tres implementaciones:
+  `InMemoryBookingRepository` (pruebas), `FloorBookingRepository` (SQLite) y
+  `LazyBookingRepository` (resuelve la base al primer uso).
+  `BookingRepositoryProvider` expone la instancia compartida por los tres
+  roles.
+- **Floor DAO** (`ReservationDao`, `ReservationCategoryDao`) sobre
+  `AppDatabase`.
+
 ## Modelos
 
 - `lib/models/booking/booking.dart`: entidad `Reservation` compartida por
@@ -32,20 +56,23 @@ implementación.
 ## Controllers (`ChangeNotifier`, por rol)
 
 - `controllers/booking/client_view/client_booking_controller.dart`
-  (`ClientBookingController`): **estado: mock funcional.** Maneja
-  disponibilidad de franjas horarias (incluye 1 hora de preparación tras
-  cada reserva), creación idempotente por `requestId`, expiración
-  automática de reservas `pending` sin pago tras 15 minutos, y cancelación
-  con motivo obligatorio. Los datos viven en una colección `static` en
-  memoria compartida entre instancias del controlador (ver
-  [../decisions_log.md](../decisions_log.md)); no hay persistencia real ni
-  llamada a backend.
+  (`ClientBookingController`): selección de categoría, creación idempotente
+  por `requestId`, resumen previo al pago y cancelación con motivo
+  obligatorio. Las reglas (franjas, 1 hora de preparación, expiración a los
+  15 minutos) viven en `BookingService`.
 - `controllers/booking/owner_view/owner_booking_controller.dart`
   (`OwnerBookingController`): reservas generales del propietario, filtros
-  por motel/estado y flujo de cancelación con notificación al cliente.
+  por motel, habitación, cliente, estado y categoría, y flujo de cancelación
+  con notificación simulada al cliente.
 - `controllers/booking/system_admin_view/system_admin_booking_controller.dart`
   (`SystemAdminBookingController`): estadísticas y dashboard por motel para
-  el administrador del sistema.
+  el administrador del sistema, con filtro por estado y categoría.
+
+Los tres controladores exponen un estado de error recuperable: si el
+repositorio o el servicio lanzan una excepción, `errorMessage` queda
+definido y la vista muestra el estado de error con reintento (nunca un
+listado vacío). Los parámetros `simulateError` y `simulateOffline` se
+conservan solo como ganchos de demostración.
 
 ## Pantallas
 
@@ -72,28 +99,116 @@ Todas las rutas de reservas están centralizadas en `lib/routes/routes.dart`
 
 ## Pruebas
 
-Es el único feature con pruebas automatizadas encontradas en el
-repositorio:
+Pruebas automatizadas del módulo:
 
+- `test/service/booking/booking_service_test.dart`
+- `test/repositories/booking/` (repositorio en memoria y Floor)
 - `test/controllers/booking/client_view/client_booking_controller_test.dart`
 - `test/controllers/booking/owner_view/owner_booking_controller_test.dart`
 - `test/controllers/booking/system_admin_view/system_admin_booking_controller_test.dart`
 - `test/widgets/booking/*_test.dart` (cancelación, dashboards, detalle,
-  listados)
+  listados, resumen de pago con desglose de costos)
+
+Los controladores de propietario y administrador incluyen pruebas con un
+repositorio que siempre falla, para verificar el estado de error.
+
+## Transiciones por reloj
+
+`BookingService` recibe un reloj inyectable (`DateTime Function() now`), de
+modo que las transiciones se prueban de forma determinista:
+
+- `pending` sin pago pasa a `cancelled` a los 15 minutos y libera la franja.
+- `upcoming` pasa a `active` al llegar la hora de entrada y a `completed` al
+  cumplirse la salida.
+- `syncStatuses` persiste esas transiciones al consultar; `resolveStatuses`
+  es la versión pura que usan los getters síncronos de los controladores.
+
+## Categorías y filtros
+
+El catálogo `reservation_categories` es un dato maestro en Supabase
+(`supabase/migrations/202611070001_create_reservation_categories.sql`, solo
+lectura pública). `FloorReservationCategoryRepository` lo lee por REST
+(`SupabaseReservationCategorySource`) la primera vez que se usa y actualiza la
+caché SQLite; sin conexión, o si la tabla remota está vacía, usa la caché y,
+si también está vacía, siembra `defaultReservationCategories`. El cliente debe
+elegir una categoría antes de reservar y la reserva guarda su `categoryId`
+(nulo en reservas anteriores al catálogo). Propietario y administrador
+filtran por categoría; si el catálogo no carga, el filtro se omite sin
+bloquear la pantalla.
+
+## Cobertura de escenarios de la spec
+
+Cubiertos: asignación aleatoria entre habitaciones activas libres del tipo y
+rechazo sin unidades activas; conflicto de concurrencia con mensaje;
+reintento idempotente tras error de red; validación de fecha y hora
+obligatorias; desglose de costos en el resumen; estado vacío y error con
+reintento en "Mis reservas"; filtro por cliente del propietario (reutiliza
+`reservationsForClient`); estados de error recuperable en propietario y
+administrador.
 
 ## Qué falta o es provisional
 
-- No hay backend ni persistencia real: todo el estado vive en memoria y se
-  reinicia con la app.
-- El pago real de una reserva (`confirmPayment` en
-  `ClientBookingController`) tiene un método listo para integrarse, pero
-  ninguna pantalla en el alcance actual lo dispara; el procesamiento de
-  pagos está fuera del alcance implementado hoy.
-- La disponibilidad de habitaciones se calcula combinando este controlador
-  con datos mock de otro módulo (`RoomVisualData`, ver
-  `widgets/room` y `controllers/room/room_mock_data.dart`); no hay una
-  única fuente de verdad de disponibilidad.
+- Sin sesión de Firebase las reservas se persisten solo en el dispositivo
+  (modo demo). Con sesión se sincronizan con Firestore (ver "Sincronización
+  con Firestore"); un cambio hecho sin conexión puede quedar sobrescrito por
+  la copia remota en la siguiente lectura (no hay cola de reintentos).
+- El pago real de una reserva (`confirmPayment`) se dispara desde el pago con
+  tarjeta; el procesamiento con pasarela real está fuera del alcance.
+- La disponibilidad de habitaciones se calcula combinando este módulo con
+  datos mock de otro (`RoomVisualData`, ver `widgets/room` y
+  `controllers/room/room_mock_data.dart`); no hay una única fuente de verdad.
 - La nota final de `docs/booking_context.md` ("Nota para el LLM (Claude)")
-  sobre métricas adicionales para el dashboard de administrador sigue sin
-  resolver: es una petición abierta, no una implementación pendiente
-  confirmada por el equipo.
+  sobre métricas adicionales del dashboard de administrador sigue sin
+  resolver: es una petición abierta, no una implementación confirmada.
+
+## Persistencia local de reservas (Floor)
+
+`BookingRepositoryProvider.useDatabase()` (llamado en `main.dart`) cambia el
+repositorio por defecto a `LazyBookingRepository` -> `FloorBookingRepository`.
+El modelo de dominio `Reservation` no tiene anotaciones de Floor.
+
+- Tablas (base común `machuco.db` de `AppDatabaseProvider`, versión 13):
+  - `reservation_categories`: caché local del maestro de categorías de
+    Supabase.
+  - `reservations`: una fila por reserva (`ReservationEntity`). Fechas como
+    epoch en milisegundos, enums como su `name`. Indices en `requestId` y
+    `motelId`.
+  - `reservation_line_items`: servicios y productos (`kind` =
+    `service`|`product`, `position` conserva el orden). `reservationId` es FK
+    a `reservations.id` con `ON DELETE CASCADE`.
+- `ReservationMapper` (`lib/repositories/booking/reservation_mapper.dart`)
+  convierte filas <-> `Reservation`; `ReservationDao` inserta/actualiza la
+  reserva y reemplaza sus lineas dentro de una `@transaction`.
+- Siembra: si `reservations` esta vacia, el repositorio inserta una vez la
+  semilla de `booking_seed_data.dart`.
+- Migración 12 -> 13 (`migration12To13` en `app_database.dart`): crea las
+  tres tablas e índices de reservas en bases que ya tenían la versión 12 de
+  `develop`. Debe mantenerse igual al SQL generado en `app_database.g.dart`.
+
+## Sincronización con Firestore
+
+`BookingRepositoryProvider.useDatabase()` envuelve el repositorio local en
+`SyncedBookingRepository` (`lib/repositories/booking/`):
+
+- **Sin sesión** (`CurrentUser.uidOrNull == null`): se comporta igual que el
+  repositorio local, con la semilla de demostración y sin llamar a Firebase.
+- **Con sesión**: `getAll` descarga primero lo que el rol puede leer (cliente:
+  `listForGuest(uid)`, propietario: `listForOwner(uid)`, admin: `listAll()`),
+  lo guarda en SQLite (la copia remota gana) y oculta la semilla
+  (`isSeedReservationId`). Sin conexión devuelve la caché.
+- `add` y `update` guardan en local y suben en segundo plano
+  (`ReservationCloudRepository.saveReservation`). No se suben la semilla ni las
+  reservas de moteles que no están en el catálogo de Supabase (sin propietario
+  conocido). Un error al subir conserva la copia local.
+- Documento `reservations/{id}` (`ReservationFirestoreDocument`): los campos de
+  `Reservation` más `ownerId`, el propietario del motel (`motels.owner_id` de
+  Supabase), que usan las reglas para autorizar al propietario.
+- Reglas (`firestore.rules`, `match /reservations/{reservationId}`): leen el
+  cliente (`guestId`), el propietario (`ownerId`) y el admin; solo el cliente
+  crea, a su nombre; las actualizaciones solo cambian estado, motivo de
+  cancelación, acceso a factura y método de pago, con las transiciones de
+  `BookingService`; nadie borra.
+- Identidad: los controladores de cliente y propietario usan el uid de Firebase
+  (`CurrentUser.uidOrNull`) y solo sin sesión los ids de demostración. Para que
+  un propietario vea reservas, `motels.owner_id` debe ser su uid: los moteles
+  nuevos ya se crean así desde `OwnerMotelsPage`.

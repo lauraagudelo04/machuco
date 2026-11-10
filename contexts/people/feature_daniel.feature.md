@@ -1,4 +1,11 @@
-# Contexto - Funcionalidad de PQRS (rama: feature_daniel)
+# Contexto - Reservas (rama: feature_daniel)
+
+> **Alcance actual: módulo de reservas** (cliente, propietario y administrador
+> del sistema). La spec está en `docs/booking_context.md` y la implementación
+> en `docs/modules/booking.md`. El contenido de PQRS de abajo es el alcance
+> anterior de esta rama y se conserva solo como referencia.
+
+## Alcance anterior: PQRS
 
 ## Rol del usuario
 

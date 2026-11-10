@@ -7,12 +7,25 @@
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:201797273193:android:478caeb42535587b0884f8",
+        "mobilesdk_app_id": "1:201797273193:android:fb96e013e19b418c0884f8",
         "android_client_info": {
-          "package_name": "com.example.machuco"
+          "package_name": "co.machuco.app"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "201797273193-vdtjvv36uhelqn67mv78v0jv92vm5nu2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.machuco.app",
+            "certificate_hash": "8fee770bb32619efc37aa199c698589279d28afe"
+          }
+        },
+        {
+          "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyAuoCNiUeRJZpankhfIZBGlCHfoP8b2Uv8"
@@ -20,7 +33,115 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "201797273193-cdo6nkd2mc885re9e3ei4a006m8oltaa.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.machuco"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:201797273193:android:222f631458ed0b780884f8",
+        "android_client_info": {
+          "package_name": "co.machuco.app.dev"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "201797273193-3ic4v3e4jq9b3v0dgphomq48f8ujepd8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "co.machuco.app.dev",
+            "certificate_hash": "8fee770bb32619efc37aa199c698589279d28afe"
+          }
+        },
+        {
+          "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuoCNiUeRJZpankhfIZBGlCHfoP8b2Uv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "201797273193-cdo6nkd2mc885re9e3ei4a006m8oltaa.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.machuco"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:201797273193:android:478caeb42535587b0884f8",
+        "android_client_info": {
+          "package_name": "com.example.machuco"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "201797273193-16cg4sfav8h4d9jqehdl8m8ssdguia1l.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.machuco",
+            "certificate_hash": "540c1a1c98593e4520f32bf0de5ff1b90b314d11"
+          }
+        },
+        {
+          "client_id": "201797273193-uk39kkkpht2u464davmejjblvul9s2rj.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.machuco",
+            "certificate_hash": "8fee770bb32619efc37aa199c698589279d28afe"
+          }
+        },
+        {
+          "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAuoCNiUeRJZpankhfIZBGlCHfoP8b2Uv8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "201797273193-q18r1r0c154motok2mm2gdl1lnd5mel5.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "201797273193-cdo6nkd2mc885re9e3ei4a006m8oltaa.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.machuco"
+              }
+            }
+          ]
         }
       }
     }

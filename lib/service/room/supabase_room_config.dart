@@ -1,5 +1,5 @@
-/// Configuración del proyecto Supabase usada por habitaciones y catálogos de
-/// autenticación.
+/// Configuración del proyecto Supabase usada por habitaciones, catálogos de
+/// autenticación y el maestro de categorías de reserva.
 ///
 /// Los valores por defecto corresponden al proyecto de desarrollo y permiten
 /// ejecutar la app con `flutter run` sin argumentos. Se pueden sobrescribir en
