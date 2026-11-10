@@ -11,7 +11,11 @@ import 'package:machuco/service/firebase/current_user.dart';
 /// Sin repositorio usa datos de ejemplo en memoria (los usan otros módulos y
 /// pruebas). [MotelController.persistent] usa Firebase SQL Connect.
 class MotelController {
-  MotelController({MotelRepository? repository}) : _repository = repository;
+  MotelController({
+    MotelRepository? repository,
+    String? Function()? currentUserId,
+  }) : _repository = repository,
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid);
 
   factory MotelController.persistent() {
     return MotelController(
@@ -28,6 +32,9 @@ class MotelController {
   }
 
   final MotelRepository? _repository;
+
+  /// Uid del propietario con la sesión iniciada. Inyectable para los tests.
+  final String? Function() _currentUserId;
 
   static final List<Motel> _mockDatabase = [
     Motel(
@@ -83,19 +90,48 @@ class MotelController {
   /// Moteles del propietario autenticado. Con SQL Connect el filtro por
   /// dueño lo aplica el backend con el token de Firebase Auth.
   Future<List<Motel>> getMyMotels() async {
+    final ownerId = _currentUserId();
     final repository = _repository;
     if (repository == null) {
+      // Sin backend se filtra el mock por la sesión; sin sesión no hay nada.
+      if (ownerId == null || ownerId.trim().isEmpty) return const [];
       await Future.delayed(const Duration(seconds: 1));
       return _mockDatabase
-          .where((motel) => motel.ownerId == _currentOwnerId)
+          .where((motel) => motel.ownerId == ownerId)
           .toList();
     }
     return repository.getMyMotels();
   }
 
-  /// Signed-in Firebase uid; the demo owner without a session.
-  static String get _currentOwnerId =>
-      CurrentUser.uidOrNull ?? 'owner-1020304050';
+  /// Reasigna todos los moteles de un propietario a otro.
+  ///
+  /// Se usa antes de eliminar una cuenta: si falla, la eliminación no debe
+  /// continuar para no dejar moteles huérfanos. No hay mutación específica en
+  /// el backend, así que se apoya en la edición de administrador.
+  Future<void> reassignMoteles({
+    required String fromOwnerId,
+    required String toOwnerId,
+  }) async {
+    if (fromOwnerId.trim().isEmpty || toOwnerId.trim().isEmpty) {
+      throw const MotelRepositoryException(
+        'Se requieren los propietarios de origen y destino.',
+      );
+    }
+    final repository = _repository;
+    if (repository == null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      for (var i = 0; i < _mockDatabase.length; i++) {
+        final current = _mockDatabase[i];
+        if (current.ownerId != fromOwnerId) continue;
+        _mockDatabase[i] = current.copyWith(ownerId: toOwnerId);
+      }
+      return;
+    }
+    final motels = await repository.getMotels();
+    for (final motel in motels.where((m) => m.ownerId == fromOwnerId)) {
+      await repository.updateMotelAsAdmin(motel.copyWith(ownerId: toOwnerId));
+    }
+  }
 
   /// Moteles de un propietario concreto (vista del administrador).
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {

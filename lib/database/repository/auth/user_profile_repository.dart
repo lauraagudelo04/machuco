@@ -32,6 +32,10 @@ abstract interface class UserProfileRepository {
     required String phoneNumber,
   });
 
+  /// Clears `mustChangePassword` after the user replaces the temporary
+  /// password. `firestore.rules` only allows it when it was `true`.
+  Future<void> clearMustChangePassword(String uid);
+
   /// Deletes `users/{uid}`. Idempotent: succeeds if the document is already
   /// gone. Only the owner of the profile may delete it (`firestore.rules`).
   Future<void> deleteProfile(String uid);
@@ -81,6 +85,15 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
       await _doc(
         uid,
       ).update({'fullName': fullName, 'phoneNumber': phoneNumber});
+    } on FirebaseException catch (e) {
+      throw _map(e);
+    }
+  }
+
+  @override
+  Future<void> clearMustChangePassword(String uid) async {
+    try {
+      await _doc(uid).update({'mustChangePassword': false});
     } on FirebaseException catch (e) {
       throw _map(e);
     }

@@ -10,9 +10,12 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/controllers/owner_management/platform_finance_summary.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/widgets/account_status_chip.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/service/auth/auth_preferences.dart';
+import 'package:machuco/views/admin_access/admin_panel_drawer.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
@@ -20,7 +23,6 @@ import 'package:machuco/views/login/logout_navigation.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
-import 'owner_summary.dart';
 
 const _compactWidthBreakpoint = 360.0;
 const _listMaxWidth = 640.0;
@@ -36,15 +38,49 @@ class OwnerPage extends StatefulWidget {
   State<OwnerPage> createState() => _OwnerPageState();
 }
 
-class _OwnerPageState extends State<OwnerPage> {
-  final OwnerController _controller = OwnerController();
+class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
+  // Instancia compartida: el detalle, el formulario y la gestión de moteles
+  // deben ver el mismo estado del módulo.
+  final OwnerController _controller = OwnerController.instance;
   final PlatformFinanceSummary _financeSummary = PlatformFinanceSummary();
   final TextEditingController _searchController = TextEditingController();
 
+  /// Correo de la sesión administrativa, leído de `shared_preferences`.
+  /// Es solo informativo: la autorización la valida el backend.
+  String? _adminEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _controller.init();
+    _loadAdminEmail();
+  }
+
+  /// Al volver del segundo plano se intenta sincronizar de inmediato: cubre
+  /// el caso de recuperar la conexión mientras la app estaba minimizada.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _controller.retrySynchronization();
+    }
+  }
+
+  Future<void> _loadAdminEmail() async {
+    try {
+      final email = await AuthPreferences().loadCurrentUserEmail();
+      if (!mounted || email == null) return;
+      setState(() => _adminEmail = email);
+    } catch (_) {
+      // Sin preferencias disponibles se omite el subtítulo; no es crítico.
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
-    _controller.dispose();
+    // No se libera el controlador: lo comparten varias pantallas del módulo.
     super.dispose();
   }
 
@@ -62,6 +98,114 @@ class _OwnerPageState extends State<OwnerPage> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  /// Pide a quién reasignar los moteles antes de eliminar al propietario.
+  ///
+  /// Devuelve el id del propietario destino, o `null` si se canceló. Si no hay
+  /// otros propietarios solo se informa el motivo.
+  Future<String?> _askTransferTarget(OwnerAnonymizationBlocker blocker) async {
+    if (blocker.candidates.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No hay otro propietario'),
+          content: Text(
+            '${blocker.ownerName} tiene ${blocker.motelNames.length} moteles '
+            'vinculados y no hay otro propietario para reasignarlos. Registra '
+            'u habilita otro propietario primero.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return null;
+    }
+
+    var selected = blocker.candidates.first.id;
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Moteles de ${blocker.ownerName}'),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${blocker.motelNames.length} moteles vinculados. '
+                        'Elige a quién reasignarlos antes de eliminar la '
+                        'cuenta:',
+                      ),
+                      const SizedBox(height: AppSpacing.s3),
+                      for (final name in blocker.motelNames)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s1),
+                          child: Text('• $name'),
+                        ),
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(
+                        'Reasignar a',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.s2),
+                      Wrap(
+                        spacing: AppSpacing.s2,
+                        runSpacing: AppSpacing.s2,
+                        children: [
+                          for (final candidate in blocker.candidates)
+                            ChoiceChip(
+                              label: Text(candidate.fullName),
+                              selected: selected == candidate.id,
+                              onSelected: (_) =>
+                                  setDialogState(() => selected = candidate.id),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(selected),
+                  child: const Text('Reasignar y eliminar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  /// Aviso del banner; añade el estado del reintento automático cuando aplica.
+  String _retryBannerMessage() {
+    final message = _controller.syncWarningMessage ?? '';
+    if (!_controller.isAutoRetrying) return message;
+    return '$message Reintentando automáticamente '
+        '(${_controller.autoRetryAttempt}/${_controller.autoRetryMaxAttempts}).';
+  }
+
+  /// Abre las solicitudes de propietarios y sincroniza al volver, para que
+  /// las cuentas aprobadas o rechazadas dejen de aparecer como pendientes.
+  Future<void> _openApprovals() async {
+    await Navigator.of(context).pushNamed(AppRoutes.adminOwnerApprovals);
+    if (!mounted) return;
+    await _controller.retrySynchronization();
   }
 
   Future<void> _createOwner() async {
@@ -121,11 +265,18 @@ class _OwnerPageState extends State<OwnerPage> {
     // a activarlo es inocuo y no necesita confirmación.
     if (owner.isActive && !await _confirmDeactivation(owner)) return;
     if (!mounted) return;
-    final updated = _controller.setActiveState(
+    final updated = await _controller.setActiveState(
       owner.id,
       isActive: !owner.isActive,
     );
-    if (updated == null) return;
+    if (!mounted) return;
+    if (updated == null) {
+      _showMessage(
+        _controller.lastError ??
+            'No se pudo cambiar el estado del propietario.',
+      );
+      return;
+    }
     _showMessage(
       updated.isActive
           ? '${updated.fullName} quedó activo.'
@@ -133,22 +284,57 @@ class _OwnerPageState extends State<OwnerPage> {
     );
   }
 
-  Future<void> _deleteOwner(Owner owner) async {
-    if (!await _confirmDeletion(owner)) return;
+  Future<void> _anonymizeOwner(Owner owner) async {
+    if (!await _confirmAnonymization(owner)) return;
     if (!mounted) return;
-    final deleted = _controller.deleteOwner(owner.id);
-    if (deleted == null) return;
-    _showMessage('${deleted.fullName} fue eliminado.');
+    var anonymized = await _controller.anonymizeOwner(owner.id);
+    if (!mounted) return;
+
+    // Si tiene moteles, el controlador deja el bloqueo con la lista y los
+    // propietarios disponibles: aquí se pide a quién reasignarlos.
+    final blocker = _controller.lastAnonymizationBlocker;
+    if (anonymized == null && blocker != null) {
+      final targetId = await _askTransferTarget(blocker);
+      if (!mounted || targetId == null) return;
+      anonymized = await _controller.anonymizeOwner(
+        owner.id,
+        transferToOwnerId: targetId,
+      );
+      if (!mounted) return;
+      if (anonymized != null) {
+        _showMessage(
+          '${anonymized.fullName} fue anonimizado y sus moteles quedaron con '
+          '${blocker.candidates.firstWhere((c) => c.id == targetId).fullName}.',
+        );
+        return;
+      }
+    }
+
+    if (anonymized == null) {
+      _showMessage(
+        _controller.lastError ?? 'No se pudo anonimizar al propietario.',
+      );
+      return;
+    }
+    if (_controller.lastAnonymizationIsPending) {
+      _showMessage(
+        '${anonymized.fullName} se anonimizará en Firebase cuando vuelva la '
+        'conexión.',
+      );
+      return;
+    }
+    _showMessage('${anonymized.fullName} fue anonimizado.');
   }
 
-  Future<bool> _confirmDeletion(Owner owner) async {
+  Future<bool> _confirmAnonymization(Owner owner) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar propietario'),
+        title: const Text('Anonimizar propietario'),
         content: Text(
-          '${owner.fullName} se eliminará de forma permanente y no podrás '
-          'recuperarlo. Si solo quieres suspender su operación, usa Inactivar.',
+          '${owner.fullName} ya no podrá iniciar sesión y sus datos '
+          'personales se eliminarán. El documento se conserva sin datos para '
+          'auditoría. Si solo quieres suspender su operación, usa Inactivar.',
         ),
         actions: [
           TextButton(
@@ -157,7 +343,7 @@ class _OwnerPageState extends State<OwnerPage> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Eliminar'),
+            child: const Text('Anonimizar'),
           ),
         ],
       ),
@@ -193,31 +379,71 @@ class _OwnerPageState extends State<OwnerPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Propietarios'),
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Propietarios'),
+            if (_adminEmail != null)
+              Text(
+                'Sesión: $_adminEmail',
+                style: Theme.of(context).textTheme.labelSmall,
+              ),
+          ],
+        ),
+        // Todo se agrupa en el menú lateral: la barra solo tiene la hamburguesa
+        // para no duplicar acciones (notificaciones y cerrar sesión).
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.s2),
-            child: AppIconButton(
-              icon: Icons.notifications_outlined,
-              tooltip: 'Notificaciones',
-              onPressed: _openNotifications,
-            ),
-          ),
-          Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
-            child: AppIconButton(
-              icon: Icons.logout,
-              tooltip: 'Cerrar sesión',
-              onPressed: _logout,
+            child: Builder(
+              builder: (context) => AppIconButton(
+                icon: Icons.menu,
+                tooltip: 'Menú principal',
+                onPressed: () => Scaffold.of(context).openEndDrawer(),
+              ),
             ),
           ),
         ],
+      ),
+      endDrawer: Builder(
+        builder: (drawerContext) => AdminPanelDrawer(
+          pendingRequests: _controller.owners
+              .where((owner) => owner.isPendingApproval)
+              .length,
+          adminEmail: _adminEmail,
+          onOpenApprovals: () {
+            Navigator.of(drawerContext).pop();
+            _openApprovals();
+          },
+          onOpenNotifications: () {
+            Navigator.of(drawerContext).pop();
+            _openNotifications();
+          },
+          onOpenProfile: () {
+            Navigator.of(drawerContext).pop();
+            Navigator.of(context).pushNamed(AppRoutes.adminProfile);
+          },
+          onLogout: () {
+            Navigator.of(drawerContext).pop();
+            _logout();
+          },
+        ),
       ),
       body: SafeArea(
         bottom: false,
         child: ListenableBuilder(
           listenable: _controller,
           builder: (context, _) {
+            if (_controller.isLoading && !_controller.hasOwners) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            if (!_controller.hasOwners && _controller.lastError != null) {
+              return AppErrorState(
+                message: _controller.lastError!,
+                onRetry: _controller.init,
+              );
+            }
             if (!_controller.hasOwners) {
               return AppEmptyState(
                 icon: Icons.people_outline,
@@ -239,6 +465,63 @@ class _OwnerPageState extends State<OwnerPage> {
                     constraints: const BoxConstraints(maxWidth: _listMaxWidth),
                     child: CustomScrollView(
                       slivers: [
+                        if (_controller.syncWarningMessage != null)
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                AppSpacing.s4,
+                                horizontalPadding,
+                                0,
+                              ),
+                              child: AppCard(
+                                semanticLabel:
+                                    'Aviso de sincronización de propietarios',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.cloud_off_outlined,
+                                      color: context.appColors.textSecondary,
+                                    ),
+                                    const SizedBox(width: AppSpacing.s2),
+                                    Expanded(
+                                      child: Text(
+                                        _retryBannerMessage(),
+                                        style: Theme.of(
+                                          context,
+                                        ).textTheme.bodySmall,
+                                      ),
+                                    ),
+                                    TextButton(
+                                      onPressed: _controller.isSyncing
+                                          ? null
+                                          : _controller.retrySynchronization,
+                                      child: const Text('Reintentar'),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (_controller.owners.any(
+                          (owner) => owner.isPendingApproval,
+                        ))
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                AppSpacing.s4,
+                                horizontalPadding,
+                                0,
+                              ),
+                              child: PendingOwnerRequestsBanner(
+                                count: _controller.owners
+                                    .where((owner) => owner.isPendingApproval)
+                                    .length,
+                                onReview: _openApprovals,
+                              ),
+                            ),
+                          ),
                         SliverToBoxAdapter(
                           child: Padding(
                             padding: EdgeInsets.fromLTRB(
@@ -269,7 +552,7 @@ class _OwnerPageState extends State<OwnerPage> {
                             onDetail: _openDetail,
                             onEdit: _editOwner,
                             onToggleActive: _toggleActiveState,
-                            onDelete: _deleteOwner,
+                            onDelete: _anonymizeOwner,
                             onViewMotels: _viewOwnerMotels,
                           )
                         else
@@ -294,7 +577,7 @@ class _OwnerPageState extends State<OwnerPage> {
         ),
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _createOwner,
+        onPressed: _controller.isLoading ? null : _createOwner,
         tooltip: 'Crear propietario',
         child: const Icon(Icons.add),
       ),
@@ -553,7 +836,10 @@ class _OwnerCard extends StatelessWidget {
                 child: Text(owner.fullName, style: textTheme.titleMedium),
               ),
               const SizedBox(width: AppSpacing.s2),
-              OwnerStatusChip(isActive: owner.isActive),
+              AccountStatusChip(
+                isActive: owner.isActive,
+                status: owner.accountStatus,
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.s2),
@@ -562,7 +848,10 @@ class _OwnerCard extends StatelessWidget {
             text: owner.documentLabel,
           ),
           _OwnerDetailLine(icon: Icons.mail_outline, text: owner.email),
-          _OwnerDetailLine(icon: Icons.phone_outlined, text: owner.phone),
+          _OwnerDetailLine(
+            icon: Icons.phone_outlined,
+            text: owner.phoneWithDialCode,
+          ),
           const SizedBox(height: AppSpacing.s2),
           // Wrap y no Row: en pantallas angostas las cinco acciones no caben
           // en una linea y deben bajar a la siguiente en vez de desbordarse.
@@ -600,7 +889,7 @@ class _OwnerCard extends StatelessWidget {
               ),
               AppIconButton(
                 icon: Icons.delete_outline,
-                tooltip: 'Eliminar a ${owner.fullName}',
+                tooltip: 'Anonimizar a ${owner.fullName}',
                 variant: AppIconButtonVariant.destructive,
                 onPressed: onDelete,
               ),

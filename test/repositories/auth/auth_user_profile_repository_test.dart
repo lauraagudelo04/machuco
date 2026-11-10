@@ -138,7 +138,8 @@ void main() {
     expect(entry?.phoneNumber, isNull);
   });
 
-  test('migra de v12 a v13 creando la tabla y conservando los datos', () async {
+  test('migra de v12 a la versión actual creando la tabla y conservando los '
+      'datos', () async {
     var raw = database.database as sqflite.Database;
     await raw.execute('DROP TABLE auth_user_profile');
     await raw.insert('phone_country_codes', {
@@ -155,7 +156,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 17);
+    expect(await raw.getVersion(), 20);
     expect(await raw.query('phone_country_codes'), previousCodes);
     final repository = buildRepository();
     expect(await repository.loadCurrent(), isNull);

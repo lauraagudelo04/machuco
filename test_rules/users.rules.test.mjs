@@ -406,9 +406,10 @@ describe('users: eliminación', () => {
     await assertFails(deleteDoc(doc(as('owner'), 'users/client')));
   });
 
-  test('el admin activo elimina perfiles de clientes y propietarios', async () => {
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/client')));
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/owner')));
+
+  test('el admin activo ya no elimina perfiles: se anonimizan', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/client')));
+    await assertFails(deleteDoc(doc(as('admin'), 'users/owner')));
   });
 
   test('el admin activo no elimina a otro administrador', async () => {
@@ -832,5 +833,204 @@ describe('administradores: contraseña temporal pendiente', () => {
         approvedAt: serverTimestamp(),
       }),
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// CRUD de propietarios: el panel de administración crea la cuenta en `users`
+// (password temporal) y edita/borra el documento. Replica lo que escriben
+// `OwnerUserDocument.createMap/updateMap` y `deleteOwner` en la app.
+// ---------------------------------------------------------------------------
+
+const adminCreatedOwner = (overrides = {}) => ({
+  fullName: 'Laura Gómez Restrepo',
+  email: 'laura.panel@example.com',
+  phoneNumber: '+573001234567',
+  phone: '300 123 4567',
+  role: 'owner',
+  accountStatus: 'active',
+  createdAt: serverTimestamp(),
+  createdBy: 'admin',
+  mustChangePassword: true,
+  documentType: 'citizenshipCard',
+  documentNumber: '1020304050',
+  nit: '1020304050',
+  personType: 'natural',
+  countryCode: '+57',
+  countryName: 'Colombia',
+  address: 'Calle 10 # 43-25',
+  updatedBy: 'admin',
+  updatedAt: serverTimestamp(),
+  ...overrides,
+});
+
+/// Payload de anonimización que escribe `anonymizeOwner` en la app.
+const ownerAnonymization = (overrides = {}) => ({
+  fullName: 'Propietario eliminado',
+  accountStatus: 'anonymized',
+  anonymizedAt: serverTimestamp(),
+  anonymizedBy: 'admin',
+  updatedBy: 'admin',
+  updatedAt: serverTimestamp(),
+  phone: null,
+  phoneNumber: null,
+  phoneCountryCodeId: null,
+  nit: null,
+  personType: null,
+  documentType: null,
+  documentNumber: null,
+  address: null,
+  countryCode: null,
+  countryName: null,
+  companyName: null,
+  planId: null,
+  firstNames: null,
+  lastNames: null,
+  mustChangePassword: null,
+  ...overrides,
+});
+
+const ownerEdit = () => ({
+  fullName: 'Laura Gómez Actualizada',
+  phone: '311 999 8888',
+  phoneNumber: '+573119998888',
+  documentType: 'passport',
+  documentNumber: 'AV123456',
+  nit: 'AV123456',
+  personType: 'natural',
+  countryCode: '+57',
+  countryName: 'Colombia',
+  address: 'Carrera 43 # 10-25',
+  updatedBy: 'admin',
+  updatedAt: serverTimestamp(),
+});
+
+describe('users: CRUD de propietarios por el administrador', () => {
+  beforeEach(async () => {
+    await seed({
+      'users/admin': seededAdmin,
+      'users/owner-panel': {
+        ...adminCreatedOwner(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+      },
+    });
+  });
+
+  test('un admin activo crea un propietario con los datos legales', async () => {
+    await assertSucceeds(
+      setDoc(doc(as('admin'), 'users/owner-new'), adminCreatedOwner()),
+    );
+  });
+
+  test('también puede crearlo pendiente de aprobación', async () => {
+    await assertSucceeds(
+      setDoc(
+        doc(as('admin'), 'users/owner-pending'),
+        adminCreatedOwner({
+          email: 'pendiente@example.com',
+          accountStatus: 'pending_approval',
+        }),
+      ),
+    );
+  });
+
+  test('un cliente no puede crear propietarios', async () => {
+    await assertFails(
+      setDoc(doc(as('client'), 'users/owner-new'), adminCreatedOwner()),
+    );
+  });
+
+  test('rechaza un tipo de documento desconocido o un NIT desincronizado', async () => {
+    await assertFails(
+      setDoc(
+        doc(as('admin'), 'users/owner-bad-type'),
+        adminCreatedOwner({ documentType: 'otro' }),
+      ),
+    );
+    await assertFails(
+      setDoc(
+        doc(as('admin'), 'users/owner-bad-nit'),
+        adminCreatedOwner({ nit: '900000000-1' }),
+      ),
+    );
+  });
+
+  test('no se puede crear con una cuenta ya activa sin password temporal', async () => {
+    await assertFails(
+      setDoc(
+        doc(as('admin'), 'users/owner-plain'),
+        adminCreatedOwner({ mustChangePassword: false }),
+      ),
+    );
+  });
+
+  test('un admin activo edita los datos legales y de contacto', async () => {
+    await assertSucceeds(updateDoc(doc(as('admin'), 'users/owner-panel'), ownerEdit()));
+  });
+
+  test('un admin no edita el correo, el rol ni el estado del propietario', async () => {
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/owner-panel'), {
+        ...ownerEdit(),
+        email: 'otro@example.com',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/owner-panel'), {
+        ...ownerEdit(),
+        role: 'client',
+      }),
+    );
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/owner-panel'), {
+        ...ownerEdit(),
+        accountStatus: 'disabled',
+      }),
+    );
+  });
+
+  test('un cliente no edita a un propietario', async () => {
+    await assertFails(updateDoc(doc(as('client'), 'users/owner-panel'), ownerEdit()));
+  });
+
+  test('un admin activo anonimiza a un propietario', async () => {
+    await assertSucceeds(
+      updateDoc(doc(as('admin'), 'users/owner-panel'), ownerAnonymization()),
+    );
+  });
+
+  test('exige el nombre placeholder al anonimizar', async () => {
+    await assertFails(
+      updateDoc(
+        doc(as('admin'), 'users/owner-panel'),
+        ownerAnonymization({ fullName: 'Laura Gómez' }),
+      ),
+    );
+  });
+
+  test('exige limpiar los datos personales al anonimizar', async () => {
+    await assertFails(
+      updateDoc(
+        doc(as('admin'), 'users/owner-panel'),
+        ownerAnonymization({ nit: '1020304050' }),
+      ),
+    );
+  });
+
+  test('un cliente no anonimiza a un propietario', async () => {
+    await assertFails(
+      updateDoc(doc(as('client'), 'users/owner-panel'), ownerAnonymization()),
+    );
+  });
+
+  test('un admin no anonimiza a otro administrador', async () => {
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/admin'), ownerAnonymization()),
+    );
+  });
+
+  test('un admin ya no borra al propietario', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/owner-panel')));
   });
 });

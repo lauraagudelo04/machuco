@@ -119,6 +119,9 @@ final class _FakeUserProfileRepository implements UserProfileRepository {
   }) async {}
 
   @override
+  Future<void> clearMustChangePassword(String uid) async {}
+
+  @override
   Future<void> deleteProfile(String uid) async {
     _profiles.remove(uid);
   }
