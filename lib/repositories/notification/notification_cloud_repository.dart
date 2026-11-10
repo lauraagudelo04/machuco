@@ -22,8 +22,15 @@ class NotificationCloudRepository {
     required String actorUid,
     String? recipientUid,
   }) async {
+    // Firestore stores the stable event contract. The notification-type catalog
+    // may contain extra admin labels (for example, "prueba222"), which are
+    // presentation types rather than valid domain event types.
+    final eventType = switch (type.code) {
+      'reservation' || 'payment' || 'review' || 'system' => type.code,
+      _ => 'system',
+    };
     final document = await _notifications.add({
-      'eventType': type.code,
+      'eventType': eventType,
       'actorUid': actorUid,
       'target': target.name,
       if (target == NotificationTarget.specificUser)
