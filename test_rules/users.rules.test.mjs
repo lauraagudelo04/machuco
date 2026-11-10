@@ -400,8 +400,8 @@ describe('users: eliminación', () => {
     await assertFails(deleteDoc(doc(as('other'), 'users/client')));
   });
 
-  test('un admin activo sí elimina cuentas que no son de administrador', async () => {
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/client')));
+  test('un admin ya no borra cuentas: se anonimizan', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/client')));
   });
 
   test('sin sesión no se elimina nada', async () => {
@@ -845,6 +845,32 @@ const adminCreatedOwner = (overrides = {}) => ({
   ...overrides,
 });
 
+/// Payload de anonimización que escribe `anonymizeOwner` en la app.
+const ownerAnonymization = (overrides = {}) => ({
+  fullName: 'Propietario eliminado',
+  accountStatus: 'anonymized',
+  anonymizedAt: serverTimestamp(),
+  anonymizedBy: 'admin',
+  updatedBy: 'admin',
+  updatedAt: serverTimestamp(),
+  phone: null,
+  phoneNumber: null,
+  phoneCountryCodeId: null,
+  nit: null,
+  personType: null,
+  documentType: null,
+  documentNumber: null,
+  address: null,
+  countryCode: null,
+  countryName: null,
+  companyName: null,
+  planId: null,
+  firstNames: null,
+  lastNames: null,
+  mustChangePassword: null,
+  ...overrides,
+});
+
 const ownerEdit = () => ({
   fullName: 'Laura Gómez Actualizada',
   phone: '311 999 8888',
@@ -949,15 +975,43 @@ describe('users: CRUD de propietarios por el administrador', () => {
     await assertFails(updateDoc(doc(as('client'), 'users/owner-panel'), ownerEdit()));
   });
 
-  test('un admin activo borra el documento del propietario', async () => {
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/owner-panel')));
+  test('un admin activo anonimiza a un propietario', async () => {
+    await assertSucceeds(
+      updateDoc(doc(as('admin'), 'users/owner-panel'), ownerAnonymization()),
+    );
   });
 
-  test('un admin no puede borrar a otro administrador', async () => {
-    await assertFails(deleteDoc(doc(as('admin'), 'users/admin')));
+  test('exige el nombre placeholder al anonimizar', async () => {
+    await assertFails(
+      updateDoc(
+        doc(as('admin'), 'users/owner-panel'),
+        ownerAnonymization({ fullName: 'Laura Gómez' }),
+      ),
+    );
   });
 
-  test('un cliente no puede borrar a un propietario', async () => {
-    await assertFails(deleteDoc(doc(as('client'), 'users/owner-panel')));
+  test('exige limpiar los datos personales al anonimizar', async () => {
+    await assertFails(
+      updateDoc(
+        doc(as('admin'), 'users/owner-panel'),
+        ownerAnonymization({ nit: '1020304050' }),
+      ),
+    );
+  });
+
+  test('un cliente no anonimiza a un propietario', async () => {
+    await assertFails(
+      updateDoc(doc(as('client'), 'users/owner-panel'), ownerAnonymization()),
+    );
+  });
+
+  test('un admin no anonimiza a otro administrador', async () => {
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/admin'), ownerAnonymization()),
+    );
+  });
+
+  test('un admin ya no borra al propietario', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/owner-panel')));
   });
 });
