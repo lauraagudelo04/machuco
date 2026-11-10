@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 
@@ -5,10 +8,16 @@ import 'package:machuco/controllers/booking/client_view/client_booking_controlle
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/product/product_controller.dart';
 import 'package:machuco/controllers/room/room_mock_data.dart';
+import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
+import 'package:machuco/core/design_system/components/app_feedback.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
+import 'package:machuco/core/design_system/components/app_skeleton.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
+import 'package:machuco/core/design_system/tokens/app_motion.dart';
+import 'package:machuco/core/design_system/tokens/app_opacity.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/utils/currency_formatter.dart';
@@ -25,9 +34,14 @@ import 'package:machuco/widgets/booking/quantity_stepper.dart';
 /// Formulario de reserva. Una sola pantalla con scroll (sin stepper),
 /// alcanzable desde el detalle de habitación pulsando "Reservar".
 class CreateBookingPage extends StatefulWidget {
-  const CreateBookingPage({super.key, required this.room});
+  const CreateBookingPage({
+    super.key,
+    required this.room,
+    this.motelController,
+  });
 
   final RoomVisualData room;
+  final MotelController? motelController;
 
   @override
   State<CreateBookingPage> createState() => _CreateBookingPageState();
@@ -37,11 +51,12 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   late final ClientBookingController _bookingController;
   late final AdditionalServiceSystemAdministratorController _servicesController;
   late final ProductController _productsController;
-  final MotelController _motelController = MotelController();
+  late final MotelController _motelController;
   late final String _requestId;
   late final String _roomTypeName;
 
   Motel? _motel;
+  String? _motelError;
   DateTime? _checkInDate;
   DateTime? _checkOutDate;
   TimeOfDay? _checkInTime;
@@ -50,13 +65,18 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   final Set<String> _selectedServiceIds = {};
   final Set<String> _selectedProductIds = {};
   bool _isSubmitting = false;
+  // Required-field hints stay hidden until the user tries to submit.
+  bool _submitAttempted = false;
   bool _simulateNetworkFailureNextAttempt = false;
   bool _simulateConflictNextAttempt = false;
 
   @override
   void initState() {
     super.initState();
-    _bookingController = ClientBookingController();
+    _motelController = widget.motelController ?? MotelController.persistent();
+    _bookingController = ClientBookingController(
+      motelController: _motelController,
+    );
     _servicesController = AdditionalServiceSystemAdministratorController(
       motelId: widget.room.motelId,
     );
@@ -73,12 +93,18 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
         )
         .name;
     _servicesController.addListener(_refresh);
+    // Sin load() los servicios del motel nunca se consultan y no hay qué elegir.
+    _servicesController.load();
+    _bookingController.addListener(_refresh);
+    unawaited(_bookingController.refresh());
+    unawaited(_bookingController.loadCategories());
     _loadMotel();
   }
 
   @override
   void dispose() {
     _servicesController.removeListener(_refresh);
+    _bookingController.removeListener(_refresh);
     _servicesController.dispose();
     _bookingController.dispose();
     super.dispose();
@@ -89,8 +115,35 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   }
 
   Future<void> _loadMotel() async {
-    final motel = await _motelController.getMotelById(widget.room.motelId);
-    if (mounted) setState(() => _motel = motel);
+    if (mounted) {
+      setState(() {
+        _motel = null;
+        _motelError = null;
+      });
+    }
+    try {
+      final motel = await _motelController.getMotelById(widget.room.motelId);
+      if (!mounted) return;
+      if (motel == null ||
+          motel.id != widget.room.motelId ||
+          !motel.isAvailable) {
+        setState(
+          () => _motelError =
+              'El motel de esta habitación ya no está disponible.',
+        );
+        return;
+      }
+      setState(() => _motel = motel);
+    } on MotelRepositoryException catch (error) {
+      if (mounted) setState(() => _motelError = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _motelError =
+              'No se pudo consultar el motel de esta habitación. Inténtalo nuevamente.',
+        );
+      }
+    }
   }
 
   DateTime? get _checkIn {
@@ -115,31 +168,34 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     );
   }
 
+  /// Rooms of the selected type in this motel. One of the active ones that
+  /// is free for the chosen range is assigned when the reservation is made.
+  List<RoomCandidate> get _typeRooms {
+    final rooms = [
+      for (final room in buildRoomMockData())
+        if (room.motelId == widget.room.motelId &&
+            room.idType == widget.room.idType)
+          room,
+    ];
+    if (!rooms.any((room) => room.id == widget.room.id)) rooms.add(widget.room);
+    return [
+      for (final room in rooms)
+        RoomCandidate(
+          id: room.id,
+          name: room.name,
+          number: room.roomNumber,
+          isActive: room.isActive,
+        ),
+    ];
+  }
+
+  /// Booking rules (future check-in, ordering, max stay, availability of the
+  /// room type) are evaluated by `BookingService` through the controller.
   String? get _rangeError {
     final checkIn = _checkIn;
     final checkOut = _checkOut;
     if (checkIn == null || checkOut == null) return null;
-    if (checkIn.isBefore(DateTime.now())) {
-      return 'La hora de entrada debe ser posterior al momento actual.';
-    }
-    if (!checkOut.isAfter(checkIn)) {
-      return 'La hora de salida debe ser posterior a la hora de entrada.';
-    }
-    if (checkOut.difference(checkIn) > const Duration(hours: 24)) {
-      return 'La estancia no puede superar 24 horas continuas.';
-    }
-    if (!_bookingController.isSlotAvailable(
-      widget.room.id,
-      checkIn,
-      checkOut,
-    )) {
-      return _bookingController.explainBlockedSlot(
-        widget.room.id,
-        checkIn,
-        checkOut,
-      );
-    }
-    return null;
+    return _bookingController.typeScheduleError(_typeRooms, checkIn, checkOut);
   }
 
   bool get _hasCompleteSchedule =>
@@ -152,27 +208,28 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       _guestCount >= 1 && _guestCount <= widget.room.capacity;
 
   bool get _isFormValid =>
-      _hasCompleteSchedule && _rangeError == null && _isGuestCountValid;
+      _motel != null &&
+      _motelError == null &&
+      _hasCompleteSchedule &&
+      _rangeError == null &&
+      _isGuestCountValid &&
+      _bookingController.hasCategorySelected;
 
-  List<AdditionalServiceData> get _availableServices =>
-      _servicesController.getActiveAdditionalServicesByMotelId(
-        widget.room.motelId,
-      );
+  List<AdditionalServiceData> get _availableServices => _servicesController
+      .getActiveAdditionalServicesByMotelId(widget.room.motelId);
 
   List<Product> get _availableProducts => _productsController
       .getProductsByMotel(widget.room.motelId)
       .where((product) => product.isActive)
       .toList();
 
-  int get _hoursForTotal {
-    final checkIn = _checkIn;
-    final checkOut = _checkOut;
-    if (checkIn == null || checkOut == null) return 0;
-    final minutes = checkOut.difference(checkIn).inMinutes;
-    return (minutes / 60).ceil();
-  }
-
-  int get _roomTotal => widget.room.pricePerHour * _hoursForTotal;
+  PriceBreakdown get _price => _bookingController.priceBreakdown(
+    pricePerHour: widget.room.pricePerHour,
+    checkIn: _checkIn,
+    checkOut: _checkOut,
+    services: _selectedServiceItems,
+    products: _selectedProductItems,
+  );
 
   List<ReservationLineItem> get _selectedServiceItems => _availableServices
       .where((service) => _selectedServiceIds.contains(service.id.toString()))
@@ -196,21 +253,13 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       )
       .toList();
 
-  int get _servicesTotal =>
-      _selectedServiceItems.fold(0, (sum, item) => sum + item.subtotal);
-
-  int get _productsTotal =>
-      _selectedProductItems.fold(0, (sum, item) => sum + item.subtotal);
-
-  int get _grandTotal => _roomTotal + _servicesTotal + _productsTotal;
-
   Future<void> _pickCheckInDate() async {
     final now = DateTime.now();
     final picked = await showDatePicker(
       context: context,
       initialDate: _checkInDate ?? now,
       firstDate: DateTime(now.year, now.month, now.day),
-      lastDate: now.add(const Duration(days: 365)),
+      lastDate: now.add(ClientBookingController.bookingHorizon),
     );
     if (picked == null) return;
     setState(() {
@@ -228,7 +277,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       context: context,
       initialDate: _checkOutDate ?? firstDate,
       firstDate: firstDate,
-      lastDate: firstDate.add(const Duration(days: 365)),
+      lastDate: firstDate.add(ClientBookingController.bookingHorizon),
     );
     if (picked != null) setState(() => _checkOutDate = picked);
   }
@@ -249,27 +298,34 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     if (picked != null) setState(() => _checkOutTime = picked);
   }
 
+  void _revealRequiredHints() {
+    if (!_submitAttempted) setState(() => _submitAttempted = true);
+  }
+
   Future<void> _submit() async {
-    if (!_isFormValid || _isSubmitting) return;
+    if (_isSubmitting) return;
+    if (!_isFormValid) {
+      _revealRequiredHints();
+      return;
+    }
     setState(() => _isSubmitting = true);
 
     final checkIn = _checkIn!;
     final checkOut = _checkOut!;
 
-    final result = await _bookingController.createReservation(
+    final result = await _bookingController.createReservationForType(
       requestId: _requestId,
       motelId: widget.room.motelId,
-      motelName: 'Motel ${widget.room.motelId}',
-      roomId: widget.room.id,
-      roomName: widget.room.name,
-      roomNumber: widget.room.roomNumber,
+      motelName: _motel!.name,
+      rooms: _typeRooms,
       checkIn: checkIn,
       checkOut: checkOut,
       stayMode: StayMode.dateTimeRange,
       guestCount: _guestCount,
       services: _selectedServiceItems,
       products: _selectedProductItems,
-      roomTotal: _roomTotal,
+      roomTotal: _price.roomTotal,
+      categoryId: _bookingController.selectedCategoryId,
       simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
       simulateConcurrentConflict: _simulateConflictNextAttempt,
     );
@@ -286,8 +342,15 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       case CreateReservationOutcome.conflict:
         _showRecoverableError(
           result.message!,
-          actionLabel: 'Actualizar calendario',
-          onAction: () => setState(() {}),
+          actionLabel: 'Actualizar',
+          onAction: () => unawaited(_bookingController.refresh()),
+        );
+      case CreateReservationOutcome.noActiveUnits:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(result.message!),
+            duration: AppMotion.feedback,
+          ),
         );
       case CreateReservationOutcome.networkError:
         _showRecoverableError(
@@ -307,7 +370,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       SnackBar(
         content: Text(message),
         action: SnackBarAction(label: actionLabel, onPressed: onAction),
-        duration: const Duration(seconds: 6),
+        duration: AppMotion.feedback,
       ),
     );
   }
@@ -331,11 +394,22 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screen),
           children: [
+            if (_motelError != null)
+              AppErrorState(message: _motelError!, onRetry: _loadMotel),
             _HeaderCard(
               motelName: _motel?.name ?? 'Cargando motel...',
               roomTypeName: _roomTypeName,
               capacity: widget.room.capacity,
               pricePerHour: widget.room.pricePerHour,
+            ),
+            const SizedBox(height: AppSpacing.s4),
+            _CategoryCard(
+              categories: _bookingController.categories,
+              selectedId: _bookingController.selectedCategoryId,
+              isLoading: _bookingController.isLoadingCategories,
+              errorMessage: _bookingController.categoriesError,
+              onSelected: _bookingController.selectCategory,
+              onRetry: () => unawaited(_bookingController.loadCategories()),
             ),
             const SizedBox(height: AppSpacing.s4),
             _ScheduleCard(
@@ -348,6 +422,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
               onPickCheckInTime: _pickCheckInTime,
               onPickCheckOutTime: _pickCheckOutTime,
               rangeError: _rangeError,
+              showRequiredHints: _submitAttempted,
             ),
             const SizedBox(height: AppSpacing.s4),
             AppCard(
@@ -381,29 +456,106 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
                 }
               }),
             ),
-            const SizedBox(height: AppSpacing.s4),
-            _DebugToolsCard(
-              simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
-              simulateConflict: _simulateConflictNextAttempt,
-              onNetworkFailureChanged: (value) =>
-                  setState(() => _simulateNetworkFailureNextAttempt = value),
-              onConflictChanged: (value) =>
-                  setState(() => _simulateConflictNextAttempt = value),
-            ),
+            // Mock failure simulation: development builds only.
+            if (kDebugMode) ...[
+              const SizedBox(height: AppSpacing.s4),
+              _DebugToolsCard(
+                simulateNetworkFailure: _simulateNetworkFailureNextAttempt,
+                simulateConflict: _simulateConflictNextAttempt,
+                onNetworkFailureChanged: (value) =>
+                    setState(() => _simulateNetworkFailureNextAttempt = value),
+                onConflictChanged: (value) =>
+                    setState(() => _simulateConflictNextAttempt = value),
+              ),
+            ],
             const SizedBox(height: AppSpacing.s4),
             _SummaryCard(
               room: widget.room,
-              hours: _hoursForTotal,
-              roomTotal: _roomTotal,
+              hours: _price.hours,
+              roomTotal: _price.roomTotal,
               services: _selectedServiceItems,
               products: _selectedProductItems,
-              total: _grandTotal,
+              total: _price.total,
               isFormValid: _isFormValid,
               isSubmitting: _isSubmitting,
               onSubmit: _submit,
+              onBlockedTap: _revealRequiredHints,
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _CategoryCard extends StatelessWidget {
+  const _CategoryCard({
+    required this.categories,
+    required this.selectedId,
+    required this.isLoading,
+    required this.errorMessage,
+    required this.onSelected,
+    required this.onRetry,
+  });
+
+  final List<ReservationCategory> categories;
+  final int? selectedId;
+  final bool isLoading;
+  final String? errorMessage;
+  final ValueChanged<int?> onSelected;
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    final Widget content;
+    if (isLoading) {
+      content = const AppSkeleton(height: 40);
+    } else if (errorMessage != null) {
+      content = Row(
+        children: [
+          Expanded(
+            child: Text(
+              errorMessage!,
+              style: textTheme.bodyMedium?.copyWith(
+                color: Theme.of(context).colorScheme.error,
+              ),
+            ),
+          ),
+          TextButton(onPressed: onRetry, child: const Text('Reintentar')),
+        ],
+      );
+    } else {
+      content = Wrap(
+        spacing: AppSpacing.s2,
+        runSpacing: AppSpacing.s2,
+        children: [
+          for (final category in categories)
+            ChoiceChip(
+              label: Text(category.name),
+              selected: category.id == selectedId,
+              onSelected: (selected) =>
+                  onSelected(selected ? category.id : null),
+            ),
+        ],
+      );
+    }
+
+    return AppCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Categoría', style: textTheme.titleLarge),
+          const SizedBox(height: AppSpacing.s1),
+          Text(
+            'Selecciona una categoría para continuar con la reserva.',
+            style: textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
+          ),
+          const SizedBox(height: AppSpacing.s3),
+          content,
+        ],
       ),
     );
   }
@@ -435,10 +587,7 @@ class _HeaderCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.s1),
-          Text(
-            roomTypeName,
-            style: Theme.of(context).textTheme.headlineSmall,
-          ),
+          Text(roomTypeName, style: Theme.of(context).textTheme.headlineSmall),
           const SizedBox(height: AppSpacing.s2),
           Wrap(
             spacing: AppSpacing.s2,
@@ -501,8 +650,10 @@ class _ScheduleCard extends StatelessWidget {
     required this.onPickCheckInTime,
     required this.onPickCheckOutTime,
     required this.rangeError,
+    required this.showRequiredHints,
   });
 
+  final bool showRequiredHints;
   final DateTime? checkInDate;
   final VoidCallback onPickCheckInDate;
   final DateTime? checkOutDate;
@@ -529,24 +680,28 @@ class _ScheduleCard extends StatelessWidget {
             value: checkInDate,
             onTap: onPickCheckInDate,
           ),
+          if (showRequiredHints && checkInDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de entrada',
             value: checkInTime,
             onTap: onPickCheckInTime,
           ),
+          if (showRequiredHints && checkInTime == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _DateField(
             label: 'Fecha de salida',
             value: checkOutDate,
             onTap: onPickCheckOutDate,
           ),
+          if (showRequiredHints && checkOutDate == null) const _RequiredHint(),
           const SizedBox(height: AppSpacing.s3),
           _TimeField(
             label: 'Hora de salida',
             value: checkOutTime,
             onTap: onPickCheckOutTime,
           ),
+          if (showRequiredHints && checkOutTime == null) const _RequiredHint(),
           if (rangeError != null) ...[
             const SizedBox(height: AppSpacing.s3),
             _InlineNotice(message: rangeError!),
@@ -679,6 +834,24 @@ class _TimeField extends StatelessWidget {
   }
 }
 
+/// Caption shown next to an empty date/time selector.
+class _RequiredHint extends StatelessWidget {
+  const _RequiredHint();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(left: AppSpacing.s3, top: AppSpacing.s1),
+      child: Text(
+        'Campo obligatorio',
+        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+          color: Theme.of(context).colorScheme.error,
+        ),
+      ),
+    );
+  }
+}
+
 class _InlineNotice extends StatelessWidget {
   const _InlineNotice({required this.message});
   final String message;
@@ -691,7 +864,9 @@ class _InlineNotice extends StatelessWidget {
         width: double.infinity,
         padding: const EdgeInsets.all(AppSpacing.s3),
         decoration: BoxDecoration(
-          color: Theme.of(context).colorScheme.error.withValues(alpha: .12),
+          color: Theme.of(
+            context,
+          ).colorScheme.error.withValues(alpha: AppOpacity.softFill),
           borderRadius: BorderRadius.circular(AppRadius.md),
         ),
         child: Row(
@@ -868,6 +1043,7 @@ class _SummaryCard extends StatelessWidget {
     required this.products,
     required this.total,
     required this.isFormValid,
+    required this.onBlockedTap,
     required this.isSubmitting,
     required this.onSubmit,
   });
@@ -879,6 +1055,7 @@ class _SummaryCard extends StatelessWidget {
   final List<ReservationLineItem> products;
   final int total;
   final bool isFormValid;
+  final VoidCallback onBlockedTap;
   final bool isSubmitting;
   final VoidCallback onSubmit;
 
@@ -911,11 +1088,17 @@ class _SummaryCard extends StatelessWidget {
             emphasize: true,
           ),
           const SizedBox(height: AppSpacing.s4),
-          AppButton(
-            label: 'Reservar',
-            icon: Icons.event_available_outlined,
-            loading: isSubmitting,
-            onPressed: isFormValid && !isSubmitting ? onSubmit : null,
+          // A disabled button ignores taps, so the wrapper catches them and
+          // reveals the required-field hints instead.
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: isFormValid || isSubmitting ? null : onBlockedTap,
+            child: AppButton(
+              label: 'Reservar',
+              icon: Icons.event_available_outlined,
+              loading: isSubmitting,
+              onPressed: isFormValid && !isSubmitting ? onSubmit : null,
+            ),
           ),
         ],
       ),

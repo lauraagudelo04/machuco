@@ -87,6 +87,12 @@ beforeEach(async () => {
     for (const [uid, data] of Object.entries(users)) {
       await setDoc(doc(db, `users/${uid}`), data);
     }
+    await setDoc(doc(db, 'reservations/booking-1'), {
+      ownerId: 'ownerActive', guestId: 'clientActive', motelId: 'motel-1',
+      roomId: 'room-1', total: 85000,
+      checkIn: Timestamp.fromDate(new Date('2026-11-10T20:00:00Z')),
+      status: 'pending', paymentMethod: 'En el Local',
+    });
     for (const ownerId of [
       'ownerActive',
       'ownerPending',
@@ -130,7 +136,7 @@ describe('cliente según su estado', () => {
   test('[EST-03] activo crea su pago pendiente', async () => {
     await assertSucceeds(
       setDoc(
-        doc(as('clientActive'), 'payments/new-client'),
+        doc(as('clientActive'), 'payments/pay-booking-1'),
         payment('ownerActive'),
       ),
     );

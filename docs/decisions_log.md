@@ -569,3 +569,286 @@ con su fila. Estas últimas no ejecutan el 12 -> 13: sus ejemplos de room los
 limpia `RoomDao.removeLegacyMockData`.
 
 La próxima migración de cualquier rama usa la versión 15.
+
+## 2026-11-07 — Reservas en Firestore y propietarios por uid (rama `feature_daniel`)
+
+**Decisión:** las reservas se sincronizan con la colección `reservations` de
+Cloud Firestore (SQLite queda como caché local), aplicando la decisión del
+2026-10-27 de que los datos de dominio van en Firebase. Supabase guarda solo
+los maestros `reservation_categories` y `country_phone_codes`
+(`supabase/migrations/202611070001_*` y `202611070002_*`).
+
+**Propiedad de moteles:** `motels.owner_id` debe ser el uid de Firebase del
+propietario. Antes tenía ids de demostración (`owner-1020304050`) porque
+`OwnerMotelsPage` y `MotelController.getMyMotels` los fijaban en el código, y
+ninguna regla basada en `request.auth.uid` (reservas ni pagos) podía
+autorizar a un propietario real. Ahora usan `CurrentUser.uidOrNull` y solo sin
+sesión el propietario de demostración.
+
+**Versión SQLite:** al fusionar `develop` (v13 y v14 ya ocupadas), las
+tablas de reservas se crean en la migración 14 -> 15 con `CREATE TABLE IF NOT
+EXISTS`. La próxima migración de cualquier rama usa la versión 16.
+
+**Pendiente:** reasignar en Supabase los moteles de demostración a cuentas de
+propietario reales y desplegar `firestore.rules`.
+
+## 2026-11-09 — Firebase Analytics para toda la app (rama `feature_daniel`)
+
+**Contexto:** el profesor pidió conectar la app con Firebase, en especial con
+el módulo de Analytics. Firebase ya es la plataforma decidida (2026-10-27),
+así que no se evaluaron alternativas.
+
+**Decisión:** se agrega `firebase_analytics: ^13.0.1` (compatible con
+`firebase_core ^5.1.0`) detrás de un único `AnalyticsService`
+(`lib/service/analytics/`), con el mismo patrón de proveedor estático que los
+repositorios: no-op por defecto y Firebase desde `main`. Las pantallas se
+reportan solas con `AnalyticsRouteObserver`; los eventos de autenticación y
+de reservas, desde sus controllers y servicios. El detalle de eventos y cómo
+agregar uno está en [firebase.md](firebase.md#5-analytics-firebase-analytics).
+
+**Privacidad:** solo se envían identificadores técnicos (uid, ids de motel),
+montos y estados; nunca nombres, correos, celulares ni NIT. La analítica es
+best effort: un error al reportar nunca interrumpe el flujo.
+
+**Pendiente:** registrar `user_role` como dimensión personalizada en la
+consola y que cada rama agregue los eventos de su módulo.
+
+## 2026-11-09 — Reglas de Firestore restauradas tras un despliegue incompleto (rama `feature_daniel`)
+
+**Problema:** las reglas publicadas en `machuco` se desplegaron desde una copia
+local que no estaba en ninguna rama de GitHub. Traían cambios nuevos de
+`users` (creación y edición de propietarios por un admin, `isAdminOwnerCreation`
+e `isAdminOwnerEdit`), pero no los bloques `match /reservations` ni
+`match /owners`, así que la regla por defecto negaba esas colecciones: las
+reservas de todos los integrantes dejaron de sincronizarse
+(`PERMISSION_DENIED`).
+
+**Decisión:** `firestore.rules` pasa a ser exactamente lo publicado más los
+bloques de `reservations` (y sus funciones) y `owners`, sin quitar nada de lo
+publicado. Se desplegó el 2026-11-09 y se verificó con una reserva real.
+`test_rules/reservations.rules.test.mjs` cubre la colección para que un
+despliegue sin ella falle en las pruebas.
+
+**Pendiente:** quien hizo el despliegue debe subir sus cambios de reglas y de
+app a su rama. El test existente "nadie elimina el perfil de otro, ni siquiera
+un admin" falla con las reglas publicadas, porque ahora un admin activo puede
+borrar cuentas que no son de administrador; su dueño decide si actualiza el
+test o la regla. Antes de cada despliegue hay que partir de las reglas
+publicadas o de `develop` actualizado, nunca de una copia local vieja.
+
+## 2026-11-09 — Moteles pasan a Firebase SQL Connect (rama `feature_marco`)
+
+**Contexto:** la decisión del 2026-10-27 fija Firebase como base de datos
+principal y Supabase solo para datos maestros. Los moteles estaban en
+Supabase (entrada del 2026-10-28) y a la rama de moteles se le asignó
+implementar Firebase SQL Connect (antes Data Connect).
+
+**Decisión:**
+
+- Los moteles se guardan en **Firebase SQL Connect** (PostgreSQL), servicio
+  `machuco-service` en `us-east4`, instancia `machuco-instance`, base
+  `machuco-database` (prueba gratuita del plan Spark, activada el
+  2026-11-09; dura 90 días). Esquema y conector `motel` desplegados el
+  2026-11-09 con la CLI 15.34.1.
+- Tabla `motels` en `dataconnect/schema/motel.gql`, conector `motel` en
+  `dataconnect/motel/`. Código generado en `lib/service/sql_connect/motel_connector/`.
+- El dueño lo fija el backend con el uid del token de Firebase Auth
+  (`auth.uid`): un propietario solo lista, crea y edita sus moteles.
+- Se conserva la caché local en Floor (`MotelDao`) para lectura sin red.
+- Se retira el repositorio de moteles de Supabase. Los indicativos
+  telefónicos siguen en Supabase (son un maestro).
+- Convención para el equipo: un archivo de esquema y una carpeta de
+  conector por funcionalidad. Ver `docs/sql_connect.md`.
+
+**Pendiente:**
+
+- Las operaciones de administrador (`ListAllMotels`, `AdminCreateMotel`,
+  `AdminUpdateMotel`) exigen el custom claim `role: 'admin'` en el token de
+  Firebase Auth. Hasta que la rama de autenticación lo agregue, nadie puede
+  usarlas.
+- Antes de que terminen los 90 días hay que decidir si se pasa a Blaze.
+
+**Actualización (2026-11-09):** cada motel se copia también en Firestore
+(`motels/{motelId}`, mismo UUID, colección propia de esta rama) para que
+otros módulos lo consulten desde sus reglas. Lo escriben el administrador y
+el propietario activo con su propio `ownerId`. La regla `room_motels` de la
+rama de habitaciones no se modificó.
+## 2026-11-09 — Propietarios ocupa las versiones 15, 16 y 17 de SQLite (rama `feature_juliang`)
+
+**Contexto:** al fusionar `develop` en `feature_juliang`, la base compartida
+quedó en la versión 14 (`auth_user_profile`) y el merge eliminó las migraciones
+del módulo de propietarios. Algunas instalaciones de esta rama ya estaban en la
+versión 16 (sus propias 12→13 `owners`, 13→14 indicativo, 14→15
+`document_types` y 15→16 `pendingDelete`), de modo que se saltaron los pasos de
+`develop`.
+
+**Decisión:** se conservan el 12→13 y el 13→14 de `develop` y las migraciones de
+propietarios se re-apilan por encima, todas idempotentes:
+
+- `14→15`: crea `owners` con `countryCode`/`countryName` y `document_types` con
+  sus cinco semillas.
+- `15→16`: agrega `pendingDelete` a `owners`.
+- `16→17`: reconciliación. Crea `auth_user_profile`, repite la limpieza de los
+  ejemplos de room (sólo si existen las tablas de habitaciones) y reasegura el
+  esquema de propietarios. Cubre las bases v16 de esta rama, que nunca
+  ejecutaron el 13→14 de `develop`.
+
+La versión local queda en **17**; la próxima rama que migre usa la 18.
+
+## 2026-11-09 — Los propietarios viven en `users/{uid}` (rama `feature_juliang`)
+
+**Contexto:** el módulo de propietarios escribía en una colección `owners`
+propia, separada de los usuarios registrados. Eso duplicaba identidades: un
+propietario que se registraba desde la app quedaba en `users` y otro creado por
+el administrador quedaba en `owners`, sin cuenta de acceso.
+
+**Decisión:** un propietario **es un usuario registrado**. El módulo lee
+`users` con `role == 'owner'` y el panel de administración hace el CRUD ahí:
+
+- Crear crea la cuenta en Firebase Auth con `AuthAccountProvisioner` y una
+  contraseña temporal (se muestra una sola vez), y escribe `users/{uid}` con
+  `role = owner`, `mustChangePassword = true` y el estado inicial que elija el
+  administrador (`active` o `pending_approval`).
+- Los datos legales se guardan en `documentType`/`documentNumber`/`address` y
+  se mantienen sincronizados con `nit`/`personType` (NIT → `juridica`) para no
+  romper el registro público ni las reglas de aprobación existentes.
+- Editar solo toca datos legales y de contacto (nunca correo, rol ni estado).
+- Eliminar borra el documento `users/{uid}`. La cuenta de Firebase Auth no se
+  puede borrar desde el cliente (no hay Admin SDK); queda huérfana y su correo
+  sigue tomado, igual que en `anonymizeAdministrator`.
+- La colección `owners` queda obsoleta y se borra a mano desde la consola.
+- El estado local de SQLite sube a la versión **18** (`accountStatus`); la
+  próxima rama que migre usa la 19.
+
+## 2026-11-09 — Se retiran los datos demo de propietarios
+
+**Contexto:** el módulo sembraba tres propietarios de demostración en SQLite y
+la versión anterior guardaba ids temporales `owner-...` para documentos que
+vivían en la colección `owners`. Al pasar el listado a `users`, esas filas
+aparecían como propietarios que no existen en Firebase.
+
+**Decisión:** ya no se siembran datos demo; el listado refleja únicamente los
+usuarios con `role = owner`. La migración **18→19** borra del dispositivo las
+filas con id `owner-...` (idempotente: un uid de Firebase Auth nunca empieza
+por ese prefijo). La próxima rama que migre usa la 20.
+
+## 2026-11-09 — Perfil del propietario y bloqueo de eliminación con moteles
+
+**Contexto:** la vista de moteles del propietario usaba un id y nombres
+quemados (`owner-1020304050`, «Laura Gómez») y no existía una pantalla para que
+el propietario viera o ajustara sus datos. Además, borrar un propietario con
+moteles dejaba los moteles huérfanos.
+
+**Decisión:**
+
+- La vista toma el uid de `CurrentUser` y el nombre de `users/{uid}`; se retira
+  el selector de propietarios de ejemplo.
+- Se agrega «Mi perfil» (`/motels/owner/profile`): el propietario ve sus datos
+  y edita solo nombre y teléfono, que es lo que las reglas permiten
+  autoeditar. El documento, el rol y el estado siguen siendo del administrador.
+- `deleteOwner` se bloquea si el propietario tiene moteles: se listan los
+  nombres y se pide reasignarlos o eliminarlos. Si no se puede verificar por
+  falta de red, también se bloquea. No se elige transferencia automática para
+  no reasignar moteles sin que un humano lo confirme.
+
+## 2026-11-09 — Cambio de contraseña del propietario y nombre completo
+
+**Contexto:** las cuentas de propietario creadas por el panel nacen con
+`mustChangePassword = true`, pero no había forma de que el propietario
+reemplazara esa contraseña. Además, algunos chips partían `fullName` y mostraban
+solo el primer nombre.
+
+**Decisión:**
+
+- «Mi perfil» incluye **Cambiar contraseña** (`/motels/owner/profile/password`):
+  valida con `AuthValidators`, usa `PasswordChangeService` y limpia
+  `mustChangePassword` si estaba activo. Las reglas actuales ya lo permiten.
+- El nombre se muestra siempre como `fullName` completo; no se parte ni se
+  abrevian los chips (el avatar conserva las iniciales por estética).
+- Quedan como tareas futuras la transferencia automática de moteles al
+  eliminar un propietario y el guard que obligue a cambiar la contraseña
+  temporal al iniciar sesión.
+
+## 2026-11-09 — Transferencia de moteles al eliminar un propietario
+
+**Contexto:** el borrado de un propietario con moteles se bloqueaba con un
+mensaje, obligando a reasignar los moteles a mano por fuera de la app.
+
+**Decisión:** el mismo flujo de eliminación reasigna los moteles. El controlador
+expone `OwnerDeletionBlocker` (moteles + demás propietarios como candidatos) y
+la pantalla abre un cuadro con la lista de moteles y un selector de destino. Al
+confirmar se ejecuta `MotelRepository.reassignMoteles` (un `PATCH` a Supabase
+más la caché local) y solo entonces se borra `users/{uid}`. Si la reasignación
+falla no se elimina nada. Queda como tarea futura poder **eliminar** los
+moteles desde ese mismo cuadro.
+
+Además, las acciones de «Mi perfil» pasan a una barra inferior fija: el botón
+de cambiar contraseña quedaba al final del listado y no siempre era visible.
+
+## 2026-11-09 — Acceso a solicitudes de propietarios y perfil del administrador
+
+**Contexto:** el módulo de aprobación de propietarios (`OwnerApprovalsPage`,
+`AdminAccessController`) existía pero solo se llegaba por un acceso directo de
+desarrollo. El administrador tampoco tenía una pantalla de perfil.
+
+**Decisión:**
+
+- El panel de Propietarios estrena menú lateral con **Solicitudes de
+  propietarios** (contador de `pending_approval`), **Mi perfil** y **Cerrar
+  sesión**. Además, con pendientes se muestra una tarjeta «N solicitudes» con
+  acción «Revisar».
+- Se agrega el perfil del administrador (`/auth/admin/profile`) para ver sus
+  datos y editar nombre y teléfono (lo que `isAdminContactEdit` permite) y
+  cambiar la contraseña. Con `mustChangePassword` la edición queda bloqueada
+  hasta cambiar la temporal.
+- Las piezas comunes se renombran a nombres neutrales: `UserProfileController`,
+  `UserEditProfilePage`, `ChangePasswordPage` y `AccountStatusChip`, de modo que
+  propietario y administrador compartan el mismo código.
+- Sin cambios en `firestore.rules`.
+
+## 2026-11-10 — Unificación del esquema local tras el merge de develop (versión 20)
+
+**Contexto:** el `pull` de develop dejó marcas de conflicto en
+`app_database.dart`, `app_database.g.dart` y este documento. Ambas ramas habían
+numerado migraciones distintas: develop llegó a la **17** (reservas, room sync y
+servicios adicionales) y `feature_juliang` a la **19** (propietarios).
+
+**Decisión:** se conserva la cadena de develop hasta la 17 y se re-apila el
+módulo de propietarios arriba:
+
+- `13→14`: auth + room sync (develop).
+- `14→15` y `15→16`: esquemas fusionados de auth/room sync/reservas (develop).
+- `16→17`: pagos, clientes y servicios adicionales (develop).
+- `17→18`: `owners` con indicativo, `document_types` sembrada, `pendingDelete`
+  y `accountStatus` (todo idempotente).
+- `18→19`: limpia las filas locales con id `owner-...` (datos demo y heredados).
+- `19→20`: vuelve a completar los esquemas de develop de forma idempotente,
+  para las instalaciones que ya estaban en la v19 propia.
+
+La versión local queda en **20**; la próxima rama que migre usa la 21.
+`app_database.g.dart` se regenera con build_runner (nunca a mano) y
+`firestore.rules` quedó intacto con las reglas de propietarios y las de
+reservas de develop.
+
+## 2026-11-10 — Los propietarios se anonimizan en vez de eliminarse
+
+**Contexto:** el panel borraba `users/{uid}` al «eliminar» un propietario. El
+equipo sugirió conservar el documento para auditoría y quitar los datos
+personales, como ya se hace con los administradores.
+
+**Decisión:** la acción del panel pasa a ser **Anonimizar**:
+
+- Se conserva el documento con `role = owner`, el correo, `createdAt`,
+  `createdBy` y la auditoría (`anonymizedAt`, `anonymizedBy`).
+- Se reemplaza `fullName` por «Propietario eliminado» y se limpian teléfono,
+  documento, NIT, tipo de persona, dirección, país, plan y nombres separados.
+- `accountStatus` pasa a `anonymized`: la cuenta no puede iniciar sesión y
+  desaparece del listado de propietarios (el pull borra la fila local).
+- Se mantiene el bloqueo por moteles: primero hay que reasignarlos al destino
+  elegido en el cuadro de transferencia.
+- `firestore.rules` agrega `isAdminOwnerAnonymization()` y **retira** el
+  borrado de cuentas por parte del admin; solo el propio usuario puede borrar
+  su perfil. Hay que desplegar reglas.
+- La cuenta de Firebase Auth no se puede borrar desde el cliente (sin Admin
+  SDK), igual que con los administradores; se elimina desde la consola cuando
+  haga falta.

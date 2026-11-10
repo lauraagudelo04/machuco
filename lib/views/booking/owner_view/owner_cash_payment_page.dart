@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
@@ -51,6 +52,18 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
   }
 
   Future<void> _confirmPayment() async {
+    final reservation = _reservation;
+    if (reservation != null && reservation.isPayAtProperty) {
+      await Navigator.of(context).pushNamed(
+        AppRoutes.ownerPayments,
+        arguments: {
+          'motelId': reservation.motelId,
+          'motelName': reservation.motelName,
+        },
+      );
+      if (mounted) await _load();
+      return;
+    }
     setState(() => _isSubmitting = true);
     try {
       await _controller.registerCashPayment(widget.reservationId);
@@ -64,12 +77,18 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
       );
       Navigator.of(context).pop(true);
     } on ReservationCancellationException catch (error) {
-      if (!mounted) return;
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      _showPaymentError(error.message);
+    } on ReservationTransitionException catch (error) {
+      _showPaymentError(error.message);
     }
+  }
+
+  void _showPaymentError(String message) {
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -152,7 +171,9 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
           ),
           const SizedBox(height: AppSpacing.s5),
           AppButton(
-            label: 'Confirmar pago en efectivo',
+            label: reservation.isPayAtProperty
+                ? 'Registrar pago en Finanzas'
+                : 'Confirmar pago en efectivo',
             icon: Icons.payments_outlined,
             loading: _isSubmitting,
             onPressed: _isSubmitting ? null : _confirmPayment,

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
 import 'package:machuco/controllers/payment_method/payment_method_checkout_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
@@ -8,6 +9,15 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/views/payment_method/payment_method_page.dart';
 
+Future<bool> _confirmWithClientController(String reservationId) async {
+  final controller = ClientBookingController();
+  try {
+    return await controller.confirmPayment(reservationId);
+  } finally {
+    controller.dispose();
+  }
+}
+
 class PaymentMethodSelectionPage extends StatefulWidget {
   const PaymentMethodSelectionPage({
     super.key,
@@ -16,6 +26,7 @@ class PaymentMethodSelectionPage extends StatefulWidget {
     this.concept = 'Reserva Suite Deluxe - Motel Fantasía',
     this.onContinue,
     this.checkoutController,
+    this.confirmReservationPayment,
   });
 
   final Reservation? reservation;
@@ -23,6 +34,10 @@ class PaymentMethodSelectionPage extends StatefulWidget {
   final String concept;
   final ValueChanged<PaymentMethodModel>? onContinue;
   final PaymentCheckoutController? checkoutController;
+
+  /// Confirms the payment of a reservation and reports success. Defaults to
+  /// the client booking flow; injectable so the view builds no controller.
+  final Future<bool> Function(String reservationId)? confirmReservationPayment;
 
   @override
   State<PaymentMethodSelectionPage> createState() =>
@@ -33,6 +48,10 @@ class _PaymentMethodSelectionPageState
     extends State<PaymentMethodSelectionPage> {
   bool _isCashSelected = false;
   bool _isRegistering = false;
+
+  /// Set once the reservation was confirmed, so retrying a failed payment
+  /// registration does not confirm it again (it is no longer pending).
+  bool _reservationConfirmed = false;
 
   // Perezoso: crear el controlador toca Firebase y SQLite, que no deben
   // inicializarse mientras el usuario solo está eligiendo.
@@ -47,7 +66,8 @@ class _PaymentMethodSelectionPageState
       ? 'Reserva ${_reservation!.roomName} - ${_reservation!.motelName}'
       : widget.concept;
 
-  String get _formattedAmount => '${formatCurrencyAmount(_effectiveAmount)} COP';
+  String get _formattedAmount =>
+      '${formatCurrencyAmount(_effectiveAmount)} COP';
 
   void _selectCash() {
     setState(() => _isCashSelected = true);
@@ -56,10 +76,9 @@ class _PaymentMethodSelectionPageState
   void _goToInvoice([PaymentMethodModel? paymentMethod]) {
     final reservation = _reservation;
     if (reservation == null) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.clientMotels,
-        (_) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(AppRoutes.clientMotels, (_) => false);
       return;
     }
 
@@ -68,7 +87,8 @@ class _PaymentMethodSelectionPageState
       (_) => false,
       arguments: {
         'reservation': reservation,
-        'paymentMethod': paymentMethod ??
+        'paymentMethod':
+            paymentMethod ??
             PaymentMethodModel(
               amount: _effectiveAmount,
               concept: _effectiveConcept,
@@ -94,13 +114,41 @@ class _PaymentMethodSelectionPageState
   Future<void> _continueAfterCard(PaymentMethodModel model) async {
     final reservation = _reservation;
     if (reservation != null) {
+      // The real checkout rejects the sandbox before Booking can mark a
+      // reservation paid. Tests may inject an actual payment implementation.
       final registered = await _registerPayment(
         () => _checkout.registerCardPayment(reservation, kind: model.cardKind),
       );
       if (!registered) return;
+      if (!_reservationConfirmed) {
+        if (!await _confirmReservation(reservation)) return;
+        _reservationConfirmed = true;
+      }
     }
     if (!mounted) return;
     (widget.onContinue ?? _goToInvoice)(model);
+  }
+
+  /// Card payment succeeded: confirms the reservation (pending -> upcoming or
+  /// active) before registering the payment. If the reservation can no longer
+  /// be paid (for example, its 15 minutes expired) the user is told and leaves.
+  Future<bool> _confirmReservation(Reservation reservation) async {
+    final confirmed =
+        await (widget.confirmReservationPayment ??
+            _confirmWithClientController)(reservation.id);
+    if (!mounted) return false;
+    if (!confirmed) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'No pudimos confirmar el pago: la reserva ya no está pendiente '
+            'de pago.',
+          ),
+        ),
+      );
+      Navigator.of(context).popUntil((route) => route.isFirst);
+    }
+    return confirmed;
   }
 
   Future<void> _finishCashPayment() async {
@@ -112,7 +160,10 @@ class _PaymentMethodSelectionPageState
       if (!registered) return;
     }
     if (!mounted) return;
-    _goToInvoice();
+    // Choosing where to pay is not a receipt or an invoice for money received.
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.clientReservations, (_) => false);
   }
 
   Future<bool> _registerPayment(
@@ -202,7 +253,7 @@ class _PaymentMethodSelectionPageState
               _PaymentOptionCard(
                 icon: Icons.credit_card_outlined,
                 title: 'Tarjeta',
-                description: 'Realiza el pago en línea con tu tarjeta.',
+                description: 'Simulación; no realiza cobros bancarios.',
                 selected: false,
                 onTap: _openCardPayment,
               ),

@@ -15,6 +15,7 @@ import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
@@ -41,8 +42,10 @@ class LoginController extends ChangeNotifier {
     this._catalogRepository,
     this._profileCache,
     PeriodicTimerFactory? timerFactory,
+    AnalyticsService? analytics,
   }) : _userDirectory = userDirectory ?? InMemoryRegisteredUserDirectory(),
-       _timerFactory = timerFactory ?? Timer.periodic;
+       _timerFactory = timerFactory ?? Timer.periodic,
+       _injectedAnalytics = analytics;
 
   static const _defaultCountryIsoCode = 'CO';
 
@@ -53,6 +56,10 @@ class LoginController extends ChangeNotifier {
   static const passwordResetCooldown = 60;
 
   final AuthService? _authService;
+  final AnalyticsService? _injectedAnalytics;
+
+  AnalyticsService get _analytics =>
+      _injectedAnalytics ?? AnalyticsServiceProvider.instance;
   final RegisteredUserDirectory _userDirectory;
   final AuthPreferences? _preferences;
   final AuthCatalogRepository? _catalogRepository;
@@ -160,6 +167,9 @@ class LoginController extends ChangeNotifier {
       await _clearCurrentUserEmail();
       await _clearCachedProfile();
     } else {
+      unawaited(
+        _analytics.setUser(id: restored.userId, role: restored.role.name),
+      );
       await _saveCurrentUserEmail(restored.email);
       await _cacheProfile(restored);
     }
@@ -228,6 +238,7 @@ class LoginController extends ChangeNotifier {
         password: password,
       );
       await _startSession(nextSession);
+      unawaited(_analytics.logLogin(AnalyticsLoginMethod.password));
       await _runPreference((preferences) {
         return rememberEmail
             ? preferences.saveRememberedEmail(email)
@@ -285,6 +296,7 @@ class LoginController extends ChangeNotifier {
     _setSubmitting(true);
     try {
       await authService.registerAccount(prepared);
+      unawaited(_analytics.logSignUp(AnalyticsLoginMethod.password));
       if (code != null && !code.isDevelopmentSeed) {
         await _runPreference((preferences) {
           return preferences.saveLastCountryCodeId(code.id);
@@ -353,6 +365,7 @@ class LoginController extends ChangeNotifier {
       await authService.logout();
     }
     _session = null;
+    unawaited(_analytics.setUser());
     await _clearCurrentUserEmail();
     await _clearCachedProfile();
     notifyListeners();
@@ -527,6 +540,9 @@ class LoginController extends ChangeNotifier {
 
   Future<void> _startSession(AuthSession nextSession) async {
     _session = nextSession;
+    unawaited(
+      _analytics.setUser(id: nextSession.userId, role: nextSession.role.name),
+    );
     await _saveCurrentUserEmail(nextSession.email);
     await _cacheProfile(nextSession);
     notifyListeners();

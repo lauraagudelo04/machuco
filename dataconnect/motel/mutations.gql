@@ -1,0 +1,143 @@
+# Mutaciones del conector `motel` (administración de moteles).
+# Los moteles no se eliminan: se inhabilitan con isAvailable = false.
+
+# Propietario registra un motel. El dueño sale del token, no de la app.
+mutation CreateMyMotel(
+  $name: String!
+  $email: String!
+  $roomCount: Int!
+  $nit: String!
+  $address: String!
+  $phone: String!
+  $description: String
+  $generalLocation: String
+  $paymentMethods: [String!]!
+  $imageUrls: [String!]!
+) @auth(level: USER) {
+  motel_insert(
+    data: {
+      ownerId_expr: "auth.uid"
+      name: $name
+      email: $email
+      roomCount: $roomCount
+      nit: $nit
+      address: $address
+      phone: $phone
+      description: $description
+      generalLocation: $generalLocation
+      paymentMethods: $paymentMethods
+      imageUrls: $imageUrls
+      isAvailable: true
+    }
+  )
+}
+
+# Propietario edita un motel propio. Si el motel no es suyo, no se
+# actualiza ninguna fila (el resultado es 0).
+mutation UpdateMyMotel(
+  $id: UUID!
+  $name: String!
+  $email: String!
+  $roomCount: Int!
+  $nit: String!
+  $address: String!
+  $phone: String!
+  $description: String
+  $generalLocation: String
+  $paymentMethods: [String!]!
+  $imageUrls: [String!]!
+) @auth(level: USER) {
+  motel_updateMany(
+    where: { id: { eq: $id }, ownerId: { eq_expr: "auth.uid" } }
+    data: {
+      name: $name
+      email: $email
+      roomCount: $roomCount
+      nit: $nit
+      address: $address
+      phone: $phone
+      description: $description
+      generalLocation: $generalLocation
+      paymentMethods: $paymentMethods
+      imageUrls: $imageUrls
+      updatedAt_expr: "request.time"
+    }
+  )
+}
+
+# Propietario habilita o inhabilita un motel propio.
+mutation SetMyMotelAvailability($id: UUID!, $isAvailable: Boolean!)
+@auth(level: USER) {
+  motel_updateMany(
+    where: { id: { eq: $id }, ownerId: { eq_expr: "auth.uid" } }
+    data: { isAvailable: $isAvailable, updatedAt_expr: "request.time" }
+  )
+}
+
+# Administrador del sistema registra un motel para un propietario.
+# Exige el custom claim `role: 'admin'` (ver nota en queries.gql).
+mutation AdminCreateMotel(
+  $ownerId: String!
+  $name: String!
+  $email: String!
+  $roomCount: Int!
+  $nit: String!
+  $address: String!
+  $phone: String!
+  $description: String
+  $generalLocation: String
+  $paymentMethods: [String!]!
+  $imageUrls: [String!]!
+) @auth(expr: "auth.token.role == 'admin'") {
+  motel_insert(
+    data: {
+      ownerId: $ownerId
+      name: $name
+      email: $email
+      roomCount: $roomCount
+      nit: $nit
+      address: $address
+      phone: $phone
+      description: $description
+      generalLocation: $generalLocation
+      paymentMethods: $paymentMethods
+      imageUrls: $imageUrls
+      isAvailable: true
+    }
+  )
+}
+
+# Administrador del sistema edita cualquier motel.
+# Exige el custom claim `role: 'admin'` (ver nota en queries.gql).
+mutation AdminUpdateMotel(
+  $id: UUID!
+  $name: String!
+  $email: String!
+  $roomCount: Int!
+  $nit: String!
+  $address: String!
+  $phone: String!
+  $description: String
+  $generalLocation: String
+  $paymentMethods: [String!]!
+  $imageUrls: [String!]!
+  $isAvailable: Boolean!
+) @auth(expr: "auth.token.role == 'admin'") {
+  motel_update(
+    id: $id
+    data: {
+      name: $name
+      email: $email
+      roomCount: $roomCount
+      nit: $nit
+      address: $address
+      phone: $phone
+      description: $description
+      generalLocation: $generalLocation
+      paymentMethods: $paymentMethods
+      imageUrls: $imageUrls
+      isAvailable: $isAvailable
+      updatedAt_expr: "request.time"
+    }
+  )
+}

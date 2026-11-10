@@ -6,20 +6,33 @@ import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
+import 'package:machuco/database/model/document_type/document_type_entry.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_category_dao.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/additional_service/additional_service_category.dart';
+import 'package:machuco/models/additional_service/additional_service_entry.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_line_item_entity.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/booking/reservation_category_dao.dart';
+import 'package:machuco/repositories/booking/reservation_dao.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
+import 'package:machuco/database/model/owner/owner_entry.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
+import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 part 'app_database.g.dart';
@@ -33,7 +46,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 20,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -45,6 +58,13 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
+    AdditionalServiceCategory,
+    AdditionalServiceEntry,
+    ReservationCategory,
+    ReservationEntity,
+    ReservationLineItemEntity,
+    OwnerEntry,
+    DocumentTypeEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -53,6 +73,10 @@ abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
+  AdditionalServiceCategoryDao get additionalServiceCategoryDao;
+  AdditionalServiceDao get additionalServiceDao;
+  OwnerDao get ownerDao;
+  DocumentTypeDao get documentTypeDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -61,6 +85,10 @@ abstract class AppDatabase extends FloorDatabase {
   PhoneCountryCodeDao get phoneCountryCodeDao;
   MotelDao get motelDao;
   AuthUserProfileDao get authUserProfileDao;
+
+  ReservationCategoryDao get reservationCategoryDao;
+
+  ReservationDao get reservationDao;
 }
 
 class AppDatabaseProvider {
@@ -89,11 +117,18 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
+        migration15To16,
+        migration16To17,
+        migration17To18,
+        migration18To19,
+        migration19To20,
       ])
       .addCallback(
         Callback(
           onCreate: (database, version) async {
             await _createManualSchemas(database, version);
+            await _seedDocumentTypes(database);
             await seedSubscriptionTestOwner(database);
           },
         ),
@@ -106,6 +141,7 @@ Future<void> _createManualSchemas(
   int version,
 ) async {
   await _createRoomSchema(database, version);
+  await createRoomSyncSchema(database);
   await _createAuthCatalogSchema(database);
 }
 
@@ -304,7 +340,7 @@ Future<void> _createMotelSchema(sqflite.DatabaseExecutor database) async {
   );
 }
 
-Future<void> _createPaymentSchema(sqflite.Database database) async {
+Future<void> _createPaymentSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS payment_method_catalog ('
     'id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)',
@@ -327,7 +363,7 @@ Future<void> _createPaymentSchema(sqflite.Database database) async {
   }
 }
 
-Future<void> _createClientSchema(sqflite.Database database) async {
+Future<void> _createClientSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `clients` ('
     '`id` INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -395,7 +431,9 @@ final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 /// Es idempotente porque esta tabla se creó antes como v13 en la rama de
 /// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
 /// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
-final migration13To14 = Migration(13, 14, (database) async {
+Future<void> _createAuthUserProfileSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
     '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
@@ -404,4 +442,298 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
   );
+}
+
+Future<void> createRoomSyncSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''CREATE TABLE IF NOT EXISTS room_sync_queue (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    collection_name TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    payload TEXT NOT NULL
+  )''');
+}
+
+Future<void> _completeAuthAndRoomSyncSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
+  await _createAuthUserProfileSchema(database);
+  await createRoomSyncSchema(database);
+}
+
+final migration13To14 = Migration(13, 14, _completeAuthAndRoomSyncSchemas);
+
+/// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
+/// genera para `ReservationCategory`, `ReservationEntity` y
+/// `ReservationLineItemEntity`.
+Future<void> _createReservationSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
+    '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, '
+    '`requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, '
+    '`motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, '
+    '`roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, '
+    '`checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, '
+    '`stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, '
+    '`roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, '
+    '`status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, '
+    '`guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, '
+    '`categoryId` INTEGER, `cancellationReason` TEXT, '
+    '`invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, '
+    'PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_line_items` ('
+    '`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, '
+    '`itemId` TEXT NOT NULL, `name` TEXT NOT NULL, '
+    '`unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, '
+    '`position` INTEGER NOT NULL, '
+    'FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) '
+    'ON UPDATE NO ACTION ON DELETE CASCADE)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_requestId` '
+    'ON `reservations` (`requestId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_motelId` '
+    'ON `reservations` (`motelId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
+    'ON `reservation_line_items` (`reservationId`)',
+  );
+}
+
+Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
+  await _completeAuthAndRoomSyncSchemas(database);
+  await _createReservationSchema(database);
+}
+
+final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+
+/// Completa las dos variantes de v15 conservando los datos de ambas ramas.
+final migration15To16 = Migration(15, 16, _completeMergedSchemas);
+
+/// Esquema completo de develop: auth, room sync, reservas, pagos, clientes y
+/// servicios adicionales. Todo es idempotente, así que también sirve para
+/// completar una base que llegó desde la rama de propietarios (v19 propia).
+Future<void> _completeDevelopSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
+  await _completeMergedSchemas(database);
+  await _createPaymentSchema(database);
+  await _createClientSchema(database);
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_service_categories ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, createdAt INTEGER NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_additional_service_categories_name '
+    'ON additional_service_categories (name)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_services ('
+    'id TEXT PRIMARY KEY, motelId TEXT NOT NULL, name TEXT NOT NULL, '
+    'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
+    'active INTEGER NOT NULL)',
+  );
+}
+
+/// Agrega el maestro de categorías de servicios adicionales y la tabla
+/// local de servicios adicionales. Primero completa los esquemas de las otras
+/// ramas (idempotente) por si la base quedó en una v16 anterior a la unión.
+final migration16To17 = Migration(16, 17, _completeDevelopSchemas);
+
+/// Propietarios y tipos de documento (módulo de propietarios).
+///
+/// Re-apilada sobre la cadena de develop (que llega a la 17). Es idempotente:
+/// cubre tanto una base de develop, que no tiene `owners`, como una de esta
+/// rama, que ya los tenía con el indicativo y `pendingDelete`.
+final migration17To18 = Migration(17, 18, (database) async {
+  await _deleteLegacyRoomMockDataIfPresent(database);
+  await _createOwnerSchema(database);
+  await _addOwnerCountryColumns(database);
+  await _addOwnerPendingDeleteColumn(database);
+  await _addOwnerAccountStatusColumn(database);
+  await _createDocumentTypeSchema(database);
+  await _seedDocumentTypes(database);
 });
+
+/// Limpieza de filas locales heredadas de la versión anterior.
+///
+/// Antes el módulo sembraba tres propietarios de demostración y guardaba ids
+/// temporales `owner-...` porque los documentos vivían en la colección
+/// `owners`. Ahora cada fila es un usuario de Firebase Auth y su id es el uid,
+/// así que esas filas solo ensuciaban el listado. Es idempotente porque un uid
+/// nunca empieza por `owner-`.
+final migration18To19 = Migration(18, 19, (database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'owners'",
+  );
+  if (tables.isEmpty) return;
+  await database.delete('owners', where: "id LIKE 'owner-%'");
+});
+
+/// Reconciliación final: una instalación de esta rama pudo quedar en la v19
+/// propia (con propietarios pero sin las tablas de develop). Se completan sus
+/// esquemas de forma idempotente.
+final migration19To20 = Migration(19, 20, _completeDevelopSchemas);
+
+/// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
+///
+/// Algunas bases mínimas (pruebas de migración de propietarios) no lo tienen y
+/// `DELETE FROM rooms` fallaría.
+Future<void> _deleteLegacyRoomMockDataIfPresent(
+  sqflite.DatabaseExecutor database,
+) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' "
+    "AND name IN ('rooms', 'room_types')",
+  );
+  if (tables.length < 2) return;
+  await deleteLegacyRoomMockData(database);
+}
+
+
+/// Estado de la cuenta del propietario tal como vive en `users/{uid}`.
+///
+/// Es idempotente: una base nueva ya nace con la columna y una de esta rama
+/// anterior a la unificación también.
+Future<void> _addOwnerAccountStatusColumn(
+  sqflite.DatabaseExecutor database,
+) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('accountStatus')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN accountStatus TEXT');
+  }
+}
+
+Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS owners (
+      id TEXT NOT NULL PRIMARY KEY,
+      fullName TEXT NOT NULL,
+      documentType TEXT NOT NULL,
+      documentNumber TEXT NOT NULL,
+      email TEXT NOT NULL,
+      phone TEXT NOT NULL,
+      address TEXT,
+      isActive INTEGER NOT NULL,
+      synchronized INTEGER NOT NULL,
+      createdAt INTEGER NOT NULL,
+      updatedAt INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Separa el indicativo del país del número nacional.
+///
+/// `owners` se creó sin estas columnas; se consulta `PRAGMA table_info` porque
+/// una base nueva ya nace con ellas y una de la 12→13 no las tiene.
+Future<void> _addOwnerCountryColumns(sqflite.DatabaseExecutor database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+
+  if (!names.contains('countryCode')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryCode TEXT');
+  }
+  if (!names.contains('countryName')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN countryName TEXT');
+  }
+}
+
+/// Marca de borrado diferido; `DEFAULT 0` deja válidas las filas anteriores.
+Future<void> _addOwnerPendingDeleteColumn(
+  sqflite.DatabaseExecutor database,
+) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('pendingDelete')) {
+    await database.execute(
+      'ALTER TABLE owners ADD COLUMN pendingDelete INTEGER NOT NULL '
+      'DEFAULT 0',
+    );
+  }
+}
+
+Future<void> _createDocumentTypeSchema(
+  sqflite.DatabaseExecutor database,
+) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS document_types (
+      id INTEGER NOT NULL PRIMARY KEY,
+      code TEXT NOT NULL,
+      name TEXT NOT NULL,
+      pattern TEXT NOT NULL,
+      example TEXT NOT NULL,
+      isActive INTEGER NOT NULL,
+      sortOrder INTEGER NOT NULL
+    )
+  ''');
+}
+
+/// Semillas del maestro; `INSERT OR IGNORE` permite correrla también en bases
+/// nuevas, donde Floor ya creó la tabla vacía.
+Future<void> _seedDocumentTypes(sqflite.DatabaseExecutor database) async {
+  const rows = [
+    {
+      'id': 1,
+      'code': 'CC',
+      'name': 'Cédula de ciudadanía',
+      'pattern': r'^\d{6,10}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 1,
+    },
+    {
+      'id': 2,
+      'code': 'CE',
+      'name': 'Cédula de extranjería',
+      'pattern': r'^\d{6,12}$',
+      'example': '345678',
+      'isActive': 1,
+      'sortOrder': 2,
+    },
+    {
+      'id': 3,
+      'code': 'NIT',
+      'name': 'Número de identificación tributaria',
+      'pattern': r'^\d{9,10}(-\d)?$',
+      'example': '900123456-7',
+      'isActive': 1,
+      'sortOrder': 3,
+    },
+    {
+      'id': 4,
+      'code': 'PAS',
+      'name': 'Pasaporte',
+      'pattern': r'^[A-Za-z0-9]{6,12}$',
+      'example': 'AV123456',
+      'isActive': 1,
+      'sortOrder': 4,
+    },
+    {
+      'id': 5,
+      'code': 'TI',
+      'name': 'Tarjeta de identidad',
+      'pattern': r'^\d{6,11}$',
+      'example': '1020304050',
+      'isActive': 1,
+      'sortOrder': 5,
+    },
+  ];
+
+  for (final row in rows) {
+    await database.insert(
+      'document_types',
+      row,
+      conflictAlgorithm: sqflite.ConflictAlgorithm.ignore,
+    );
+  }
+}

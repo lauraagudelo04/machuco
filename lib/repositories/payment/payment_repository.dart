@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:http/http.dart' as http;
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
@@ -198,6 +200,73 @@ class PaymentRepository {
     return _withDao((dao) => dao.insertPayment(payment));
   }
 
+  Future<PaymentRecord> createPendingReservationPayment(PaymentRecord payment) {
+    _validatePayment(payment);
+    if (payment.status != PaymentStatus.pending ||
+        payment.method != null ||
+        payment.paymentMethodId != null ||
+        payment.paidAt != null ||
+        payment.receiptNumber != null) {
+      throw const PaymentRepositoryException(
+        PaymentRepositoryError.invalidPayment,
+        'El pago en el establecimiento debe comenzar pendiente y sin método.',
+      );
+    }
+    return _withDao(
+      (dao) => dao.createPendingReservationPayment(
+        payment,
+        _now().millisecondsSinceEpoch,
+      ),
+    );
+  }
+
+  /// Recover a durable local selection/receipt when an older remote
+  /// reservation arrives after restarting. Never resurrect a cancellation.
+  Future<Reservation> reconcileReservation(Reservation reservation) =>
+      _withDao((dao) async {
+        final payment = await dao.findById(
+          ReservationPaymentTerms.paymentId(reservation.id),
+        );
+        if (payment == null ||
+            payment.clientId != reservation.guestId ||
+            payment.motelId != reservation.motelId ||
+            payment.roomId != reservation.roomId ||
+            payment.amount != reservation.total) {
+          return reservation;
+        }
+        if (reservation.status == ReservationStatus.cancelled) {
+          if (payment.status == PaymentStatus.pending) {
+            await dao.updatePayment(
+              payment.copyWith(status: PaymentStatus.cancelled),
+            );
+          }
+          return reservation;
+        }
+        if (reservation.status != ReservationStatus.pending) return reservation;
+        if (payment.status == PaymentStatus.pending) {
+          return reservation.copyWith(
+            paymentMethod: ReservationPaymentTerms.payAtProperty,
+          );
+        }
+        if (payment.status == PaymentStatus.paid &&
+            payment.paidAt != null &&
+            payment.paymentMethodId != null &&
+            payment.receiptNumber != null) {
+          final methods = await dao.findCatalogEntries();
+          for (final method in methods) {
+            if (method.id != payment.paymentMethodId) continue;
+            return reservation.copyWith(
+              status: _now().isBefore(reservation.checkIn)
+                  ? ReservationStatus.upcoming
+                  : ReservationStatus.active,
+              paymentMethod: method.name,
+              invoiceAccessStatus: InvoiceAccessStatus.pending,
+            );
+          }
+        }
+        return reservation;
+      });
+
   void _validatePayment(PaymentRecord payment) {
     for (final id in [
       payment.id,
@@ -298,6 +367,11 @@ class PaymentRepository {
       return await operation(database.paymentDao);
     } on PaymentRepositoryException {
       rethrow;
+    } on PaymentReservationException catch (error) {
+      throw PaymentRepositoryException(
+        PaymentRepositoryError.invalidPayment,
+        error.message,
+      );
     } on Exception {
       throw const PaymentRepositoryException(
         PaymentRepositoryError.storage,

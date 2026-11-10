@@ -1,10 +1,11 @@
 /// Modelos de dominio para la reserva de habitaciones del cliente.
 ///
 /// Todo el flujo de "Reserva de habitación" y "Gestión de mis reservas" gira
-/// en torno a [Reservation]. No existe backend real: estos modelos son la
-/// forma que usa `ClientBookingController` para representar reservas
-/// mantenidas en memoria.
+/// en torno a [Reservation], compartida por los tres roles y persistida en
+/// SQLite con sincronización Firestore. El modelo no procesa cobros bancarios.
 library;
+
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 
 /// Estado de una reserva. Nunca se debe representar el estado con cadenas
 /// mágicas: todo el dominio de reservas gira en torno a este enum estricto.
@@ -83,8 +84,10 @@ class Reservation {
     required this.createdAt,
     this.guestId = '',
     this.guestName = '',
+    this.categoryId,
     this.cancellationReason,
     this.invoiceAccessStatus = InvoiceAccessStatus.notApplicable,
+    this.paymentMethod,
   });
 
   final String id;
@@ -122,6 +125,10 @@ class Reservation {
   final String guestId;
   final String guestName;
 
+  /// Id of the `ReservationCategory` chosen before booking. Nullable for
+  /// reservations created before categories existed.
+  final int? categoryId;
+
   /// Motivo de cancelación, capturado la primera vez que la reserva pasa a
   /// `cancelled` mediante un flujo que lo exige (Propietario o Cliente).
   /// Queda visible de forma permanente en el detalle una vez existe.
@@ -129,6 +136,14 @@ class Reservation {
 
   /// Estado del acceso a la factura. Ver [InvoiceAccessStatus].
   final InvoiceAccessStatus invoiceAccessStatus;
+
+  /// `En el Local` records where a pending payment will be received. Once
+  /// received, this is the catalog method name (for example `Efectivo`).
+  /// A non-null value alone does NOT prove that money was received.
+  final String? paymentMethod;
+
+  bool get isPayAtProperty =>
+      paymentMethod == ReservationPaymentTerms.payAtProperty;
 
   Duration get stayDuration => checkOut.difference(checkIn);
 
@@ -140,6 +155,8 @@ class Reservation {
     ReservationStatus? status,
     String? cancellationReason,
     InvoiceAccessStatus? invoiceAccessStatus,
+    int? categoryId,
+    String? paymentMethod,
   }) {
     return Reservation(
       id: id,
@@ -161,8 +178,10 @@ class Reservation {
       createdAt: createdAt,
       guestId: guestId,
       guestName: guestName,
+      categoryId: categoryId ?? this.categoryId,
       cancellationReason: cancellationReason ?? this.cancellationReason,
       invoiceAccessStatus: invoiceAccessStatus ?? this.invoiceAccessStatus,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
     );
   }
 }

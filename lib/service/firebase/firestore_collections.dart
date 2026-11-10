@@ -10,7 +10,22 @@ abstract final class FirestoreCollections {
   static const subscriptions = 'subscriptions';
 
   /// Payment records synchronized from the owner's local SQLite database.
+  static const rooms = 'rooms';
+  static const roomTypes = 'room_types';
+  static const roomMotels = 'room_motels';
+
   static const payments = 'payments';
+
+  /// Copia de los moteles de Firebase SQL Connect (`motels/{motelId}`, mismo
+  /// UUID), para que otros módulos y sus reglas los consulten en Firestore.
+  static const motels = 'motels';
+
+  /// Additional services offered by a motel (`additionalServices/{id}`).
+  static const additionalServices = 'additionalServices';
+
+  /// Reservations shared by client, motel owner and admin
+  /// (`reservations/{reservationId}`), cached locally in SQLite.
+  static const reservations = 'reservations';
 
   /// Client reviews of motels and rooms, one document per review id.
   static const reviews = 'reviews';
