@@ -1,4 +1,5 @@
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/motel/motel_firestore_registry.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/database/repository/motel/motel_sql_connect_gateway.dart';
 import 'package:machuco/database/repository/motel/sql_connect_motel_repository.dart';
@@ -21,6 +22,7 @@ class MotelController {
           return db.motelDao;
         },
         currentUid: () => CurrentUser.uidOrNull,
+        firestoreRegistry: FirestoreMotelRegistry(),
       ),
     );
   }

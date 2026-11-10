@@ -667,3 +667,9 @@ implementar Firebase SQL Connect (antes Data Connect).
   Firebase Auth. Hasta que la rama de autenticación lo agregue, nadie puede
   usarlas.
 - Antes de que terminen los 90 días hay que decidir si se pasa a Blaze.
+
+**Actualización (2026-11-09):** cada motel se copia también en Firestore
+(`motels/{motelId}`, mismo UUID, colección propia de esta rama) para que
+otros módulos lo consulten desde sus reglas. Lo escriben el administrador y
+el propietario activo con su propio `ownerId`. La regla `room_motels` de la
+rama de habitaciones no se modificó.
