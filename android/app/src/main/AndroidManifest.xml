@@ -5,6 +5,11 @@
         android:label="${appLabel}"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- Firebase Messaging 17 registra el dispositivo mediante su
+             Firebase Installation ID, usado para envíos manuales de prueba. -->
+        <meta-data
+            android:name="firebase_messaging_installation_id_enabled"
+            android:value="true" />
         <activity
             android:name=".MainActivity"
             android:exported="true"
