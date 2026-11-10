@@ -162,31 +162,31 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And Si la cuenta era de contraseña temporal, se limpia mustChangePassword
     And La app informa "Contraseña actualizada correctamente"
 
-  Scenario: Reasignar moteles al eliminar un propietario
+  Scenario: Reasignar moteles al anonimizar un propietario
     Given El propietario tiene al menos un motel vinculado en Supabase
-    When El administrador confirma su eliminación
-    Then El sistema no elimina la cuenta todavía
+    When El administrador confirma su anonimización
+    Then El sistema no anonimiza la cuenta todavía
     And Abre un cuadro con los nombres de sus moteles
     And Muestra los demás propietarios para elegir el destino
     When El administrador elige un destino y confirma
     Then Los moteles se reasignan a ese propietario en Supabase
-    And La cuenta del propietario eliminado se borra
+    And La cuenta queda anonimizada (sin datos personales)
 
-  Scenario: No se puede eliminar si la reasignación falla
+  Scenario: No se puede anonimizar si la reasignación falla
     Given El propietario tiene moteles vinculados
     And La reasignación falla por falta de conexión
     When El administrador confirma la transferencia
-    Then No se elimina la cuenta ni la fila local
+    Then No se anonimiza la cuenta ni la fila local
     And Se informa que los moteles no se pudieron reasignar
 
-  Scenario: Eliminar un propietario sin conexión
+  Scenario: Anonimizar un propietario sin conexión
     Given El dispositivo está en modo avión
     And Existe un propietario sincronizado en Firestore
-    When El usuario elimina el propietario
+    When El administrador anonimiza el propietario
     Then La fila local queda con pendingDelete = 1 y se oculta del listado
-    And El documento users/{uid} sigue en Firestore
+    And El documento users/{uid} sigue intacto en Firestore
     When El usuario recupera la conexión
-    Then La sincronización borra el documento users/{uid}
+    Then La sincronización anonimiza el documento users/{uid}
     And La fila local se elimina por completo
     And El pull posterior no resucita al propietario
 

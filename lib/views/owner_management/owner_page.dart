@@ -104,7 +104,7 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
   ///
   /// Devuelve el id del propietario destino, o `null` si se canceló. Si no hay
   /// otros propietarios solo se informa el motivo.
-  Future<String?> _askTransferTarget(OwnerDeletionBlocker blocker) async {
+  Future<String?> _askTransferTarget(OwnerAnonymizationBlocker blocker) async {
     if (blocker.candidates.isEmpty) {
       await showDialog<void>(
         context: context,
@@ -284,56 +284,57 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _deleteOwner(Owner owner) async {
-    if (!await _confirmDeletion(owner)) return;
+  Future<void> _anonymizeOwner(Owner owner) async {
+    if (!await _confirmAnonymization(owner)) return;
     if (!mounted) return;
-    var deleted = await _controller.deleteOwner(owner.id);
+    var anonymized = await _controller.anonymizeOwner(owner.id);
     if (!mounted) return;
 
     // Si tiene moteles, el controlador deja el bloqueo con la lista y los
     // propietarios disponibles: aquí se pide a quién reasignarlos.
-    final blocker = _controller.lastDeletionBlocker;
-    if (deleted == null && blocker != null) {
+    final blocker = _controller.lastAnonymizationBlocker;
+    if (anonymized == null && blocker != null) {
       final targetId = await _askTransferTarget(blocker);
       if (!mounted || targetId == null) return;
-      deleted = await _controller.deleteOwner(
+      anonymized = await _controller.anonymizeOwner(
         owner.id,
         transferToOwnerId: targetId,
       );
       if (!mounted) return;
-      if (deleted != null) {
+      if (anonymized != null) {
         _showMessage(
-          '${deleted.fullName} fue eliminado y sus moteles quedaron con '
+          '${anonymized.fullName} fue anonimizado y sus moteles quedaron con '
           '${blocker.candidates.firstWhere((c) => c.id == targetId).fullName}.',
         );
         return;
       }
     }
 
-    if (deleted == null) {
+    if (anonymized == null) {
       _showMessage(
-        _controller.lastError ?? 'No se pudo eliminar el propietario.',
+        _controller.lastError ?? 'No se pudo anonimizar al propietario.',
       );
       return;
     }
-    if (_controller.lastDeletionIsPending) {
+    if (_controller.lastAnonymizationIsPending) {
       _showMessage(
-        '${deleted.fullName} se eliminará de Firebase cuando vuelva la '
+        '${anonymized.fullName} se anonimizará en Firebase cuando vuelva la '
         'conexión.',
       );
       return;
     }
-    _showMessage('${deleted.fullName} fue eliminado.');
+    _showMessage('${anonymized.fullName} fue anonimizado.');
   }
 
-  Future<bool> _confirmDeletion(Owner owner) async {
+  Future<bool> _confirmAnonymization(Owner owner) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Eliminar propietario'),
+        title: const Text('Anonimizar propietario'),
         content: Text(
-          '${owner.fullName} se eliminará de forma permanente y no podrás '
-          'recuperarlo. Si solo quieres suspender su operación, usa Inactivar.',
+          '${owner.fullName} ya no podrá iniciar sesión y sus datos '
+          'personales se eliminarán. El documento se conserva sin datos para '
+          'auditoría. Si solo quieres suspender su operación, usa Inactivar.',
         ),
         actions: [
           TextButton(
@@ -342,7 +343,7 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Eliminar'),
+            child: const Text('Anonimizar'),
           ),
         ],
       ),
@@ -551,7 +552,7 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
                             onDetail: _openDetail,
                             onEdit: _editOwner,
                             onToggleActive: _toggleActiveState,
-                            onDelete: _deleteOwner,
+                            onDelete: _anonymizeOwner,
                             onViewMotels: _viewOwnerMotels,
                           )
                         else
@@ -888,7 +889,7 @@ class _OwnerCard extends StatelessWidget {
               ),
               AppIconButton(
                 icon: Icons.delete_outline,
-                tooltip: 'Eliminar a ${owner.fullName}',
+                tooltip: 'Anonimizar a ${owner.fullName}',
                 variant: AppIconButtonVariant.destructive,
                 onPressed: onDelete,
               ),

@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/service/owner/owner_service.dart';
@@ -41,6 +42,7 @@ void main() {
     String? countryName = 'Colombia',
     String? address = 'Calle 10 # 43-25',
     bool isActive = true,
+    AccountStatus accountStatus = AccountStatus.active,
   }) => Owner(
     id: id,
     fullName: fullName,
@@ -52,6 +54,7 @@ void main() {
     countryName: countryName,
     address: address,
     isActive: isActive,
+    accountStatus: accountStatus,
   );
 
   test('inserta un propietario y lo recupera con todos sus campos', () async {
@@ -195,6 +198,26 @@ void main() {
       expect((await repository.findById('owner-1'))!.isSynchronized, isTrue);
     },
   );
+
+  test('mergeRemoteOwners quita la fila local si la nube la anonimizó', () async {
+    await repository.insert(buildOwner(id: 'uid-1'));
+    await repository.markSynchronized('uid-1');
+    await repository.insert(buildOwner(id: 'uid-2', documentNumber: '555555'));
+    await repository.markSynchronized('uid-2');
+
+    await repository.mergeRemoteOwners([
+      buildOwner(
+        id: 'uid-1',
+        fullName: 'Propietario eliminado',
+        accountStatus: AccountStatus.anonymized,
+        isActive: false,
+      ),
+      buildOwner(id: 'uid-2', documentNumber: '555555'),
+    ]);
+
+    expect(await repository.findById('uid-1'), isNull);
+    expect(await repository.findById('uid-2'), isNotNull);
+  });
 
   test('mergeRemoteOwners inserta nuevos y respeta los pendientes', () async {
     // owner-1 sigue pendiente de envío; owner-2 ya fue confirmado.

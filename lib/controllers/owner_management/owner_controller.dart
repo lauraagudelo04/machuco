@@ -21,8 +21,8 @@ import 'package:machuco/service/owner/owner_sync_scheduler.dart';
 ///
 /// La vista lo usa para pedir a quién reasignar los moteles antes de borrar
 /// la cuenta.
-class OwnerDeletionBlocker {
-  const OwnerDeletionBlocker({
+class OwnerAnonymizationBlocker {
+  const OwnerAnonymizationBlocker({
     required this.ownerId,
     required this.ownerName,
     required this.motelNames,
@@ -137,8 +137,8 @@ class OwnerController extends ChangeNotifier {
   bool _disposed = false;
   String? _syncWarningMessage;
   late final OwnerSyncRetryScheduler _syncRetry;
-  bool _lastDeletionIsPending = false;
-  OwnerDeletionBlocker? _deletionBlocker;
+  bool _lastAnonymizationIsPending = false;
+  OwnerAnonymizationBlocker? _anonymizationBlocker;
   Future<void>? _backgroundSync;
 
   List<CountryPhoneCode> _countryPhoneCodes = const [];
@@ -193,12 +193,12 @@ class OwnerController extends ChangeNotifier {
   int get autoRetryMaxAttempts => _syncRetry.maxAttempts;
 
   /// `true` si la última eliminación quedó pendiente de borrar en Firestore.
-  bool get lastDeletionIsPending => _lastDeletionIsPending;
+  bool get lastAnonymizationIsPending => _lastAnonymizationIsPending;
 
   /// Moteles y propietarios disponibles cuando la eliminación quedó bloqueada.
   ///
   /// La vista lo usa para pedir a quién reasignar los moteles y reintentar.
-  OwnerDeletionBlocker? get lastDeletionBlocker => _deletionBlocker;
+  OwnerAnonymizationBlocker? get lastAnonymizationBlocker => _anonymizationBlocker;
 
   /// Completa cuando termina el envío en segundo plano de la última escritura.
   ///
@@ -536,15 +536,15 @@ class OwnerController extends ChangeNotifier {
     );
   }
 
-  /// Elimina un propietario de forma permanente y devuelve el que se quitó.
+  /// Anonimiza a un propietario y devuelve el registro que había en memoria.
   ///
-  /// A diferencia de [setActiveState], la operación no se puede deshacer. Un
-  /// propietario con moteles vinculados no se elimina: sus moteles quedarían
-  /// huérfanos (nadie los vería y las reservas apuntarían a una cuenta
-  /// inexistente). Con conexión se borra primero el documento remoto; sin
-  /// conexión la fila se oculta con `pendingDelete = 1` y la sincronización la
-  /// borra en Firestore cuando vuelva la red.
-  Future<Owner?> deleteOwner(
+  /// No se borra el documento: se conserva para auditoría con
+  /// `accountStatus = anonymized`, sin datos personales y sin acceso. Un
+  /// propietario con moteles vinculados no se anonimiza hasta reasignarlos:
+  /// quedarían a nombre de una cuenta sin datos. Con conexión se anonimiza
+  /// primero en Firestore; sin conexión la fila se oculta con
+  /// `pendingDelete = 1` y la sincronización la anonimiza cuando vuelva la red.
+  Future<Owner?> anonymizeOwner(
     String ownerId, {
     String? transferToOwnerId,
   }) async {
@@ -566,9 +566,9 @@ class OwnerController extends ChangeNotifier {
       return null;
     }
 
-    _deletionBlocker = null;
+    _anonymizationBlocker = null;
     if (motelNames.isNotEmpty) {
-      final blocker = OwnerDeletionBlocker(
+      final blocker = OwnerAnonymizationBlocker(
         ownerId: ownerId,
         ownerName: owner.fullName,
         motelNames: List.unmodifiable(motelNames),
@@ -576,7 +576,7 @@ class OwnerController extends ChangeNotifier {
           _owners.where((candidate) => candidate.id != ownerId),
         ),
       );
-      _deletionBlocker = blocker;
+      _anonymizationBlocker = blocker;
 
       final target = transferToOwnerId?.trim() ?? '';
       if (target.isEmpty) {
@@ -600,46 +600,47 @@ class OwnerController extends ChangeNotifier {
       } catch (_) {
         _lastError =
             'No se pudieron reasignar los moteles de ${owner.fullName}, así '
-            'que no se eliminó la cuenta. Revisa tu conexión e inténtalo de '
+            'que no se anonimizó la cuenta. Revisa tu conexión e inténtalo de '
             'nuevo.';
         notifyListeners();
         return null;
       }
-      _deletionBlocker = null;
+      _anonymizationBlocker = null;
     }
 
-    _lastDeletionIsPending = false;
+    _lastAnonymizationIsPending = false;
     final cloud = _cloudRepository;
     final adminId = _currentUserId();
     final hasSession =
         cloud != null && adminId != null && adminId.trim().isNotEmpty;
 
     if (!hasSession) {
-      await _markPendingDeletion(
+      await _markPendingAnonymization(
         owner,
-        '${owner.fullName} se eliminó en este dispositivo. Inicia sesión para '
-        'borrarlo de Firebase.',
+        '${owner.fullName} se anonimizó en este dispositivo. Inicia sesión '
+        'para aplicarlo en Firebase.',
         scheduleRetry: false,
       );
       return owner;
     }
 
     try {
-      await cloud.deleteOwner(ownerId);
+      await cloud.anonymizeOwner(ownerId: ownerId, adminId: adminId);
     } on OwnerCloudRepositoryException catch (error) {
       if (error.type == OwnerCloudFailureType.network) {
-        await _markPendingDeletion(
+        await _markPendingAnonymization(
           owner,
-          '${error.message} Se borrará de Firebase cuando vuelva la conexión.',
+          '${error.message} Se anonimizará en Firebase cuando vuelva la '
+          'conexión.',
         );
         return owner;
       }
-      _lastError = '${error.message} No se eliminó en este dispositivo.';
+      _lastError = '${error.message} No se anonimizó en este dispositivo.';
       notifyListeners();
       return null;
     } catch (_) {
       _lastError =
-          'No se pudo eliminar el propietario de la nube. Intenta de nuevo.';
+          'No se pudo anonimizar al propietario en la nube. Intenta de nuevo.';
       notifyListeners();
       return null;
     }
@@ -650,8 +651,8 @@ class OwnerController extends ChangeNotifier {
     }, sync: false);
   }
 
-  /// Oculta el propietario y deja su borrado pendiente de Firestore.
-  Future<void> _markPendingDeletion(
+  /// Oculta el propietario y deja su anonimización pendiente de Firestore.
+  Future<void> _markPendingAnonymization(
     Owner owner,
     String message, {
     bool scheduleRetry = true,
@@ -659,7 +660,7 @@ class OwnerController extends ChangeNotifier {
     try {
       await _service.marcarPendienteDeEliminar(owner.id);
       await _reload();
-      _lastDeletionIsPending = true;
+      _lastAnonymizationIsPending = true;
       _syncWarningMessage = message;
       if (scheduleRetry) _syncRetry.notifyNetworkFailure();
     } catch (error) {
@@ -798,13 +799,13 @@ class OwnerController extends ChangeNotifier {
     }
   }
 
-  /// Borra primero lo que el usuario eliminó sin conexión y después sube los
-  /// cambios. El orden importa: un pendiente de borrado no debe reenviarse
-  /// como alta.
+  /// Anonimiza primero lo que quedó pendiente sin conexión y después sube los
+  /// cambios. El orden importa: un pendiente de anonimización no debe
+  /// reenviarse como alta.
   Future<void> _pushPending(OwnerCloudRepository cloud, String adminId) async {
     final pendingDeletes = await _service.propietariosPendientesDeEliminar();
     for (final owner in pendingDeletes) {
-      await cloud.deleteOwner(owner.id);
+      await cloud.anonymizeOwner(ownerId: owner.id, adminId: adminId);
       await _service.eliminarPropietario(owner.id);
     }
 
@@ -834,7 +835,7 @@ class OwnerController extends ChangeNotifier {
     return null;
   }
 
-  /// Reasigna los moteles antes de eliminar la cuenta.
+  /// Reasigna los moteles antes de anonimizar la cuenta.
   static Future<void> _transferMotels(String fromOwnerId, String toOwnerId) =>
       MotelController.persistent().reassignMoteles(
         fromOwnerId: fromOwnerId,
@@ -854,8 +855,8 @@ class OwnerController extends ChangeNotifier {
     final plural = cantidad == 1 ? 'motel vinculado' : 'moteles vinculados';
     final shown = names.take(3).join(', ');
     final rest = cantidad > 3 ? ' y ${cantidad - 3} más' : '';
-    return 'No se puede eliminar a ${owner.fullName}: tiene $cantidad $plural '
-        '($shown$rest). Reasígnalos o elimínalos primero.';
+    return 'No se puede anonimizar a ${owner.fullName}: tiene $cantidad '
+        '$plural ($shown$rest). Reasígnalos primero.';
   }
 
   Owner? _findOwner(String id) {

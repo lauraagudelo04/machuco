@@ -332,13 +332,13 @@ void main() {
     );
   });
 
-  test('deleteOwner elimina y la eliminación persiste', () async {
+  test('anonymizeOwner oculta y la anonimización persiste', () async {
     final controller = buildController();
     await controller.init();
     final target = controller.owners.first;
     final totalBefore = controller.owners.length;
 
-    final deleted = await controller.deleteOwner(target.id);
+    final deleted = await controller.anonymizeOwner(target.id);
 
     expect(deleted, isNotNull);
     expect(controller.owners, hasLength(totalBefore - 1));
@@ -570,23 +570,27 @@ void main() {
       expect(controller.lastError, contains('pendiente'));
     });
 
-    test('eliminar borra también el documento remoto', () async {
+    test('anonimizar conserva el documento sin datos personales', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final controller = buildController(cloudRepository: cloud);
       await controller.init();
       final totalBefore = controller.owners.length;
 
-      final deleted = await controller.deleteOwner('uid-1');
+      final deleted = await controller.anonymizeOwner('uid-1');
 
       expect(deleted, isNotNull);
-      expect(cloud.remote.containsKey('uid-1'), isFalse);
+      expect(
+        cloud.remote['uid-1']!.accountStatus,
+        AccountStatus.anonymized,
+      );
+      expect(cloud.remote['uid-1']!.fullName, 'Propietario eliminado');
       expect(controller.owners, hasLength(totalBefore - 1));
       expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
     });
 
     test(
-      'si no hay conexión deja el borrado pendiente y oculta al propietario',
+      'si no hay conexión deja la anonimización pendiente y oculta al propietario',
       () async {
         final cloud = _FakeOwnerCloudRepository()
           ..remote['uid-1'] = remoteOwner(id: 'uid-1');
@@ -594,10 +598,10 @@ void main() {
         await controller.init();
         cloud.failDelete = true;
 
-        final deleted = await controller.deleteOwner('uid-1');
+        final deleted = await controller.anonymizeOwner('uid-1');
 
         expect(deleted, isNotNull);
-        expect(controller.lastDeletionIsPending, isTrue);
+        expect(controller.lastAnonymizationIsPending, isTrue);
         expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
         expect(cloud.remote.containsKey('uid-1'), isTrue);
         expect(controller.isAutoRetrying, isTrue);
@@ -609,19 +613,22 @@ void main() {
     );
 
     test(
-      'el reintento borra en Firestore los pendientes de eliminar',
+      'el reintento anonimiza en Firestore los pendientes',
       () async {
         final cloud = _FakeOwnerCloudRepository()
           ..remote['uid-1'] = remoteOwner(id: 'uid-1');
         final controller = buildController(cloudRepository: cloud);
         await controller.init();
         cloud.failDelete = true;
-        await controller.deleteOwner('uid-1');
+        await controller.anonymizeOwner('uid-1');
 
         cloud.failDelete = false;
         await controller.retrySynchronization();
 
-        expect(cloud.remote.containsKey('uid-1'), isFalse);
+        expect(
+          cloud.remote['uid-1']!.accountStatus,
+          AccountStatus.anonymized,
+        );
         expect(controller.syncWarningMessage, isNull);
         expect(controller.isAutoRetrying, isFalse);
         expect(
@@ -631,7 +638,7 @@ void main() {
       },
     );
 
-    test('no elimina un propietario con moteles vinculados', () async {
+    test('no anonimiza un propietario con moteles vinculados', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final controller = buildController(
@@ -644,10 +651,10 @@ void main() {
       await controller.init();
       final totalBefore = controller.owners.length;
 
-      final deleted = await controller.deleteOwner('uid-1');
+      final deleted = await controller.anonymizeOwner('uid-1');
 
       expect(deleted, isNull);
-      expect(controller.lastError, contains('No se puede eliminar'));
+      expect(controller.lastError, contains('No se puede anonimizar'));
       expect(controller.lastError, contains('2 moteles vinculados'));
       expect(controller.lastError, contains('Motel Paraíso Élite'));
       expect(cloud.remote.containsKey('uid-1'), isTrue);
@@ -669,10 +676,10 @@ void main() {
         );
         await controller.init();
 
-        final deleted = await controller.deleteOwner('uid-1');
+        final deleted = await controller.anonymizeOwner('uid-1');
 
         expect(deleted, isNull);
-        final blocker = controller.lastDeletionBlocker;
+        final blocker = controller.lastAnonymizationBlocker;
         expect(blocker, isNotNull);
         expect(blocker!.ownerId, 'uid-1');
         expect(blocker.motelNames, ['Motel Uno', 'Motel Dos']);
@@ -684,7 +691,7 @@ void main() {
       },
     );
 
-    test('reasigna los moteles y después elimina al propietario', () async {
+    test('reasigna los moteles y después anonimiza al propietario', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final transfers = <String>[];
@@ -698,19 +705,23 @@ void main() {
         (owner) => owner.id != 'uid-1',
       );
 
-      final deleted = await controller.deleteOwner(
+      final deleted = await controller.anonymizeOwner(
         'uid-1',
         transferToOwnerId: target.id,
       );
 
       expect(deleted, isNotNull);
       expect(transfers, ['uid-1->${target.id}']);
-      expect(cloud.remote.containsKey('uid-1'), isFalse);
+      expect(
+        cloud.remote['uid-1']!.accountStatus,
+        AccountStatus.anonymized,
+      );
+      expect(cloud.remote['uid-1']!.fullName, 'Propietario eliminado');
       expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
-      expect(controller.lastDeletionBlocker, isNull);
+      expect(controller.lastAnonymizationBlocker, isNull);
     });
 
-    test('si falla la reasignación no elimina la cuenta', () async {
+    test('si falla la reasignación no anonimiza la cuenta', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final controller = buildController(
@@ -723,7 +734,7 @@ void main() {
         (owner) => owner.id != 'uid-1',
       );
 
-      final deleted = await controller.deleteOwner(
+      final deleted = await controller.anonymizeOwner(
         'uid-1',
         transferToOwnerId: target.id,
       );
@@ -745,7 +756,7 @@ void main() {
       );
       await controller.init();
 
-      final deleted = await controller.deleteOwner(
+      final deleted = await controller.anonymizeOwner(
         'uid-1',
         transferToOwnerId: 'uid-1',
       );
@@ -756,7 +767,7 @@ void main() {
       expect(cloud.remote.containsKey('uid-1'), isTrue);
     });
 
-    test('no elimina si no hay otro propietario para reasignar', () async {
+    test('no anonimiza si no hay otro propietario para reasignar', () async {
       // Solo queda el propietario remoto en la lista: sin candidatos.
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
@@ -769,18 +780,18 @@ void main() {
       // Se eliminan los demás propietarios locales para dejar solo el remoto.
       for (final owner in controller.owners.toList()) {
         if (owner.id != 'uid-1') {
-          await controller.deleteOwner(owner.id);
+          await controller.anonymizeOwner(owner.id);
         }
       }
 
-      final deleted = await controller.deleteOwner('uid-1');
+      final deleted = await controller.anonymizeOwner('uid-1');
 
       expect(deleted, isNull);
-      expect(controller.lastDeletionBlocker?.candidates, isEmpty);
-      expect(controller.lastError, contains('No se puede eliminar'));
+      expect(controller.lastAnonymizationBlocker?.candidates, isEmpty);
+      expect(controller.lastError, contains('No se puede anonimizar'));
     });
 
-    test('no elimina si no se pudo verificar los moteles', () async {
+    test('no anonimiza si no se pudo verificar los moteles', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final controller = buildController(
@@ -789,14 +800,14 @@ void main() {
       );
       await controller.init();
 
-      final deleted = await controller.deleteOwner('uid-1');
+      final deleted = await controller.anonymizeOwner('uid-1');
 
       expect(deleted, isNull);
       expect(controller.lastError, contains('No se pudo verificar'));
       expect(cloud.remote.containsKey('uid-1'), isTrue);
     });
 
-    test('el pull remoto no resucita un borrado pendiente', () async {
+    test('el pull remoto no resucita un pendiente de anonimizar', () async {
       final cloud = _FakeOwnerCloudRepository()
         ..remote['uid-1'] = remoteOwner(id: 'uid-1');
       final controller = buildController(cloudRepository: cloud);
@@ -805,7 +816,7 @@ void main() {
         (owner) => owner.id == 'uid-1',
       );
       cloud.failDelete = true;
-      await controller.deleteOwner('uid-1');
+      await controller.anonymizeOwner('uid-1');
 
       final repository = OwnerRepository(database: database);
       await repository.mergeRemoteOwners([target]);
@@ -992,13 +1003,23 @@ class _FakeOwnerCloudRepository implements OwnerCloudRepository {
   }
 
   @override
-  Future<void> deleteOwner(String ownerId) async {
+  Future<void> anonymizeOwner({
+    required String ownerId,
+    required String adminId,
+  }) async {
     if (failDelete) {
       throw const OwnerCloudRepositoryException(
         OwnerCloudFailureType.network,
         'Sin conexión.',
       );
     }
-    remote.remove(ownerId);
+    final existing = remote[ownerId];
+    if (existing == null) return;
+    remote[ownerId] = existing.copyWith(
+      fullName: 'Propietario eliminado',
+      accountStatus: AccountStatus.anonymized,
+      isActive: false,
+      isSynchronized: true,
+    );
   }
 }

@@ -396,6 +396,7 @@ service cloud.firestore {
           && request.resource.data.accountStatus in ['active', 'disabled'])
         || isAdminContactEdit()
         || isAdminOwnerEdit()
+        || isAdminOwnerAnonymization()
         || isAdminAnonymization()
         || (isSignedIn()
           && request.auth.uid == uid
@@ -406,17 +407,14 @@ service cloud.firestore {
             || (resource.data.get('mustChangePassword', false) == true
               && request.resource.data.mustChangePassword == false))));
 
-      // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
-      // tras reautenticarse) y un admin activo puede borrar cuentas que no
-      // son de administrador (propietarios y clientes). Las subcolecciones no
-      // se borran en cascada. Un admin no se borra: se anonimiza (ver
-      // isAdminAnonymization) para conservar la auditoria y respetar
-      // "siempre hay un admin activo".
-      allow delete: if (isSignedIn()
-          && request.auth.uid == uid
-          && resource.data.role != 'admin'
-          && resource.data.get('accountStatus', '') != 'anonymized')
-        || (isActiveAdmin() && resource.data.role != 'admin');
+      // Solo cada usuario puede borrar su propio perfil (eliminacion de
+      // cuenta, tras reautenticarse). Un administrador no borra cuentas:
+      // anonimiza (isAdminOwnerAnonymization / isAdminAnonymization) para
+      // conservar la auditoria. Las subcolecciones no se borran en cascada.
+      allow delete: if isSignedIn()
+        && request.auth.uid == uid
+        && resource.data.role != 'admin'
+        && resource.data.get('accountStatus', '') != 'anonymized';
 
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
@@ -563,6 +561,45 @@ service cloud.firestore {
         && hasValidOwnerManagementFields(after)
         && after.updatedBy == request.auth.uid
         && after.updatedAt == request.time;
+    }
+
+    // Un admin activo anonimiza a un propietario: conserva rol, correo,
+    // createdAt/createdBy y la auditoría; reemplaza el nombre y limpia los
+    // datos personales. El documento nunca se borra (queda para auditoría).
+    function isAdminOwnerAnonymization() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'owner'
+        && after.role == 'owner'
+        && after.accountStatus == 'anonymized'
+        && after.fullName == 'Propietario eliminado'
+        && after.email == before.email
+        && after.get('createdAt', null) == before.get('createdAt', null)
+        && after.get('createdBy', null) == before.get('createdBy', null)
+        && after.anonymizedAt == request.time
+        && after.anonymizedBy == request.auth.uid
+        && after.keys().hasOnly([
+          'fullName', 'email', 'role', 'accountStatus', 'createdAt',
+          'createdBy', 'anonymizedAt', 'anonymizedBy', 'updatedBy',
+          'updatedAt', 'phone', 'phoneNumber', 'phoneCountryCodeId', 'nit',
+          'personType', 'documentType', 'documentNumber', 'address',
+          'countryCode', 'countryName', 'companyName', 'planId',
+          'firstNames', 'lastNames', 'mustChangePassword'])
+        && after.get('phone', null) == null
+        && after.get('phoneNumber', null) == null
+        && after.get('phoneCountryCodeId', null) == null
+        && after.get('nit', null) == null
+        && after.get('personType', null) == null
+        && after.get('documentType', null) == null
+        && after.get('documentNumber', null) == null
+        && after.get('address', null) == null
+        && after.get('countryCode', null) == null
+        && after.get('countryName', null) == null
+        && after.get('companyName', null) == null
+        && after.get('planId', null) == null
+        && after.get('firstNames', null) == null
+        && after.get('lastNames', null) == null;
     }
 
     // Reservas compartidas por cliente, propietario y administrador

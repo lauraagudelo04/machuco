@@ -72,7 +72,12 @@ abstract interface class OwnerCloudRepository {
 
   Future<List<Owner>> listOwners();
 
-  Future<void> deleteOwner(String ownerId);
+  /// Anonimiza al propietario: conserva el documento para auditoría, borra
+  /// sus datos personales y deja `accountStatus = anonymized`.
+  Future<void> anonymizeOwner({
+    required String ownerId,
+    required String adminId,
+  });
 }
 
 class FirestoreOwnerCloudRepository implements OwnerCloudRepository {
@@ -232,16 +237,46 @@ class FirestoreOwnerCloudRepository implements OwnerCloudRepository {
   }
 
   @override
-  Future<void> deleteOwner(String ownerId) async {
+  Future<void> anonymizeOwner({
+    required String ownerId,
+    required String adminId,
+  }) async {
     _validateId(ownerId, 'propietario');
+    _validateId(adminId, 'administrador');
     try {
-      await _users.doc(ownerId).delete().timeout(requestTimeout);
+      await _users
+          .doc(ownerId)
+          .update({
+            'fullName': 'Propietario eliminado',
+            'accountStatus': AccountStatus.anonymized.storageValue,
+            // Datos personales: se vacían, el documento queda para auditoría.
+            'phone': null,
+            'phoneNumber': null,
+            'phoneCountryCodeId': null,
+            'nit': null,
+            'personType': null,
+            'documentType': null,
+            'documentNumber': null,
+            'address': null,
+            'countryCode': null,
+            'countryName': null,
+            'companyName': null,
+            'planId': null,
+            'firstNames': null,
+            'lastNames': null,
+            'mustChangePassword': null,
+            'anonymizedAt': FieldValue.serverTimestamp(),
+            'anonymizedBy': adminId,
+            'updatedBy': adminId,
+            'updatedAt': FieldValue.serverTimestamp(),
+          })
+          .timeout(requestTimeout);
     } on FirebaseException catch (error) {
       throw _map(error);
     } on TimeoutException {
       throw const OwnerCloudRepositoryException(
         OwnerCloudFailureType.network,
-        'Sin conexión: no se pudo eliminar el propietario de la nube.',
+        'Sin conexión: no se pudo anonimizar al propietario.',
       );
     }
   }

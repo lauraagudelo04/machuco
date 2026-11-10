@@ -33,9 +33,9 @@ depende de `supabase_flutter`.
 4. El formulario abre el maestro de indicativos y el de tipos de documento. El
    último indicativo usado se recuerda en `shared_preferences` y se
    preselecciona en la siguiente creación.
-5. Eliminar con conexión borra primero el documento remoto y después la fila
-   local. Sin conexión la fila se oculta con `pendingDelete = 1` y el borrado se
-   reintenta solo cuando vuelve la red.
+5. Anonimizar con conexión actualiza primero el documento remoto (sin datos
+   personales) y después quita la fila local. Sin conexión la fila se oculta con
+   `pendingDelete = 1` y la anonimización se reintenta sola al volver la red.
 
 ## SQLite
 
@@ -52,12 +52,13 @@ depende de `supabase_flutter`.
 - Las filas con id `owner-...` eran datos demo o ids temporales de la versión
   anterior (cuando los documentos vivían en la colección `owners`). La
   migración 18→19 las elimina del dispositivo.
-- `pendingDelete = 1` significa «el usuario lo eliminó sin conexión y falta
-  borrarlo en Firestore». La fila no se lista ni cuenta como alta; cuando la
-  nube confirma el delete, se borra por completo.
+- `pendingDelete = 1` significa «el usuario lo anonimizó sin conexión y falta
+  aplicarlo en Firestore». La fila no se lista ni cuenta como alta; cuando la
+  nube confirma la anonimización, se quita por completo.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
-  se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
+  se sube en el siguiente envío. Un pendiente de anonimizar tampoco se
+  resucita; si la nube lo devuelve anonimizado, la fila local se elimina.
 - La versión local es la **20**. Se conserva la cadena de develop hasta la 17
   (auth/room sync, reservas, pagos/clientes y servicios adicionales) y encima
   se re-apila el módulo: la **17→18** crea `owners` (con
@@ -132,19 +133,22 @@ Un propietario **es un usuario registrado**: vive en `users/{uid}` con
   el interruptor.
 - **Listar**: `where('role', '==', 'owner')`; el orden y los filtros se aplican
   en la app (no hace falta un índice compuesto).
-- **Eliminar**: borra el documento `users/{uid}`. La cuenta de Firebase Auth
-  **no** se puede borrar desde el cliente (no hay Admin SDK): queda huérfana y
-  su correo sigue tomado; se elimina desde la consola cuando haga falta. Es la
-  misma limitación documentada para `anonymizeAdministrator`.
+- **Anonimizar** (antes «Eliminar»): no se borra el documento. Se conserva para
+  auditoría con `accountStatus = anonymized`, `fullName = 'Propietario
+  eliminado'`, `anonymizedBy/At`, y se limpian los datos personales (teléfono,
+  documento, NIT, tipo de persona, dirección, país, plan). Se conservan el
+  correo, el rol y `createdAt/createdBy`. El propietario ya no puede iniciar
+  sesión y desaparece del listado. La cuenta de Firebase Auth sigue existiendo
+  (no hay Admin SDK en el cliente), igual que con los administradores.
 - `OwnerUserDocument` tolera los perfiles creados antes de este módulo (solo
   `fullName`, `email`, `phoneNumber`, `role`, `accountStatus`): quedan con
   documento vacío («Sin documento registrado») y se pueden completar al
   editarlos. Un documento realmente ilegible se omite y no tumba el listado.
 - `FirestoreOwnerCloudRepository` implementa `OwnerCloudRepository` con timeout
   de 10 segundos, errores tipados (incluido `emailInUse`) y mensajes en español.
-- Sincronización: borrar los `pendingDelete`, subir los `synchronized = 0`
+- Sincronización: anonimizar los `pendingDelete`, subir los `synchronized = 0`
   (update + cambio de estado), descargar `users` y mezclar en SQLite sin pisar
-  cambios locales ni borrados pendientes.
+  cambios locales ni anonimizaciones pendientes.
 
 ### Seguridad
 
@@ -155,8 +159,9 @@ Un propietario **es un usuario registrado**: vive en `users/{uid}` con
   `createdAt == request.time`.
 - `isAdminOwnerEdit()`: un admin activo edita los datos legales y de contacto;
   nunca el correo, el rol ni el estado.
-- `allow delete`: un admin activo borra cuentas que no son de administrador.
-  Los administradores no se borran: se anonimizan.
+- `isAdminOwnerAnonymization()`: un admin activo anonimiza propietarios (nombre
+  placeholder, estado `anonymized`, datos personales a `null` y auditoría). Un
+  admin **ya no puede borrar** cuentas: solo el propio usuario borra su perfil.
 
 `nit` debe ser igual a `documentNumber` y `personType` coherente con el tipo de
 documento; el resto de campos queda en la lista permitida.
@@ -192,9 +197,8 @@ firebase deploy --only firestore:rules,indexes
 
 ## Eliminación de propietarios con moteles
 
-Un propietario **con moteles vinculados** no se elimina sin reasignarlos: los
-moteles quedarían huérfanos (ningún propietario los vería y las reservas
-apuntarían a una cuenta inexistente).
+Un propietario **con moteles vinculados** no se anonimiza sin reasignarlos: los
+moteles quedarían a nombre de una cuenta sin datos y nadie podría gestionarlos.
 
 - `OwnerController.deleteOwner` consulta los moteles del propietario antes de
   tocar nada (`MotelController.getMotelsByOwnerId`, con la caché local como
@@ -205,11 +209,11 @@ apuntarían a una cuenta inexistente).
   selector de destino.
 - Al confirmar, `MotelRepository.reassignMoteles` reasigna el `owner_id` de
   todos los moteles con un solo `PATCH` a Supabase y actualiza la caché local;
-  solo si eso sale bien se elimina la cuenta (`users/{uid}` + fila local).
-- Si la reasignación falla, no se borra nada y se informa del motivo. Si el
+  solo si eso sale bien se anonimiza la cuenta (`users/{uid}` + fila local).
+- Si la reasignación falla, no se anonimiza nada y se informa del motivo. Si el
   propietario es el único, se avisa que no hay destino posible.
 - Sin conexión el bloqueo no se puede verificar y se pide reintentar: es
-  preferible no borrar a dejar moteles huérfanos.
+  preferible no anonimizar a dejar moteles a nombre de una cuenta vacía.
 
 ## Solicitudes de propietarios (panel del administrador)
 

@@ -132,6 +132,14 @@ class OwnerRepository {
     final database = await _database;
     for (final remote in owners) {
       final existing = await database.ownerDao.findById(remote.id);
+      // Una cuenta anonimizada en la nube ya no es un propietario del módulo:
+      // se quita la fila local (en este u otro dispositivo).
+      if (remote.accountStatus == AccountStatus.anonymized) {
+        if (existing != null) {
+          await database.ownerDao.deleteById(remote.id);
+        }
+        continue;
+      }
       if (existing == null) {
         await database.ownerDao.insertOwner(_toEntry(remote, synchronized: 1));
         continue;

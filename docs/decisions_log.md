@@ -829,3 +829,26 @@ La versión local queda en **20**; la próxima rama que migre usa la 21.
 `app_database.g.dart` se regenera con build_runner (nunca a mano) y
 `firestore.rules` quedó intacto con las reglas de propietarios y las de
 reservas de develop.
+
+## 2026-11-10 — Los propietarios se anonimizan en vez de eliminarse
+
+**Contexto:** el panel borraba `users/{uid}` al «eliminar» un propietario. El
+equipo sugirió conservar el documento para auditoría y quitar los datos
+personales, como ya se hace con los administradores.
+
+**Decisión:** la acción del panel pasa a ser **Anonimizar**:
+
+- Se conserva el documento con `role = owner`, el correo, `createdAt`,
+  `createdBy` y la auditoría (`anonymizedAt`, `anonymizedBy`).
+- Se reemplaza `fullName` por «Propietario eliminado» y se limpian teléfono,
+  documento, NIT, tipo de persona, dirección, país, plan y nombres separados.
+- `accountStatus` pasa a `anonymized`: la cuenta no puede iniciar sesión y
+  desaparece del listado de propietarios (el pull borra la fila local).
+- Se mantiene el bloqueo por moteles: primero hay que reasignarlos al destino
+  elegido en el cuadro de transferencia.
+- `firestore.rules` agrega `isAdminOwnerAnonymization()` y **retira** el
+  borrado de cuentas por parte del admin; solo el propio usuario puede borrar
+  su perfil. Hay que desplegar reglas.
+- La cuenta de Firebase Auth no se puede borrar desde el cliente (sin Admin
+  SDK), igual que con los administradores; se elimina desde la consola cuando
+  haga falta.
