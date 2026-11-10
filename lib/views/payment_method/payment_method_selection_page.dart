@@ -66,7 +66,8 @@ class _PaymentMethodSelectionPageState
       ? 'Reserva ${_reservation!.roomName} - ${_reservation!.motelName}'
       : widget.concept;
 
-  String get _formattedAmount => '${formatCurrencyAmount(_effectiveAmount)} COP';
+  String get _formattedAmount =>
+      '${formatCurrencyAmount(_effectiveAmount)} COP';
 
   void _selectCash() {
     setState(() => _isCashSelected = true);
@@ -75,10 +76,9 @@ class _PaymentMethodSelectionPageState
   void _goToInvoice([PaymentMethodModel? paymentMethod]) {
     final reservation = _reservation;
     if (reservation == null) {
-      Navigator.of(context).pushNamedAndRemoveUntil(
-        AppRoutes.clientMotels,
-        (_) => false,
-      );
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil(AppRoutes.clientMotels, (_) => false);
       return;
     }
 
@@ -87,7 +87,8 @@ class _PaymentMethodSelectionPageState
       (_) => false,
       arguments: {
         'reservation': reservation,
-        'paymentMethod': paymentMethod ??
+        'paymentMethod':
+            paymentMethod ??
             PaymentMethodModel(
               amount: _effectiveAmount,
               concept: _effectiveConcept,
@@ -113,14 +114,16 @@ class _PaymentMethodSelectionPageState
   Future<void> _continueAfterCard(PaymentMethodModel model) async {
     final reservation = _reservation;
     if (reservation != null) {
-      if (!_reservationConfirmed) {
-        if (!await _confirmReservation(reservation)) return;
-        _reservationConfirmed = true;
-      }
+      // The real checkout rejects the sandbox before Booking can mark a
+      // reservation paid. Tests may inject an actual payment implementation.
       final registered = await _registerPayment(
         () => _checkout.registerCardPayment(reservation, kind: model.cardKind),
       );
       if (!registered) return;
+      if (!_reservationConfirmed) {
+        if (!await _confirmReservation(reservation)) return;
+        _reservationConfirmed = true;
+      }
     }
     if (!mounted) return;
     (widget.onContinue ?? _goToInvoice)(model);
@@ -157,7 +160,10 @@ class _PaymentMethodSelectionPageState
       if (!registered) return;
     }
     if (!mounted) return;
-    _goToInvoice();
+    // Choosing where to pay is not a receipt or an invoice for money received.
+    Navigator.of(
+      context,
+    ).pushNamedAndRemoveUntil(AppRoutes.clientReservations, (_) => false);
   }
 
   Future<bool> _registerPayment(
@@ -247,7 +253,7 @@ class _PaymentMethodSelectionPageState
               _PaymentOptionCard(
                 icon: Icons.credit_card_outlined,
                 title: 'Tarjeta',
-                description: 'Realiza el pago en línea con tu tarjeta.',
+                description: 'Simulación; no realiza cobros bancarios.',
                 selected: false,
                 onTap: _openCardPayment,
               ),

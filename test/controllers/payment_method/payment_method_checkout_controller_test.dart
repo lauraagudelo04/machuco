@@ -11,12 +11,14 @@ import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/repositories/payment/payment_cloud_repository.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
+import 'package:machuco/repositories/booking/reservation_mapper.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 class _FakeCloud implements PaymentCloudRepository {
   _FakeCloud({this.failure});
 
-  final PaymentCloudRepositoryException? failure;
+  PaymentCloudRepositoryException? failure;
+  int attempts = 0;
   final saved = <({String ownerId, PaymentRecord payment, String? name})>[];
 
   @override
@@ -25,6 +27,7 @@ class _FakeCloud implements PaymentCloudRepository {
     required PaymentRecord payment,
     String? paymentMethodName,
   }) async {
+    attempts++;
     if (failure != null) throw failure!;
     saved.add((ownerId: ownerId, payment: payment, name: paymentMethodName));
   }
@@ -66,7 +69,9 @@ void main() {
     roomTotal: 156000,
     total: 156000,
     status: ReservationStatus.pending,
-    createdAt: DateTime(2026, 11, 3, 17),
+    createdAt: DateTime(2026, 11, 3, 17, 58),
+    guestId: 'client-uid',
+    guestName: 'Cliente real',
   );
 
   setUpAll(() {
@@ -89,6 +94,10 @@ void main() {
       publishableKey: 'publishable-test-key',
       now: () => now,
     );
+    await database.reservationDao.insertReservation(
+      ReservationMapper.toEntity(reservation),
+      const [],
+    );
   });
 
   tearDown(() async {
@@ -107,68 +116,68 @@ void main() {
     ownerIdForMotel: (_) async => ownerId,
     currentUserId: () => uid,
     currentUserName: () => 'cliente@machuco.com',
-    now: () => now,
   );
 
-  test('En el Local crea un pago pendiente sin método y lo sincroniza', () async {
-    final cloud = _FakeCloud();
+  test(
+    'En el Local crea un pago pendiente sin método y lo sincroniza',
+    () async {
+      final cloud = _FakeCloud();
 
-    final result = await controller(
-      cloud: cloud,
-    ).registerPendingLocalPayment(reservation);
+      final result = await controller(
+        cloud: cloud,
+      ).registerPendingLocalPayment(reservation);
 
-    expect(result.syncWarning, isNull);
-    expect(result.payment.status, PaymentStatus.pending);
-    expect(result.payment.paymentMethodId, isNull);
-    expect(result.payment.paidAt, isNull);
-    expect(result.payment.receiptNumber, isNull);
-    expect(result.payment.clientId, 'client-uid');
-    expect(result.payment.amount, 156000);
-    expect(result.payment.reservationDate, reservation.checkIn);
-    expect(result.payment.room, 'Habitación 208 · Deluxe');
+      expect(result.syncWarning, isNull);
+      expect(result.payment.status, PaymentStatus.pending);
+      expect(result.payment.paymentMethodId, isNull);
+      expect(result.payment.paidAt, isNull);
+      expect(result.payment.receiptNumber, isNull);
+      expect(result.payment.clientId, 'client-uid');
+      expect(result.payment.amount, 156000);
+      expect(result.payment.reservationDate, reservation.checkIn);
+      expect(result.payment.room, 'Habitación 208 · Deluxe');
 
-    final stored = await repository.findPayment(result.payment.id);
-    expect(stored?.status, PaymentStatus.pending);
-    expect(cloud.saved.single.ownerId, 'owner-uid');
-    expect(cloud.saved.single.name, isNull);
-  });
+      final stored = await repository.findPayment(result.payment.id);
+      expect(stored?.status, PaymentStatus.pending);
+      expect(cloud.saved.single.ownerId, 'owner-uid');
+      expect(cloud.saved.single.name, isNull);
+    },
+  );
 
-  test('tarjeta de crédito crea el pago pagado con el método 2', () async {
-    final cloud = _FakeCloud();
+  for (final kind in CardPaymentKind.values) {
+    test('el sandbox $kind no crea pagos reales', () async {
+      final cloud = _FakeCloud();
+      await expectLater(
+        controller(cloud: cloud).registerCardPayment(reservation, kind: kind),
+        throwsA(isA<PaymentRepositoryException>()),
+      );
+      expect(await repository.findAllPayments(), isEmpty);
+      expect(cloud.saved, isEmpty);
+      expect(
+        (await database.reservationDao.findReservationById(
+          reservation.id,
+        ))!.status,
+        'pending',
+      );
+    });
+  }
 
-    final result = await controller(cloud: cloud).registerCardPayment(
-      reservation,
-      kind: CardPaymentKind.credit,
-    );
+  test(
+    'sin sesión no inventa la identidad del cliente ni crea pagos',
+    () async {
+      final cloud = _FakeCloud();
 
-    expect(result.payment.status, PaymentStatus.paid);
-    expect(result.payment.paymentMethodId, 2);
-    expect(result.payment.paidAt, now);
-    expect(result.payment.receiptNumber, 'CARD-pay-res-1');
-    expect(cloud.saved.single.name, 'Tarjeta de crédito');
-  });
-
-  test('tarjeta de débito usa el método 3 del maestro', () async {
-    final result = await controller().registerCardPayment(
-      reservation,
-      kind: CardPaymentKind.debit,
-    );
-
-    expect(result.payment.paymentMethodId, 3);
-  });
-
-  test('sin sesión de Firebase guarda local y avisa que no sincronizó', () async {
-    final cloud = _FakeCloud();
-
-    final result = await controller(
-      cloud: cloud,
-      uid: null,
-    ).registerPendingLocalPayment(reservation);
-
-    expect(result.syncWarning, contains('Firebase'));
-    expect(cloud.saved, isEmpty);
-    expect(await repository.findPayment(result.payment.id), isNotNull);
-  });
+      await expectLater(
+        controller(
+          cloud: cloud,
+          uid: null,
+        ).registerPendingLocalPayment(reservation),
+        throwsA(isA<PaymentRepositoryException>()),
+      );
+      expect(cloud.saved, isEmpty);
+      expect(await repository.findAllPayments(), isEmpty);
+    },
+  );
 
   test('si Firebase falla el pago local se conserva y se avisa', () async {
     final cloud = _FakeCloud(
@@ -186,17 +195,20 @@ void main() {
     expect(await repository.findPayment(result.payment.id), isNotNull);
   });
 
-  test('si el motel no tiene propietario conocido avisa y no sincroniza', () async {
-    final cloud = _FakeCloud();
+  test(
+    'si el motel no tiene propietario conocido avisa y no sincroniza',
+    () async {
+      final cloud = _FakeCloud();
 
-    final result = await controller(
-      cloud: cloud,
-      ownerId: null,
-    ).registerPendingLocalPayment(reservation);
+      final result = await controller(
+        cloud: cloud,
+        ownerId: null,
+      ).registerPendingLocalPayment(reservation);
 
-    expect(result.syncWarning, contains('propietario'));
-    expect(cloud.saved, isEmpty);
-  });
+      expect(result.syncWarning, contains('propietario'));
+      expect(cloud.saved, isEmpty);
+    },
+  );
 
   test('repetir En el Local es idempotente y no duplica en la nube', () async {
     final cloud = _FakeCloud();
@@ -206,7 +218,40 @@ void main() {
     final second = await checkout.registerPendingLocalPayment(reservation);
 
     expect(second.payment.status, PaymentStatus.pending);
-    expect(cloud.saved, hasLength(1));
+    expect(cloud.saved, hasLength(2));
+    expect(cloud.saved.map((entry) => entry.payment.id).toSet(), {'pay-res-1'});
+    expect(await repository.findAllPayments(), hasLength(1));
+  });
+
+  test(
+    'reintentar después de reiniciar vuelve a sincronizar el pendiente',
+    () async {
+      final cloud = _FakeCloud(
+        failure: const PaymentCloudRepositoryException(
+          PaymentCloudFailureType.network,
+          'Sin conexión',
+        ),
+      );
+      final first = await controller(
+        cloud: cloud,
+      ).registerPendingLocalPayment(reservation);
+      expect(first.syncWarning, 'Sin conexión');
+      cloud.failure = null;
+      final second = await controller(
+        cloud: cloud,
+      ).registerPendingLocalPayment(reservation);
+      expect(second.syncWarning, isNull);
+      expect(cloud.attempts, 2);
+      expect(await repository.findAllPayments(), hasLength(1));
+    },
+  );
+
+  test('otra cuenta no puede registrar el pago de la reserva', () async {
+    await expectLater(
+      controller(uid: 'other-client').registerPendingLocalPayment(reservation),
+      throwsA(isA<PaymentRepositoryException>()),
+    );
+    expect(await repository.findAllPayments(), isEmpty);
   });
 
   test('pagar con tarjeta una reserva ya pendiente se rechaza', () async {
@@ -222,7 +267,7 @@ void main() {
         isA<PaymentRepositoryException>().having(
           (error) => error.kind,
           'kind',
-          PaymentRepositoryError.alreadyProcessed,
+          PaymentRepositoryError.invalidPayment,
         ),
       ),
     );

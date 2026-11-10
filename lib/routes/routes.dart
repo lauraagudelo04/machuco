@@ -128,16 +128,20 @@ abstract final class AppRoutes {
                 reservation: settings.arguments! as Reservation,
               )
             : const PaymentMethodSelectionPage(),
-      ownerPayments =>
-        settings.arguments is Motel
-            ? OwnerPaymentsPage(
-                motelId: (settings.arguments! as Motel).id,
-                motelName: (settings.arguments! as Motel).name,
-              )
-            : const OwnerPaymentsPage(
-                motelId: PaymentStore.fallbackMotelId,
-                motelName: 'Motel Paraíso Élite',
-              ),
+      ownerPayments => switch (settings.arguments) {
+        Motel motel => OwnerPaymentsPage(
+          motelId: motel.id,
+          motelName: motel.name,
+        ),
+        {'motelId': String id, 'motelName': String name} => OwnerPaymentsPage(
+          motelId: id,
+          motelName: name,
+        ),
+        _ => const OwnerPaymentsPage(
+          motelId: PaymentStore.fallbackMotelId,
+          motelName: 'Motel Paraíso Élite',
+        ),
+      },
       ownerSubscription => const OwnerSubscriptionPage(),
       adminPayments => const AdminFinancePage(),
       adminAdditionalServices => AdditionalServiceSystemAdministratorPage(
