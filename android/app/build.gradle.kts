@@ -39,12 +39,17 @@ android {
     // El namespace es el paquete del código Kotlin (MainActivity); puede
     // diferir del applicationId sin afectar la instalación.
     namespace = "com.example.machuco"
-    compileSdk = flutter.compileSdkVersion
+    // flutter_local_notifications 23 requiere compilar contra Android API 37.
+    // Esto no modifica el minSdk ni los dispositivos compatibles.
+    compileSdk = 37
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+        // Requerido por flutter_local_notifications para las APIs Java
+        // usadas en Android antiguos.
+        isCoreLibraryDesugaringEnabled = true
     }
 
     defaultConfig {
@@ -107,6 +112,13 @@ android {
             }
         }
     }
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // AGP 9 no expone siempre el módulo FlutterFire al javac del registrante
+    // generado; declararlo aquí asegura que su clase de plugin esté disponible.
+    implementation(project(":cloud_firestore"))
 }
 
 kotlin {
