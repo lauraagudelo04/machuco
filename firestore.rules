@@ -842,10 +842,17 @@ service cloud.firestore {
     // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
     // mismo id. La escriben el administrador y el propietario activo (este
     // solo a su propio nombre). No se borran: se inhabilitan.
+    // Las reglas de habitaciones pueden confiar en ownerId: un propietario
+    // solo crea moteles a su nombre y solo edita los que ya son suyos, sin
+    // poder cambiarles el dueño.
     match /motels/{motelId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
         || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isActiveOwner()
+            && resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == request.auth.uid);
       allow delete: if false;
     }
 
