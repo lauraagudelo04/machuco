@@ -9,12 +9,16 @@ import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_category_dao.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/additional_service/additional_service_category.dart';
+import 'package:machuco/models/additional_service/additional_service_entry.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
@@ -33,7 +37,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 15,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -45,6 +49,8 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
+    AdditionalServiceCategory,
+    AdditionalServiceEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -53,6 +59,8 @@ abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
+  AdditionalServiceCategoryDao get additionalServiceCategoryDao;
+  AdditionalServiceDao get additionalServiceDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -89,6 +97,7 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
       ])
       .addCallback(
         Callback(
@@ -403,5 +412,27 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
+});
+
+/// Agrega el maestro de categorías de servicios adicionales y la tabla
+/// local de servicios adicionales. También completa las tablas de pagos y
+/// clientes en bases que quedaron en la versión 7 con otro esquema.
+final migration14To15 = Migration(14, 15, (database) async {
+  await _createPaymentSchema(database);
+  await _createClientSchema(database);
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_service_categories ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, createdAt INTEGER NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_additional_service_categories_name '
+    'ON additional_service_categories (name)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_services ('
+    'id TEXT PRIMARY KEY, motelId TEXT NOT NULL, name TEXT NOT NULL, '
+    'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
+    'active INTEGER NOT NULL)',
   );
 });

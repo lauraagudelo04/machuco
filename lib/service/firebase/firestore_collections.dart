@@ -11,4 +11,7 @@ abstract final class FirestoreCollections {
 
   /// Payment records synchronized from the owner's local SQLite database.
   static const payments = 'payments';
+
+  /// Additional services offered by a motel (`additionalServices/{id}`).
+  static const additionalServices = 'additionalServices';
 }

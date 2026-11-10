@@ -74,6 +74,10 @@ class _$AppDatabase extends AppDatabase {
 
   PaymentDao? _paymentDaoInstance;
 
+  AdditionalServiceCategoryDao? _additionalServiceCategoryDaoInstance;
+
+  AdditionalServiceDao? _additionalServiceDaoInstance;
+
   ClientDao? _clientDaoInstance;
 
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
@@ -88,7 +92,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 14,
+      version: 15,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -138,6 +142,12 @@ class _$AppDatabase extends AppDatabase {
           'CREATE TABLE IF NOT EXISTS `auth_user_profile` (`uid` TEXT NOT NULL, `email` TEXT NOT NULL, `first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, `role` TEXT NOT NULL, `account_status` TEXT NOT NULL, `phone_country_code_id` INTEGER, `phone_number` TEXT, `company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
         );
         await database.execute(
+          'CREATE TABLE IF NOT EXISTS `additional_service_categories` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)',
+        );
+        await database.execute(
+          'CREATE TABLE IF NOT EXISTS `additional_services` (`id` TEXT NOT NULL, `motelId` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `price` INTEGER NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))',
+        );
+        await database.execute(
           'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)',
         );
         await database.execute(
@@ -151,6 +161,9 @@ class _$AppDatabase extends AppDatabase {
         );
         await database.execute(
           'CREATE INDEX `index_payments_paymentMethodId` ON `payments` (`paymentMethodId`)',
+        );
+        await database.execute(
+          'CREATE UNIQUE INDEX `index_additional_service_categories_name` ON `additional_service_categories` (`name`)',
         );
 
         await callback?.onCreate?.call(database, version);
@@ -178,6 +191,20 @@ class _$AppDatabase extends AppDatabase {
   @override
   PaymentDao get paymentDao {
     return _paymentDaoInstance ??= _$PaymentDao(database, changeListener);
+  }
+
+  @override
+  AdditionalServiceCategoryDao get additionalServiceCategoryDao {
+    return _additionalServiceCategoryDaoInstance ??=
+        _$AdditionalServiceCategoryDao(database, changeListener);
+  }
+
+  @override
+  AdditionalServiceDao get additionalServiceDao {
+    return _additionalServiceDaoInstance ??= _$AdditionalServiceDao(
+      database,
+      changeListener,
+    );
   }
 
   @override
@@ -830,6 +857,178 @@ class _$PaymentDao extends PaymentDao {
         await transactionDatabase.paymentDao.mergeRemotePayments(payments);
       });
     }
+  }
+}
+
+class _$AdditionalServiceCategoryDao extends AdditionalServiceCategoryDao {
+  _$AdditionalServiceCategoryDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _additionalServiceCategoryInsertionAdapter = InsertionAdapter(
+        database,
+        'additional_service_categories',
+        (AdditionalServiceCategory item) => <String, Object?>{
+          'id': item.id,
+          'name': item.name,
+          'createdAt': _subscriptionDateConverter.encode(item.createdAt),
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AdditionalServiceCategory>
+  _additionalServiceCategoryInsertionAdapter;
+
+  @override
+  Future<List<AdditionalServiceCategory>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM additional_service_categories ORDER BY name ASC',
+      mapper: (Map<String, Object?> row) => AdditionalServiceCategory(
+        id: row['id'] as int?,
+        name: row['name'] as String,
+        createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int),
+      ),
+    );
+  }
+
+  @override
+  Future<int?> count() async {
+    return _queryAdapter.query(
+      'SELECT COUNT(*) FROM additional_service_categories',
+      mapper: (Map<String, Object?> row) => row.values.first as int,
+    );
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn(
+      'DELETE FROM additional_service_categories',
+    );
+  }
+
+  @override
+  Future<void> insertAll(List<AdditionalServiceCategory> categories) async {
+    await _additionalServiceCategoryInsertionAdapter.insertList(
+      categories,
+      OnConflictStrategy.abort,
+    );
+  }
+}
+
+class _$AdditionalServiceDao extends AdditionalServiceDao {
+  _$AdditionalServiceDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _additionalServiceEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'additional_services',
+        (AdditionalServiceEntry item) => <String, Object?>{
+          'id': item.id,
+          'motelId': item.motelId,
+          'name': item.name,
+          'description': item.description,
+          'category': item.category,
+          'price': item.price,
+          'active': item.active ? 1 : 0,
+        },
+      ),
+      _additionalServiceEntryUpdateAdapter = UpdateAdapter(
+        database,
+        'additional_services',
+        ['id'],
+        (AdditionalServiceEntry item) => <String, Object?>{
+          'id': item.id,
+          'motelId': item.motelId,
+          'name': item.name,
+          'description': item.description,
+          'category': item.category,
+          'price': item.price,
+          'active': item.active ? 1 : 0,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AdditionalServiceEntry>
+  _additionalServiceEntryInsertionAdapter;
+
+  final UpdateAdapter<AdditionalServiceEntry>
+  _additionalServiceEntryUpdateAdapter;
+
+  @override
+  Future<List<AdditionalServiceEntry>> findAll() async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM additional_services ORDER BY name ASC',
+      mapper: (Map<String, Object?> row) => AdditionalServiceEntry(
+        id: row['id'] as String,
+        motelId: row['motelId'] as String,
+        name: row['name'] as String,
+        description: row['description'] as String,
+        category: row['category'] as String,
+        price: row['price'] as int,
+        active: (row['active'] as int) != 0,
+      ),
+    );
+  }
+
+  @override
+  Future<List<AdditionalServiceEntry>> findByMotel(String motelId) async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM additional_services WHERE motelId = ?1 ORDER BY name ASC',
+      mapper: (Map<String, Object?> row) => AdditionalServiceEntry(
+        id: row['id'] as String,
+        motelId: row['motelId'] as String,
+        name: row['name'] as String,
+        description: row['description'] as String,
+        category: row['category'] as String,
+        price: row['price'] as int,
+        active: (row['active'] as int) != 0,
+      ),
+      arguments: [motelId],
+    );
+  }
+
+  @override
+  Future<int?> count() async {
+    return _queryAdapter.query(
+      'SELECT COUNT(*) FROM additional_services',
+      mapper: (Map<String, Object?> row) => row.values.first as int,
+    );
+  }
+
+  @override
+  Future<void> deleteById(String serviceId) async {
+    await _queryAdapter.queryNoReturn(
+      'DELETE FROM additional_services WHERE id = ?1',
+      arguments: [serviceId],
+    );
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM additional_services');
+  }
+
+  @override
+  Future<void> insertAll(List<AdditionalServiceEntry> services) async {
+    await _additionalServiceEntryInsertionAdapter.insertList(
+      services,
+      OnConflictStrategy.abort,
+    );
+  }
+
+  @override
+  Future<void> updateService(AdditionalServiceEntry service) async {
+    await _additionalServiceEntryUpdateAdapter.update(
+      service,
+      OnConflictStrategy.abort,
+    );
   }
 }
 

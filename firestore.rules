@@ -436,6 +436,53 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    function isActiveOwnerOrAdmin() {
+      return isAdmin() || isActiveOwner();
+    }
+
+    function hasValidAdditionalServiceFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'motelId', 'name', 'description', 'category', 'price',
+          'active', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'motelId', 'name', 'description', 'category', 'price',
+          'active', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.name is string
+        && data.name.size() > 0 && data.name.size() <= 100
+        && data.description is string
+        && data.description.size() > 0 && data.description.size() <= 500
+        && data.category is string
+        && data.category.size() > 0 && data.category.size() <= 100
+        && data.price is int && data.price > 0
+        && data.active is bool
+        && data.updatedAt == request.time;
+    }
+
+    // Servicios adicionales de un motel. Cualquier usuario con sesion los
+    // consulta (el cliente los elige al reservar). Los crea un administrador o
+    // un propietario activo, que queda como ownerId; solo ese propietario o un
+    // administrador los edita o elimina, y ownerId/motelId no cambian.
+    match /additionalServices/{serviceId} {
+      allow read: if isSignedIn();
+
+      allow create: if isActiveOwnerOrAdmin()
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidAdditionalServiceFields(request.resource.data);
+
+      allow update: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.motelId == resource.data.motelId
+        && hasValidAdditionalServiceFields(request.resource.data);
+
+      allow delete: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {
