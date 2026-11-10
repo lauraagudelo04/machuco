@@ -60,9 +60,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -94,9 +94,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _motels = previous);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 

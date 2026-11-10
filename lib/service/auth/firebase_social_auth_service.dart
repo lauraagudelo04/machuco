@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
@@ -12,6 +14,7 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/social_auth_result.dart';
 import 'package:machuco/models/auth/social_profile_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/account_profile_removal.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_auth_service.dart';
@@ -81,7 +84,9 @@ final class FirebaseSocialAuthService implements SocialAuthService {
     DateTime Function()? clock,
     bool? useWebPopups,
     AdministratorsRepository? administratorsRepository,
-  }) : _usePopups = useWebPopups ?? kIsWeb,
+    AnalyticsService? analytics,
+  }) : _analytics = analytics,
+       _usePopups = useWebPopups ?? kIsWeb,
        _auth = firebaseAuth ?? FirebaseAuth.instance,
        _profiles = profileRepository ?? FirestoreUserProfileRepository(),
        _administrators =
@@ -96,6 +101,7 @@ final class FirebaseSocialAuthService implements SocialAuthService {
   final AuthUserProfileRepository _cache;
   final GitHubEmailVerifier _gitHub;
   final DateTime Function() _clock;
+  final AnalyticsService? _analytics;
 
   /// En web `signInWithProvider`, `linkWithProvider` y
   /// `reauthenticateWithProvider` no existen (`UnimplementedError`); allí se
@@ -158,11 +164,24 @@ final class FirebaseSocialAuthService implements SocialAuthService {
 
   @override
   Future<SocialAuthResult> signInWithGoogle() =>
-      _signIn(AuthProviderKind.google);
+      _signInReported(AuthProviderKind.google);
 
   @override
   Future<SocialAuthResult> signInWithGitHub() =>
-      _signIn(AuthProviderKind.github);
+      _signInReported(AuthProviderKind.github);
+
+  /// Reports `login` only when the provider opened a session with a complete
+  /// profile; a new user is reported as `sign_up` in [completeProfile].
+  Future<SocialAuthResult> _signInReported(AuthProviderKind kind) async {
+    final result = await _signIn(kind);
+    if (result is SocialAuthActive || result is SocialAuthPending) {
+      unawaited(_analyticsService.logLogin(kind.name));
+    }
+    return result;
+  }
+
+  AnalyticsService get _analyticsService =>
+      _analytics ?? AnalyticsServiceProvider.instance;
 
   Future<SocialAuthResult> _signIn(AuthProviderKind kind) async {
     final UserCredential credential;
@@ -500,7 +519,13 @@ final class FirebaseSocialAuthService implements SocialAuthService {
       }
       return SocialAuthError(_profileFailure(e));
     }
-    return _resultForProfile(user, profile);
+    final result = await _resultForProfile(user, profile);
+    final provider = _providersOf(user).where((kind) => kind.isSocial);
+    if (provider.isNotEmpty &&
+        (result is SocialAuthActive || result is SocialAuthPending)) {
+      unawaited(_analyticsService.logSignUp(provider.first.name));
+    }
+    return result;
   }
 
   String? _validate(SocialProfileData data) {
