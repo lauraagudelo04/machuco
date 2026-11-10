@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
@@ -8,7 +8,7 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/password_change_service.dart';
-import 'package:machuco/views/motel/owner_view/owner_change_password_page.dart';
+import 'package:machuco/views/auth/change_password_page.dart';
 
 class _FakeProfiles implements UserProfileRepository {
   _FakeProfiles(this.profile);
@@ -68,11 +68,11 @@ UserProfile _profile({bool mustChangePassword = true}) => UserProfile(
   mustChangePassword: mustChangePassword,
 );
 
-OwnerProfileController _controller(
+UserProfileController _controller(
   UserProfile profile, {
   PasswordChangeService? passwords,
 }) {
-  final controller = OwnerProfileController(
+  final controller = UserProfileController(
     repository: _FakeProfiles(profile),
     passwordChangeService: passwords,
     currentUserId: () => 'uid-owner',
@@ -89,7 +89,7 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      _wrap(OwnerChangePasswordPage(controller: controller)),
+      _wrap(ChangePasswordPage(controller: controller)),
     );
     await tester.pumpAndSettle();
 
@@ -101,7 +101,7 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      _wrap(OwnerChangePasswordPage(controller: controller)),
+      _wrap(ChangePasswordPage(controller: controller)),
     );
     await tester.pumpAndSettle();
 
@@ -134,7 +134,7 @@ void main() {
     addTearDown(controller.dispose);
 
     await tester.pumpWidget(
-      _wrap(OwnerChangePasswordPage(controller: controller)),
+      _wrap(ChangePasswordPage(controller: controller)),
     );
     await tester.pumpAndSettle();
 

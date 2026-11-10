@@ -209,6 +209,33 @@ apuntarían a una cuenta inexistente).
 - Sin conexión el bloqueo no se puede verificar y se pide reintentar: es
   preferible no borrar a dejar moteles huérfanos.
 
+## Solicitudes de propietarios (panel del administrador)
+
+Cuando alguien se registra como propietario, su cuenta nace en
+`users/{uid}` con `accountStatus = pending_approval`. El administrador las
+atiende desde el módulo de aprobaciones, que ya existía y ahora es accesible:
+
+- Menú lateral del panel de Propietarios (`owner_page.dart`): la entrada
+  **«Solicitudes de propietarios»** muestra el número de pendientes y abre
+  `/auth/admin/owner-approvals` (protegida por `AdminRouteGuard`).
+- Con pendientes, el listado de propietarios muestra además una tarjeta
+  «N solicitudes pendientes» con acción «Revisar».
+- El contador sale de la caché local de `users` (los propietarios con
+  `accountStatus == pending_approval`), así que se actualiza al sincronizar
+  tras aprobar o rechazar.
+- La pantalla de detalle ya permite aprobar (`active`) o rechazar con motivo y
+  muestra alertas de NIT duplicado, dígito de verificación y plan.
+
+## Perfil del administrador
+
+- «Mi perfil» del panel (`/auth/admin/profile`, con `AdminRouteGuard`) muestra
+  nombre, correo, teléfono, rol y estado de la cuenta.
+- Puede editar **nombre y teléfono** (`isAdminContactEdit` en las reglas) y
+  cambiar su contraseña; con `mustChangePassword` activo la edición queda
+  deshabilitada hasta cambiarla, porque `isActiveAdmin` lo exige.
+- Las piezas genéricas se comparten con el perfil del propietario:
+  `UserProfileController`, `UserEditProfilePage` y `ChangePasswordPage`.
+
 ## Tareas futuras
 
 Pendientes acordados, sin implementar todavía:

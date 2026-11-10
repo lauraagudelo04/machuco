@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/user_profile.dart';
-import 'package:machuco/views/motel/owner_view/owner_change_password_page.dart';
+import 'package:machuco/views/auth/change_password_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_profile_page.dart';
 
 class _FakeUserProfileRepository implements UserProfileRepository {
@@ -39,7 +39,7 @@ Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
 
 void main() {
   testWidgets('el botón Cambiar contraseña abre la pantalla', (tester) async {
-    final controller = OwnerProfileController(
+    final controller = UserProfileController(
       repository: _FakeUserProfileRepository(
         const UserProfile(
           uid: 'uid-owner',
@@ -60,14 +60,14 @@ void main() {
     await tester.tap(find.text('Cambiar contraseña'));
     await tester.pumpAndSettle();
 
-    expect(find.byType(OwnerChangePasswordPage), findsOneWidget);
+    expect(find.byType(ChangePasswordPage), findsOneWidget);
   });
 
   testWidgets('muestra los datos reales del propietario', (tester) async {
     tester.view.physicalSize = const Size(800, 1600);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
-    final controller = OwnerProfileController(
+    final controller = UserProfileController(
       repository: _FakeUserProfileRepository(
         const UserProfile(
           uid: 'uid-owner',
@@ -104,7 +104,7 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
 
-    final controller = OwnerProfileController(
+    final controller = UserProfileController(
       repository: _FakeUserProfileRepository(
         const UserProfile(
           uid: 'uid-owner',

@@ -1,22 +1,22 @@
 import 'package:flutter/material.dart';
 
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 
 /// Edición del perfil del propietario.
 ///
 /// Solo nombre y teléfono: `firestore.rules` no permite que el propio usuario
 /// cambie el documento, el rol ni el estado de su cuenta.
-class OwnerEditProfilePage extends StatefulWidget {
-  const OwnerEditProfilePage({super.key, required this.controller});
+class UserEditProfilePage extends StatefulWidget {
+  const UserEditProfilePage({super.key, required this.controller});
 
-  final OwnerProfileController controller;
+  final UserProfileController controller;
 
   @override
-  State<OwnerEditProfilePage> createState() => _OwnerEditProfilePageState();
+  State<UserEditProfilePage> createState() => _UserEditProfilePageState();
 }
 
-class _OwnerEditProfilePageState extends State<OwnerEditProfilePage> {
+class _UserEditProfilePageState extends State<UserEditProfilePage> {
   late final TextEditingController _nameController;
   late final TextEditingController _phoneController;
   String? _nameError;

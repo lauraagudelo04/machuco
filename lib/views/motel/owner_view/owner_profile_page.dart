@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/user_profile.dart';
-import 'package:machuco/views/owner_management/owner_summary.dart';
+import 'package:machuco/widgets/account_status_chip.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
 
-import 'owner_change_password_page.dart';
-import 'owner_edit_profile_page.dart';
+import 'package:machuco/views/auth/change_password_page.dart';
+import 'package:machuco/views/auth/user_edit_profile_page.dart';
 
 /// Perfil del propietario autenticado (`users/{uid}`).
 ///
@@ -19,21 +19,21 @@ class OwnerProfilePage extends StatefulWidget {
   const OwnerProfilePage({super.key, this.controller});
 
   /// Controlador inyectable para los tests; si es `null` se crea uno propio.
-  final OwnerProfileController? controller;
+  final UserProfileController? controller;
 
   @override
   State<OwnerProfilePage> createState() => _OwnerProfilePageState();
 }
 
 class _OwnerProfilePageState extends State<OwnerProfilePage> {
-  late final OwnerProfileController _controller;
+  late final UserProfileController _controller;
   late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
     _ownsController = widget.controller == null;
-    _controller = widget.controller ?? OwnerProfileController();
+    _controller = widget.controller ?? UserProfileController();
     if (_controller.profile == null) _controller.load();
   }
 
@@ -53,8 +53,7 @@ class _OwnerProfilePageState extends State<OwnerProfilePage> {
     try {
       final changed = await Navigator.of(context).push<bool>(
         MaterialPageRoute(
-          builder: (context) =>
-              OwnerChangePasswordPage(controller: _controller),
+          builder: (context) => ChangePasswordPage(controller: _controller),
         ),
       );
       if (changed == true && mounted) await _controller.load();
@@ -72,7 +71,7 @@ class _OwnerProfilePageState extends State<OwnerProfilePage> {
   Future<void> _openEdit() async {
     await Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => OwnerEditProfilePage(controller: _controller),
+        builder: (context) => UserEditProfilePage(controller: _controller),
       ),
     );
   }
@@ -300,7 +299,7 @@ class _ProfileHeader extends StatelessWidget {
             ),
           ),
           const SizedBox(height: AppSpacing.s3),
-          OwnerStatusChip(
+          AccountStatusChip(
             isActive: status == AccountStatus.active,
             status: status,
           ),

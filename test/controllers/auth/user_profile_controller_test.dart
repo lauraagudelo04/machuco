@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
@@ -123,11 +123,11 @@ class _FakePasswordChangeService implements PasswordChangeService {
   }
 }
 
-OwnerProfileController _buildController(
+UserProfileController _buildController(
   _FakeUserProfileRepository repository, {
   String? currentUserId = 'uid-owner',
   PasswordChangeService? passwordChangeService,
-}) => OwnerProfileController(
+}) => UserProfileController(
   repository: repository,
   passwordChangeService: passwordChangeService,
   currentUserId: () => currentUserId,

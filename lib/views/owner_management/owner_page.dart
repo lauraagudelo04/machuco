@@ -10,10 +10,12 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/controllers/owner_management/platform_finance_summary.dart';
 import 'package:machuco/models/owner_management/owner.dart';
+import 'package:machuco/widgets/account_status_chip.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
 
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
+import 'package:machuco/views/admin_access/admin_panel_drawer.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/notification/system_admin_view/system_admin_notification_view.dart';
 import 'package:machuco/views/payment/payment_view_support.dart';
@@ -21,7 +23,6 @@ import 'package:machuco/views/login/logout_navigation.dart';
 
 import 'owner_detail_page.dart';
 import 'owner_form_page.dart';
-import 'owner_summary.dart';
 
 const _compactWidthBreakpoint = 360.0;
 const _listMaxWidth = 640.0;
@@ -197,6 +198,14 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
     if (!_controller.isAutoRetrying) return message;
     return '$message Reintentando automáticamente '
         '(${_controller.autoRetryAttempt}/${_controller.autoRetryMaxAttempts}).';
+  }
+
+  /// Abre las solicitudes de propietarios y sincroniza al volver, para que
+  /// las cuentas aprobadas o rechazadas dejen de aparecer como pendientes.
+  Future<void> _openApprovals() async {
+    await Navigator.of(context).pushNamed(AppRoutes.adminOwnerApprovals);
+    if (!mounted) return;
+    await _controller.retrySynchronization();
   }
 
   Future<void> _createOwner() async {
@@ -384,6 +393,16 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s2),
+            child: Builder(
+              builder: (context) => AppIconButton(
+                icon: Icons.menu,
+                tooltip: 'Menú principal',
+                onPressed: () => Scaffold.of(context).openEndDrawer(),
+              ),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(right: AppSpacing.s2),
             child: AppIconButton(
               icon: Icons.notifications_outlined,
               tooltip: 'Notificaciones',
@@ -399,6 +418,26 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
             ),
           ),
         ],
+      ),
+      endDrawer: Builder(
+        builder: (drawerContext) => AdminPanelDrawer(
+          pendingRequests: _controller.owners
+              .where((owner) => owner.isPendingApproval)
+              .length,
+          adminEmail: _adminEmail,
+          onOpenApprovals: () {
+            Navigator.of(drawerContext).pop();
+            _openApprovals();
+          },
+          onOpenProfile: () {
+            Navigator.of(drawerContext).pop();
+            Navigator.of(context).pushNamed(AppRoutes.adminProfile);
+          },
+          onLogout: () {
+            Navigator.of(drawerContext).pop();
+            _logout();
+          },
+        ),
       ),
       body: SafeArea(
         bottom: false,
@@ -470,6 +509,25 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
                                     ),
                                   ],
                                 ),
+                              ),
+                            ),
+                          ),
+                        if (_controller.owners.any(
+                          (owner) => owner.isPendingApproval,
+                        ))
+                          SliverToBoxAdapter(
+                            child: Padding(
+                              padding: EdgeInsets.fromLTRB(
+                                horizontalPadding,
+                                AppSpacing.s4,
+                                horizontalPadding,
+                                0,
+                              ),
+                              child: PendingOwnerRequestsBanner(
+                                count: _controller.owners
+                                    .where((owner) => owner.isPendingApproval)
+                                    .length,
+                                onReview: _openApprovals,
                               ),
                             ),
                           ),
@@ -787,7 +845,7 @@ class _OwnerCard extends StatelessWidget {
                 child: Text(owner.fullName, style: textTheme.titleMedium),
               ),
               const SizedBox(width: AppSpacing.s2),
-              OwnerStatusChip(
+              AccountStatusChip(
                 isActive: owner.isActive,
                 status: owner.accountStatus,
               ),

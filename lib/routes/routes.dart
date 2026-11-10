@@ -17,7 +17,7 @@ import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
-import 'package:machuco/views/motel/owner_view/owner_change_password_page.dart';
+import 'package:machuco/views/auth/change_password_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_profile_page.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -53,6 +53,7 @@ import 'package:machuco/views/admin_access/administrator_detail_page.dart';
 import 'package:machuco/views/admin_access/administrators_page.dart';
 import 'package:machuco/views/admin_access/create_admin_page.dart';
 import 'package:machuco/views/admin_access/owner_approval_detail_page.dart';
+import 'package:machuco/views/admin_access/admin_profile_page.dart';
 import 'package:machuco/views/admin_access/owner_approvals_page.dart';
 
 /// Central registry of named routes for the app.
@@ -110,6 +111,7 @@ abstract final class AppRoutes {
   static const adminOwnerApprovals = AuthRoutes.adminOwnerApprovals;
   static const adminOwnerApprovalDetail = AuthRoutes.adminOwnerApprovalDetail;
   static const adminAdministrators = AuthRoutes.adminAdministrators;
+  static const adminProfile = AuthRoutes.adminProfile;
   static const adminCreateAdministrator = AuthRoutes.adminCreateAdministrator;
   static const adminAdministratorDetail = AuthRoutes.adminAdministratorDetail;
   static const adminChangePassword = AuthRoutes.adminChangePassword;
@@ -253,7 +255,7 @@ abstract final class AppRoutes {
       ),
 
       ownerProfile => const OwnerProfilePage(),
-      ownerChangePassword => const OwnerChangePasswordPage(),
+      ownerChangePassword => const ChangePasswordPage(),
       clientProfile => const ClientProfilePage(),
       clientProfileEdit => const ClientEditProfilePage(),
       invoice => () {
@@ -305,6 +307,8 @@ abstract final class AppRoutes {
               )
             : const OwnerApprovalsPage(),
       ),
+      adminProfile =>
+        const AdminRouteGuard(child: AdminProfilePage()),
       adminAdministrators => const AdminRouteGuard(child: AdministratorsPage()),
       adminCreateAdministrator => AdminRouteGuard(
         child: settings.arguments is AdministratorsController

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
-import 'package:machuco/controllers/owner_management/owner_profile_controller.dart';
+import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
 import 'package:machuco/widgets/auth/auth_password_field.dart';
@@ -11,30 +11,29 @@ import 'package:machuco/widgets/auth/auth_password_field.dart';
 /// Sirve tanto para reemplazar la contraseña temporal con la que nace una
 /// cuenta creada por el panel como para cambiarla cuando el propietario
 /// quiera. Al terminar limpia `mustChangePassword` si estaba activo.
-class OwnerChangePasswordPage extends StatefulWidget {
-  const OwnerChangePasswordPage({super.key, this.controller});
+class ChangePasswordPage extends StatefulWidget {
+  const ChangePasswordPage({super.key, this.controller});
 
   /// Controlador inyectable para los tests; si es `null` se crea uno propio.
-  final OwnerProfileController? controller;
+  final UserProfileController? controller;
 
   @override
-  State<OwnerChangePasswordPage> createState() =>
-      _OwnerChangePasswordPageState();
+  State<ChangePasswordPage> createState() => _ChangePasswordPageState();
 }
 
-class _OwnerChangePasswordPageState extends State<OwnerChangePasswordPage> {
+class _ChangePasswordPageState extends State<ChangePasswordPage> {
   final _formKey = GlobalKey<FormState>();
   final _passwordController = TextEditingController();
   final _confirmationController = TextEditingController();
 
-  late final OwnerProfileController _controller;
+  late final UserProfileController _controller;
   late final bool _ownsController;
 
   @override
   void initState() {
     super.initState();
     _ownsController = widget.controller == null;
-    _controller = widget.controller ?? OwnerProfileController();
+    _controller = widget.controller ?? UserProfileController();
     // Si la pantalla se abre desde la tabla de rutas, el controlador llega
     // vacío: se carga para mostrar el aviso de contraseña temporal.
     if (_controller.profile == null) _controller.load();

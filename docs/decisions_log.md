@@ -681,3 +681,24 @@ moteles desde ese mismo cuadro.
 
 Además, las acciones de «Mi perfil» pasan a una barra inferior fija: el botón
 de cambiar contraseña quedaba al final del listado y no siempre era visible.
+
+## 2026-11-09 — Acceso a solicitudes de propietarios y perfil del administrador
+
+**Contexto:** el módulo de aprobación de propietarios (`OwnerApprovalsPage`,
+`AdminAccessController`) existía pero solo se llegaba por un acceso directo de
+desarrollo. El administrador tampoco tenía una pantalla de perfil.
+
+**Decisión:**
+
+- El panel de Propietarios estrena menú lateral con **Solicitudes de
+  propietarios** (contador de `pending_approval`), **Mi perfil** y **Cerrar
+  sesión**. Además, con pendientes se muestra una tarjeta «N solicitudes» con
+  acción «Revisar».
+- Se agrega el perfil del administrador (`/auth/admin/profile`) para ver sus
+  datos y editar nombre y teléfono (lo que `isAdminContactEdit` permite) y
+  cambiar la contraseña. Con `mustChangePassword` la edición queda bloqueada
+  hasta cambiar la temporal.
+- Las piezas comunes se renombran a nombres neutrales: `UserProfileController`,
+  `UserEditProfilePage`, `ChangePasswordPage` y `AccountStatusChip`, de modo que
+  propietario y administrador compartan el mismo código.
+- Sin cambios en `firestore.rules`.

@@ -138,6 +138,22 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And Puede cambiar su nombre y su teléfono
     And No puede cambiar su correo, documento ni estado
 
+  Scenario: El administrador revisa las solicitudes de propietarios
+    Given Hay al menos una cuenta con accountStatus = pending_approval
+    When El administrador abre el menú del panel de Propietarios
+    Then Ve "Solicitudes de propietarios" con el número de pendientes
+    And El listado muestra la tarjeta "N solicitudes pendientes"
+    When Entra a la solicitud
+    Then Puede aprobarla o rechazarla con un motivo
+
+  Scenario: El administrador edita su propio perfil
+    Given El administrador inició sesión con una cuenta activa
+    When Abre "Mi perfil" desde el menú
+    Then Ve su nombre, correo, teléfono, rol y estado
+    And Puede editar su nombre y su teléfono
+    And Puede cambiar su contraseña
+    And Con contraseña temporal pendiente la edición está deshabilitada
+
   Scenario: El propietario cambia su contraseña desde el perfil
     Given El propietario inició sesión con Firebase
     When Abre "Cambiar contraseña" desde su perfil

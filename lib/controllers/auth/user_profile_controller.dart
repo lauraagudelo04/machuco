@@ -12,8 +12,8 @@ import 'package:machuco/service/firebase/current_user.dart';
 /// Carga y actualiza `users/{uid}`. Las reglas de Firestore solo permiten que
 /// el propio usuario cambie `fullName` y `phoneNumber`; el documento, el rol y
 /// el estado los administra el panel de administración.
-class OwnerProfileController extends ChangeNotifier {
-  OwnerProfileController({
+class UserProfileController extends ChangeNotifier {
+  UserProfileController({
     UserProfileRepository? repository,
     PasswordChangeService? passwordChangeService,
     String? Function()? currentUserId,
