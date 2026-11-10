@@ -502,7 +502,19 @@ Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
   await _createReservationSchema(database);
 }
 
-final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+final migration14To15 = Migration(14, 15, (database) async {
+  await _completeMergedSchemas(database);
+  final columns = await database.rawQuery('PRAGMA table_info(notifications)');
+  if (!columns.any((column) => column['name'] == 'recipientUid')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN recipientUid TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS index_notifications_recipientUid '
+    'ON notifications (recipientUid)',
+  );
+});
 
 /// Completa las dos variantes de v15 conservando los datos de ambas ramas.
 final migration15To16 = Migration(15, 16, _completeMergedSchemas);
@@ -527,20 +539,5 @@ final migration16To17 = Migration(16, 17, (database) async {
     'id TEXT PRIMARY KEY, motelId TEXT NOT NULL, name TEXT NOT NULL, '
     'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
     'active INTEGER NOT NULL)',
-  );
-});
-
-/// Replaces legacy email recipients with Firebase UIDs for new notifications.
-/// Existing rows are retained (and remain visible in the admin history).
-final migration14To15 = Migration(14, 15, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(notifications)');
-  if (!columns.any((column) => column['name'] == 'recipientUid')) {
-    await database.execute(
-      'ALTER TABLE notifications ADD COLUMN recipientUid TEXT',
-    );
-  }
-  await database.execute(
-    'CREATE INDEX IF NOT EXISTS index_notifications_recipientUid '
-    'ON notifications (recipientUid)',
   );
 });
