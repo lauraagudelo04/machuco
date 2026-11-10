@@ -7,7 +7,6 @@ import Foundation
 
 import cloud_firestore
 import firebase_analytics
-import firebase_app_check
 import firebase_auth
 import firebase_core
 import printing
