@@ -219,24 +219,24 @@ class _ProfileActions extends StatelessWidget {
       child: SafeArea(
         top: false,
         minimum: const EdgeInsets.all(AppSpacing.s4),
-        child: Row(
+        // Dos botones apilados: en una fila, las etiquetas largas desbordan
+        // horizontalmente en pantallas angostas.
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Expanded(
-              child: AppButton(
-                label: 'Editar perfil',
-                icon: Icons.edit_outlined,
-                variant: AppButtonVariant.secondary,
-                onPressed: onEdit,
-              ),
+            AppButton(
+              label: 'Editar perfil',
+              icon: Icons.edit_outlined,
+              variant: AppButtonVariant.secondary,
+              size: AppButtonSize.medium,
+              onPressed: onEdit,
             ),
-            const SizedBox(width: AppSpacing.s3),
-            Expanded(
-              child: AppButton(
-                label: 'Cambiar contraseña',
-                icon: Icons.lock_outline,
-                variant: AppButtonVariant.secondary,
-                onPressed: onChangePassword,
-              ),
+            const SizedBox(height: AppSpacing.s2),
+            AppButton(
+              label: 'Cambiar contraseña',
+              icon: Icons.lock_outline,
+              size: AppButtonSize.medium,
+              onPressed: onChangePassword,
             ),
           ],
         ),

@@ -95,4 +95,37 @@ void main() {
     expect(find.text('Persona natural'), findsOneWidget);
     expect(find.text('Activo'), findsOneWidget);
   });
+
+  testWidgets('las acciones caben en una pantalla angosta', (tester) async {
+    // En tests la fuente de respaldo dibuja cada glifo como un cuadrado de
+    // `fontSize`, mucho más ancha que Inter/Roboto en un móvil real; 400 evita
+    // falsos positivos manteniendo el escenario de pantalla estrecha.
+    tester.view.physicalSize = const Size(400, 640);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    final controller = OwnerProfileController(
+      repository: _FakeUserProfileRepository(
+        const UserProfile(
+          uid: 'uid-owner',
+          fullName: 'Juan Camilo Garcia',
+          email: 'juan.garcia@example.com',
+          phoneNumber: '+573102781291',
+          role: RegisteredUserRole.owner,
+          accountStatus: AccountStatus.active,
+        ),
+      ),
+      currentUserId: () => 'uid-owner',
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(
+      _wrap(OwnerProfilePage(controller: controller)),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Editar perfil'), findsOneWidget);
+    expect(find.text('Cambiar contraseña'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 }
