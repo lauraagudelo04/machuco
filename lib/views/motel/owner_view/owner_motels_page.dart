@@ -11,7 +11,6 @@ import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
 import '../../../service/auth/auth_preferences.dart';
-import '../../../service/firebase/current_user.dart';
 import '../../../database/repository/auth/user_profile_repository.dart';
 import 'owner_profile_page.dart';
 
@@ -34,7 +33,15 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String get _currentOwnerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  String get _ownerName {
+  String? _ownerName;
+  String? _ownerEmail;
+
+  /// Nombre a mostrar: el del perfil de `users/{uid}`, o su correo.
+  String get _displayName {
+    final name = _ownerName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final email = _ownerEmail?.trim();
+    if (email != null && email.isNotEmpty) return email;
     final user = FirebaseAuth.instance.currentUser;
     return user?.displayName ?? user?.email ?? 'Propietario';
   }
@@ -189,7 +196,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: Text(_ownerName),
+        title: Text(_displayName, overflow: TextOverflow.ellipsis),
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
@@ -245,7 +252,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: $_ownerName',
+                    'Sesión: $_displayName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -314,7 +321,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _ownerName.split(' ').first,
+                    _displayName,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(

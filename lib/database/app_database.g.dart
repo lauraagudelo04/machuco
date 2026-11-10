@@ -78,15 +78,13 @@ class _$AppDatabase extends AppDatabase {
 
   PaymentDao? _paymentDaoInstance;
 
-<<<<<<< HEAD
-  OwnerDao? _ownerDaoInstance;
-
-  DocumentTypeDao? _documentTypeDaoInstance;
-=======
   AdditionalServiceCategoryDao? _additionalServiceCategoryDaoInstance;
 
   AdditionalServiceDao? _additionalServiceDaoInstance;
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+
+  OwnerDao? _ownerDaoInstance;
+
+  DocumentTypeDao? _documentTypeDaoInstance;
 
   ClientDao? _clientDaoInstance;
 
@@ -106,11 +104,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-<<<<<<< HEAD
-      version: 19,
-=======
-      version: 17,
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+      version: 20,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -146,27 +140,17 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `auth_user_profile` (`uid` TEXT NOT NULL, `email` TEXT NOT NULL, `first_names` TEXT NOT NULL, `last_names` TEXT NOT NULL, `role` TEXT NOT NULL, `account_status` TEXT NOT NULL, `phone_country_code_id` INTEGER, `phone_number` TEXT, `company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))');
         await database.execute(
-<<<<<<< HEAD
+            'CREATE TABLE IF NOT EXISTS `additional_service_categories` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `additional_services` (`id` TEXT NOT NULL, `motelId` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `price` INTEGER NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, `requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, `roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, `checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, `stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, `roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, `categoryId` INTEGER, `cancellationReason` TEXT, `invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `reservation_line_items` (`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, `reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, `itemId` TEXT NOT NULL, `name` TEXT NOT NULL, `unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, `position` INTEGER NOT NULL, FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE)');
+        await database.execute(
             'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `accountStatus` TEXT, `pendingDelete` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
-=======
-          'CREATE TABLE IF NOT EXISTS `additional_service_categories` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `createdAt` INTEGER NOT NULL)',
-        );
-        await database.execute(
-          'CREATE TABLE IF NOT EXISTS `additional_services` (`id` TEXT NOT NULL, `motelId` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `category` TEXT NOT NULL, `price` INTEGER NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))',
-        );
-        await database.execute(
-          'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY (`id`))',
-        );
-        await database.execute(
-          'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, `requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, `roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, `checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, `stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, `roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, `status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, `guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, `categoryId` INTEGER, `cancellationReason` TEXT, `invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, PRIMARY KEY (`id`))',
-        );
-        await database.execute(
-          'CREATE TABLE IF NOT EXISTS `reservation_line_items` (`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, `reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, `itemId` TEXT NOT NULL, `name` TEXT NOT NULL, `unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, `position` INTEGER NOT NULL, FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE)',
-        );
-        await database.execute(
-          'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)',
-        );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `document_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL, `example` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -174,28 +158,19 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
         await database.execute(
-<<<<<<< HEAD
             'CREATE INDEX `index_payments_clientId` ON `payments` (`clientId`)');
         await database.execute(
             'CREATE INDEX `index_payments_motelId` ON `payments` (`motelId`)');
         await database.execute(
             'CREATE INDEX `index_payments_paymentMethodId` ON `payments` (`paymentMethodId`)');
-=======
-          'CREATE INDEX `index_payments_paymentMethodId` ON `payments` (`paymentMethodId`)',
-        );
         await database.execute(
-          'CREATE UNIQUE INDEX `index_additional_service_categories_name` ON `additional_service_categories` (`name`)',
-        );
+            'CREATE UNIQUE INDEX `index_additional_service_categories_name` ON `additional_service_categories` (`name`)');
         await database.execute(
-          'CREATE INDEX `index_reservations_requestId` ON `reservations` (`requestId`)',
-        );
+            'CREATE INDEX `index_reservations_requestId` ON `reservations` (`requestId`)');
         await database.execute(
-          'CREATE INDEX `index_reservations_motelId` ON `reservations` (`motelId`)',
-        );
+            'CREATE INDEX `index_reservations_motelId` ON `reservations` (`motelId`)');
         await database.execute(
-          'CREATE INDEX `index_reservation_line_items_reservationId` ON `reservation_line_items` (`reservationId`)',
-        );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+            'CREATE INDEX `index_reservation_line_items_reservationId` ON `reservation_line_items` (`reservationId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -221,7 +196,18 @@ class _$AppDatabase extends AppDatabase {
   }
 
   @override
-<<<<<<< HEAD
+  AdditionalServiceCategoryDao get additionalServiceCategoryDao {
+    return _additionalServiceCategoryDaoInstance ??=
+        _$AdditionalServiceCategoryDao(database, changeListener);
+  }
+
+  @override
+  AdditionalServiceDao get additionalServiceDao {
+    return _additionalServiceDaoInstance ??=
+        _$AdditionalServiceDao(database, changeListener);
+  }
+
+  @override
   OwnerDao get ownerDao {
     return _ownerDaoInstance ??= _$OwnerDao(database, changeListener);
   }
@@ -230,19 +216,6 @@ class _$AppDatabase extends AppDatabase {
   DocumentTypeDao get documentTypeDao {
     return _documentTypeDaoInstance ??=
         _$DocumentTypeDao(database, changeListener);
-=======
-  AdditionalServiceCategoryDao get additionalServiceCategoryDao {
-    return _additionalServiceCategoryDaoInstance ??=
-        _$AdditionalServiceCategoryDao(database, changeListener);
-  }
-
-  @override
-  AdditionalServiceDao get additionalServiceDao {
-    return _additionalServiceDaoInstance ??= _$AdditionalServiceDao(
-      database,
-      changeListener,
-    );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
   }
 
   @override
@@ -269,18 +242,14 @@ class _$AppDatabase extends AppDatabase {
 
   @override
   ReservationCategoryDao get reservationCategoryDao {
-    return _reservationCategoryDaoInstance ??= _$ReservationCategoryDao(
-      database,
-      changeListener,
-    );
+    return _reservationCategoryDaoInstance ??=
+        _$ReservationCategoryDao(database, changeListener);
   }
 
   @override
   ReservationDao get reservationDao {
-    return _reservationDaoInstance ??= _$ReservationDao(
-      database,
-      changeListener,
-    );
+    return _reservationDaoInstance ??=
+        _$ReservationDao(database, changeListener);
   }
 }
 
@@ -785,7 +754,156 @@ class _$PaymentDao extends PaymentDao {
   }
 }
 
-<<<<<<< HEAD
+class _$AdditionalServiceCategoryDao extends AdditionalServiceCategoryDao {
+  _$AdditionalServiceCategoryDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _additionalServiceCategoryInsertionAdapter = InsertionAdapter(
+            database,
+            'additional_service_categories',
+            (AdditionalServiceCategory item) => <String, Object?>{
+                  'id': item.id,
+                  'name': item.name,
+                  'createdAt': _subscriptionDateConverter.encode(item.createdAt)
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AdditionalServiceCategory>
+      _additionalServiceCategoryInsertionAdapter;
+
+  @override
+  Future<List<AdditionalServiceCategory>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM additional_service_categories ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => AdditionalServiceCategory(
+            id: row['id'] as int?,
+            name: row['name'] as String,
+            createdAt:
+                _subscriptionDateConverter.decode(row['createdAt'] as int)));
+  }
+
+  @override
+  Future<int?> count() async {
+    return _queryAdapter.query(
+        'SELECT COUNT(*) FROM additional_service_categories',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter
+        .queryNoReturn('DELETE FROM additional_service_categories');
+  }
+
+  @override
+  Future<void> insertAll(List<AdditionalServiceCategory> categories) async {
+    await _additionalServiceCategoryInsertionAdapter.insertList(
+        categories, OnConflictStrategy.abort);
+  }
+}
+
+class _$AdditionalServiceDao extends AdditionalServiceDao {
+  _$AdditionalServiceDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _additionalServiceEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'additional_services',
+            (AdditionalServiceEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'motelId': item.motelId,
+                  'name': item.name,
+                  'description': item.description,
+                  'category': item.category,
+                  'price': item.price,
+                  'active': item.active ? 1 : 0
+                }),
+        _additionalServiceEntryUpdateAdapter = UpdateAdapter(
+            database,
+            'additional_services',
+            ['id'],
+            (AdditionalServiceEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'motelId': item.motelId,
+                  'name': item.name,
+                  'description': item.description,
+                  'category': item.category,
+                  'price': item.price,
+                  'active': item.active ? 1 : 0
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AdditionalServiceEntry>
+      _additionalServiceEntryInsertionAdapter;
+
+  final UpdateAdapter<AdditionalServiceEntry>
+      _additionalServiceEntryUpdateAdapter;
+
+  @override
+  Future<List<AdditionalServiceEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM additional_services ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => AdditionalServiceEntry(
+            id: row['id'] as String,
+            motelId: row['motelId'] as String,
+            name: row['name'] as String,
+            description: row['description'] as String,
+            category: row['category'] as String,
+            price: row['price'] as int,
+            active: (row['active'] as int) != 0));
+  }
+
+  @override
+  Future<List<AdditionalServiceEntry>> findByMotel(String motelId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM additional_services WHERE motelId = ?1 ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => AdditionalServiceEntry(id: row['id'] as String, motelId: row['motelId'] as String, name: row['name'] as String, description: row['description'] as String, category: row['category'] as String, price: row['price'] as int, active: (row['active'] as int) != 0),
+        arguments: [motelId]);
+  }
+
+  @override
+  Future<int?> count() async {
+    return _queryAdapter.query('SELECT COUNT(*) FROM additional_services',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
+  }
+
+  @override
+  Future<void> deleteById(String serviceId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM additional_services WHERE id = ?1',
+        arguments: [serviceId]);
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM additional_services');
+  }
+
+  @override
+  Future<void> insertAll(List<AdditionalServiceEntry> services) async {
+    await _additionalServiceEntryInsertionAdapter.insertList(
+        services, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<void> updateService(AdditionalServiceEntry service) async {
+    await _additionalServiceEntryUpdateAdapter.update(
+        service, OnConflictStrategy.abort);
+  }
+}
+
 class _$OwnerDao extends OwnerDao {
   _$OwnerDao(
     this.database,
@@ -834,20 +952,6 @@ class _$OwnerDao extends OwnerDao {
                       _subscriptionDateConverter.encode(item.createdAt),
                   'updatedAt': _subscriptionDateConverter.encode(item.updatedAt)
                 });
-=======
-class _$AdditionalServiceCategoryDao extends AdditionalServiceCategoryDao {
-  _$AdditionalServiceCategoryDao(this.database, this.changeListener)
-    : _queryAdapter = QueryAdapter(database),
-      _additionalServiceCategoryInsertionAdapter = InsertionAdapter(
-        database,
-        'additional_service_categories',
-        (AdditionalServiceCategory item) => <String, Object?>{
-          'id': item.id,
-          'name': item.name,
-          'createdAt': _subscriptionDateConverter.encode(item.createdAt),
-        },
-      );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
 
   final sqflite.DatabaseExecutor database;
 
@@ -855,7 +959,6 @@ class _$AdditionalServiceCategoryDao extends AdditionalServiceCategoryDao {
 
   final QueryAdapter _queryAdapter;
 
-<<<<<<< HEAD
   final InsertionAdapter<OwnerEntry> _ownerEntryInsertionAdapter;
 
   final UpdateAdapter<OwnerEntry> _ownerEntryUpdateAdapter;
@@ -917,26 +1020,10 @@ class _$AdditionalServiceCategoryDao extends AdditionalServiceCategoryDao {
         'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 AND pendingDelete = 0 LIMIT 1',
         mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, countryCode: row['countryCode'] as String?, countryName: row['countryName'] as String?, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int), accountStatus: row['accountStatus'] as String?, pendingDelete: row['pendingDelete'] as int),
         arguments: [documentType, documentNumber]);
-=======
-  final InsertionAdapter<AdditionalServiceCategory>
-  _additionalServiceCategoryInsertionAdapter;
-
-  @override
-  Future<List<AdditionalServiceCategory>> findAll() async {
-    return _queryAdapter.queryList(
-      'SELECT * FROM additional_service_categories ORDER BY name ASC',
-      mapper: (Map<String, Object?> row) => AdditionalServiceCategory(
-        id: row['id'] as int?,
-        name: row['name'] as String,
-        createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int),
-      ),
-    );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
   }
 
   @override
   Future<int?> count() async {
-<<<<<<< HEAD
     return _queryAdapter.query('SELECT COUNT(*) FROM owners',
         mapper: (Map<String, Object?> row) => row.values.first as int);
   }
@@ -1037,60 +1124,6 @@ class _$DocumentTypeDao extends DocumentTypeDao {
                   'isActive': item.isActive,
                   'sortOrder': item.sortOrder
                 });
-=======
-    return _queryAdapter.query(
-      'SELECT COUNT(*) FROM additional_service_categories',
-      mapper: (Map<String, Object?> row) => row.values.first as int,
-    );
-  }
-
-  @override
-  Future<void> deleteAll() async {
-    await _queryAdapter.queryNoReturn(
-      'DELETE FROM additional_service_categories',
-    );
-  }
-
-  @override
-  Future<void> insertAll(List<AdditionalServiceCategory> categories) async {
-    await _additionalServiceCategoryInsertionAdapter.insertList(
-      categories,
-      OnConflictStrategy.abort,
-    );
-  }
-}
-
-class _$AdditionalServiceDao extends AdditionalServiceDao {
-  _$AdditionalServiceDao(this.database, this.changeListener)
-    : _queryAdapter = QueryAdapter(database),
-      _additionalServiceEntryInsertionAdapter = InsertionAdapter(
-        database,
-        'additional_services',
-        (AdditionalServiceEntry item) => <String, Object?>{
-          'id': item.id,
-          'motelId': item.motelId,
-          'name': item.name,
-          'description': item.description,
-          'category': item.category,
-          'price': item.price,
-          'active': item.active ? 1 : 0,
-        },
-      ),
-      _additionalServiceEntryUpdateAdapter = UpdateAdapter(
-        database,
-        'additional_services',
-        ['id'],
-        (AdditionalServiceEntry item) => <String, Object?>{
-          'id': item.id,
-          'motelId': item.motelId,
-          'name': item.name,
-          'description': item.description,
-          'category': item.category,
-          'price': item.price,
-          'active': item.active ? 1 : 0,
-        },
-      );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
 
   final sqflite.DatabaseExecutor database;
 
@@ -1098,7 +1131,6 @@ class _$AdditionalServiceDao extends AdditionalServiceDao {
 
   final QueryAdapter _queryAdapter;
 
-<<<<<<< HEAD
   final InsertionAdapter<DocumentTypeEntry> _documentTypeEntryInsertionAdapter;
 
   @override
@@ -1127,66 +1159,10 @@ class _$AdditionalServiceDao extends AdditionalServiceDao {
             example: row['example'] as String,
             isActive: row['isActive'] as int,
             sortOrder: row['sortOrder'] as int));
-=======
-  final InsertionAdapter<AdditionalServiceEntry>
-  _additionalServiceEntryInsertionAdapter;
-
-  final UpdateAdapter<AdditionalServiceEntry>
-  _additionalServiceEntryUpdateAdapter;
-
-  @override
-  Future<List<AdditionalServiceEntry>> findAll() async {
-    return _queryAdapter.queryList(
-      'SELECT * FROM additional_services ORDER BY name ASC',
-      mapper: (Map<String, Object?> row) => AdditionalServiceEntry(
-        id: row['id'] as String,
-        motelId: row['motelId'] as String,
-        name: row['name'] as String,
-        description: row['description'] as String,
-        category: row['category'] as String,
-        price: row['price'] as int,
-        active: (row['active'] as int) != 0,
-      ),
-    );
-  }
-
-  @override
-  Future<List<AdditionalServiceEntry>> findByMotel(String motelId) async {
-    return _queryAdapter.queryList(
-      'SELECT * FROM additional_services WHERE motelId = ?1 ORDER BY name ASC',
-      mapper: (Map<String, Object?> row) => AdditionalServiceEntry(
-        id: row['id'] as String,
-        motelId: row['motelId'] as String,
-        name: row['name'] as String,
-        description: row['description'] as String,
-        category: row['category'] as String,
-        price: row['price'] as int,
-        active: (row['active'] as int) != 0,
-      ),
-      arguments: [motelId],
-    );
-  }
-
-  @override
-  Future<int?> count() async {
-    return _queryAdapter.query(
-      'SELECT COUNT(*) FROM additional_services',
-      mapper: (Map<String, Object?> row) => row.values.first as int,
-    );
-  }
-
-  @override
-  Future<void> deleteById(String serviceId) async {
-    await _queryAdapter.queryNoReturn(
-      'DELETE FROM additional_services WHERE id = ?1',
-      arguments: [serviceId],
-    );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
   }
 
   @override
   Future<void> deleteAll() async {
-<<<<<<< HEAD
     await _queryAdapter.queryNoReturn('DELETE FROM document_types');
   }
 
@@ -1194,25 +1170,6 @@ class _$AdditionalServiceDao extends AdditionalServiceDao {
   Future<void> insertDocumentTypes(List<DocumentTypeEntry> types) async {
     await _documentTypeEntryInsertionAdapter.insertList(
         types, OnConflictStrategy.replace);
-=======
-    await _queryAdapter.queryNoReturn('DELETE FROM additional_services');
-  }
-
-  @override
-  Future<void> insertAll(List<AdditionalServiceEntry> services) async {
-    await _additionalServiceEntryInsertionAdapter.insertList(
-      services,
-      OnConflictStrategy.abort,
-    );
-  }
-
-  @override
-  Future<void> updateService(AdditionalServiceEntry service) async {
-    await _additionalServiceEntryUpdateAdapter.update(
-      service,
-      OnConflictStrategy.abort,
-    );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
   }
 }
 
@@ -1564,16 +1521,15 @@ class _$AuthUserProfileDao extends AuthUserProfileDao {
 }
 
 class _$ReservationCategoryDao extends ReservationCategoryDao {
-  _$ReservationCategoryDao(this.database, this.changeListener)
-    : _queryAdapter = QueryAdapter(database),
-      _reservationCategoryInsertionAdapter = InsertionAdapter(
-        database,
-        'reservation_categories',
-        (ReservationCategory item) => <String, Object?>{
-          'id': item.id,
-          'name': item.name,
-        },
-      );
+  _$ReservationCategoryDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _reservationCategoryInsertionAdapter = InsertionAdapter(
+            database,
+            'reservation_categories',
+            (ReservationCategory item) =>
+                <String, Object?>{'id': item.id, 'name': item.name});
 
   final sqflite.DatabaseExecutor database;
 
@@ -1582,128 +1538,115 @@ class _$ReservationCategoryDao extends ReservationCategoryDao {
   final QueryAdapter _queryAdapter;
 
   final InsertionAdapter<ReservationCategory>
-  _reservationCategoryInsertionAdapter;
+      _reservationCategoryInsertionAdapter;
 
   @override
   Future<List<ReservationCategory>> findAll() async {
     return _queryAdapter.queryList(
-      'SELECT * FROM reservation_categories ORDER BY name ASC',
-      mapper: (Map<String, Object?> row) => ReservationCategory(
-        id: row['id'] as int,
-        name: row['name'] as String,
-      ),
-    );
+        'SELECT * FROM reservation_categories ORDER BY name ASC',
+        mapper: (Map<String, Object?> row) => ReservationCategory(
+            id: row['id'] as int, name: row['name'] as String));
   }
 
   @override
   Future<ReservationCategory?> findById(int id) async {
     return _queryAdapter.query(
-      'SELECT * FROM reservation_categories WHERE id = ?1 LIMIT 1',
-      mapper: (Map<String, Object?> row) => ReservationCategory(
-        id: row['id'] as int,
-        name: row['name'] as String,
-      ),
-      arguments: [id],
-    );
+        'SELECT * FROM reservation_categories WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => ReservationCategory(
+            id: row['id'] as int, name: row['name'] as String),
+        arguments: [id]);
   }
 
   @override
   Future<void> insertAll(List<ReservationCategory> categories) async {
     await _reservationCategoryInsertionAdapter.insertList(
-      categories,
-      OnConflictStrategy.ignore,
-    );
+        categories, OnConflictStrategy.ignore);
   }
 
   @override
   Future<void> upsertAll(List<ReservationCategory> categories) async {
     await _reservationCategoryInsertionAdapter.insertList(
-      categories,
-      OnConflictStrategy.replace,
-    );
+        categories, OnConflictStrategy.replace);
   }
 
   @override
   Future<void> insertCategory(ReservationCategory category) async {
     await _reservationCategoryInsertionAdapter.insert(
-      category,
-      OnConflictStrategy.ignore,
-    );
+        category, OnConflictStrategy.ignore);
   }
 }
 
 class _$ReservationDao extends ReservationDao {
-  _$ReservationDao(this.database, this.changeListener)
-    : _queryAdapter = QueryAdapter(database),
-      _reservationEntityInsertionAdapter = InsertionAdapter(
-        database,
-        'reservations',
-        (ReservationEntity item) => <String, Object?>{
-          'id': item.id,
-          'requestId': item.requestId,
-          'motelId': item.motelId,
-          'motelName': item.motelName,
-          'roomId': item.roomId,
-          'roomName': item.roomName,
-          'roomNumber': item.roomNumber,
-          'checkIn': item.checkIn,
-          'checkOut': item.checkOut,
-          'stayMode': item.stayMode,
-          'guestCount': item.guestCount,
-          'roomTotal': item.roomTotal,
-          'total': item.total,
-          'status': item.status,
-          'createdAt': item.createdAt,
-          'guestId': item.guestId,
-          'guestName': item.guestName,
-          'categoryId': item.categoryId,
-          'cancellationReason': item.cancellationReason,
-          'invoiceAccessStatus': item.invoiceAccessStatus,
-          'paymentMethod': item.paymentMethod,
-        },
-      ),
-      _reservationLineItemEntityInsertionAdapter = InsertionAdapter(
-        database,
-        'reservation_line_items',
-        (ReservationLineItemEntity item) => <String, Object?>{
-          'rowId': item.rowId,
-          'reservationId': item.reservationId,
-          'kind': item.kind,
-          'itemId': item.itemId,
-          'name': item.name,
-          'unitPrice': item.unitPrice,
-          'quantity': item.quantity,
-          'position': item.position,
-        },
-      ),
-      _reservationEntityUpdateAdapter = UpdateAdapter(
-        database,
-        'reservations',
-        ['id'],
-        (ReservationEntity item) => <String, Object?>{
-          'id': item.id,
-          'requestId': item.requestId,
-          'motelId': item.motelId,
-          'motelName': item.motelName,
-          'roomId': item.roomId,
-          'roomName': item.roomName,
-          'roomNumber': item.roomNumber,
-          'checkIn': item.checkIn,
-          'checkOut': item.checkOut,
-          'stayMode': item.stayMode,
-          'guestCount': item.guestCount,
-          'roomTotal': item.roomTotal,
-          'total': item.total,
-          'status': item.status,
-          'createdAt': item.createdAt,
-          'guestId': item.guestId,
-          'guestName': item.guestName,
-          'categoryId': item.categoryId,
-          'cancellationReason': item.cancellationReason,
-          'invoiceAccessStatus': item.invoiceAccessStatus,
-          'paymentMethod': item.paymentMethod,
-        },
-      );
+  _$ReservationDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _reservationEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'reservations',
+            (ReservationEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'requestId': item.requestId,
+                  'motelId': item.motelId,
+                  'motelName': item.motelName,
+                  'roomId': item.roomId,
+                  'roomName': item.roomName,
+                  'roomNumber': item.roomNumber,
+                  'checkIn': item.checkIn,
+                  'checkOut': item.checkOut,
+                  'stayMode': item.stayMode,
+                  'guestCount': item.guestCount,
+                  'roomTotal': item.roomTotal,
+                  'total': item.total,
+                  'status': item.status,
+                  'createdAt': item.createdAt,
+                  'guestId': item.guestId,
+                  'guestName': item.guestName,
+                  'categoryId': item.categoryId,
+                  'cancellationReason': item.cancellationReason,
+                  'invoiceAccessStatus': item.invoiceAccessStatus,
+                  'paymentMethod': item.paymentMethod
+                }),
+        _reservationLineItemEntityInsertionAdapter = InsertionAdapter(
+            database,
+            'reservation_line_items',
+            (ReservationLineItemEntity item) => <String, Object?>{
+                  'rowId': item.rowId,
+                  'reservationId': item.reservationId,
+                  'kind': item.kind,
+                  'itemId': item.itemId,
+                  'name': item.name,
+                  'unitPrice': item.unitPrice,
+                  'quantity': item.quantity,
+                  'position': item.position
+                }),
+        _reservationEntityUpdateAdapter = UpdateAdapter(
+            database,
+            'reservations',
+            ['id'],
+            (ReservationEntity item) => <String, Object?>{
+                  'id': item.id,
+                  'requestId': item.requestId,
+                  'motelId': item.motelId,
+                  'motelName': item.motelName,
+                  'roomId': item.roomId,
+                  'roomName': item.roomName,
+                  'roomNumber': item.roomNumber,
+                  'checkIn': item.checkIn,
+                  'checkOut': item.checkOut,
+                  'stayMode': item.stayMode,
+                  'guestCount': item.guestCount,
+                  'roomTotal': item.roomTotal,
+                  'total': item.total,
+                  'status': item.status,
+                  'createdAt': item.createdAt,
+                  'guestId': item.guestId,
+                  'guestName': item.guestName,
+                  'categoryId': item.categoryId,
+                  'cancellationReason': item.cancellationReason,
+                  'invoiceAccessStatus': item.invoiceAccessStatus,
+                  'paymentMethod': item.paymentMethod
+                });
 
   final sqflite.DatabaseExecutor database;
 
@@ -1714,179 +1657,149 @@ class _$ReservationDao extends ReservationDao {
   final InsertionAdapter<ReservationEntity> _reservationEntityInsertionAdapter;
 
   final InsertionAdapter<ReservationLineItemEntity>
-  _reservationLineItemEntityInsertionAdapter;
+      _reservationLineItemEntityInsertionAdapter;
 
   final UpdateAdapter<ReservationEntity> _reservationEntityUpdateAdapter;
 
   @override
   Future<List<ReservationEntity>> findAllReservations() async {
-    return _queryAdapter.queryList(
-      'SELECT * FROM reservations',
-      mapper: (Map<String, Object?> row) => ReservationEntity(
-        id: row['id'] as String,
-        requestId: row['requestId'] as String,
-        motelId: row['motelId'] as String,
-        motelName: row['motelName'] as String,
-        roomId: row['roomId'] as String,
-        roomName: row['roomName'] as String,
-        roomNumber: row['roomNumber'] as String,
-        checkIn: row['checkIn'] as int,
-        checkOut: row['checkOut'] as int,
-        stayMode: row['stayMode'] as String,
-        guestCount: row['guestCount'] as int,
-        roomTotal: row['roomTotal'] as int,
-        total: row['total'] as int,
-        status: row['status'] as String,
-        createdAt: row['createdAt'] as int,
-        guestId: row['guestId'] as String,
-        guestName: row['guestName'] as String,
-        categoryId: row['categoryId'] as int?,
-        cancellationReason: row['cancellationReason'] as String?,
-        invoiceAccessStatus: row['invoiceAccessStatus'] as String,
-        paymentMethod: row['paymentMethod'] as String?,
-      ),
-    );
+    return _queryAdapter.queryList('SELECT * FROM reservations',
+        mapper: (Map<String, Object?> row) => ReservationEntity(
+            id: row['id'] as String,
+            requestId: row['requestId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            roomId: row['roomId'] as String,
+            roomName: row['roomName'] as String,
+            roomNumber: row['roomNumber'] as String,
+            checkIn: row['checkIn'] as int,
+            checkOut: row['checkOut'] as int,
+            stayMode: row['stayMode'] as String,
+            guestCount: row['guestCount'] as int,
+            roomTotal: row['roomTotal'] as int,
+            total: row['total'] as int,
+            status: row['status'] as String,
+            createdAt: row['createdAt'] as int,
+            guestId: row['guestId'] as String,
+            guestName: row['guestName'] as String,
+            categoryId: row['categoryId'] as int?,
+            cancellationReason: row['cancellationReason'] as String?,
+            invoiceAccessStatus: row['invoiceAccessStatus'] as String,
+            paymentMethod: row['paymentMethod'] as String?));
   }
 
   @override
   Future<ReservationEntity?> findReservationById(String id) async {
     return _queryAdapter.query(
-      'SELECT * FROM reservations WHERE id = ?1 LIMIT 1',
-      mapper: (Map<String, Object?> row) => ReservationEntity(
-        id: row['id'] as String,
-        requestId: row['requestId'] as String,
-        motelId: row['motelId'] as String,
-        motelName: row['motelName'] as String,
-        roomId: row['roomId'] as String,
-        roomName: row['roomName'] as String,
-        roomNumber: row['roomNumber'] as String,
-        checkIn: row['checkIn'] as int,
-        checkOut: row['checkOut'] as int,
-        stayMode: row['stayMode'] as String,
-        guestCount: row['guestCount'] as int,
-        roomTotal: row['roomTotal'] as int,
-        total: row['total'] as int,
-        status: row['status'] as String,
-        createdAt: row['createdAt'] as int,
-        guestId: row['guestId'] as String,
-        guestName: row['guestName'] as String,
-        categoryId: row['categoryId'] as int?,
-        cancellationReason: row['cancellationReason'] as String?,
-        invoiceAccessStatus: row['invoiceAccessStatus'] as String,
-        paymentMethod: row['paymentMethod'] as String?,
-      ),
-      arguments: [id],
-    );
+        'SELECT * FROM reservations WHERE id = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => ReservationEntity(
+            id: row['id'] as String,
+            requestId: row['requestId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            roomId: row['roomId'] as String,
+            roomName: row['roomName'] as String,
+            roomNumber: row['roomNumber'] as String,
+            checkIn: row['checkIn'] as int,
+            checkOut: row['checkOut'] as int,
+            stayMode: row['stayMode'] as String,
+            guestCount: row['guestCount'] as int,
+            roomTotal: row['roomTotal'] as int,
+            total: row['total'] as int,
+            status: row['status'] as String,
+            createdAt: row['createdAt'] as int,
+            guestId: row['guestId'] as String,
+            guestName: row['guestName'] as String,
+            categoryId: row['categoryId'] as int?,
+            cancellationReason: row['cancellationReason'] as String?,
+            invoiceAccessStatus: row['invoiceAccessStatus'] as String,
+            paymentMethod: row['paymentMethod'] as String?),
+        arguments: [id]);
   }
 
   @override
   Future<ReservationEntity?> findReservationByRequestId(
-    String requestId,
-  ) async {
+      String requestId) async {
     return _queryAdapter.query(
-      'SELECT * FROM reservations WHERE requestId = ?1 LIMIT 1',
-      mapper: (Map<String, Object?> row) => ReservationEntity(
-        id: row['id'] as String,
-        requestId: row['requestId'] as String,
-        motelId: row['motelId'] as String,
-        motelName: row['motelName'] as String,
-        roomId: row['roomId'] as String,
-        roomName: row['roomName'] as String,
-        roomNumber: row['roomNumber'] as String,
-        checkIn: row['checkIn'] as int,
-        checkOut: row['checkOut'] as int,
-        stayMode: row['stayMode'] as String,
-        guestCount: row['guestCount'] as int,
-        roomTotal: row['roomTotal'] as int,
-        total: row['total'] as int,
-        status: row['status'] as String,
-        createdAt: row['createdAt'] as int,
-        guestId: row['guestId'] as String,
-        guestName: row['guestName'] as String,
-        categoryId: row['categoryId'] as int?,
-        cancellationReason: row['cancellationReason'] as String?,
-        invoiceAccessStatus: row['invoiceAccessStatus'] as String,
-        paymentMethod: row['paymentMethod'] as String?,
-      ),
-      arguments: [requestId],
-    );
+        'SELECT * FROM reservations WHERE requestId = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => ReservationEntity(
+            id: row['id'] as String,
+            requestId: row['requestId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            roomId: row['roomId'] as String,
+            roomName: row['roomName'] as String,
+            roomNumber: row['roomNumber'] as String,
+            checkIn: row['checkIn'] as int,
+            checkOut: row['checkOut'] as int,
+            stayMode: row['stayMode'] as String,
+            guestCount: row['guestCount'] as int,
+            roomTotal: row['roomTotal'] as int,
+            total: row['total'] as int,
+            status: row['status'] as String,
+            createdAt: row['createdAt'] as int,
+            guestId: row['guestId'] as String,
+            guestName: row['guestName'] as String,
+            categoryId: row['categoryId'] as int?,
+            cancellationReason: row['cancellationReason'] as String?,
+            invoiceAccessStatus: row['invoiceAccessStatus'] as String,
+            paymentMethod: row['paymentMethod'] as String?),
+        arguments: [requestId]);
   }
 
   @override
   Future<int?> countReservations() async {
-    return _queryAdapter.query(
-      'SELECT COUNT(*) FROM reservations',
-      mapper: (Map<String, Object?> row) => row.values.first as int,
-    );
+    return _queryAdapter.query('SELECT COUNT(*) FROM reservations',
+        mapper: (Map<String, Object?> row) => row.values.first as int);
   }
 
   @override
   Future<List<ReservationLineItemEntity>> findAllLineItems() async {
     return _queryAdapter.queryList(
-      'SELECT * FROM reservation_line_items ORDER BY reservationId, position',
-      mapper: (Map<String, Object?> row) => ReservationLineItemEntity(
-        rowId: row['rowId'] as int?,
-        reservationId: row['reservationId'] as String,
-        kind: row['kind'] as String,
-        itemId: row['itemId'] as String,
-        name: row['name'] as String,
-        unitPrice: row['unitPrice'] as int,
-        quantity: row['quantity'] as int,
-        position: row['position'] as int,
-      ),
-    );
+        'SELECT * FROM reservation_line_items ORDER BY reservationId, position',
+        mapper: (Map<String, Object?> row) => ReservationLineItemEntity(
+            rowId: row['rowId'] as int?,
+            reservationId: row['reservationId'] as String,
+            kind: row['kind'] as String,
+            itemId: row['itemId'] as String,
+            name: row['name'] as String,
+            unitPrice: row['unitPrice'] as int,
+            quantity: row['quantity'] as int,
+            position: row['position'] as int));
   }
 
   @override
   Future<List<ReservationLineItemEntity>> findLineItems(
-    String reservationId,
-  ) async {
+      String reservationId) async {
     return _queryAdapter.queryList(
-      'SELECT * FROM reservation_line_items WHERE reservationId = ?1 ORDER BY position',
-      mapper: (Map<String, Object?> row) => ReservationLineItemEntity(
-        rowId: row['rowId'] as int?,
-        reservationId: row['reservationId'] as String,
-        kind: row['kind'] as String,
-        itemId: row['itemId'] as String,
-        name: row['name'] as String,
-        unitPrice: row['unitPrice'] as int,
-        quantity: row['quantity'] as int,
-        position: row['position'] as int,
-      ),
-      arguments: [reservationId],
-    );
+        'SELECT * FROM reservation_line_items WHERE reservationId = ?1 ORDER BY position',
+        mapper: (Map<String, Object?> row) => ReservationLineItemEntity(rowId: row['rowId'] as int?, reservationId: row['reservationId'] as String, kind: row['kind'] as String, itemId: row['itemId'] as String, name: row['name'] as String, unitPrice: row['unitPrice'] as int, quantity: row['quantity'] as int, position: row['position'] as int),
+        arguments: [reservationId]);
   }
 
   @override
   Future<void> deleteLineItems(String id) async {
     await _queryAdapter.queryNoReturn(
-      'DELETE FROM reservation_line_items WHERE reservationId = ?1',
-      arguments: [id],
-    );
+        'DELETE FROM reservation_line_items WHERE reservationId = ?1',
+        arguments: [id]);
   }
 
   @override
   Future<void> insertReservationRow(ReservationEntity reservation) async {
     await _reservationEntityInsertionAdapter.insert(
-      reservation,
-      OnConflictStrategy.abort,
-    );
+        reservation, OnConflictStrategy.abort);
   }
 
   @override
   Future<void> insertLineItems(List<ReservationLineItemEntity> items) async {
     await _reservationLineItemEntityInsertionAdapter.insertList(
-      items,
-      OnConflictStrategy.abort,
-    );
+        items, OnConflictStrategy.abort);
   }
 
   @override
   Future<void> updateReservationRow(ReservationEntity reservation) async {
     await _reservationEntityUpdateAdapter.update(
-      reservation,
-      OnConflictStrategy.abort,
-    );
+        reservation, OnConflictStrategy.abort);
   }
 
   @override
@@ -1897,15 +1810,12 @@ class _$ReservationDao extends ReservationDao {
     if (database is sqflite.Transaction) {
       await super.insertReservation(reservation, items);
     } else {
-      await (database as sqflite.Database).transaction<void>((
-        transaction,
-      ) async {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
-        await transactionDatabase.reservationDao.insertReservation(
-          reservation,
-          items,
-        );
+        await transactionDatabase.reservationDao
+            .insertReservation(reservation, items);
       });
     }
   }
@@ -1918,15 +1828,12 @@ class _$ReservationDao extends ReservationDao {
     if (database is sqflite.Transaction) {
       await super.replaceReservation(reservation, items);
     } else {
-      await (database as sqflite.Database).transaction<void>((
-        transaction,
-      ) async {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
-        await transactionDatabase.reservationDao.replaceReservation(
-          reservation,
-          items,
-        );
+        await transactionDatabase.reservationDao
+            .replaceReservation(reservation, items);
       });
     }
   }
@@ -1939,15 +1846,12 @@ class _$ReservationDao extends ReservationDao {
     if (database is sqflite.Transaction) {
       await super.insertReservations(reservations, items);
     } else {
-      await (database as sqflite.Database).transaction<void>((
-        transaction,
-      ) async {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
         final transactionDatabase = _$AppDatabase(changeListener)
           ..database = transaction;
-        await transactionDatabase.reservationDao.insertReservations(
-          reservations,
-          items,
-        );
+        await transactionDatabase.reservationDao
+            .insertReservations(reservations, items);
       });
     }
   }

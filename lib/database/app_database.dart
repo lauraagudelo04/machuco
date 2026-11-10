@@ -46,11 +46,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-<<<<<<< HEAD
-  version: 19,
-=======
-  version: 17,
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+  version: 20,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -62,16 +58,13 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
-<<<<<<< HEAD
-    OwnerEntry,
-    DocumentTypeEntry,
-=======
     AdditionalServiceCategory,
     AdditionalServiceEntry,
     ReservationCategory,
     ReservationEntity,
     ReservationLineItemEntity,
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+    OwnerEntry,
+    DocumentTypeEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -80,13 +73,10 @@ abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
-<<<<<<< HEAD
-  OwnerDao get ownerDao;
-  DocumentTypeDao get documentTypeDao;
-=======
   AdditionalServiceCategoryDao get additionalServiceCategoryDao;
   AdditionalServiceDao get additionalServiceDao;
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+  OwnerDao get ownerDao;
+  DocumentTypeDao get documentTypeDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -130,11 +120,9 @@ class AppDatabaseProvider {
         migration14To15,
         migration15To16,
         migration16To17,
-<<<<<<< HEAD
         migration17To18,
         migration18To19,
-=======
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
+        migration19To20,
       ])
       .addCallback(
         Callback(
@@ -352,7 +340,7 @@ Future<void> _createMotelSchema(sqflite.DatabaseExecutor database) async {
   );
 }
 
-Future<void> _createPaymentSchema(sqflite.Database database) async {
+Future<void> _createPaymentSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS payment_method_catalog ('
     'id INTEGER NOT NULL PRIMARY KEY, name TEXT NOT NULL)',
@@ -375,7 +363,7 @@ Future<void> _createPaymentSchema(sqflite.Database database) async {
   }
 }
 
-Future<void> _createClientSchema(sqflite.Database database) async {
+Future<void> _createClientSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `clients` ('
     '`id` INTEGER PRIMARY KEY AUTOINCREMENT, '
@@ -443,11 +431,6 @@ final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 /// Es idempotente porque esta tabla se creó antes como v13 en la rama de
 /// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
 /// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
-<<<<<<< HEAD
-final migration13To14 = Migration(13, 14, _createAuthUserProfileSchema);
-
-=======
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
 Future<void> _createAuthUserProfileSchema(
   sqflite.DatabaseExecutor database,
 ) async {
@@ -461,19 +444,6 @@ Future<void> _createAuthUserProfileSchema(
   );
 }
 
-<<<<<<< HEAD
-/// Propietarios y tipos de documento (módulo de propietarios).
-///
-/// Es idempotente porque las versiones 12→13 y 13→14 de esta rama también
-/// crearon `owners`, y porque develop llegó hasta la 14 sin ninguna de las dos
-/// tablas. Aquí se garantiza el esquema completo que necesita la app:
-/// `owners` con el indicativo separado y `document_types` sembrada.
-final migration14To15 = Migration(14, 15, (database) async {
-  await _createOwnerSchema(database);
-  await _addOwnerCountryColumns(database);
-  await _createDocumentTypeSchema(database);
-  await _seedDocumentTypes(database);
-=======
 Future<void> createRoomSyncSchema(sqflite.DatabaseExecutor database) async {
   await database.execute('''CREATE TABLE IF NOT EXISTS room_sync_queue (
     sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -549,10 +519,12 @@ final migration14To15 = Migration(14, 15, _completeMergedSchemas);
 /// Completa las dos variantes de v15 conservando los datos de ambas ramas.
 final migration15To16 = Migration(15, 16, _completeMergedSchemas);
 
-/// Agrega el maestro de categorías de servicios adicionales y la tabla
-/// local de servicios adicionales. Primero completa los esquemas de las otras
-/// ramas (idempotente) por si la base quedó en una v16 anterior a la unión.
-final migration16To17 = Migration(16, 17, (database) async {
+/// Esquema completo de develop: auth, room sync, reservas, pagos, clientes y
+/// servicios adicionales. Todo es idempotente, así que también sirve para
+/// completar una base que llegó desde la rama de propietarios (v19 propia).
+Future<void> _completeDevelopSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
   await _completeMergedSchemas(database);
   await _createPaymentSchema(database);
   await _createClientSchema(database);
@@ -570,45 +542,26 @@ final migration16To17 = Migration(16, 17, (database) async {
     'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
     'active INTEGER NOT NULL)',
   );
->>>>>>> 5146107eb4335446d3972278be0976fe9942f220
-});
+}
 
-/// Borrados diferidos de propietarios.
-///
-/// Antes, eliminar sin conexión obligaba a conservar el registro. Ahora la fila
-/// queda oculta con `pendingDelete = 1` hasta que Firestore confirme el
-/// borrado, de modo que la sincronización puede reintentarlo sola.
-final migration15To16 = Migration(15, 16, _addOwnerPendingDeleteColumn);
+/// Agrega el maestro de categorías de servicios adicionales y la tabla
+/// local de servicios adicionales. Primero completa los esquemas de las otras
+/// ramas (idempotente) por si la base quedó en una v16 anterior a la unión.
+final migration16To17 = Migration(16, 17, _completeDevelopSchemas);
 
-/// Reconciliación de las dos ramas en una sola base.
+/// Propietarios y tipos de documento (módulo de propietarios).
 ///
-/// Una instalación de esta rama llegó al merge ya en la versión 16, así que se
-/// saltó los pasos de develop (12→13 y 13→14). Esta migración aplica sus
-/// efectos pendientes —perfil del usuario y limpieza de los ejemplos de room—
-/// y vuelve a garantizar el esquema de propietarios. Todo es idempotente: en
-/// una base que viene de develop las tablas ya existen y no se toca nada.
-final migration16To17 = Migration(16, 17, (database) async {
-  await _createAuthUserProfileSchema(database);
+/// Re-apilada sobre la cadena de develop (que llega a la 17). Es idempotente:
+/// cubre tanto una base de develop, que no tiene `owners`, como una de esta
+/// rama, que ya los tenía con el indicativo y `pendingDelete`.
+final migration17To18 = Migration(17, 18, (database) async {
   await _deleteLegacyRoomMockDataIfPresent(database);
   await _createOwnerSchema(database);
   await _addOwnerCountryColumns(database);
   await _addOwnerPendingDeleteColumn(database);
+  await _addOwnerAccountStatusColumn(database);
   await _createDocumentTypeSchema(database);
   await _seedDocumentTypes(database);
-});
-
-/// Estado de la cuenta del propietario tal como vive en `users/{uid}`.
-///
-/// Los propietarios pasan a ser usuarios registrados: la columna permite
-/// mostrar si la cuenta está activa, pendiente de aprobación o deshabilitada
-/// sin consultar la nube. Las filas anteriores quedan con el estado activo que
-/// ya representaba `isActive`.
-final migration17To18 = Migration(17, 18, (database) async {
-  final columns = await database.rawQuery('PRAGMA table_info(owners)');
-  final names = columns.map((column) => column['name']).toSet();
-  if (!names.contains('accountStatus')) {
-    await database.execute('ALTER TABLE owners ADD COLUMN accountStatus TEXT');
-  }
 });
 
 /// Limpieza de filas locales heredadas de la versión anterior.
@@ -626,6 +579,11 @@ final migration18To19 = Migration(18, 19, (database) async {
   await database.delete('owners', where: "id LIKE 'owner-%'");
 });
 
+/// Reconciliación final: una instalación de esta rama pudo quedar en la v19
+/// propia (con propietarios pero sin las tablas de develop). Se completan sus
+/// esquemas de forma idempotente.
+final migration19To20 = Migration(19, 20, _completeDevelopSchemas);
+
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
 ///
 /// Algunas bases mínimas (pruebas de migración de propietarios) no lo tienen y
@@ -639,6 +597,21 @@ Future<void> _deleteLegacyRoomMockDataIfPresent(
   );
   if (tables.length < 2) return;
   await deleteLegacyRoomMockData(database);
+}
+
+
+/// Estado de la cuenta del propietario tal como vive en `users/{uid}`.
+///
+/// Es idempotente: una base nueva ya nace con la columna y una de esta rama
+/// anterior a la unificación también.
+Future<void> _addOwnerAccountStatusColumn(
+  sqflite.DatabaseExecutor database,
+) async {
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('accountStatus')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN accountStatus TEXT');
+  }
 }
 
 Future<void> _createOwnerSchema(sqflite.DatabaseExecutor database) async {

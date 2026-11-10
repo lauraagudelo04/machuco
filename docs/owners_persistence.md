@@ -58,11 +58,13 @@ depende de `supabase_flutter`.
 - `OwnerRepository.mergeRemoteOwners` inserta lo que solo existe en la nube y
   actualiza lo ya sincronizado. Un registro local pendiente **nunca** se pisa:
   se sube en el siguiente envío. Un borrado pendiente tampoco se resucita.
-- La versión local es la **19**: la 14→15 crea `owners` (con
-  `countryCode`/`countryName`) y `document_types` sembrada; la 15→16 agrega
-  `pendingDelete`; la 16→17 reconcilia una base v16 de esta rama antes del
-  merge; la 17→18 agrega `accountStatus`; y la 18→19 borra las filas heredadas
-  con id `owner-...`. Todas son idempotentes.
+- La versión local es la **20**. Se conserva la cadena de develop hasta la 17
+  (auth/room sync, reservas, pagos/clientes y servicios adicionales) y encima
+  se re-apila el módulo: la **17→18** crea `owners` (con
+  `countryCode`/`countryName`), `document_types` sembrada, `pendingDelete` y
+  `accountStatus`; la **18→19** borra las filas heredadas con id `owner-...`; y
+  la **19→20** vuelve a completar los esquemas de develop para las bases que ya
+  estaban en la v19 propia. Todas son idempotentes.
 
 ## Supabase: maestro de tipos de documento
 
