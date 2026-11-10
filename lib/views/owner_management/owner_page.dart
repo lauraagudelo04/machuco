@@ -390,31 +390,17 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
               ),
           ],
         ),
+        // Todo se agrupa en el menú lateral: la barra solo tiene la hamburguesa
+        // para no duplicar acciones (notificaciones y cerrar sesión).
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.s2),
+            padding: const EdgeInsets.only(right: AppSpacing.s4),
             child: Builder(
               builder: (context) => AppIconButton(
                 icon: Icons.menu,
                 tooltip: 'Menú principal',
                 onPressed: () => Scaffold.of(context).openEndDrawer(),
               ),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.s2),
-            child: AppIconButton(
-              icon: Icons.notifications_outlined,
-              tooltip: 'Notificaciones',
-              onPressed: _openNotifications,
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.s4),
-            child: AppIconButton(
-              icon: Icons.logout,
-              tooltip: 'Cerrar sesión',
-              onPressed: _logout,
             ),
           ),
         ],
@@ -428,6 +414,10 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
           onOpenApprovals: () {
             Navigator.of(drawerContext).pop();
             _openApprovals();
+          },
+          onOpenNotifications: () {
+            Navigator.of(drawerContext).pop();
+            _openNotifications();
           },
           onOpenProfile: () {
             Navigator.of(drawerContext).pop();

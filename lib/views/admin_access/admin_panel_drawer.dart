@@ -12,6 +12,7 @@ class AdminPanelDrawer extends StatelessWidget {
     required this.pendingRequests,
     required this.adminEmail,
     required this.onOpenApprovals,
+    required this.onOpenNotifications,
     required this.onOpenProfile,
     required this.onLogout,
   });
@@ -19,6 +20,7 @@ class AdminPanelDrawer extends StatelessWidget {
   final int pendingRequests;
   final String? adminEmail;
   final VoidCallback onOpenApprovals;
+  final VoidCallback onOpenNotifications;
   final VoidCallback onOpenProfile;
   final VoidCallback onLogout;
 
@@ -78,6 +80,11 @@ class AdminPanelDrawer extends StatelessWidget {
                   )
                 : null,
             onTap: onOpenApprovals,
+          ),
+          ListTile(
+            leading: const Icon(Icons.notifications_outlined),
+            title: const Text('Notificaciones'),
+            onTap: onOpenNotifications,
           ),
           ListTile(
             leading: const Icon(Icons.person_outline),
