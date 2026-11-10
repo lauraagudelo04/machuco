@@ -64,12 +64,18 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
       );
       Navigator.of(context).pop(true);
     } on ReservationCancellationException catch (error) {
-      if (!mounted) return;
-      setState(() => _isSubmitting = false);
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(error.message)));
+      _showPaymentError(error.message);
+    } on ReservationTransitionException catch (error) {
+      _showPaymentError(error.message);
     }
+  }
+
+  void _showPaymentError(String message) {
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override

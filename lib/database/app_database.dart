@@ -15,8 +15,13 @@ import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_line_item_entity.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/booking/reservation_category_dao.dart';
+import 'package:machuco/repositories/booking/reservation_dao.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
@@ -33,7 +38,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 15,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -45,6 +50,9 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
+    ReservationCategory,
+    ReservationEntity,
+    ReservationLineItemEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -61,6 +69,10 @@ abstract class AppDatabase extends FloorDatabase {
   PhoneCountryCodeDao get phoneCountryCodeDao;
   MotelDao get motelDao;
   AuthUserProfileDao get authUserProfileDao;
+
+  ReservationCategoryDao get reservationCategoryDao;
+
+  ReservationDao get reservationDao;
 }
 
 class AppDatabaseProvider {
@@ -89,6 +101,7 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
       ])
       .addCallback(
         Callback(
@@ -403,5 +416,51 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
+});
+
+/// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
+/// genera para `ReservationCategory`, `ReservationEntity` y
+/// `ReservationLineItemEntity`.
+final migration14To15 = Migration(14, 15, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
+    '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, '
+    '`requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, '
+    '`motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, '
+    '`roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, '
+    '`checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, '
+    '`stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, '
+    '`roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, '
+    '`status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, '
+    '`guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, '
+    '`categoryId` INTEGER, `cancellationReason` TEXT, '
+    '`invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, '
+    'PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_line_items` ('
+    '`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, '
+    '`itemId` TEXT NOT NULL, `name` TEXT NOT NULL, '
+    '`unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, '
+    '`position` INTEGER NOT NULL, '
+    'FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) '
+    'ON UPDATE NO ACTION ON DELETE CASCADE)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_requestId` '
+    'ON `reservations` (`requestId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_motelId` '
+    'ON `reservations` (`motelId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
+    'ON `reservation_line_items` (`reservationId`)',
   );
 });

@@ -97,6 +97,7 @@ class _Bar extends StatelessWidget {
               child: Align(
                 alignment: Alignment.bottomCenter,
                 child: FractionallySizedBox(
+                  widthFactor: 0.6,
                   heightFactor: ratio.clamp(0.02, 1.0),
                   child: DecoratedBox(
                     decoration: BoxDecoration(

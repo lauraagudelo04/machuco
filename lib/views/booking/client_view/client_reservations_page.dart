@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/booking/client_view/client_booking_controller.dart';
@@ -63,31 +64,33 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
       appBar: AppBar(
         title: const Text('Mis reservas'),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Herramientas de depuración (mock)',
-            icon: const Icon(Icons.bug_report_outlined),
-            onSelected: (action) {
-              switch (action) {
-                case 'reload':
-                  unawaited(_load());
-                case 'error':
-                  unawaited(_load(simulateError: true));
-                case 'offline':
-                  unawaited(_load(simulateOffline: true));
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'reload', child: Text('Recargar')),
-              PopupMenuItem(
-                value: 'error',
-                child: Text('Simular error de carga'),
-              ),
-              PopupMenuItem(
-                value: 'offline',
-                child: Text('Simular sin conexión'),
-              ),
-            ],
-          ),
+          // Mock failure simulation: development builds only.
+          if (kDebugMode)
+            PopupMenuButton<String>(
+              tooltip: 'Herramientas de depuración (mock)',
+              icon: const Icon(Icons.bug_report_outlined),
+              onSelected: (action) {
+                switch (action) {
+                  case 'reload':
+                    unawaited(_load());
+                  case 'error':
+                    unawaited(_load(simulateError: true));
+                  case 'offline':
+                    unawaited(_load(simulateOffline: true));
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'reload', child: Text('Recargar')),
+                PopupMenuItem(
+                  value: 'error',
+                  child: Text('Simular error de carga'),
+                ),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: Text('Simular sin conexión'),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(child: _buildBody(context)),
@@ -124,7 +127,7 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
     }
 
     final motelNames = _controller.motelNames;
-    final roomLabels = _controller.roomLabelsFor;
+    final roomLabels = _controller.roomLabelsForMotel(_motelFilter);
     final reservations = _controller.filteredReservations(
       motelName: _motelFilter,
       roomLabel: _roomFilter,
@@ -145,7 +148,13 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
             roomFilter: _roomFilter,
             sortField: _sortField,
             descending: _descending,
-            onMotelChanged: (value) => setState(() => _motelFilter = value),
+            onMotelChanged: (value) => setState(() {
+              _motelFilter = value;
+              _roomFilter = _controller.reconcileRoomLabel(
+                _roomFilter,
+                motelName: value,
+              );
+            }),
             onRoomChanged: (value) => setState(() => _roomFilter = value),
             onSortFieldChanged: (value) => setState(() => _sortField = value),
             onToggleDirection: () => setState(() => _descending = !_descending),
@@ -160,13 +169,15 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
               message: hasAnyReservation
                   ? 'No hay reservas que coincidan con el filtro seleccionado.'
                   : 'Cuando reserves una habitación, la verás aquí.',
-              actionLabel: hasAnyReservation ? 'Limpiar filtros' : null,
+              actionLabel: hasAnyReservation
+                  ? 'Limpiar filtros'
+                  : 'Explorar moteles',
               onAction: hasAnyReservation
                   ? () => setState(() {
                       _motelFilter = null;
                       _roomFilter = null;
                     })
-                  : null,
+                  : () => Navigator.pushNamed(context, AppRoutes.clientMotels),
             )
           else
             for (final reservation in reservations)

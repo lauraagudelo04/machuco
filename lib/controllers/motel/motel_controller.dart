@@ -20,7 +20,7 @@ class MotelController {
           final db = await AppDatabaseProvider.database;
           return db.motelDao;
         },
-        currentUid: () => CurrentUser.uid,
+        currentUid: () => CurrentUser.uidOrNull,
       ),
     );
   }
@@ -84,13 +84,16 @@ class MotelController {
     final repository = _repository;
     if (repository == null) {
       await Future.delayed(const Duration(seconds: 1));
-      const currentLoggedInUserId = 'owner-1020304050';
       return _mockDatabase
-          .where((motel) => motel.ownerId == currentLoggedInUserId)
+          .where((motel) => motel.ownerId == _currentOwnerId)
           .toList();
     }
     return repository.getMyMotels();
   }
+
+  /// Signed-in Firebase uid; the demo owner without a session.
+  static String get _currentOwnerId =>
+      CurrentUser.uidOrNull ?? 'owner-1020304050';
 
   /// Moteles de un propietario concreto (vista del administrador).
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {

@@ -9,6 +9,7 @@ import '../../payment/owner_view/owner_payment_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
+import '../../../service/firebase/current_user.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -27,12 +28,17 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String _searchQuery = '';
 
-  String _currentOwnerId = 'owner-1020304050';
-  final Map<String, String> _dummyOwners = {
-    'owner-1020304050': 'Laura Gómez (Propietaria)',
-    'owner-900123456': 'Inversiones Machuco S.A.S.',
-    'owner-345678': 'Simón Restrepo',
-  };
+  // With a session the owner is the signed-in uid and cannot switch to
+  // another one; without it the demo owners keep working.
+  late final String? _sessionUid = CurrentUser.uidOrNull;
+  late String _currentOwnerId = _sessionUid ?? 'owner-1020304050';
+  late final Map<String, String> _dummyOwners = _sessionUid == null
+      ? const {
+          'owner-1020304050': 'Laura Gómez (Propietaria)',
+          'owner-900123456': 'Inversiones Machuco S.A.S.',
+          'owner-345678': 'Simón Restrepo',
+        }
+      : {_sessionUid: CurrentUser.emailOrNull ?? 'Mi cuenta'};
 
   @override
   void initState() {
