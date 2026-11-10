@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../controllers/notification/notification_controller.dart';
 import '../../../core/design_system/components/app_feedback.dart';
@@ -10,11 +11,13 @@ import '../../../widgets/notification/notification_card.dart';
 class ClientNotificationView extends StatefulWidget {
   const ClientNotificationView({
     super.key,
-    this.recipientUser = NotificationController.demoClientUser,
+    this.recipientUid,
+    this.recipientRole = 'client',
     this.title = 'Notificaciones',
   });
 
-  final String recipientUser;
+  final String? recipientUid;
+  final String recipientRole;
   final String title;
 
   @override
@@ -27,7 +30,11 @@ class _ClientNotificationViewState extends State<ClientNotificationView> {
   @override
   void initState() {
     super.initState();
-    _controller = NotificationController(recipientUser: widget.recipientUser);
+    _controller = NotificationController(
+      recipientUid:
+          widget.recipientUid ?? FirebaseAuth.instance.currentUser?.uid,
+      recipientRole: widget.recipientRole,
+    );
     _controller.addListener(_onControllerChanged);
   }
 

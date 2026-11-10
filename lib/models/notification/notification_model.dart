@@ -57,13 +57,35 @@ extension NotificationTypePresentation on NotificationType {
   };
 }
 
-enum NotificationTarget { all, specificUser }
+/// Audience of a notification.  The value is persisted, therefore do not
+/// rename an enum member without a SQLite migration.
+enum NotificationTarget { all, clients, owners, specificUser }
 
 extension NotificationTargetData on NotificationTarget {
   String get label => switch (this) {
     NotificationTarget.all => 'Todos los usuarios',
+    NotificationTarget.clients => 'Todos los clientes',
+    NotificationTarget.owners => 'Todos los propietarios',
     NotificationTarget.specificUser => 'Usuario específico',
   };
+}
+
+/// A safe, display-only projection of `users/{uid}` used by the admin picker.
+/// The UID—not the email—is persisted as the notification recipient.
+class NotificationRecipient {
+  const NotificationRecipient({
+    required this.uid,
+    required this.fullName,
+    required this.email,
+    required this.role,
+  });
+
+  final String uid;
+  final String fullName;
+  final String email;
+  final String role;
+
+  String get label => fullName.isEmpty ? email : '$fullName · $email';
 }
 
 class AppNotification {
@@ -76,7 +98,8 @@ class AppNotification {
     required this.isUnread,
     required this.target,
     this.type,
-    this.recipientUser,
+    this.recipientUid,
+    this.remoteId,
   });
 
   final int id;
@@ -87,5 +110,6 @@ class AppNotification {
   final DateTime sentAt;
   final bool isUnread;
   final NotificationTarget target;
-  final String? recipientUser;
+  final String? recipientUid;
+  final String? remoteId;
 }

@@ -357,6 +357,57 @@ service cloud.firestore {
           allow delete: if false;
         }
       }
+
+      match /notificationReads/{notificationId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
+        allow delete: if false;
+      }
+
+      match /devices/{deviceId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Announcements are authored only by active administrators. A client or
+    // owner may read a global announcement, one aimed at their role, or one
+    // addressed to their Firebase UID. Email is never used as an identifier.
+    match /notifications/{notificationId} {
+      function canReadNotification() {
+        return isActiveAdmin()
+          || ((isActiveClient() || isActiveOwner())
+            && (resource.data.target == 'all'
+              || (resource.data.target == 'clients' && isActiveClient())
+              || (resource.data.target == 'owners' && isActiveOwner())
+              || (resource.data.target == 'specificUser'
+                && resource.data.recipientUid == request.auth.uid)));
+      }
+
+      allow read: if canReadNotification();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'sourceId', 'actorUid', 'recipientUid', 'target',
+          'title', 'message', 'createdAt', 'clientName', 'motelName',
+          'roomName'])
+        && request.resource.data.keys().hasAll([
+          'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
+        && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.target in ['all', 'clients', 'owners', 'specificUser']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.target != 'specificUser'
+          || (request.resource.data.recipientUid is string
+            && request.resource.data.recipientUid.size() > 0));
+      allow update, delete: if false;
     }
 
     // Contador de administradores activos ("siempre debe existir uno"). Solo

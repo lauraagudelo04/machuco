@@ -1,0 +1,126 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:machuco/models/notification/notification_model.dart';
+import 'package:machuco/service/firebase/firestore_collections.dart';
+
+/// Firestore replica of the notification inbox. SQLite remains the offline
+/// cache managed by [NotificationRepository]; this repository is the shared
+/// transport between Firebase accounts/devices.
+class NotificationCloudRepository {
+  NotificationCloudRepository({FirebaseFirestore? firestore})
+    : _firestore = firestore ?? FirebaseFirestore.instance;
+
+  final FirebaseFirestore _firestore;
+
+  CollectionReference<Map<String, dynamic>> get _notifications =>
+      _firestore.collection(FirestoreCollections.notifications);
+
+  Future<String> publishManual({
+    required NotificationType type,
+    required String title,
+    required String message,
+    required NotificationTarget target,
+    required String actorUid,
+    String? recipientUid,
+  }) async {
+    final document = await _notifications.add({
+      'eventType': type.code,
+      'actorUid': actorUid,
+      'target': target.name,
+      if (target == NotificationTarget.specificUser)
+        'recipientUid': recipientUid,
+      'title': title.trim(),
+      'message': message.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    return document.id;
+  }
+
+  /// Retrieves all documents visible to a role. Separate queries avoid an
+  /// unsupported OR across `target` and `recipientUid` and work offline from
+  /// Firestore's own cache as well.
+  Future<List<CloudNotification>> findInbox({
+    required String uid,
+    required String role,
+  }) async {
+    final roleTarget = role == 'owner' ? 'owners' : 'clients';
+    final results = await Future.wait([
+      _notifications
+          .where('target', whereIn: ['all', roleTarget])
+          .limit(100)
+          .get(),
+      _notifications
+          .where('target', isEqualTo: 'specificUser')
+          .where('recipientUid', isEqualTo: uid)
+          .limit(100)
+          .get(),
+    ]);
+    final seen = <String>{};
+    final notifications = <CloudNotification>[];
+    for (final document in results.expand((snapshot) => snapshot.docs)) {
+      if (seen.add(document.id)) {
+        notifications.add(CloudNotification.fromDocument(document));
+      }
+    }
+    notifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    return notifications;
+  }
+
+  Future<bool> isRead({
+    required String uid,
+    required String notificationId,
+  }) async =>
+      (await _firestore
+              .collection(FirestoreCollections.users)
+              .doc(uid)
+              .collection('notificationReads')
+              .doc(notificationId)
+              .get())
+          .exists;
+
+  Future<void> markRead({
+    required String uid,
+    required String notificationId,
+  }) => _firestore
+      .collection(FirestoreCollections.users)
+      .doc(uid)
+      .collection('notificationReads')
+      .doc(notificationId)
+      .set({'readAt': FieldValue.serverTimestamp()});
+}
+
+class CloudNotification {
+  const CloudNotification({
+    required this.id,
+    required this.eventType,
+    required this.title,
+    required this.message,
+    required this.target,
+    required this.createdAt,
+    this.recipientUid,
+  });
+
+  final String id;
+  final String eventType;
+  final String title;
+  final String message;
+  final NotificationTarget target;
+  final DateTime createdAt;
+  final String? recipientUid;
+
+  factory CloudNotification.fromDocument(
+    QueryDocumentSnapshot<Map<String, dynamic>> document,
+  ) {
+    final data = document.data();
+    return CloudNotification(
+      id: document.id,
+      eventType: data['eventType']?.toString() ?? 'system',
+      title: data['title']?.toString() ?? '',
+      message: data['message']?.toString() ?? '',
+      target: NotificationTarget.values.byName(
+        data['target']?.toString() ?? 'all',
+      ),
+      createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
+      recipientUid: data['recipientUid']?.toString(),
+    );
+  }
+}

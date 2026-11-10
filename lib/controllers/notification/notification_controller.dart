@@ -1,14 +1,18 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/models/notification/notification_model.dart';
+import 'package:machuco/repositories/notification/notification_cloud_repository.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
 class NotificationController extends ChangeNotifier {
   NotificationController({
-    this.recipientUser,
+    this.recipientUid,
+    this.recipientRole = 'client',
     NotificationRepository? repository,
+    this.cloudRepository,
     LocalPreferencesService? preferences,
   }) : _repository = repository ?? NotificationRepository(),
        _preferences =
@@ -21,9 +25,11 @@ class NotificationController extends ChangeNotifier {
   static const demoOwnerUser = 'owner-1020304050';
   static const _lastTypeFilterIdKey = 'lastTypeFilterId';
 
-  final String? recipientUser;
+  final String? recipientUid;
+  final String recipientRole;
   final NotificationRepository _repository;
   final LocalPreferencesService _preferences;
+  final NotificationCloudRepository? cloudRepository;
   late final Future<void> ready;
 
   List<AppNotification> _notifications = const [];
@@ -54,12 +60,15 @@ class NotificationController extends ChangeNotifier {
     _errorMessage = null;
     _notify();
     try {
-      final entries = recipientUser == null
+      final entries = recipientUid == null
           ? await _repository.findAllNotifications()
-          : await _repository.findNotificationsForRecipient(recipientUser!);
-      final readIds = recipientUser == null
+          : await _repository.findNotificationsForRecipient(
+              recipientUid!,
+              role: recipientRole,
+            );
+      final readIds = recipientUid == null
           ? <int>{}
-          : await _repository.findReadNotificationIds(recipientUser!);
+          : await _repository.findReadNotificationIds(recipientUid!);
 
       try {
         final types = await _repository.findTypes();
@@ -74,6 +83,7 @@ class NotificationController extends ChangeNotifier {
         _errorMessage = error.message;
       }
       _notifications = _toAppNotifications(entries, readIds);
+      await _appendCloudNotifications();
     } on NotificationRepositoryException catch (error) {
       _errorMessage = error.message;
     } catch (_) {
@@ -95,19 +105,15 @@ class NotificationController extends ChangeNotifier {
   }
 
   Future<void> markAsRead(AppNotification notification) async {
-    final userId = recipientUser;
+    final userId = recipientUid;
     if (userId == null || !notification.isUnread) return;
-    await _repository.markAsRead(
-      notificationId: notification.id,
-      userId: userId,
-    );
-    await _loadLocalNotifications();
-  }
-
-  Future<void> markAllRead() async {
-    final userId = recipientUser;
-    if (userId == null) return;
-    for (final notification in _notifications.where((item) => item.isUnread)) {
+    final remoteId = notification.remoteId;
+    if (remoteId != null) {
+      await (cloudRepository ?? NotificationCloudRepository()).markRead(
+        uid: userId,
+        notificationId: remoteId,
+      );
+    } else {
       await _repository.markAsRead(
         notificationId: notification.id,
         userId: userId,
@@ -116,19 +122,27 @@ class NotificationController extends ChangeNotifier {
     await _loadLocalNotifications();
   }
 
+  Future<void> markAllRead() async {
+    final userId = recipientUid;
+    if (userId == null) return;
+    for (final notification in _notifications.where((item) => item.isUnread)) {
+      await markAsRead(notification);
+    }
+  }
+
   Future<void> addNotification({
     required NotificationType type,
     required String title,
     required String message,
     required NotificationTarget target,
-    String? recipientUser,
+    String? recipientUid,
   }) async {
     if (_isSaving) throw StateError('Ya se está guardando una notificación');
     if (title.trim().isEmpty || message.trim().isEmpty) {
       throw ArgumentError('El título y el mensaje son obligatorios');
     }
     if (target == NotificationTarget.specificUser &&
-        (recipientUser == null || recipientUser.trim().isEmpty)) {
+        (recipientUid == null || recipientUid.trim().isEmpty)) {
       throw ArgumentError('El destinatario es obligatorio');
     }
     _isSaving = true;
@@ -139,8 +153,19 @@ class NotificationController extends ChangeNotifier {
         title: title,
         message: message,
         target: target,
-        recipientUser: recipientUser,
+        recipientUid: recipientUid,
       );
+      final actorUid = FirebaseAuth.instance.currentUser?.uid;
+      if (actorUid != null) {
+        await (cloudRepository ?? NotificationCloudRepository()).publishManual(
+          type: type,
+          title: title,
+          message: message,
+          target: target,
+          actorUid: actorUid,
+          recipientUid: recipientUid,
+        );
+      }
       await _loadLocalNotifications();
     } finally {
       _isSaving = false;
@@ -149,14 +174,55 @@ class NotificationController extends ChangeNotifier {
   }
 
   Future<void> _loadLocalNotifications() async {
-    final entries = recipientUser == null
+    final entries = recipientUid == null
         ? await _repository.findAllNotifications()
-        : await _repository.findNotificationsForRecipient(recipientUser!);
-    final readIds = recipientUser == null
+        : await _repository.findNotificationsForRecipient(
+            recipientUid!,
+            role: recipientRole,
+          );
+    final readIds = recipientUid == null
         ? <int>{}
-        : await _repository.findReadNotificationIds(recipientUser!);
+        : await _repository.findReadNotificationIds(recipientUid!);
     _notifications = _toAppNotifications(entries, readIds);
+    await _appendCloudNotifications();
     _notify();
+  }
+
+  Future<void> _appendCloudNotifications() async {
+    final uid = recipientUid;
+    if (uid == null || uid.isEmpty) return;
+    try {
+      final cloud = cloudRepository ?? NotificationCloudRepository();
+      final remote = await cloud.findInbox(uid: uid, role: recipientRole);
+      final typesByCode = {for (final type in _types) type.code: type};
+      final mapped = await Future.wait(
+        remote.map((item) async {
+          final type = typesByCode[item.eventType];
+          return AppNotification(
+            id: -item.id.hashCode.abs(),
+            remoteId: item.id,
+            typeId: type?.id ?? 0,
+            type: type,
+            title: item.title,
+            message: item.message,
+            sentAt: item.createdAt,
+            isUnread: !await cloud.isRead(uid: uid, notificationId: item.id),
+            target: item.target,
+            recipientUid: item.recipientUid,
+          );
+        }),
+      );
+      final localRemoteIds = _notifications
+          .map((notification) => notification.remoteId)
+          .whereType<String>()
+          .toSet();
+      _notifications = [
+        ..._notifications,
+        ...mapped.where((item) => !localRemoteIds.contains(item.remoteId)),
+      ]..sort((a, b) => b.sentAt.compareTo(a.sentAt));
+    } catch (_) {
+      // The SQLite inbox remains available when Firestore is offline.
+    }
   }
 
   List<AppNotification> _toAppNotifications(
@@ -177,13 +243,16 @@ class NotificationController extends ChangeNotifier {
             title: entry.title,
             message: entry.message,
             sentAt: entry.sentAt,
-            isUnread: recipientUser != null && !readIds.contains(id),
+            isUnread: recipientUid != null && !readIds.contains(id),
             target: NotificationTarget.values.byName(entry.target),
-            recipientUser: entry.recipientUser,
+            recipientUid: entry.recipientUid,
           );
         })
         .toList(growable: false);
   }
+
+  Future<List<NotificationRecipient>> searchRecipients(String query) =>
+      _repository.searchActiveRecipients(query);
 
   void _notify() {
     if (!_disposed) notifyListeners();

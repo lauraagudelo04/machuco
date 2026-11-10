@@ -9,7 +9,7 @@ class NotificationEntry {
     required this.message,
     required this.sentAt,
     required this.target,
-    this.recipientUser,
+    this.recipientUid,
   });
 
   @PrimaryKey(autoGenerate: true)
@@ -19,7 +19,7 @@ class NotificationEntry {
   final String message;
   final DateTime sentAt;
   final String target;
-  final String? recipientUser;
+  final String? recipientUid;
 }
 
 @Entity(

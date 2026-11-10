@@ -63,9 +63,9 @@ class AdminNotificationCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Text(
-                  isAll
-                      ? '📢 Todos'
-                      : '👤 Para: ${notification.recipientUser ?? "Usuario"}',
+                  notification.target == NotificationTarget.specificUser
+                      ? '👤 Usuario específico'
+                      : '📢 ${notification.target.label}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: isAll ? AppColors.violet : AppColors.fuchsia,
                     fontWeight: FontWeight.w600,

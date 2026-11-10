@@ -25,6 +25,9 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
 
   NotificationType? _selectedType;
   NotificationTarget _selectedTarget = NotificationTarget.all;
+  NotificationRecipient? _selectedRecipient;
+  List<NotificationRecipient> _recipientResults = const [];
+  bool _isSearchingRecipients = false;
 
   @override
   void dispose() {
@@ -38,7 +41,7 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
     final type = _selectedType;
     final title = _titleController.text.trim();
     final message = _messageController.text.trim();
-    final recipient = _recipientController.text.trim();
+    final recipient = _selectedRecipient;
 
     if (type == null) {
       _showError('No hay tipos de notificación disponibles.');
@@ -49,8 +52,8 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
       return;
     }
     if (_selectedTarget == NotificationTarget.specificUser &&
-        recipient.isEmpty) {
-      _showError('Ingresa el correo o ID del usuario destino.');
+        recipient == null) {
+      _showError('Busca y selecciona un usuario destino.');
       return;
     }
 
@@ -60,8 +63,8 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
         title: title,
         message: message,
         target: _selectedTarget,
-        recipientUser: _selectedTarget == NotificationTarget.specificUser
-            ? recipient
+        recipientUid: _selectedTarget == NotificationTarget.specificUser
+            ? recipient?.uid
             : null,
       );
       if (!mounted) return;
@@ -69,9 +72,9 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _selectedTarget == NotificationTarget.all
-                ? 'Notificación guardada para todos los usuarios.'
-                : 'Notificación guardada para: $recipient',
+            _selectedTarget == NotificationTarget.specificUser
+                ? 'Notificación guardada para: ${recipient!.label}'
+                : 'Notificación guardada para ${_selectedTarget.label.toLowerCase()}.',
           ),
           backgroundColor: AppColors.available,
         ),
@@ -80,6 +83,20 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
       _showError(error.message?.toString() ?? 'Datos inválidos.');
     } catch (_) {
       _showError('No se pudo guardar la notificación.');
+    }
+  }
+
+  Future<void> _searchRecipients(String value) async {
+    setState(() => _isSearchingRecipients = true);
+    try {
+      final results = await widget.controller.searchRecipients(value);
+      if (mounted && _recipientController.text.trim() == value.trim()) {
+        setState(() => _recipientResults = results);
+      }
+    } catch (_) {
+      if (mounted) setState(() => _recipientResults = const []);
+    } finally {
+      if (mounted) setState(() => _isSearchingRecipients = false);
     }
   }
 
@@ -142,47 +159,73 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
               style: Theme.of(context).textTheme.labelLarge,
             ),
             const SizedBox(height: AppSpacing.s2),
-            Row(
-              children: [
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Center(child: Text('Todos los usuarios')),
-                    selected: _selectedTarget == NotificationTarget.all,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(
-                          () => _selectedTarget = NotificationTarget.all,
-                        );
-                      }
-                    },
-                  ),
-                ),
-                const SizedBox(width: AppSpacing.s2),
-                Expanded(
-                  child: ChoiceChip(
-                    label: const Center(child: Text('Usuario específico')),
-                    selected:
-                        _selectedTarget == NotificationTarget.specificUser,
-                    onSelected: (selected) {
-                      if (selected) {
-                        setState(
-                          () =>
-                              _selectedTarget = NotificationTarget.specificUser,
-                        );
-                      }
-                    },
-                  ),
-                ),
-              ],
+            Wrap(
+              spacing: AppSpacing.s2,
+              runSpacing: AppSpacing.s2,
+              children: NotificationTarget.values
+                  .map(
+                    (target) => ChoiceChip(
+                      label: Text(target.label),
+                      selected: _selectedTarget == target,
+                      onSelected: (selected) {
+                        if (selected) setState(() => _selectedTarget = target);
+                      },
+                    ),
+                  )
+                  .toList(growable: false),
             ),
             if (_selectedTarget == NotificationTarget.specificUser) ...[
               const SizedBox(height: AppSpacing.s3),
               AppTextField(
-                label: 'Usuario Destino (Correo / ID)',
-                hint: 'ej: usuario@machuco.com',
+                label: 'Buscar usuario por correo',
+                hint: 'Escribe al menos 2 caracteres',
                 controller: _recipientController,
                 prefixIcon: const Icon(Icons.person_outline),
+                onChanged: _searchRecipients,
               ),
+              if (_isSearchingRecipients)
+                const Padding(
+                  padding: EdgeInsets.only(top: AppSpacing.s2),
+                  child: LinearProgressIndicator(),
+                ),
+              if (_selectedRecipient != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: AppSpacing.s2),
+                  child: Text(
+                    'Seleccionado: ${_selectedRecipient!.label}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+              if (_recipientResults.isNotEmpty)
+                Container(
+                  margin: const EdgeInsets.only(top: AppSpacing.s2),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: context.appColors.borderStrong),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                  ),
+                  child: Column(
+                    children: _recipientResults
+                        .map(
+                          (candidate) => ListTile(
+                            dense: true,
+                            title: Text(
+                              candidate.fullName.isEmpty
+                                  ? candidate.email
+                                  : candidate.fullName,
+                            ),
+                            subtitle: Text(
+                              '${candidate.email} · ${candidate.role == 'client' ? 'Cliente' : 'Propietario'}',
+                            ),
+                            onTap: () => setState(() {
+                              _selectedRecipient = candidate;
+                              _recipientController.text = candidate.email;
+                              _recipientResults = const [];
+                            }),
+                          ),
+                        )
+                        .toList(growable: false),
+                  ),
+                ),
             ],
             const SizedBox(height: AppSpacing.s4),
             Text(

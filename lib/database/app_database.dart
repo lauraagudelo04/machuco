@@ -33,7 +33,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 14,
+  version: 15,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -89,6 +89,7 @@ class AppDatabaseProvider {
         migration11To12,
         migration12To13,
         migration13To14,
+        migration14To15,
       ])
       .addCallback(
         Callback(
@@ -244,7 +245,7 @@ final migration5To6 = Migration(5, 6, (database) async {
     'CREATE TABLE IF NOT EXISTS notifications ('
     'id INTEGER PRIMARY KEY AUTOINCREMENT, typeId INTEGER NOT NULL, '
     'title TEXT NOT NULL, message TEXT NOT NULL, sentAt INTEGER NOT NULL, '
-    'target TEXT NOT NULL, recipientUser TEXT)',
+    'target TEXT NOT NULL, recipientUid TEXT)',
   );
   await database.execute(
     'CREATE TABLE IF NOT EXISTS notification_reads ('
@@ -403,5 +404,20 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`role` TEXT NOT NULL, `account_status` TEXT NOT NULL, '
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
+  );
+});
+
+/// Replaces legacy email recipients with Firebase UIDs for new notifications.
+/// Existing rows are retained (and remain visible in the admin history).
+final migration14To15 = Migration(14, 15, (database) async {
+  final columns = await database.rawQuery('PRAGMA table_info(notifications)');
+  if (!columns.any((column) => column['name'] == 'recipientUid')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN recipientUid TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS index_notifications_recipientUid '
+    'ON notifications (recipientUid)',
   );
 });
