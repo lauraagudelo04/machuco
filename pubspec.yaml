@@ -44,6 +44,7 @@ dependencies:
   cloud_firestore: ^7.1.0
   pdf: ^3.13.1
   printing: ^5.15.1
+  country_flags: ^4.1.2
 
 dev_dependencies:
   flutter_test:
@@ -64,6 +65,10 @@ dev_dependencies:
 
 # The following section is specific to Flutter packages.
 flutter:
+  # Flavor de Android que usa `flutter run`/`flutter build` cuando no se pasa
+  # `--flavor` (ver docs/auth/android-setup.md). Para producción:
+  # `--flavor prod`.
+  default-flavor: dev
 
   # The following line ensures that the Material Icons font is
   # included with your application, so that you can use the icons in

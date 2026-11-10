@@ -436,3 +436,136 @@ reglas se desplegaron el 2026-10-27 y `.firebaserc` fija el proyecto
 `machuco`.
 
 **Estado:** cerrado.
+
+## 2026-11-04 — Retiro de las credenciales de prueba e indicativos con bandera (rama `feature-juan_pablo`)
+
+**Credenciales de prueba:** se eliminó `HardcodedAuthService`, el flag
+`AUTH_USE_HARDCODED_AUTH_USERS` (que estaba **encendido por defecto**) y el
+aviso con los usuarios de prueba del login. Firebase Authentication es el
+único proveedor; los integrantes crean sus cuentas con su correo. Las pruebas
+usan servicios falsos inyectados. Las contraseñas antiguas siguen en el
+historial de git: no deben reutilizarse en cuentas reales.
+
+**Indicativos:** la tabla real de Supabase es `phone_country_codes`
+(`country_code` ISO, `calling_code`); `country_phone_codes`, que consultaba
+el registro, no existe en Supabase, por lo que el selector siempre caía a la
+caché o a la semilla. `AuthCatalogRepository` ahora consulta
+`phone_country_codes` siguiendo el patrón de `ClientRepository` y cachea con
+el DAO compartido `PhoneCountryCodeDao`. La tabla local `country_phone_codes`
+queda sin uso; se retira en una migración coordinada.
+
+**Dependencia nueva:** `country_flags: ^4.1.2` (solicitada por la rama) para
+pintar la bandera desde el código ISO. Solo se usa a través de
+`AppCountryFlag`.
+
+**Estado:** implementado.
+
+## 2026-11-04 — Plan de autenticación social v1.0 y entorno Android (rama `feature-juan_pablo`)
+
+**Aprobación:** el responsable de la rama aprobó el "Plan de autenticación
+social v1.0" (`docs/auth/plan-auth-social.md`) el 2026-11-04, con las
+decisiones D1-D5 y D7-D11. D6 no se decidió explícitamente.
+
+**Implementado (etapa 7):**
+- `applicationId` de producción `co.machuco.app` y flavor `dev`
+  (`co.machuco.app.dev`), ambos en el proyecto Firebase `machuco`, con sus
+  apps Android registradas.
+- `google-services.json` único con los tres paquetes.
+- Firma de desarrollo compartida mediante `android/key.properties` (no
+  versionado), reutilizando `android/debug.keystore`
+  (SHA-1 `8F:EE:77:0B:B3:26:19:EF:C3:7A:A1:99:C6:98:58:92:79:D2:8A:FE`).
+- Se descartaron la ruta local de Java en `gradle.properties` y el bloque de
+  firma roto de `build.gradle.kts`; `google-services` sigue en 4.4.4.
+- `lib/firebase_options.dart` elige la app por `appFlavor`.
+- Pruebas de `firestore.rules` con Emulator Suite + Node (`test_rules/`).
+- Reglas e índice de `users` desplegados.
+
+**Pendiente:** registrar el SHA-1/SHA-256 compartido en las apps
+`co.machuco.app` y `co.machuco.app.dev`, el keystore de release, la OAuth
+App de GitHub y habilitar los proveedores. Ver la sección 7 del plan y
+`docs/auth/android-setup.md`.
+
+**Estado:** etapa 7 implementada; etapas 1-6 y 8 pendientes.
+
+## 2026-11-05 — Flavor por defecto `dev` (rama `feature-juan_pablo`)
+
+`pubspec.yaml` declara `flutter: default-flavor: dev` para que `flutter run`
+sin `--flavor` siga funcionando en Android en todas las ramas (sin él, Gradle
+compila todas las variantes y Flutter no encuentra el APK). Producción se
+compila siempre con `--flavor prod`. Aprobado por el responsable de la rama.
+
+
+## 2026-11-09 — Gestión de administradores sin Cloud Functions (rama `feature-juan_pablo`)
+
+**Contexto:** es un proyecto universitario y todo debe funcionar sin costos
+(plan Spark de Firebase). Cloud Functions y el Admin SDK exigen el plan
+Blaze, así que no se usan. Tampoco se agregan dependencias ni proveedores de
+correo.
+
+**Decisión (la autoridad son las reglas de Firestore, sin backend propio):**
+- **Crear un administrador:** la app lo crea con una instancia secundaria de
+  Firebase (`Firebase.initializeApp(name: ...)`), para no cerrar la sesión de
+  quien lo crea, y escribe `users/{uid}` con la sesión del administrador
+  principal. Genera una contraseña temporal (`Random.secure()`, 16
+  caracteres) que quien crea ve una sola vez y entrega por su cuenta; nunca
+  se guarda ni se registra. **No se envían correos ni SMS.** Si falla la
+  escritura del perfil, se borra el usuario recién creado (reversión).
+- **Primer ingreso:** el perfil nace con `mustChangePassword: true`. El
+  nuevo administrador va directo a cambiar su contraseña
+  (`AuthRoutes.adminChangePassword`); mientras tanto las reglas no lo tratan
+  como administrador activo. Si pierde la contraseña, usa "¿Olvidaste tu
+  contraseña?".
+- **Eliminar a otro administrador:** se anonimiza `users/{uid}` (queda
+  `fullName: 'Administrador eliminado'`, `accountStatus: 'anonymized'` y la
+  auditoría) y pierde el acceso. **Eliminar la propia cuenta:** anonimiza y
+  además borra su usuario con `User.delete()`. Los administradores ya no
+  pueden borrar su `users/{uid}` (las reglas lo niegan).
+- **Siempre debe existir un administrador activo:** `system/adminRegistry`
+  guarda `activeAdminCount`. Crear suma 1 y anonimizar resta 1, en una
+  transacción que lee el conteo; las reglas exigen ese cambio con `getAfter`
+  y que el resultado sea >= 1. Cuenta todo administrador con
+  `accountStatus == 'active'`, incluso con contraseña temporal pendiente
+  (reemplaza la definición anterior "ya definió su contraseña").
+
+**Limitación aceptada:** al eliminar a OTRO administrador su usuario sigue
+existiendo en Firebase Auth (solo el Admin SDK puede borrarlo): su correo
+queda ocupado y no se puede volver a crear un administrador con ese correo.
+Mientras `isAdmin()` en `firestore.rules` solo compruebe el rol, esa cuenta
+anonimizada conserva los accesos que dependan de `isAdmin()`; debe
+endurecerse con la rama dueña de esas reglas. El conteo de `adminRegistry`
+también puede desviarse si un administrador malintencionado escribe el
+registro directamente (las reglas solo limitan el cambio a +-1).
+
+**Estado:** implementado en cliente y reglas; las reglas se despliegan antes
+que la nueva versión de la app.
+
+## 2026-11-09 — Distribución privada del keystore compartido (rama `feature-juan_pablo`)
+
+**Contexto:** el equipo debe poder entrar con Google y GitHub sin registrar
+huellas propias en Firebase. El repositorio es público.
+
+**Decisión:** `android/debug.keystore` y `android/key.properties` no se
+versionan. El responsable de la rama los comparte de forma privada, solo con
+los integrantes. Quien solo instala la app recibe un APK ya firmado y no
+necesita el keystore.
+
+**Motivo:** con el keystore en un repositorio público, cualquiera podría firmar
+una app que Firebase aceptaría como `co.machuco.app`. Retirarlo después no
+bastaría, porque quedaría en el historial de Git.
+
+**Actualiza el pendiente del 2026-11-04:** el SHA-1/SHA-256 compartido está
+registrado (2026-11-05) y el responsable de la rama confirmó que Google y GitHub
+están habilitados en Firebase. Sigue pendiente el keystore de release.
+
+## 2026-11-09 — `auth_user_profile` pasa a la versión 14 de SQLite (rama `feature-juan_pablo`)
+
+**Contexto:** al fusionar `develop`, la versión 13 ya estaba ocupada por la
+limpieza de ejemplos de room (riesgo R10 del plan de autenticación).
+
+**Decisión:** se conserva el 12 -> 13 de `develop` y `auth_user_profile` se crea
+en un 13 -> 14 con `CREATE TABLE IF NOT EXISTS`. Así migran tanto las bases v13
+de `develop`, que no tienen la tabla, como las v13 de esta rama, que la conservan
+con su fila. Estas últimas no ejecutan el 12 -> 13: sus ejemplos de room los
+limpia `RoomDao.removeLegacyMockData`.
+
+La próxima migración de cualquier rama usa la versión 15.
