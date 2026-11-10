@@ -617,6 +617,68 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Facturas (FirestoreInvoiceRepository). Una por reserva: el id del
+    // documento es el id de la reserva. Se copian de la reserva ya guardada
+    // en Firestore y despues no se modifican ni se borran.
+    function isInvoiceReader(data) {
+      return isAdmin()
+        || (isActiveClient() && data.clientId == request.auth.uid)
+        || (isActiveOwner() && data.ownerId == request.auth.uid);
+    }
+
+    function invoiceReservation(reservationId) {
+      return get(/databases/$(database)/documents/reservations/$(reservationId)).data;
+    }
+
+    function matchesReservation(inv, res) {
+      return inv.ownerId == res.ownerId
+        && inv.clientId == res.guestId
+        && inv.motelId == res.motelId
+        && inv.motelName == res.motelName
+        && inv.roomName == res.roomName
+        && inv.roomNumber == res.roomNumber
+        && inv.checkIn == res.checkIn
+        && inv.checkOut == res.checkOut
+        && inv.guestCount == res.guestCount
+        && inv.roomTotal == res.roomTotal
+        && inv.total == res.total
+        && inv.items == res.services.concat(res.products);
+    }
+
+    function hasValidInvoiceFields(data, reservationId) {
+      return data.keys().hasOnly([
+          'ownerId', 'reservationId', 'invoiceNumber', 'clientId',
+          'clientName', 'motelId', 'motelName', 'roomName', 'roomNumber',
+          'checkIn', 'checkOut', 'guestCount', 'items', 'roomTotal', 'total',
+          'paymentConcept', 'paymentAmount', 'cardHolder', 'cardLast4',
+          'installments', 'issuedAt'
+        ])
+        && data.reservationId == reservationId
+        && data.invoiceNumber is string && data.invoiceNumber.size() > 0
+        && data.issuedAt == request.time
+        && (!('cardLast4' in data) || data.cardLast4.matches('^[0-9]{4}$'));
+    }
+
+    match /invoices/{reservationId} {
+      // `resource == null` permite consultar si la factura ya existe antes de
+      // emitirla (no expone datos: el documento no existe).
+      allow get: if isSignedIn()
+        && (resource == null || isInvoiceReader(resource.data));
+      allow list: if isInvoiceReader(resource.data);
+
+      allow create: if
+        exists(/databases/$(database)/documents/reservations/$(reservationId))
+        && isReservationParticipant(invoiceReservation(reservationId))
+        && invoiceReservation(reservationId).status != 'cancelled'
+        && hasValidInvoiceFields(request.resource.data, reservationId)
+        && matchesReservation(
+          request.resource.data,
+          invoiceReservation(reservationId)
+        );
+
+      allow update, delete: if false;
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {
