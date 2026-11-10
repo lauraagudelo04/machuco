@@ -150,3 +150,9 @@ firebase deploy --only firestore:rules,firestore:indexes --project machuco
 
 Después, revisa en la consola (Firestore → Índices) que el índice de
 `users` (`role`, `accountStatus`, `createdAt`) esté en estado "Habilitado".
+
+### Ejecución en macOS
+
+`flutter run -d macos` usa el scheme compartido `dev`, con configuraciones
+`Debug-dev`, `Profile-dev` y `Release-dev`. Así macOS admite el
+`default-flavor: dev` del proyecto. `Runner` conserva las configuraciones base.

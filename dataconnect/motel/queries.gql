@@ -1,0 +1,51 @@
+# Consultas del conector `motel` (administración de moteles).
+
+fragment MotelFields on Motel {
+  id
+  ownerId
+  name
+  email
+  roomCount
+  nit
+  address
+  phone
+  description
+  generalLocation
+  paymentMethods
+  imageUrls
+  isAvailable
+}
+
+# Propietario: solo sus moteles. El filtro por dueño lo aplica el backend
+# con el uid del token de Firebase Auth, no la app.
+query ListMyMotels @auth(level: USER) {
+  motels(where: { ownerId: { eq_expr: "auth.uid" } }, orderBy: [{ name: ASC }]) {
+    ...MotelFields
+  }
+}
+
+# Administrador del sistema: todos los moteles.
+# Exige el custom claim `role: 'admin'` en el token de Firebase Auth. Hasta
+# que la rama de autenticación lo agregue, nadie puede usar esta operación
+# (ver docs/decisions_log.md).
+query ListAllMotels @auth(expr: "auth.token.role == 'admin'") {
+  motels(orderBy: [{ name: ASC }]) {
+    ...MotelFields
+  }
+}
+
+# Un motel por id (lo pueden usar habitaciones y reservas).
+query GetMotelById($id: UUID!)
+@auth(level: USER, insecureReason: "Catálogo: cualquier usuario con sesión puede ver un motel.") {
+  motel(id: $id) {
+    ...MotelFields
+  }
+}
+
+# Moteles disponibles para cualquier usuario autenticado.
+query ListAvailableMotels
+@auth(level: USER, insecureReason: "Catálogo: cualquier usuario con sesión puede ver los moteles disponibles.") {
+  motels(where: { isAvailable: { eq: true } }, orderBy: [{ name: ASC }]) {
+    ...MotelFields
+  }
+}

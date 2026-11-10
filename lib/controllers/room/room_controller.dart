@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:machuco/database/repository/room/room_sync_repository.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/models/room/room_models.dart';
@@ -15,11 +19,21 @@ class RoomController extends ChangeNotifier {
     required RoomDao roomDao,
     required RoomServiceRepository serviceRepository,
     required LocalPreferencesService preferences,
-  }) : this._(roomDao, serviceRepository, preferences);
+    RoomSyncRepository? syncRepository,
+  }) : this._(roomDao, serviceRepository, preferences, syncRepository);
 
-  RoomController._(this._roomDao, this._serviceRepository, this._preferences);
+  RoomController._(
+    this._roomDao,
+    this._serviceRepository,
+    this._preferences,
+    this._syncRepository,
+  );
 
-  factory RoomController.fromEnvironment({AppDatabase? database}) {
+  factory RoomController.fromEnvironment({
+    AppDatabase? database,
+    String? motelId,
+    String? ownerId,
+  }) {
     final appDatabaseFuture = database == null
         ? AppDatabaseProvider.database
         : Future.value(database);
@@ -28,6 +42,13 @@ class RoomController extends ChangeNotifier {
     );
     return RoomController(
       roomDao: roomDao,
+      syncRepository: RoomSyncRepository(
+        dao: roomDao,
+        firestore: FirebaseFirestore.instance,
+        auth: FirebaseAuth.instance,
+        motelId: motelId,
+        ownerId: ownerId,
+      ),
       serviceRepository: RoomServiceRepository(
         baseUrl: SupabaseRoomConfig.baseUrl,
         apiKey: SupabaseRoomConfig.apiKey,
@@ -38,6 +59,24 @@ class RoomController extends ChangeNotifier {
   }
 
   final RoomDao _roomDao;
+  final RoomSyncRepository? _syncRepository;
+  Timer? _syncTimer;
+  String? syncError;
+
+  Future<void> synchronize() async {
+    if (_syncRepository == null || _disposed) return;
+    try {
+      await _syncRepository.sync();
+      syncError = null;
+      _rooms = await _roomDao.getRooms();
+      _roomTypes = await _roomDao.getRoomTypes();
+    } catch (error) {
+      syncError =
+          'Cambios guardados en este dispositivo. Sincronización pendiente: $error';
+    }
+    notifyListeners();
+  }
+
   final RoomServiceRepository _serviceRepository;
   final LocalPreferencesService _preferences;
   List<RoomVisualData> _rooms = const [];
@@ -48,6 +87,7 @@ class RoomController extends ChangeNotifier {
 
   @override
   void dispose() {
+    _syncTimer?.cancel();
     _disposed = true;
     super.dispose();
   }
@@ -74,16 +114,34 @@ class RoomController extends ChangeNotifier {
     _rooms = await _roomDao.getRooms();
     _roomTypes = await _roomDao.getRoomTypes();
     notifyListeners();
+    if (_syncRepository != null) {
+      _syncTimer ??= Timer.periodic(
+        const Duration(seconds: 30),
+        (_) => unawaited(synchronize()),
+      );
+      unawaited(synchronize());
+    }
   }
 
   Future<void> saveRooms(List<RoomVisualData> rooms) async {
+    if (_syncRepository != null) {
+      for (final room in rooms) {
+        await upsertRoom(room);
+      }
+      return;
+    }
     await _roomDao.saveRooms(rooms);
     _rooms = List.of(rooms);
     notifyListeners();
   }
 
   Future<void> upsertRoom(RoomVisualData room) async {
-    await _roomDao.upsertRoom(room);
+    if (_syncRepository == null) {
+      await _roomDao.upsertRoom(room);
+    } else {
+      await _syncRepository.saveRoom(room);
+      unawaited(synchronize());
+    }
     final index = _rooms.indexWhere((item) => item.id == room.id);
     if (index == -1) {
       _rooms = [..._rooms, room];
@@ -94,19 +152,37 @@ class RoomController extends ChangeNotifier {
   }
 
   Future<void> deleteRoom(String roomId) async {
-    await _roomDao.deleteRoom(roomId);
+    if (_syncRepository == null) {
+      await _roomDao.deleteRoom(roomId);
+    } else {
+      await _syncRepository.deleteRoom(
+        _rooms.firstWhere((r) => r.id == roomId),
+      );
+      unawaited(synchronize());
+    }
     _rooms = _rooms.where((room) => room.id != roomId).toList();
     notifyListeners();
   }
 
   Future<void> saveRoomTypes(List<RoomTypeData> roomTypes) async {
+    if (_syncRepository != null) {
+      for (final type in roomTypes) {
+        await upsertRoomType(type);
+      }
+      return;
+    }
     await _roomDao.saveRoomTypes(roomTypes);
     _roomTypes = List.of(roomTypes);
     notifyListeners();
   }
 
   Future<void> upsertRoomType(RoomTypeData roomType) async {
-    await _roomDao.upsertRoomType(roomType);
+    if (_syncRepository == null) {
+      await _roomDao.upsertRoomType(roomType);
+    } else {
+      await _syncRepository.saveType(roomType);
+      unawaited(synchronize());
+    }
     final index = _roomTypes.indexWhere((item) => item.id == roomType.id);
     if (index == -1) {
       _roomTypes = [..._roomTypes, roomType];
@@ -117,7 +193,14 @@ class RoomController extends ChangeNotifier {
   }
 
   Future<void> deleteRoomType(String typeId) async {
-    await _roomDao.deleteRoomType(typeId);
+    if (_syncRepository == null) {
+      await _roomDao.deleteRoomType(typeId);
+    } else {
+      await _syncRepository.deleteType(
+        _roomTypes.firstWhere((t) => t.id == typeId),
+      );
+      unawaited(synchronize());
+    }
     _roomTypes = _roomTypes.where((type) => type.id != typeId).toList();
     notifyListeners();
   }

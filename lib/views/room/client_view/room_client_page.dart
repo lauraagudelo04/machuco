@@ -1,5 +1,6 @@
 import 'package:machuco/controllers/room/room_controller.dart';
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import 'package:machuco/controllers/room/room_client_controller.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
@@ -9,6 +10,7 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/room/room_models.dart';
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/widgets/additional_service/additional_services_section.dart';
 
 class RoomClientPage extends StatefulWidget {
   const RoomClientPage({
@@ -16,10 +18,15 @@ class RoomClientPage extends StatefulWidget {
     required this.motel,
     this.rooms,
     this.types,
+    this.additionalServiceController,
   });
   final Motel motel;
   final List<RoomVisualData>? rooms;
   final List<RoomTypeData>? types;
+
+  /// Permite inyectar el controller de servicios en pruebas.
+  final AdditionalServiceSystemAdministratorController?
+  additionalServiceController;
 
   @override
   State<RoomClientPage> createState() => _RoomClientPageState();
@@ -27,6 +34,7 @@ class RoomClientPage extends StatefulWidget {
 
 class _RoomClientPageState extends State<RoomClientPage> {
   late RoomClientController _controller;
+  late final RoomController _data;
   bool _loading = true;
   String? _loadError;
 
@@ -38,25 +46,37 @@ class _RoomClientPageState extends State<RoomClientPage> {
       seedRooms: widget.rooms ?? const [],
       seedTypes: widget.types ?? const [],
     );
+    _data = RoomController.fromEnvironment();
+    _data.addListener(_onDataChanged);
     _loadRooms();
   }
 
-  Future<void> _loadRooms() async {
-    final data = RoomController.fromEnvironment();
-    try {
-      await data.loadLocalData();
-      if (!mounted) return;
+  void _onDataChanged() {
+    if (!mounted) return;
+    setState(() {
       _controller = RoomClientController(
         motelId: widget.motel.id,
-        seedRooms: widget.rooms ?? data.rooms,
-        seedTypes: widget.types ?? data.roomTypes,
+        seedRooms: widget.rooms ?? _data.rooms,
+        seedTypes: widget.types ?? _data.roomTypes,
       );
+    });
+  }
+
+  Future<void> _loadRooms() async {
+    try {
+      await _data.loadLocalData();
     } catch (_) {
       _loadError = 'No fue posible cargar las habitaciones guardadas.';
     } finally {
-      data.dispose();
       if (mounted) setState(() => _loading = false);
     }
+  }
+
+  @override
+  void dispose() {
+    _data.removeListener(_onDataChanged);
+    _data.dispose();
+    super.dispose();
   }
 
   @override
@@ -184,6 +204,13 @@ class _RoomClientPageState extends State<RoomClientPage> {
                         ),
                       ),
                     ),
+                  const SizedBox(height: AppSpacing.s5),
+                  AppCard(
+                    child: AdditionalServicesSection(
+                      motelId: widget.motel.id,
+                      controller: widget.additionalServiceController,
+                    ),
+                  ),
                 ],
               ),
             ),

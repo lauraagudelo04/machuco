@@ -1,9 +1,15 @@
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/motel/motel_firestore_registry.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
+import 'package:machuco/database/repository/motel/motel_sql_connect_gateway.dart';
+import 'package:machuco/database/repository/motel/sql_connect_motel_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/service/firebase/current_user.dart';
-import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
+/// Lógica de aplicación de moteles.
+///
+/// Sin repositorio usa datos de ejemplo en memoria (los usan otros módulos y
+/// pruebas). [MotelController.persistent] usa Firebase SQL Connect.
 class MotelController {
   MotelController({
     MotelRepository? repository,
@@ -13,13 +19,14 @@ class MotelController {
 
   factory MotelController.persistent() {
     return MotelController(
-      repository: MotelRepository(
-        baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
-        apiKey: SupabasePhoneCountryCodeConfig.apiKey,
+      repository: SqlConnectMotelRepository(
+        gateway: GeneratedMotelSqlConnectGateway(),
         daoProvider: () async {
           final db = await AppDatabaseProvider.database;
           return db.motelDao;
         },
+        currentUid: () => CurrentUser.uidOrNull,
+        firestoreRegistry: FirestoreMotelRegistry(),
       ),
     );
   }
@@ -80,149 +87,137 @@ class MotelController {
     ),
   ];
 
+  /// Moteles del propietario autenticado. Con SQL Connect el filtro por
+  /// dueño lo aplica el backend con el token de Firebase Auth.
   Future<List<Motel>> getMyMotels() async {
-    final ownerId = _currentUserId();
-    if (ownerId == null || ownerId.trim().isEmpty) return const [];
-    if (_repository == null) {
+    final repository = _repository;
+    if (repository == null) {
       await Future.delayed(const Duration(seconds: 1));
-      return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
+      return _mockDatabase
+          .where((motel) => motel.ownerId == _currentOwnerId)
+          .toList();
     }
-    final motels = await _repository.getMotels();
-    return motels.where((motel) => motel.ownerId == ownerId).toList();
+    return repository.getMyMotels();
   }
 
+  /// Signed-in Firebase uid; the demo owner without a session.
+  static String get _currentOwnerId =>
+      CurrentUser.uidOrNull ?? 'owner-1020304050';
+
+  /// Moteles de un propietario concreto (vista del administrador).
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {
-    if (_repository == null) {
+    final repository = _repository;
+    if (repository == null) {
       await Future.delayed(const Duration(milliseconds: 800));
       return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
     }
-    final motels = await _repository.getMotels();
+    final motels = await repository.getMotels();
     return motels.where((motel) => motel.ownerId == ownerId).toList();
   }
 
   Future<List<Motel>> getRecommendedMotels() async {
-    if (_repository == null) {
+    final repository = _repository;
+    if (repository == null) {
       await Future.delayed(const Duration(seconds: 1));
       return _mockDatabase.where((motel) => motel.isAvailable).toList();
     }
-    final motels = await _repository.getMotels();
-    return motels.where((motel) => motel.isAvailable).toList();
+    return repository.getAvailableMotels();
   }
 
   Future<List<Motel>> getAllMotels() async {
-    if (_repository == null) {
+    final repository = _repository;
+    if (repository == null) {
       await Future.delayed(const Duration(milliseconds: 600));
       return _mockDatabase;
     }
-    return _repository.getMotels();
+    return repository.getMotels();
   }
 
   Future<Motel?> getMotelById(String id) async {
-    if (_repository == null) {
+    final repository = _repository;
+    if (repository == null) {
       await Future.delayed(const Duration(milliseconds: 400));
       return _mockDatabase.cast<Motel?>().firstWhere(
         (motel) => motel?.id == id,
         orElse: () => null,
       );
     }
-    final motels = await _repository.getMotels();
-    for (final motel in motels) {
+    return repository.getMotelById(id);
+  }
+
+  /// El propietario autenticado registra un motel propio.
+  Future<Motel> addMotel(Motel newMotel) async {
+    final repository = _repository;
+    if (repository == null) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      _mockDatabase.add(newMotel);
+      return newMotel;
+    }
+    return repository.addMyMotel(newMotel);
+  }
+
+  /// El administrador registra un motel para `newMotel.ownerId`.
+  Future<Motel> adminAddMotel(Motel newMotel) async {
+    final repository = _repository;
+    if (repository == null) return addMotel(newMotel);
+    return repository.addMotelForOwner(newMotel);
+  }
+
+  /// El propietario autenticado edita un motel propio.
+  Future<Motel> updateMotel(Motel updatedMotel) async {
+    final repository = _repository;
+    if (repository == null) {
+      await Future.delayed(const Duration(milliseconds: 400));
+      _replaceInMock(updatedMotel);
+      return updatedMotel;
+    }
+    return repository.updateMyMotel(updatedMotel);
+  }
+
+  /// El administrador edita cualquier motel.
+  Future<Motel> adminUpdateMotel(Motel updatedMotel) async {
+    final repository = _repository;
+    if (repository == null) return updateMotel(updatedMotel);
+    return repository.updateMotelAsAdmin(updatedMotel);
+  }
+
+  /// El propietario autenticado habilita o inhabilita un motel propio.
+  Future<void> toggleMotelStatus(String motelId) async {
+    final repository = _repository;
+    if (repository == null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      final current = _findInMock(motelId);
+      if (current != null) {
+        _replaceInMock(current.copyWith(isAvailable: !current.isAvailable));
+      }
+      return;
+    }
+    final current = await repository.getMotelById(motelId);
+    if (current == null) return;
+    await repository.setMyMotelAvailability(motelId, !current.isAvailable);
+  }
+
+  /// El administrador habilita o inhabilita cualquier motel.
+  Future<Motel?> adminToggleMotelStatus(Motel motel) async {
+    final toggled = motel.copyWith(isAvailable: !motel.isAvailable);
+    final repository = _repository;
+    if (repository == null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      _replaceInMock(toggled);
+      return toggled;
+    }
+    return repository.updateMotelAsAdmin(toggled);
+  }
+
+  Motel? _findInMock(String id) {
+    for (final motel in _mockDatabase) {
       if (motel.id == id) return motel;
     }
     return null;
   }
 
-  Future<void> addMotel(Motel newMotel) async {
-    if (_repository == null) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      _mockDatabase.add(newMotel);
-      return;
-    }
-    await _repository.addMotel(newMotel);
-  }
-
-  Future<void> updateMotel(Motel updatedMotel) async {
-    if (_repository == null) {
-      await Future.delayed(const Duration(milliseconds: 400));
-      final index = _mockDatabase.indexWhere((m) => m.id == updatedMotel.id);
-      if (index != -1) {
-        _mockDatabase[index] = updatedMotel;
-      }
-      return;
-    }
-    await _repository.updateMotel(updatedMotel);
-  }
-
-  /// Reasigna todos los moteles de un propietario a otro.
-  ///
-  /// Se usa antes de eliminar una cuenta: si falla, la eliminación no debe
-  /// continuar para no dejar moteles huérfanos.
-  Future<void> reassignMoteles({
-    required String fromOwnerId,
-    required String toOwnerId,
-  }) async {
-    if (_repository == null) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      for (var i = 0; i < _mockDatabase.length; i++) {
-        final current = _mockDatabase[i];
-        if (current.ownerId != fromOwnerId) continue;
-        _mockDatabase[i] = Motel(
-          id: current.id,
-          ownerId: toOwnerId,
-          name: current.name,
-          email: current.email,
-          roomCount: current.roomCount,
-          nit: current.nit,
-          address: current.address,
-          phone: current.phone,
-          description: current.description,
-          generalLocation: current.generalLocation,
-          paymentMethods: current.paymentMethods,
-          imageUrls: current.imageUrls,
-          isAvailable: current.isAvailable,
-        );
-      }
-      return;
-    }
-    await _repository.reassignMoteles(
-      fromOwnerId: fromOwnerId,
-      toOwnerId: toOwnerId,
-    );
-  }
-
-  Future<void> toggleMotelStatus(String motelId) async {
-    if (_repository == null) {
-      await Future.delayed(const Duration(milliseconds: 300));
-      final index = _mockDatabase.indexWhere((m) => m.id == motelId);
-      if (index != -1) {
-        final current = _mockDatabase[index];
-        _mockDatabase[index] = Motel(
-          id: current.id,
-          ownerId: current.ownerId,
-          name: current.name,
-          email: current.email,
-          roomCount: current.roomCount,
-          nit: current.nit,
-          address: current.address,
-          phone: current.phone,
-          description: current.description,
-          generalLocation: current.generalLocation,
-          paymentMethods: current.paymentMethods,
-          imageUrls: current.imageUrls,
-          isAvailable: !current.isAvailable,
-        );
-      }
-      return;
-    }
-    final motels = await _repository.getMotels();
-    Motel? current;
-    for (final motel in motels) {
-      if (motel.id == motelId) {
-        current = motel;
-        break;
-      }
-    }
-    if (current == null) return;
-    await _repository.setAvailability(motelId, !current.isAvailable);
+  void _replaceInMock(Motel motel) {
+    final index = _mockDatabase.indexWhere((m) => m.id == motel.id);
+    if (index != -1) _mockDatabase[index] = motel;
   }
 }

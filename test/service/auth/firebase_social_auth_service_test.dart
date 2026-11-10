@@ -18,9 +18,12 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/social_auth_result.dart';
 import 'package:machuco/models/auth/social_profile_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_social_auth_service.dart';
 import 'package:machuco/service/auth/github_email_verifier.dart';
+
+import '../analytics/recording_analytics_service.dart';
 
 final _now = DateTime.utc(2026, 11, 4, 12);
 
@@ -179,6 +182,65 @@ void main() {
     });
   });
 
+  group('analítica', () {
+    late RecordingAnalyticsService analytics;
+
+    List<String> reported(RecordingAnalyticsService analytics) => [
+      for (final event in analytics.events)
+        '${event.name}:${event.parameters['method']}',
+    ];
+
+    setUp(() {
+      analytics = RecordingAnalyticsService();
+      service = FirebaseSocialAuthService(
+        firebaseAuth: auth,
+        profileRepository: profiles,
+        profileCache: cache,
+        administratorsRepository: administrators,
+        gitHubEmailVerifier: GitHubEmailVerifier(
+          httpClient: MockClient((request) async => gitHubResponse()),
+        ),
+        clock: () => _now,
+        analytics: analytics,
+      );
+    });
+
+    test('Google y GitHub con perfil completo reportan login con su '
+        'método', () async {
+      auth.nextUser = googleUser();
+      profiles.stored['u1'] = _profile();
+      await service.signInWithGoogle();
+
+      auth.nextUser = gitHubUser();
+      auth.nextAccessToken = 'gho_token';
+      await service.signInWithGitHub();
+
+      expect(reported(analytics), [
+        'login:${AnalyticsLoginMethod.google}',
+        'login:${AnalyticsLoginMethod.github}',
+      ]);
+    });
+
+    test('un usuario nuevo no reporta login hasta completar el perfil, y '
+        'entonces reporta sign_up', () async {
+      auth.nextUser = googleUser();
+      await service.signInWithGoogle();
+      expect(analytics.events, isEmpty);
+
+      await service.completeProfile(_client());
+
+      expect(reported(analytics), ['sign_up:${AnalyticsLoginMethod.google}']);
+    });
+
+    test('una cancelación no reporta nada', () async {
+      auth.signInError = FirebaseAuthException(code: 'canceled');
+
+      await service.signInWithGoogle();
+
+      expect(analytics.events, isEmpty);
+    });
+  });
+
   group('cancelación, conexión y configuración', () {
     for (final code in ['web-context-canceled', 'canceled', 'user-cancelled']) {
       test(
@@ -192,6 +254,19 @@ void main() {
           expect(profiles.created, isEmpty);
         },
       );
+    }
+
+    for (final code in ['unsupported-platform', 'unsupported-platform-operation']) {
+      test('$code explica la limitación de la plataforma', () async {
+        auth.signInError = FirebaseAuthException(code: code);
+        final result = expectType<SocialAuthError>(
+          await service.signInWithGitHub(),
+        );
+        expect(result.failure.type, AuthFailureType.providerMisconfigured);
+        expect(result.failure.message, contains('no está disponible'));
+        expect(result.failure.message, contains('versión web o Android'));
+        expect(profiles.created, isEmpty);
+      });
     }
 
     test('[SOC-06] sin conexión: error de red', () async {

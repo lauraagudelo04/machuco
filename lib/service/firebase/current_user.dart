@@ -14,6 +14,26 @@ abstract final class CurrentUser {
   /// Email of the signed-in user, or `null` when there is no session.
   static String? get email => FirebaseAuth.instance.currentUser?.email;
 
+  /// Like [uid], but `null` instead of throwing when Firebase is not
+  /// initialized (widget tests, demo mode). Use it to fall back to demo ids.
+  static String? get uidOrNull {
+    try {
+      return uid;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Like [email], but `null` instead of throwing when Firebase is not
+  /// initialized.
+  static String? get emailOrNull {
+    try {
+      return email;
+    } catch (_) {
+      return null;
+    }
+  }
+
   /// Whether a Firebase session exists right now.
   static bool get isSignedIn => FirebaseAuth.instance.currentUser != null;
 }

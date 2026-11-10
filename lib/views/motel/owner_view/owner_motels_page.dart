@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
@@ -31,19 +32,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String _searchQuery = '';
 
-  /// Uid del propietario con la sesión iniciada. Antes esta pantalla usaba un
-  /// id y una lista de nombres quemados de la etapa de desarrollo.
-  late final String _currentOwnerId = CurrentUser.uid ?? '';
-  String? _ownerName;
-  String? _ownerEmail;
+  String get _currentOwnerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  /// Nombre a mostrar: el del perfil de `users/{uid}`, o su correo.
-  String get _displayName {
-    final name = _ownerName?.trim();
-    if (name != null && name.isNotEmpty) return name;
-    final email = _ownerEmail?.trim();
-    if (email != null && email.isNotEmpty) return email;
-    return 'Propietario';
+  String get _ownerName {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.displayName ?? user?.email ?? 'Propietario';
   }
 
   @override
@@ -91,9 +84,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     }
 
     try {
-      final motelesObtenidos = await _motelController.getMotelsByOwnerId(
-        _currentOwnerId,
-      );
+      if (_currentOwnerId.isEmpty) {
+        throw StateError('Inicia sesión para consultar tus moteles.');
+      }
+      // El backend filtra por el propietario de la sesión (token de Firebase).
+      final motelesObtenidos = await _motelController.getMyMotels();
 
       if (!mounted) return;
       setState(() {
@@ -194,12 +189,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: Text(
-          'Mis moteles',
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
-        ),
+        title: Text(_ownerName),
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
@@ -255,7 +245,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: $_displayName',
+                    'Sesión: $_ownerName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -324,7 +314,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _displayName,
+                    _ownerName.split(' ').first,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(
