@@ -769,11 +769,18 @@ service cloud.firestore {
     // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
     // sin crear manualmente el registro; si existe, el registro prevalece.
     // Al transferir el motel, actualizar este permiso o crear el registro.
+    // También vale la copia de moteles de SQL Connect (motels/{motelId}), que
+    // la app escribe al crear el motel: así el propietario crea tipos de
+    // habitación y habitaciones sin esperar a un administrador (autorizado
+    // por la rama de habitaciones, 2026-11-10).
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
         && (
-          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+          (exists(/databases/$(database)/documents/motels/$(data.motelId))
+            && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+              == request.auth.uid)
+          || (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
             && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
               == request.auth.uid)
           || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))

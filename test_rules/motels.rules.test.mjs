@@ -94,3 +94,61 @@ describe('motels: copia de SQL Connect', () => {
     await assertFails(deleteDoc(doc(as('admin'), 'motels/m1')));
   });
 });
+
+// Habitaciones: ownsRoomMotel acepta la copia motels/{motelId}.
+const roomType = (overrides = {}) => ({
+  id: 't1',
+  motelId: 'm1',
+  ownerId: 'owner',
+  name: 'Suite',
+  deleted: false,
+  updatedAt: serverTimestamp(),
+  ...overrides,
+});
+const room = (overrides = {}) => ({
+  id: 'r1',
+  motelId: 'm1',
+  ownerId: 'owner',
+  name: 'Habitación 101',
+  description: 'Con jacuzzi',
+  idType: 't1',
+  pricePerHour: 50000,
+  roomNumber: '101',
+  capacity: 2,
+  imageUrls: [],
+  isActive: true,
+  includedServices: [],
+  deleted: false,
+  updatedAt: serverTimestamp(),
+  ...overrides,
+});
+
+describe('habitaciones con el motel registrado en motels', () => {
+  test('el dueño del motel crea tipos de habitación y habitaciones', async () => {
+    await setDoc(doc(as('owner'), 'motels/m1'), motel());
+    await assertSucceeds(setDoc(doc(as('owner'), 'room_types/t1'), roomType()));
+    await assertSucceeds(setDoc(doc(as('owner'), 'rooms/r1'), room()));
+  });
+
+  test('otro propietario no crea tipos ni habitaciones en un motel ajeno', async () => {
+    await setDoc(doc(as('owner'), 'motels/m1'), motel());
+    await assertFails(setDoc(
+      doc(as('otherOwner'), 'room_types/t1'),
+      roomType({ ownerId: 'otherOwner' }),
+    ));
+  });
+
+  test('sin registro en motels ni en room_motels no se crean tipos', async () => {
+    await assertFails(setDoc(doc(as('owner'), 'room_types/t1'), roomType()));
+  });
+
+  test('room_motels sigue funcionando para los registros existentes', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'room_motels/m2'), { ownerId: 'owner' });
+    });
+    await assertSucceeds(setDoc(
+      doc(as('owner'), 'room_types/t2'),
+      roomType({ id: 't2', motelId: 'm2' }),
+    ));
+  });
+});
