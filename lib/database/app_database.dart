@@ -9,12 +9,16 @@ import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_category_dao.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
+import 'package:machuco/models/additional_service/additional_service_category.dart';
+import 'package:machuco/models/additional_service/additional_service_entry.dart';
 import 'package:machuco/models/booking/reservation_category.dart';
 import 'package:machuco/models/booking/reservation_entity.dart';
 import 'package:machuco/models/booking/reservation_line_item_entity.dart';
@@ -38,7 +42,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 15,
+  version: 17,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -50,6 +54,8 @@ part 'app_database.g.dart';
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
+    AdditionalServiceCategory,
+    AdditionalServiceEntry,
     ReservationCategory,
     ReservationEntity,
     ReservationLineItemEntity,
@@ -61,6 +67,8 @@ abstract class AppDatabase extends FloorDatabase {
   SubscriptionDao get subscriptionDao;
   NotificationDao get notificationDao;
   PaymentDao get paymentDao;
+  AdditionalServiceCategoryDao get additionalServiceCategoryDao;
+  AdditionalServiceDao get additionalServiceDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -102,6 +110,8 @@ class AppDatabaseProvider {
         migration12To13,
         migration13To14,
         migration14To15,
+        migration15To16,
+        migration16To17,
       ])
       .addCallback(
         Callback(
@@ -119,6 +129,7 @@ Future<void> _createManualSchemas(
   int version,
 ) async {
   await _createRoomSchema(database, version);
+  await createRoomSyncSchema(database);
   await _createAuthCatalogSchema(database);
 }
 
@@ -408,7 +419,9 @@ final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 /// Es idempotente porque esta tabla se creó antes como v13 en la rama de
 /// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
 /// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
-final migration13To14 = Migration(13, 14, (database) async {
+Future<void> _createAuthUserProfileSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
     '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
@@ -417,12 +430,31 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
   );
-});
+}
+
+Future<void> createRoomSyncSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''CREATE TABLE IF NOT EXISTS room_sync_queue (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    collection_name TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    payload TEXT NOT NULL
+  )''');
+}
+
+Future<void> _completeAuthAndRoomSyncSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
+  await _createAuthUserProfileSchema(database);
+  await createRoomSyncSchema(database);
+}
+
+final migration13To14 = Migration(13, 14, _completeAuthAndRoomSyncSchemas);
 
 /// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
 /// genera para `ReservationCategory`, `ReservationEntity` y
 /// `ReservationLineItemEntity`.
-final migration14To15 = Migration(14, 15, (database) async {
+Future<void> _createReservationSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
     '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
@@ -462,5 +494,38 @@ final migration14To15 = Migration(14, 15, (database) async {
   await database.execute(
     'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
     'ON `reservation_line_items` (`reservationId`)',
+  );
+}
+
+Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
+  await _completeAuthAndRoomSyncSchemas(database);
+  await _createReservationSchema(database);
+}
+
+final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+
+/// Completa las dos variantes de v15 conservando los datos de ambas ramas.
+final migration15To16 = Migration(15, 16, _completeMergedSchemas);
+
+/// Agrega el maestro de categorías de servicios adicionales y la tabla
+/// local de servicios adicionales. Primero completa los esquemas de las otras
+/// ramas (idempotente) por si la base quedó en una v16 anterior a la unión.
+final migration16To17 = Migration(16, 17, (database) async {
+  await _completeMergedSchemas(database);
+  await _createPaymentSchema(database);
+  await _createClientSchema(database);
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_service_categories ('
+    'id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, createdAt INTEGER NOT NULL)',
+  );
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_additional_service_categories_name '
+    'ON additional_service_categories (name)',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS additional_services ('
+    'id TEXT PRIMARY KEY, motelId TEXT NOT NULL, name TEXT NOT NULL, '
+    'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
+    'active INTEGER NOT NULL)',
   );
 });

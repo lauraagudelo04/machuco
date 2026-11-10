@@ -617,6 +617,143 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    function isActiveOwnerOrAdmin() {
+      return isAdmin() || isActiveOwner();
+    }
+
+    function hasValidAdditionalServiceFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'motelId', 'name', 'description', 'category', 'price',
+          'active', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'motelId', 'name', 'description', 'category', 'price',
+          'active', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.name is string
+        && data.name.size() > 0 && data.name.size() <= 100
+        && data.description is string
+        && data.description.size() > 0 && data.description.size() <= 500
+        && data.category is string
+        && data.category.size() > 0 && data.category.size() <= 100
+        && data.price is int && data.price > 0
+        && data.active is bool
+        && data.updatedAt == request.time;
+    }
+
+    // Servicios adicionales de un motel. Cualquier usuario con sesion los
+    // consulta (el cliente los elige al reservar). Los crea un administrador o
+    // un propietario activo, que queda como ownerId; solo ese propietario o un
+    // administrador los edita o elimina, y ownerId/motelId no cambian.
+    match /additionalServices/{serviceId} {
+      allow read: if isSignedIn();
+
+      allow create: if isActiveOwnerOrAdmin()
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidAdditionalServiceFields(request.resource.data);
+
+      allow update: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.motelId == resource.data.motelId
+        && hasValidAdditionalServiceFields(request.resource.data);
+
+      allow delete: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+    }
+
+    // Registro de autoridad. Crear desde la consola con un usuario administrador.
+    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    match /room_motels/{motelId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
+    // sin crear manualmente el registro; si existe, el registro prevalece.
+    // Al transferir el motel, actualizar este permiso o crear el registro.
+    function ownsRoomMotel(data) {
+      return isActiveOwner()
+        && data.ownerId == request.auth.uid
+        && (
+          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
+              == request.auth.uid)
+          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+            && data.motelId == 'motel_1793753270427'
+            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
+        );
+    }
+
+    function validRoomBase(data, id) {
+      return data.id == id
+        && data.motelId is string && data.motelId.size() > 0
+        && data.ownerId is string
+        && data.name is string && data.name.size() > 0
+        && data.deleted is bool
+        && data.updatedAt == request.time;
+    }
+
+    function canReadRooms() {
+      return isAdmin() || isActiveOwner() || isActiveClient();
+    }
+
+    match /room_types/{typeId} {
+      allow read: if canReadRooms();
+      allow create: if ownsRoomMotel(request.resource.data)
+        && validRoomBase(request.resource.data, typeId)
+        && request.resource.data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'deleted', 'updatedAt']);
+      allow update: if ownsRoomMotel(resource.data)
+        && ownsRoomMotel(request.resource.data)
+        && request.resource.data.motelId == resource.data.motelId
+        && validRoomBase(request.resource.data, typeId)
+        && request.resource.data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'deleted', 'updatedAt']);
+      allow delete: if false; // Borrado lógico para sincronizar otros dispositivos.
+    }
+
+    function validRoom(data, id) {
+      let type = get(/databases/$(database)/documents/room_types/$(data.idType)).data;
+      return validRoomBase(data, id)
+        && data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'description', 'idType',
+          'pricePerHour', 'roomNumber', 'capacity', 'imageUrls', 'isActive',
+          'includedServices', 'deleted', 'updatedAt'])
+        && data.description is string
+        && data.idType is string
+        && data.pricePerHour is int && data.pricePerHour >= 0
+        && data.roomNumber is string && data.roomNumber.size() > 0
+        && data.capacity is int && data.capacity > 0
+        && data.imageUrls is list && data.includedServices is list
+        && data.isActive is bool
+        && type.motelId == data.motelId && type.ownerId == data.ownerId
+        && (data.deleted || !type.deleted);
+    }
+
+    match /rooms/{roomId} {
+      allow read: if canReadRooms();
+      allow create: if ownsRoomMotel(request.resource.data)
+        && validRoom(request.resource.data, roomId);
+      allow update: if ownsRoomMotel(resource.data)
+        && ownsRoomMotel(request.resource.data)
+        && request.resource.data.motelId == resource.data.motelId
+        && validRoom(request.resource.data, roomId);
+      allow delete: if false;
+    }
+
+    // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
+    // mismo id. La escriben el administrador y el propietario activo (este
+    // solo a su propio nombre). No se borran: se inhabilitan.
+    match /motels/{motelId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow delete: if false;
+    }
+
     // Facturas (FirestoreInvoiceRepository). Una por reserva: el id del
     // documento es el id de la reserva. Se copian de la reserva ya guardada
     // en Firestore y despues no se modifican ni se borran.

@@ -49,18 +49,31 @@ class _AdditionalServiceSystemAdministratorPageState
         );
     _controllerInitialized = true;
     _controller.addListener(_refresh);
+    _searchController.addListener(_onSearchChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _controller.load();
+    });
   }
 
   void _refresh() {
     if (mounted) {
       setState(() {
-        if (!_controller
-            .getAdditionalServiceCategoriesByMotelId(_controller.motelId)
-            .contains(_selectedCategory)) {
+        if (!_controller.categories.contains(_selectedCategory)) {
           _selectedCategory = null;
         }
       });
     }
+  }
+
+  /// Avisa si la última operación contra Firestore falló.
+  void _showSyncError() {
+    final error = _controller.syncError;
+    if (!mounted || error == null) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  void _onSearchChanged() {
+    if (mounted) setState(() {});
   }
 
   void _clearSearch() {
@@ -92,7 +105,8 @@ class _AdditionalServiceSystemAdministratorPageState
       ),
     );
     if (!mounted || shouldDelete != true) return;
-    _controller.deleteAdditionalService(service.id);
+    await _controller.deleteAdditionalService(service.id);
+    _showSyncError();
   }
 
   @override
@@ -171,10 +185,7 @@ class _AdditionalServiceSystemAdministratorPageState
               selected: _selectedCategory == null,
               onSelected: (_) => setState(() => _selectedCategory = null),
             ),
-            for (final category
-                in _controller.getAdditionalServiceCategoriesByMotelId(
-                  _controller.motelId,
-                ))
+            for (final category in _controller.categories)
               ChoiceChip(
                 label: Text(category),
                 selected: _selectedCategory == category,
@@ -218,8 +229,10 @@ class _AdditionalServiceSystemAdministratorPageState
               final service = _filteredServices[index];
               return _AdminServiceCard(
                 service: service,
-                onToggleActive: () =>
-                    _controller.toggleAdditionalServiceActive(service.id),
+                onToggleActive: () async {
+                  await _controller.toggleAdditionalServiceActive(service.id);
+                  _showSyncError();
+                },
                 onEdit: () => _openEditForm(service),
                 onDelete: () => _confirmDelete(service),
               );

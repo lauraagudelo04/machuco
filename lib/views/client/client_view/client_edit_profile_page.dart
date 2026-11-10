@@ -7,6 +7,7 @@ import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/client/client_model.dart';
+import 'package:machuco/widgets/client/change_password_bottom_sheet.dart';
 
 class ClientEditProfilePage extends StatefulWidget {
   const ClientEditProfilePage({super.key});
@@ -23,32 +24,32 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
   late String _selectedCountryCode;
 
   @override
-void initState() {
-  super.initState();
-  final client = ClientController.instance.currentClient;
-  final availableCodes = ClientController.instance.countryCodes;
+  void initState() {
+    super.initState();
+    final client = ClientController.instance.currentClient;
+    final availableCodes = ClientController.instance.countryCodes;
 
-  String rawPhone = client?.phone ?? '';
-  String code = client?.countryCode ?? '+57';
+    String rawPhone = client?.phone ?? '';
+    String code = client?.countryCode ?? '+57';
 
-  if (rawPhone.startsWith('+')) {
-    for (final country in availableCodes) {
-      if (rawPhone.startsWith(country.callingCode)) {
-        code = country.callingCode;
-        rawPhone = rawPhone.substring(country.callingCode.length).trim();
-        break;
+    if (rawPhone.startsWith('+')) {
+      for (final country in availableCodes) {
+        if (rawPhone.startsWith(country.callingCode)) {
+          code = country.callingCode;
+          rawPhone = rawPhone.substring(country.callingCode.length).trim();
+          break;
+        }
+      }
+      if (rawPhone.startsWith('+57')) {
+        code = '+57';
+        rawPhone = rawPhone.substring(3).trim();
       }
     }
-    if (rawPhone.startsWith('+57')) {
-      code = '+57';
-      rawPhone = rawPhone.substring(3).trim();
-    }
-  }
 
-  _selectedCountryCode = code;
-  _nameController = TextEditingController(text: client?.name ?? '');
-  _phoneController = TextEditingController(text: rawPhone);
-}
+    _selectedCountryCode = code;
+    _nameController = TextEditingController(text: client?.name ?? '');
+    _phoneController = TextEditingController(text: rawPhone);
+  }
 
   @override
   void dispose() {
@@ -97,6 +98,8 @@ void initState() {
 
             final isSubmitting = ClientController.instance.isLoading;
             final availableCodes = ClientController.instance.countryCodes;
+            final canChangePassword = ClientController.instance.canChangePassword;
+            final authProviderName = ClientController.instance.authProviderName;
 
             List<DropdownMenuItem<String>> dropdownItems = [];
 
@@ -201,6 +204,43 @@ void initState() {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s6),
+                
+                // --- SECCIÓN DE SEGURIDAD ---
+                _DetailSection(
+                  title: 'Seguridad',
+                  children: [
+                    if (canChangePassword)
+                      AppButton(
+                        label: 'Cambiar contraseña',
+                        icon: Icons.lock_outline,
+                        variant: AppButtonVariant.secondary,
+                        onPressed: isSubmitting
+                            ? null
+                            : () => ChangePasswordBottomSheet.show(context),
+                      )
+                    else
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                          const SizedBox(width: AppSpacing.s3),
+                          Expanded(
+                            child: Text(
+                              'Iniciaste sesión con $authProviderName. La contraseña debe gestionarse directamente en tu cuenta de $authProviderName.',
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                    color: context.appColors.textSecondary,
+                                  ),
+                            ),
+                          ),
+                        ],
+                      ),
+                  ],
+                ),
+                const SizedBox(height: AppSpacing.s6),
+                
+                // --- BOTONES DE ACCIÓN ---
                 AppButton(
                   label: 'Guardar cambios',
                   icon: Icons.check_outlined,

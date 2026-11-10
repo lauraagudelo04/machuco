@@ -635,3 +635,41 @@ un admin" falla con las reglas publicadas, porque ahora un admin activo puede
 borrar cuentas que no son de administrador; su dueño decide si actualiza el
 test o la regla. Antes de cada despliegue hay que partir de las reglas
 publicadas o de `develop` actualizado, nunca de una copia local vieja.
+
+## 2026-11-09 — Moteles pasan a Firebase SQL Connect (rama `feature_marco`)
+
+**Contexto:** la decisión del 2026-10-27 fija Firebase como base de datos
+principal y Supabase solo para datos maestros. Los moteles estaban en
+Supabase (entrada del 2026-10-28) y a la rama de moteles se le asignó
+implementar Firebase SQL Connect (antes Data Connect).
+
+**Decisión:**
+
+- Los moteles se guardan en **Firebase SQL Connect** (PostgreSQL), servicio
+  `machuco-service` en `us-east4`, instancia `machuco-instance`, base
+  `machuco-database` (prueba gratuita del plan Spark, activada el
+  2026-11-09; dura 90 días). Esquema y conector `motel` desplegados el
+  2026-11-09 con la CLI 15.34.1.
+- Tabla `motels` en `dataconnect/schema/motel.gql`, conector `motel` en
+  `dataconnect/motel/`. Código generado en `lib/service/sql_connect/motel_connector/`.
+- El dueño lo fija el backend con el uid del token de Firebase Auth
+  (`auth.uid`): un propietario solo lista, crea y edita sus moteles.
+- Se conserva la caché local en Floor (`MotelDao`) para lectura sin red.
+- Se retira el repositorio de moteles de Supabase. Los indicativos
+  telefónicos siguen en Supabase (son un maestro).
+- Convención para el equipo: un archivo de esquema y una carpeta de
+  conector por funcionalidad. Ver `docs/sql_connect.md`.
+
+**Pendiente:**
+
+- Las operaciones de administrador (`ListAllMotels`, `AdminCreateMotel`,
+  `AdminUpdateMotel`) exigen el custom claim `role: 'admin'` en el token de
+  Firebase Auth. Hasta que la rama de autenticación lo agregue, nadie puede
+  usarlas.
+- Antes de que terminen los 90 días hay que decidir si se pasa a Blaze.
+
+**Actualización (2026-11-09):** cada motel se copia también en Firestore
+(`motels/{motelId}`, mismo UUID, colección propia de esta rama) para que
+otros módulos lo consulten desde sus reglas. Lo escriben el administrador y
+el propietario activo con su propio `ownerId`. La regla `room_motels` de la
+rama de habitaciones no se modificó.
