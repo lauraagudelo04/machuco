@@ -11,4 +11,7 @@ abstract final class FirestoreCollections {
 
   /// Payment records synchronized from the owner's local SQLite database.
   static const payments = 'payments';
+
+  /// Client reviews of motels and rooms, one document per review id.
+  static const reviews = 'reviews';
 }
