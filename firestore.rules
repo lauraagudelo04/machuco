@@ -697,6 +697,16 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
+    // mismo id. La escriben el administrador y el propietario activo (este
+    // solo a su propio nombre). No se borran: se inhabilitan.
+    match /motels/{motelId} {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+        || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow delete: if false;
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {

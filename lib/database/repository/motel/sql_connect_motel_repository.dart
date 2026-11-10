@@ -1,5 +1,6 @@
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
+import 'package:machuco/database/repository/motel/motel_firestore_registry.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/database/repository/motel/motel_sql_connect_gateway.dart';
 import 'package:machuco/models/motel/motel_model.dart';
@@ -8,18 +9,24 @@ import 'package:machuco/models/motel/motel_model.dart';
 ///
 /// Lecturas: red primero; si SQL Connect falla se devuelve la caché y, si no
 /// hay caché, se lanza [MotelRepositoryException]. Escrituras: siempre
-/// requieren red y, si salen bien, actualizan la caché.
+/// requieren red y, si salen bien, actualizan la caché y el registro del
+/// motel en Firestore (`motels`) que pueden consultar otros módulos.
 class SqlConnectMotelRepository implements MotelRepository {
   SqlConnectMotelRepository({
     required MotelSqlConnectGateway gateway,
     required Future<MotelDao> Function() daoProvider,
     String? Function()? currentUid,
+    MotelFirestoreRegistry? firestoreRegistry,
   }) : _gateway = gateway,
        _daoProvider = daoProvider,
-       _currentUid = currentUid ?? (() => null);
+       _currentUid = currentUid ?? (() => null),
+       _firestoreRegistry = firestoreRegistry;
 
   final MotelSqlConnectGateway _gateway;
   final Future<MotelDao> Function() _daoProvider;
+
+  /// Si es `null` no se escribe en Firestore (lecturas desde otros módulos).
+  final MotelFirestoreRegistry? _firestoreRegistry;
 
   /// Uid de la sesión; solo se usa para filtrar la caché sin conexión.
   final String? Function() _currentUid;
@@ -111,10 +118,22 @@ class SqlConnectMotelRepository implements MotelRepository {
     }
     final cached = await dao.findById(id);
     if (cached != null) {
-      await dao.upsert(
-        MotelEntity.fromModel(
-          cached.toModel().copyWith(isAvailable: isAvailable),
-        ),
+      final motel = cached.toModel().copyWith(isAvailable: isAvailable);
+      await dao.upsert(MotelEntity.fromModel(motel));
+      await _register(motel);
+    }
+  }
+
+  /// Copia el motel en `motels/{id}` (Firestore) después de guardar en SQL Connect.
+  Future<void> _register(Motel motel) async {
+    final registry = _firestoreRegistry;
+    if (registry == null) return;
+    try {
+      await registry.save(motel);
+    } catch (_) {
+      throw const MotelRepositoryException(
+        'El motel se guardó, pero no se pudo registrar para las habitaciones. '
+        'Vuelve a guardarlo para reintentar.',
       );
     }
   }
@@ -162,6 +181,7 @@ class SqlConnectMotelRepository implements MotelRepository {
       );
     }
     await dao.upsert(MotelEntity.fromModel(motel));
+    await _register(motel);
     return motel;
   }
 }
