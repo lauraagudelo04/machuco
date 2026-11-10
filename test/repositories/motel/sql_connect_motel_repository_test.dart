@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/repository/motel/motel_firestore_registry.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
@@ -32,6 +33,8 @@ class _FakeGateway implements MotelSqlConnectGateway {
   Object? error;
   int rowsUpdated = 1;
   Motel? lastCreatedForOwner;
+  int allRequests = 0;
+  int availableRequests = 0;
 
   void _maybeThrow() {
     final e = error;
@@ -40,6 +43,7 @@ class _FakeGateway implements MotelSqlConnectGateway {
 
   @override
   Future<List<Motel>> listAll() async {
+    allRequests++;
     _maybeThrow();
     return all;
   }
@@ -52,6 +56,7 @@ class _FakeGateway implements MotelSqlConnectGateway {
 
   @override
   Future<List<Motel>> listAvailable() async {
+    availableRequests++;
     _maybeThrow();
     return all.where((m) => m.isAvailable).toList();
   }
@@ -146,6 +151,26 @@ void main() {
     expect(cached.map((e) => e.id), containsAll(['1', '2']));
     expect(cached.map((e) => e.id), isNot(contains('viejo')));
   });
+
+  test(
+    'el catálogo de cliente usa disponibles, conserva IDs y no filtra por propietario',
+    () async {
+      gateway.all = [
+        _motel('11111111-1111-4111-8111-111111111111'),
+        _motel('22222222-2222-4222-8222-222222222222', ownerId: 'uid-2'),
+        _motel('inactive', available: false),
+      ];
+      final controller = MotelController(repository: repository);
+      final catalog = await controller.getRecommendedMotels();
+      expect(gateway.availableRequests, 1);
+      expect(gateway.allRequests, 0);
+      expect(catalog.map((motel) => motel.id), [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ]);
+      expect(catalog.last.ownerId, 'uid-2');
+    },
+  );
 
   test('getMyMotels sin red devuelve solo los del usuario en caché', () async {
     await database.motelDao.upsertAll([

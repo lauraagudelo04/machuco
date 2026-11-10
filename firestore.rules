@@ -24,24 +24,78 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
     }
 
-    // Pago que un cliente registra al finalizar su reserva: en el local queda
-    // pendiente y sin metodo (lo confirma el propietario); con tarjeta nace
-    // pagado, con su metodo y fecha de pago.
+    // El cliente solo solicita pagar en el establecimiento. Un sandbox de
+    // tarjeta nunca acredita dinero recibido.
     function isClientPaymentCreate(data) {
       return isActiveClient()
         && data.clientId == request.auth.uid
         && data.ownerId != request.auth.uid
-        && (
-          (data.status == 'pending'
+        && data.status == 'pending'
             && !('method' in data)
             && !('paymentMethodId' in data)
+            && !('paymentMethodName' in data)
             && !('paidAt' in data)
-            && !('receiptNumber' in data))
-          ||
-          (data.status == 'paid'
-            && 'paymentMethodId' in data
-            && 'paidAt' in data)
-        );
+            && !('receiptNumber' in data);
+    }
+
+    function paymentMatchesReservation(paymentId, data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return paymentId == 'pay-' + data.bookingId
+        && data.ownerId == reservation.ownerId
+        && data.clientId == reservation.guestId
+        && data.motelId == reservation.motelId
+        && data.roomId == reservation.roomId
+        && data.amount == reservation.total
+        && data.reservationDate == reservation.checkIn
+        && get(/databases/$(database)/documents/users/$(data.ownerId)).data.role == 'owner'
+        && get(/databases/$(database)/documents/users/$(data.ownerId)).data.accountStatus == 'active';
+    }
+
+    function hasLinkedPaymentState(data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return (data.status == 'pending'
+          && reservation.status == 'pending'
+          && reservation.get('paymentMethod', '') == 'En el Local')
+        || (data.status == 'paid'
+          && 'paymentMethodId' in data && 'paymentMethodName' in data
+          && 'paidAt' in data && data.get('receiptNumber', '') == 'LOCAL-pay-' + data.bookingId
+          && reservation.status in ['upcoming', 'active', 'completed', 'cancelled']
+          && reservation.get('paymentMethod', '') == data.paymentMethodName)
+        || (data.status == 'cancelled' && reservation.status == 'cancelled')
+        || data.status == 'refunded';
+    }
+
+    function hasBackedReservationPayment(reservationId, data) {
+      let payment = getAfter(/databases/$(database)/documents/payments/$('pay-' + reservationId)).data;
+      return payment.bookingId == reservationId
+        && payment.ownerId == data.ownerId
+        && payment.clientId == data.guestId
+        && payment.motelId == data.motelId
+        && payment.roomId == data.roomId
+        && payment.amount == data.total
+        && payment.reservationDate == data.checkIn
+        && ((data.status == 'pending'
+            && data.get('paymentMethod', '') == 'En el Local'
+            && data.invoiceAccessStatus == 'notApplicable'
+            && payment.status == 'pending')
+          || (data.status in ['upcoming', 'active', 'completed']
+            && payment.status == 'paid'
+            && data.get('paymentMethod', '') == payment.get('paymentMethodName', '')
+            && 'paymentMethodId' in payment && 'paidAt' in payment));
+    }
+
+    function isReservationPaymentUpdate(reservationId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let selection = before.status == 'pending' && after.status == 'pending'
+        && after.get('paymentMethod', '') == 'En el Local'
+        && (before.get('paymentMethod', '') == 'En el Local'
+          || request.time < before.createdAt + duration.value(15, 'm'));
+      let receipt = before.status == 'pending'
+        && after.status in ['upcoming', 'active', 'completed'];
+      return (!after.diff(before).affectedKeys().hasAny(['paymentMethod', 'invoiceAccessStatus'])
+          && !receipt)
+        || ((selection || receipt) && hasBackedReservationPayment(reservationId, after));
     }
 
     function hasValidPaymentFields(data) {
@@ -465,11 +519,25 @@ service cloud.firestore {
 
       allow create: if !isLegacyDemoPaymentId(paymentId)
         && hasValidPaymentFields(request.resource.data)
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && (request.resource.data.status != 'paid'
+          || (get(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status == 'pending'
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active']))
         && (
           (isActiveOwner()
             && request.resource.data.ownerId == request.auth.uid)
           || isClientPaymentCreate(request.resource.data)
         );
+
+      // A client can replay exactly the same pending request after a timeout,
+      // without gaining read access or the right to confirm/cancel a payment.
+      allow update: if isClientPaymentCreate(request.resource.data)
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && hasValidPaymentFields(request.resource.data);
 
       allow update: if isActiveOwner()
         && !isLegacyDemoPaymentId(paymentId)
@@ -483,6 +551,17 @@ service cloud.firestore {
           resource.data.status,
           request.resource.data.status
         )
+        && (!(resource.data.status == 'pending' && request.resource.data.status == 'paid')
+          || paymentId != 'pay-' + request.resource.data.bookingId
+          || (get(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status == 'pending'
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active']))
+        && (paymentId != 'pay-' + request.resource.data.bookingId
+          || (paymentMatchesReservation(paymentId, request.resource.data)
+            && hasLinkedPaymentState(request.resource.data)))
+        && (resource.data.status != request.resource.data.status
+          || resource.data.status == 'pending'
+          || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['paymentMethodName', 'updatedAt']))
         && hasValidPaymentFields(request.resource.data);
 
       allow delete: if false;
@@ -605,14 +684,17 @@ service cloud.firestore {
     // Reservas compartidas por cliente, propietario y administrador
     // (ReservationCloudRepository). El cliente ve las suyas, el propietario
     // las de sus moteles (ownerId) y el admin todas. Solo el cliente las crea,
-    // a su nombre. El estado inicial puede no ser `pending` si la reserva se
-    // pago sin conexion antes de sincronizarse.
+    // a su nombre. Un estado pagado exige un comprobante del propietario;
+    // seleccionar el lugar de pago no acredita dinero recibido.
     match /reservations/{reservationId} {
       allow read: if isReservationParticipant(resource.data);
 
       allow create: if isActiveClient()
         && request.resource.data.guestId == request.auth.uid
         && request.resource.data.ownerId != request.auth.uid
+        && (request.resource.data.status == 'pending'
+          && !('paymentMethod' in request.resource.data)
+          || hasBackedReservationPayment(reservationId, request.resource.data))
         && hasValidReservationFields(request.resource.data);
 
       allow update: if isReservationParticipant(resource.data)
@@ -624,6 +706,7 @@ service cloud.firestore {
           resource.data.status,
           request.resource.data.status
         )
+        && isReservationPaymentUpdate(reservationId)
         && hasValidReservationFields(request.resource.data);
 
       allow delete: if false;

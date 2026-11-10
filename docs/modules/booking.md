@@ -2,8 +2,8 @@
 
 Estado general: **funcional con persistencia local**. Los flujos de
 creación, consulta, cancelación y pago en efectivo están implementados sobre
-una capa de servicio y un repositorio con SQLite (Floor), sin backend ni
-pasarela de pagos real. La organización de archivos y el contexto funcional
+una capa de servicio y un repositorio con SQLite (Floor) y sincronización
+Firestore, sin pasarela de pagos real. La organización de archivos y el contexto funcional
 detallado de este módulo ya están documentados en:
 
 - [`docs/booking_structure.md`](../booking_structure.md) — convención de
@@ -47,6 +47,17 @@ views -> controllers -> BookingService -> BookingRepository -> Floor DAO
   `AppDatabase`.
 
 ## Modelos
+
+### Integración «En el Local» con Payment
+
+El contrato específico está en [../payment_persistence.md](../payment_persistence.md).
+La elección conserva `pending` y usa `paymentMethod = 'En el Local'` como
+lugar, no como método recibido. Por decisión del usuario no vence en 15 minutos
+ni por inasistencia: requiere cancelación explícita. Un checkout sin esa
+elección sí vence. Payment confirma la recepción y actualiza la reserva de
+forma atómica; el acceso de cobro local de Booking lleva a Finanzas para elegir
+el método real. El sandbox de tarjeta no acredita dinero ni confirma reservas.
+No se agregan estados, tablas ni una pasarela.
 
 - `lib/models/booking/booking.dart`: entidad `Reservation` compartida por
   los tres roles (cliente, propietario, administrador), con estados

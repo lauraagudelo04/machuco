@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
+import '../../../database/repository/motel/motel_repository.dart';
 import './../../../routes/routes.dart';
 import '../../login/logout_navigation.dart';
 import '../../booking/client_view/client_reservations_page.dart';
@@ -10,7 +11,9 @@ import '../../notification/client_view/client_notification_view.dart';
 import '../../../controllers/client/client_controller.dart';
 
 class ClientMotelsPage extends StatefulWidget {
-  const ClientMotelsPage({super.key});
+  const ClientMotelsPage({super.key, this.controller});
+
+  final MotelController? controller;
 
   @override
   State<ClientMotelsPage> createState() => _ClientMotelsPageState();
@@ -19,14 +22,34 @@ class ClientMotelsPage extends StatefulWidget {
 class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
   int _selectedIndex = 0;
+  final Set<int> _visitedTabs = {0};
 
-  final MotelController _motelController = MotelController();
+  late final MotelController _motelController;
   late Future<List<Motel>> _motelsFuture;
+  bool _isRefreshing = false;
 
   @override
   void initState() {
     super.initState();
+    _motelController = widget.controller ?? MotelController.persistent();
     _motelsFuture = _motelController.getRecommendedMotels();
+  }
+
+  Future<void> _refreshMotels() async {
+    if (_isRefreshing) return;
+    final request = _motelController.getRecommendedMotels();
+    setState(() {
+      _isRefreshing = true;
+      _motelsFuture = request;
+    });
+    try {
+      await request;
+    } catch (_) {
+      // FutureBuilder presents the error and its retry action. Never replace
+      // a failed request with demo data or an empty successful response.
+    } finally {
+      if (mounted) setState(() => _isRefreshing = false);
+    }
   }
 
   @override
@@ -42,14 +65,22 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         index: _selectedIndex,
         children: [
           _buildMotelsContent(),
-          const ClientReservationsPage(),
-          const ClientPqrsPage(),
+          _visitedTabs.contains(1)
+              ? const ClientReservationsPage()
+              : const SizedBox.shrink(),
+          _visitedTabs.contains(2)
+              ? const ClientPqrsPage()
+              : const SizedBox.shrink(),
         ],
       ),
       bottomNavigationBar: AppNavigationBar(
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
-          setState(() => _selectedIndex = index);
+          setState(() {
+            _selectedIndex = index;
+            _visitedTabs.add(index);
+          });
+          if (index == 0) _refreshMotels();
         },
         destinations: const [
           AppNavigationDestination(
@@ -101,15 +132,20 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
           Padding(
             padding: const EdgeInsets.only(right: AppSpacing.s4),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
+                AppIconButton(
+                  icon: Icons.refresh,
+                  tooltip: 'Actualizar moteles',
+                  onPressed: _isRefreshing ? null : _refreshMotels,
+                ),
                 AppIconButton(
                   icon: Icons.person_outline,
                   tooltip: 'Perfil',
                   onPressed: () {
                     ClientController.instance.loadProfileData();
                     Navigator.pushNamed(context, AppRoutes.clientProfile);
-                  }
-                      
+                  },
                 ),
                 const SizedBox(width: AppSpacing.s2),
                 AppIconButton(
@@ -153,14 +189,24 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (snapshot.hasError) {
-                    return Center(
-                      child: Text('Error al cargar: ${snapshot.error}'),
+                    return _refreshableState(
+                      AppErrorState(
+                        message: snapshot.error is MotelRepositoryException
+                            ? (snapshot.error! as MotelRepositoryException)
+                                  .message
+                            : 'No se pudieron cargar los moteles. Inténtalo nuevamente.',
+                        onRetry: _refreshMotels,
+                      ),
                     );
                   }
                   if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                    return const Center(
-                      child: Text(
-                        'No hay moteles disponibles en este momento.',
+                    return _refreshableState(
+                      AppEmptyState(
+                        icon: Icons.hotel_outlined,
+                        title: 'Sin moteles disponibles',
+                        message: 'No hay moteles disponibles en este momento.',
+                        actionLabel: 'Actualizar',
+                        onAction: _refreshMotels,
                       ),
                     );
                   }
@@ -170,34 +216,51 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
 
                   final filteredMotels = allMotels.where((motel) {
                     final matchName = motel.name.toLowerCase().contains(query);
-                    final matchLocation = motel.address.toLowerCase().contains(query);
-                    
-                    return matchName || matchLocation; 
+                    final matchLocation = motel.address.toLowerCase().contains(
+                      query,
+                    );
+                    final matchZone = (motel.generalLocation ?? '')
+                        .toLowerCase()
+                        .contains(query);
+                    return motel.isAvailable &&
+                        (matchName || matchLocation || matchZone);
                   }).toList();
 
                   if (filteredMotels.isEmpty) {
-                    return const Center(child: Text('No se encontraron resultados para tu búsqueda.'));
+                    return _refreshableState(
+                      const AppEmptyState(
+                        icon: Icons.search_off_outlined,
+                        title: 'Sin resultados',
+                        message:
+                            'No se encontraron resultados para tu búsqueda.',
+                      ),
+                    );
                   }
 
-                  return ListView.separated(
-                    itemCount: filteredMotels.length,
-                    separatorBuilder: (context, index) =>
-                        const SizedBox(height: AppSpacing.s4),
-                    itemBuilder: (context, index) {
-                      final motel = filteredMotels[index];
-                      return _ClientMotelCard(
-                        name: motel.name,
-                        location: motel.address,
-                        isAvailable: motel.isAvailable,
-                        onTap: () {
-                          Navigator.pushNamed(
-                            context,
-                            AppRoutes.clientMotelDetail,
-                            arguments: motel,
-                          );
-                        },
-                      );
-                    },
+                  return RefreshIndicator(
+                    onRefresh: _refreshMotels,
+                    child: ListView.separated(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: filteredMotels.length,
+                      separatorBuilder: (context, index) =>
+                          const SizedBox(height: AppSpacing.s4),
+                      itemBuilder: (context, index) {
+                        final motel = filteredMotels[index];
+                        return _ClientMotelCard(
+                          name: motel.name,
+                          location: motel.address,
+                          isAvailable: motel.isAvailable,
+                          onTap: () async {
+                            await Navigator.pushNamed(
+                              context,
+                              AppRoutes.clientMotelDetail,
+                              arguments: motel,
+                            );
+                            if (mounted) await _refreshMotels();
+                          },
+                        );
+                      },
+                    ),
                   );
                 },
               ),
@@ -207,6 +270,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
       ),
     );
   }
+
+  Widget _refreshableState(Widget child) => RefreshIndicator(
+    onRefresh: _refreshMotels,
+    child: ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [child],
+    ),
+  );
 }
 
 class _ClientMotelCard extends StatelessWidget {

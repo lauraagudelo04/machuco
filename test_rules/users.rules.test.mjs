@@ -389,6 +389,10 @@ describe('users: eliminación', () => {
     await seed({
       'users/client': { ...clientProfile(), createdAt: Timestamp.now() },
       'users/admin': seededAdmin,
+      'users/owner': { ...ownerProfile(), createdAt: Timestamp.now() },
+      'users/admin2': { ...seededAdmin, email: 'admin2@example.com' },
+      'users/disabledAdmin': { ...seededAdmin, accountStatus: 'disabled' },
+      'users/temporaryAdmin': { ...seededAdmin, mustChangePassword: true },
     });
   });
 
@@ -396,13 +400,28 @@ describe('users: eliminación', () => {
     await assertSucceeds(deleteDoc(doc(as('client'), 'users/client')));
   });
 
-  test('otro usuario no elimina el perfil ajeno', async () => {
+  test('un usuario sin autoridad no elimina el perfil de otro', async () => {
     await assertFails(deleteDoc(doc(as('other'), 'users/client')));
+    await assertFails(deleteDoc(doc(as('client'), 'users/owner')));
+    await assertFails(deleteDoc(doc(as('owner'), 'users/client')));
   });
 
-  test('un admin ya no borra cuentas: se anonimizan', async () => {
+
+  test('el admin activo ya no elimina perfiles: se anonimizan', async () => {
     await assertFails(deleteDoc(doc(as('admin'), 'users/client')));
+    await assertFails(deleteDoc(doc(as('admin'), 'users/owner')));
   });
+
+  test('el admin activo no elimina a otro administrador', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/admin2')));
+  });
+
+  for (const uid of ['disabledAdmin', 'temporaryAdmin']) {
+    test(`${uid} no elimina perfiles ajenos`, async () => {
+      await assertFails(deleteDoc(doc(as(uid), 'users/client')));
+      await assertFails(deleteDoc(doc(as(uid), 'users/owner')));
+    });
+  }
 
   test('sin sesión no se elimina nada', async () => {
     await assertFails(deleteDoc(doc(anonymous(), 'users/client')));

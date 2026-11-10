@@ -1,6 +1,13 @@
 import 'package:floor/floor.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+
+class PaymentReservationException implements Exception {
+  const PaymentReservationException(this.message);
+  final String message;
+}
 
 @dao
 abstract class PaymentDao {
@@ -28,6 +35,81 @@ abstract class PaymentDao {
 
   @update
   Future<void> updatePayment(PaymentRecord payment);
+
+  @Query('SELECT * FROM reservations WHERE id = :id LIMIT 1')
+  Future<ReservationEntity?> findReservationForPayment(String id);
+
+  @Query('UPDATE reservations SET paymentMethod = :place WHERE id = :id')
+  Future<void> selectPaymentPlace(String id, String place);
+
+  @Query(
+    'UPDATE reservations SET status = :status, paymentMethod = :method, '
+    "invoiceAccessStatus = 'pending' WHERE id = :id",
+  )
+  Future<void> updateReservationAfterReceipt(
+    String id,
+    String status,
+    String method,
+  );
+
+  /// Both records change in one SQLite transaction, including on retry.
+  @transaction
+  Future<PaymentRecord> createPendingReservationPayment(
+    PaymentRecord payment,
+    int nowMilliseconds,
+  ) async {
+    final reservation = _validateReservation(
+      payment,
+      await findReservationForPayment(payment.bookingId),
+    );
+    if (reservation.status != 'pending') {
+      throw const PaymentReservationException(
+        'La reserva ya no está pendiente de pago.',
+      );
+    }
+    if (reservation.paymentMethod != ReservationPaymentTerms.payAtProperty &&
+        nowMilliseconds - reservation.createdAt >=
+            ReservationPaymentTerms.checkoutTimeout.inMilliseconds) {
+      throw const PaymentReservationException(
+        'El tiempo para elegir el pago de esta reserva expiró.',
+      );
+    }
+    final existing = await findById(payment.id);
+    if (existing != null) {
+      _validateReservation(existing, reservation);
+      if (existing.status != PaymentStatus.pending) {
+        throw const PaymentReservationException(
+          'Esta reserva ya tiene un pago procesado.',
+        );
+      }
+    } else {
+      await insertPayment(payment);
+    }
+    await selectPaymentPlace(
+      reservation.id,
+      ReservationPaymentTerms.payAtProperty,
+    );
+    return existing ?? payment;
+  }
+
+  ReservationEntity _validateReservation(
+    PaymentRecord payment,
+    ReservationEntity? reservation,
+  ) {
+    if (reservation == null ||
+        payment.id != ReservationPaymentTerms.paymentId(reservation.id) ||
+        payment.bookingId != reservation.id ||
+        payment.clientId != reservation.guestId ||
+        payment.motelId != reservation.motelId ||
+        payment.roomId != reservation.roomId ||
+        payment.amount != reservation.total ||
+        payment.reservationDate.millisecondsSinceEpoch != reservation.checkIn) {
+      throw const PaymentReservationException(
+        'El pago no corresponde a los datos de una reserva guardada. Actualiza las reservas.',
+      );
+    }
+    return reservation;
+  }
 
   /// Retira fixtures históricos que llegaron a SQLite antes de habilitar la
   /// sincronización real. No coincide con IDs UUID de pagos reales.
@@ -84,6 +166,22 @@ abstract class PaymentDao {
     DateTime paidAt,
     String receiptNumber,
   ) async {
+    final payment = await findById(id);
+    ReservationEntity? linkedReservation;
+    if (payment != null &&
+        payment.id == ReservationPaymentTerms.paymentId(payment.bookingId)) {
+      final reservation = _validateReservation(
+        payment,
+        await findReservationForPayment(payment.bookingId),
+      );
+      linkedReservation = reservation;
+      if (reservation.status != 'pending' ||
+          reservation.paymentMethod != ReservationPaymentTerms.payAtProperty) {
+        throw const PaymentReservationException(
+          'La reserva no admite recibir este pago. Actualiza las reservas.',
+        );
+      }
+    }
     await updatePendingPayment(
       id,
       motelId,
@@ -91,7 +189,19 @@ abstract class PaymentDao {
       paidAt,
       receiptNumber,
     );
-    return await findAffectedRows() ?? 0;
+    final changed = await findAffectedRows() ?? 0;
+    if (changed == 1 && linkedReservation != null) {
+      final catalog = await findCatalogEntries();
+      final method = catalog.firstWhere((entry) => entry.id == paymentMethodId);
+      await updateReservationAfterReceipt(
+        linkedReservation.id,
+        paidAt.millisecondsSinceEpoch >= linkedReservation.checkIn
+            ? 'active'
+            : 'upcoming',
+        method.name,
+      );
+    }
+    return changed;
   }
 
   /// Imports cloud records without letting an older pending copy regress a
@@ -102,10 +212,29 @@ abstract class PaymentDao {
       final local = await findById(remote.id);
       if (local == null) {
         await insertPayment(remote);
+      } else if (_acceptRemoteStatus(local.status, remote.status)) {
+        await updatePayment(remote);
+      }
+      final saved = await findById(remote.id);
+      if (saved == null ||
+          saved.status != PaymentStatus.paid ||
+          saved.paidAt == null ||
+          saved.id != ReservationPaymentTerms.paymentId(saved.bookingId)) {
         continue;
       }
-      if (_acceptRemoteStatus(local.status, remote.status)) {
-        await updatePayment(remote);
+      final reservation = await findReservationForPayment(saved.bookingId);
+      if (reservation == null || reservation.status != 'pending') continue;
+      _validateReservation(saved, reservation);
+      final methods = await findCatalogEntries();
+      for (final method in methods) {
+        if (method.id != saved.paymentMethodId) continue;
+        await updateReservationAfterReceipt(
+          reservation.id,
+          saved.paidAt!.millisecondsSinceEpoch >= reservation.checkIn
+              ? 'active'
+              : 'upcoming',
+          method.name,
+        );
       }
     }
   }
