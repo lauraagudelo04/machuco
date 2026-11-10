@@ -1,0 +1,26 @@
+# Esquema de Firebase SQL Connect (PostgreSQL) de MACHUCO.
+#
+# Tabla `motels`: administración de moteles (rama feature_marco).
+# Los campos replican `Motel` (lib/models/motel/motel_model.dart).
+# El `id` es un UUID generado por la base; en Dart se maneja como String,
+# por lo que las habitaciones siguen referenciando el motel con `motelId`.
+type Motel @table(name: "motels") {
+  id: UUID! @default(expr: "uuidV4()")
+  "Uid de Firebase Authentication del propietario."
+  ownerId: String!
+  name: String!
+  email: String!
+  roomCount: Int!
+  "NIT único: no puede haber dos moteles con el mismo."
+  nit: String! @unique
+  address: String!
+  phone: String!
+  description: String
+  generalLocation: String
+  paymentMethods: [String!]!
+  imageUrls: [String!]!
+  "Los moteles no se eliminan: se inhabilitan con isAvailable = false."
+  isAvailable: Boolean! @default(value: true)
+  createdAt: Timestamp! @default(expr: "request.time")
+  updatedAt: Timestamp! @default(expr: "request.time")
+}

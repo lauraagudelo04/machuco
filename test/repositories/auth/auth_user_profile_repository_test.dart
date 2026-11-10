@@ -155,7 +155,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 14);
+    expect(await raw.getVersion(), 17);
     expect(await raw.query('phone_country_codes'), previousCodes);
     final repository = buildRepository();
     expect(await repository.loadCurrent(), isNull);
