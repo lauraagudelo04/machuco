@@ -138,6 +138,14 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And Puede cambiar su nombre y su teléfono
     And No puede cambiar su correo, documento ni estado
 
+  Scenario: El propietario cambia su contraseña desde el perfil
+    Given El propietario inició sesión con Firebase
+    When Abre "Cambiar contraseña" desde su perfil
+    And Escribe una contraseña nueva y la confirma
+    Then Firebase Auth actualiza la contraseña
+    And Si la cuenta era de contraseña temporal, se limpia mustChangePassword
+    And La app informa "Contraseña actualizada correctamente"
+
   Scenario: Bloquear la eliminación de un propietario con moteles
     Given El propietario tiene al menos un motel vinculado en Supabase
     When El administrador confirma su eliminación
@@ -174,3 +182,12 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     Then La app consulta el maestro por REST
     And Reemplaza la caché local de document_types
     And El selector muestra los tipos activos ordenados por sort_order
+
+## Tareas futuras (no implementadas)
+
+- **Transferencia automática de moteles** en el flujo de eliminación de un
+  propietario: elegir otro propietario y reasignar el `owner_id` de sus moteles
+  antes de borrar la cuenta (hoy solo se bloquea y se pide reasignar a mano).
+- **Guard de contraseña temporal para propietarios**: si `mustChangePassword`
+  está activo al iniciar sesión, exigir el cambio antes de entrar (hoy el
+  cambio está disponible solo desde «Mi perfil»).

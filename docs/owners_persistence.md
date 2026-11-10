@@ -179,6 +179,14 @@ firebase deploy --only firestore:rules,indexes
   cuenta. Solo puede editar **nombre y teléfono**, que es lo que
   `firestore.rules` permite autoeditar; el documento y el estado los cambia un
   administrador.
+- Desde el perfil también puede **cambiar su contraseña**
+  (`/motels/owner/profile/password`): `OwnerProfileController.changePassword`
+  usa `PasswordChangeService` (Firebase Auth) y, si el perfil tenía
+  `mustChangePassword` (cuentas creadas por el panel con contraseña temporal),
+  limpia la marca con `UserProfileRepository.clearMustChangePassword`. Las
+  reglas ya lo permiten; no hay que redesplegar nada.
+- El nombre se muestra siempre completo (`fullName`); no se parte en
+  nombre/apellido ni se abrevian los chips.
 
 ## Eliminación de propietarios con moteles
 
@@ -196,6 +204,19 @@ apuntarían a una cuenta inexistente).
   es preferible no borrar a dejar moteles huérfanos.
 - La salida es reasignar el `owner_id` de los moteles o eliminarlos; después el
   borrado sigue su curso normal.
+
+## Tareas futuras
+
+Pendientes acordados, sin implementar todavía:
+
+- **Transferencia automática de moteles** al eliminar un propietario: hoy el
+  borrado se bloquea y el administrador debe reasignar `owner_id` o eliminar
+  los moteles a mano. La mejora es elegir otro propietario en el mismo flujo y
+  reasignar todos sus moteles antes de borrar la cuenta.
+- **Guard de contraseña temporal para propietarios** (paridad con
+  `AdminRouteGuard`): si `mustChangePassword` sigue activo al iniciar sesión,
+  forzar la pantalla de cambio antes de entrar a la app. Hoy el cambio existe
+  solo desde el perfil.
 
 ## shared_preferences
 

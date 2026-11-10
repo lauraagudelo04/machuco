@@ -5,11 +5,15 @@ import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/password_change_service.dart';
 
 UserProfile _profile({
   String fullName = 'Juan Camilo Garcia',
   String phoneNumber = '+573102781291',
+  bool mustChangePassword = false,
 }) => UserProfile(
+  mustChangePassword: mustChangePassword,
   uid: 'uid-owner',
   fullName: fullName,
   email: 'juan.garcia@example.com',
@@ -27,7 +31,9 @@ class _FakeUserProfileRepository implements UserProfileRepository {
   UserProfile? profile;
   bool failLoad = false;
   bool failSave = false;
+  bool failClear = false;
   int updateCalls = 0;
+  int clearCalls = 0;
 
   @override
   Future<void> createProfile(UserProfile profile) async {
@@ -62,14 +68,71 @@ class _FakeUserProfileRepository implements UserProfileRepository {
   }
 
   @override
+  Future<void> clearMustChangePassword(String uid) async {
+    clearCalls++;
+    if (failClear) {
+      throw const UserProfileRepositoryException(
+        UserProfileFailureType.network,
+        'No hay conexión.',
+      );
+    }
+    final current = profile;
+    if (current == null) return;
+    profile = UserProfile(
+      uid: current.uid,
+      fullName: current.fullName,
+      email: current.email,
+      phoneNumber: current.phoneNumber,
+      role: current.role,
+      accountStatus: current.accountStatus,
+      personType: current.personType,
+      nit: current.nit,
+      planId: current.planId,
+      mustChangePassword: false,
+    );
+  }
+
+  @override
   Future<void> deleteProfile(String uid) async {}
+}
+
+class _FakePasswordChangeService implements PasswordChangeService {
+  bool failWeak = false;
+  bool failRecent = false;
+  bool failNetwork = false;
+  int calls = 0;
+
+  @override
+  Future<void> changePassword({required String newPassword}) async {
+    calls++;
+    if (failWeak) {
+      throw const AuthFailure(
+        AuthFailureType.weakPassword,
+        'La contraseña es demasiado débil.',
+      );
+    }
+    if (failRecent) {
+      throw const AuthFailure(
+        AuthFailureType.requiresRecentLogin,
+        'Por seguridad, inicia sesión de nuevo para cambiar tu contraseña.',
+      );
+    }
+    if (failNetwork) {
+      throw const AuthFailure(
+        AuthFailureType.network,
+        'No hay conexión.',
+      );
+    }
+  }
 }
 
 OwnerProfileController _buildController(
   _FakeUserProfileRepository repository, {
   String? currentUserId = 'uid-owner',
+  PasswordChangeService? passwordChangeService,
 }) => OwnerProfileController(
   repository: repository,
+  passwordChangeService: passwordChangeService,
   currentUserId: () => currentUserId,
 );
 
@@ -161,5 +224,113 @@ void main() {
 
     expect(saved, isFalse);
     expect(controller.errorMessage, contains('permisos'));
+  });
+
+  test('changePassword limpia la marca de contraseña temporal', () async {
+    final repository = _FakeUserProfileRepository(
+      profile: _profile(mustChangePassword: true),
+    );
+    final passwords = _FakePasswordChangeService();
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+    await controller.load();
+
+    final changed = await controller.changePassword(
+      newPassword: 'NuevaClave123',
+    );
+
+    expect(changed, isTrue);
+    expect(passwords.calls, 1);
+    expect(repository.clearCalls, 1);
+    expect(controller.profile?.mustChangePassword, isFalse);
+    expect(controller.passwordError, isNull);
+  });
+
+  test('changePassword sin marca no limpia nada', () async {
+    final repository = _FakeUserProfileRepository(profile: _profile());
+    final passwords = _FakePasswordChangeService();
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+    await controller.load();
+
+    expect(
+      await controller.changePassword(newPassword: 'NuevaClave123'),
+      isTrue,
+    );
+    expect(repository.clearCalls, 0);
+  });
+
+  test('changePassword valida localmente antes de llamar a Firebase', () async {
+    final repository = _FakeUserProfileRepository(profile: _profile());
+    final passwords = _FakePasswordChangeService();
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+
+    final changed = await controller.changePassword(newPassword: '123');
+
+    expect(changed, isFalse);
+    expect(passwords.calls, 0);
+    expect(controller.passwordError, contains('8 caracteres'));
+  });
+
+  test('changePassword informa una contraseña débil de Firebase', () async {
+    final repository = _FakeUserProfileRepository(profile: _profile());
+    final passwords = _FakePasswordChangeService()..failWeak = true;
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+
+    expect(
+      await controller.changePassword(newPassword: 'claveSegura123'),
+      isFalse,
+    );
+    expect(controller.passwordError, contains('débil'));
+  });
+
+  test('changePassword pide iniciar sesión de nuevo si Firebase lo exige', () async {
+    final repository = _FakeUserProfileRepository(profile: _profile());
+    final passwords = _FakePasswordChangeService()..failRecent = true;
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+
+    expect(
+      await controller.changePassword(newPassword: 'claveSegura123'),
+      isFalse,
+    );
+    expect(controller.passwordError, contains('inicia sesión de nuevo'));
+  });
+
+  test('avisa si la contraseña cambió pero no se pudo limpiar la marca', () async {
+    final repository = _FakeUserProfileRepository(
+      profile: _profile(mustChangePassword: true),
+    )..failClear = true;
+    final passwords = _FakePasswordChangeService();
+    final controller = _buildController(
+      repository,
+      passwordChangeService: passwords,
+    );
+    addTearDown(controller.dispose);
+    await controller.load();
+
+    final changed = await controller.changePassword(
+      newPassword: 'NuevaClave123',
+    );
+
+    expect(changed, isFalse);
+    expect(controller.passwordError, contains('contraseña cambió'));
   });
 }

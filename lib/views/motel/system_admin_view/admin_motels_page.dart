@@ -284,7 +284,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               children: [
                 Text('Gestión de Establecimientos', style: Theme.of(context).textTheme.headlineSmall),
                 Chip(
-                  label: Text(currentOwnerName.split(' ').first, style: const TextStyle(fontSize: 12)),
+                  label: Text(currentOwnerName, style: const TextStyle(fontSize: 12)),
                   backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 ),
               ],

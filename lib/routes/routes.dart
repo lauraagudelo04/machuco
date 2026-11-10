@@ -17,6 +17,7 @@ import 'package:machuco/views/motel/client_view/client_motels_page.dart';
 import 'package:machuco/views/motel/client_view/client_motel_detail_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motel_form_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_motels_page.dart';
+import 'package:machuco/views/motel/owner_view/owner_change_password_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_profile_page.dart';
 import 'package:machuco/views/motel/system_admin_view/admin_motels_page.dart';
 import 'package:machuco/views/additional_service/system_admin_view/additional_service_admin_form_page.dart';
@@ -82,6 +83,7 @@ abstract final class AppRoutes {
   static const clientMotelDetail = '/motels/client/detail';
   static const ownerMotels = '/motels/owner';
   static const ownerProfile = '/motels/owner/profile';
+  static const ownerChangePassword = '/motels/owner/profile/password';
   static const ownerMotelDetail = '/motels/owner/detail';
   static const clientRooms = '/rooms/client';
   static const ownerRooms = '/rooms/owner';
@@ -251,6 +253,7 @@ abstract final class AppRoutes {
       ),
 
       ownerProfile => const OwnerProfilePage(),
+      ownerChangePassword => const OwnerChangePasswordPage(),
       clientProfile => const ClientProfilePage(),
       clientProfileEdit => const ClientEditProfilePage(),
       invoice => () {

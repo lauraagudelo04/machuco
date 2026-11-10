@@ -647,3 +647,21 @@ moteles dejaba los moteles huérfanos.
   nombres y se pide reasignarlos o eliminarlos. Si no se puede verificar por
   falta de red, también se bloquea. No se elige transferencia automática para
   no reasignar moteles sin que un humano lo confirme.
+
+## 2026-11-09 — Cambio de contraseña del propietario y nombre completo
+
+**Contexto:** las cuentas de propietario creadas por el panel nacen con
+`mustChangePassword = true`, pero no había forma de que el propietario
+reemplazara esa contraseña. Además, algunos chips partían `fullName` y mostraban
+solo el primer nombre.
+
+**Decisión:**
+
+- «Mi perfil» incluye **Cambiar contraseña** (`/motels/owner/profile/password`):
+  valida con `AuthValidators`, usa `PasswordChangeService` y limpia
+  `mustChangePassword` si estaba activo. Las reglas actuales ya lo permiten.
+- El nombre se muestra siempre como `fullName` completo; no se parte ni se
+  abrevian los chips (el avatar conserva las iniciales por estética).
+- Quedan como tareas futuras la transferencia automática de moteles al
+  eliminar un propietario y el guard que obligue a cambiar la contraseña
+  temporal al iniciar sesión.

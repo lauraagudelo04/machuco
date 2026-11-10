@@ -5,7 +5,9 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/owner_management/owner_summary.dart';
+import 'package:machuco/widgets/auth/auth_notice.dart';
 
 import 'owner_edit_profile_page.dart';
 
@@ -39,6 +41,15 @@ class _OwnerProfilePageState extends State<OwnerProfilePage> {
   void dispose() {
     if (_ownsController) _controller.dispose();
     super.dispose();
+  }
+
+  /// Abre el cambio de contraseña y recarga el perfil si se actualizó (para
+  /// reflejar que ya no usa una contraseña temporal).
+  Future<void> _openChangePassword() async {
+    final changed = await Navigator.of(
+      context,
+    ).pushNamed<bool>(AppRoutes.ownerChangePassword);
+    if (changed == true && mounted) await _controller.load();
   }
 
   Future<void> _openEdit() async {
@@ -145,12 +156,30 @@ class _OwnerProfilePageState extends State<OwnerProfilePage> {
                         ),
                     ],
                   ),
+                  if (profile.mustChangePassword) ...[
+                    const SizedBox(height: AppSpacing.s6),
+                    const AuthNotice(
+                      message:
+                          'Estás usando una contraseña temporal. Cámbiala para '
+                          'asegurar tu cuenta.',
+                      tone: AuthNoticeTone.info,
+                    ),
+                  ],
                   const SizedBox(height: AppSpacing.s6),
                   AppButton(
                     label: 'Editar perfil',
                     icon: Icons.edit_outlined,
                     variant: AppButtonVariant.secondary,
                     onPressed: _controller.isSaving ? null : _openEdit,
+                  ),
+                  const SizedBox(height: AppSpacing.s3),
+                  AppButton(
+                    label: 'Cambiar contraseña',
+                    icon: Icons.lock_outline,
+                    variant: AppButtonVariant.secondary,
+                    onPressed: _controller.isChangingPassword
+                        ? null
+                        : _openChangePassword,
                   ),
                 ],
               ),

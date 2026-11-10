@@ -46,8 +46,6 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return 'Propietario';
   }
 
-  String get _firstName => _displayName.split(' ').first;
-
   @override
   void initState() {
     super.initState();
@@ -326,7 +324,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _firstName,
+                    _displayName,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(
