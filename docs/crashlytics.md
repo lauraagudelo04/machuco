@@ -18,7 +18,11 @@ código, la versión y el dispositivo.
   - `PlatformDispatcher.instance.onError`: errores asíncronos que nadie
     capturó.
 - Ninguna vista llama a Firebase. Quien quiera reportar un error que ya
-  manejó usa `CrashReporter.recordError(error, stack)` (no fatal).
+  manejó usa `CrashReporting.reporter.recordError(error, stack)` (no fatal).
+- Los reportes salen del teléfono con el mensaje del error y la traza:
+  **nunca** pongas datos personales (nombres, correos, teléfonos) en el
+  mensaje de una excepción.
+- En modo debug los errores de Flutter se siguen mostrando en la consola.
 - No se usa `firebase_analytics` para esto: Analytics es de otro equipo.
 
 ## Dónde ver los reportes
@@ -40,4 +44,5 @@ Elige la app correcta en el selector; si no, la lista sale vacía.
 ## Pendiente
 
 - iOS: el plugin se instala con Swift Package Manager. Falta subir los
-  símbolos (dSYM) y probar en un dispositivo iOS.
+  símbolos (dSYM) y probar en un dispositivo iOS; sin ellos, los reportes de
+  iOS salen sin símbolos (ilegibles).

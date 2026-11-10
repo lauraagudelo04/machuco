@@ -62,4 +62,44 @@ void main() {
     expect(reporter.errors.single.error, error);
     expect(reporter.errors.single.fatal, isTrue);
   });
+
+  test('install exposes the reporter for already handled errors', () {
+    final reporter = _RecordingReporter();
+    CrashReporting.install(reporter);
+
+    CrashReporting.reporter.recordError(StateError('handled'), null);
+
+    expect(reporter.errors.single.fatal, isFalse);
+  });
+
+  test('a reporter that throws does not break the error hooks', () {
+    CrashReporting.install(_ThrowingReporter());
+
+    expect(
+      () => FlutterError.onError!(
+        FlutterErrorDetails(exception: StateError('boom')),
+      ),
+      returnsNormally,
+    );
+    expect(
+      PlatformDispatcher.instance.onError!(
+        StateError('boom'),
+        StackTrace.empty,
+      ),
+      isTrue,
+    );
+  });
+}
+
+class _ThrowingReporter implements CrashReporter {
+  @override
+  Future<void> recordFlutterFatalError(FlutterErrorDetails details) =>
+      throw StateError('sync failure');
+
+  @override
+  Future<void> recordError(
+    Object error,
+    StackTrace? stack, {
+    bool fatal = false,
+  }) async => throw StateError('async failure');
 }
