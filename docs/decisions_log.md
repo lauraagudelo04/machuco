@@ -673,3 +673,14 @@ implementar Firebase SQL Connect (antes Data Connect).
 otros módulos lo consulten desde sus reglas. Lo escriben el administrador y
 el propietario activo con su propio `ownerId`. La regla `room_motels` de la
 rama de habitaciones no se modificó.
+
+## 2026-11-10 — Crashlytics para reportar errores
+
+**Decisión:** se integra Firebase Crashlytics con instalación manual del
+plugin de Gradle (sin `flutterfire configure`, que reescribe archivos que el
+equipo ya modificó) y sin agregar `firebase_analytics`.
+
+**Verificado:** un error de prueba en el sabor `dev` (emulador Android)
+apareció como problema FATAL en la consola de Firebase.
+
+Detalle y cómo probarlo: `docs/crashlytics.md`.
