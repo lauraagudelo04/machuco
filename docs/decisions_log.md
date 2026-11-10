@@ -591,3 +591,47 @@ EXISTS`. La próxima migración de cualquier rama usa la versión 16.
 
 **Pendiente:** reasignar en Supabase los moteles de demostración a cuentas de
 propietario reales y desplegar `firestore.rules`.
+
+## 2026-11-09 — Firebase Analytics para toda la app (rama `feature_daniel`)
+
+**Contexto:** el profesor pidió conectar la app con Firebase, en especial con
+el módulo de Analytics. Firebase ya es la plataforma decidida (2026-10-27),
+así que no se evaluaron alternativas.
+
+**Decisión:** se agrega `firebase_analytics: ^13.0.1` (compatible con
+`firebase_core ^5.1.0`) detrás de un único `AnalyticsService`
+(`lib/service/analytics/`), con el mismo patrón de proveedor estático que los
+repositorios: no-op por defecto y Firebase desde `main`. Las pantallas se
+reportan solas con `AnalyticsRouteObserver`; los eventos de autenticación y
+de reservas, desde sus controllers y servicios. El detalle de eventos y cómo
+agregar uno está en [firebase.md](firebase.md#5-analytics-firebase-analytics).
+
+**Privacidad:** solo se envían identificadores técnicos (uid, ids de motel),
+montos y estados; nunca nombres, correos, celulares ni NIT. La analítica es
+best effort: un error al reportar nunca interrumpe el flujo.
+
+**Pendiente:** registrar `user_role` como dimensión personalizada en la
+consola y que cada rama agregue los eventos de su módulo.
+
+## 2026-11-09 — Reglas de Firestore restauradas tras un despliegue incompleto (rama `feature_daniel`)
+
+**Problema:** las reglas publicadas en `machuco` se desplegaron desde una copia
+local que no estaba en ninguna rama de GitHub. Traían cambios nuevos de
+`users` (creación y edición de propietarios por un admin, `isAdminOwnerCreation`
+e `isAdminOwnerEdit`), pero no los bloques `match /reservations` ni
+`match /owners`, así que la regla por defecto negaba esas colecciones: las
+reservas de todos los integrantes dejaron de sincronizarse
+(`PERMISSION_DENIED`).
+
+**Decisión:** `firestore.rules` pasa a ser exactamente lo publicado más los
+bloques de `reservations` (y sus funciones) y `owners`, sin quitar nada de lo
+publicado. Se desplegó el 2026-11-09 y se verificó con una reserva real.
+`test_rules/reservations.rules.test.mjs` cubre la colección para que un
+despliegue sin ella falle en las pruebas.
+
+**Pendiente:** quien hizo el despliegue debe subir sus cambios de reglas y de
+app a su rama. El test existente "nadie elimina el perfil de otro, ni siquiera
+un admin" falla con las reglas publicadas, porque ahora un admin activo puede
+borrar cuentas que no son de administrador; su dueño decide si actualiza el
+test o la regla. Antes de cada despliegue hay que partir de las reglas
+publicadas o de `develop` actualizado, nunca de una copia local vieja.

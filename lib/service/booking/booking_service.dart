@@ -1,7 +1,9 @@
+import 'dart:async';
 import 'dart:math';
 
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/booking/reservation_transition_exception.dart';
 import 'package:machuco/utils/date_formatter.dart';
@@ -132,9 +134,14 @@ class BookingService {
     BookingRepository? repository,
     DateTime Function()? now,
     Random? random,
+    AnalyticsService? analytics,
   }) : _repository = repository ?? BookingRepositoryProvider.instance,
        _now = now ?? DateTime.now,
-       _random = random ?? Random();
+       _random = random ?? Random(),
+       _analytics = analytics;
+
+  /// Currency of every amount reported to analytics.
+  static const String analyticsCurrency = 'COP';
 
   /// Message shown when no room of the requested type is active.
   static const String noActiveUnitsMessage =
@@ -169,6 +176,7 @@ class BookingService {
   final BookingRepository _repository;
   final DateTime Function() _now;
   final Random _random;
+  final AnalyticsService? _analytics;
 
   /// Tail of the reservation creation queue. It is static because the
   /// repository provider instance is shared by every service (one per
@@ -529,6 +537,13 @@ class BookingService {
       categoryId: categoryId,
     );
     await _repository.add(reservation);
+    _report(AnalyticsEvents.reservationCreated, {
+      'motel_id': motelId,
+      'stay_mode': stayMode.name,
+      'guest_count': guestCount,
+      'value': reservation.total,
+      'currency': analyticsCurrency,
+    });
     return reservation;
   });
 
@@ -656,6 +671,7 @@ class BookingService {
       ),
     );
     await _repository.update(paid);
+    _reportPaid(paid);
     return paid;
   }
 
@@ -683,6 +699,7 @@ class BookingService {
       ),
     );
     await _repository.update(paid);
+    if (reservation.status == ReservationStatus.pending) _reportPaid(paid);
     return paid;
   }
 
@@ -709,7 +726,24 @@ class BookingService {
       cancellationReason: reason.trim(),
     );
     await _repository.update(cancelled);
+    _report(AnalyticsEvents.reservationCancelled, {
+      'previous_status': reservation.status.name,
+    });
     return cancelled;
+  }
+
+  void _reportPaid(Reservation paid) {
+    _report(AnalyticsEvents.reservationPaid, {
+      'payment_method': paid.paymentMethod ?? defaultPaymentMethod,
+      'value': paid.total,
+      'currency': analyticsCurrency,
+    });
+  }
+
+  /// Analytics is best effort: it never delays nor breaks the operation.
+  void _report(String event, Map<String, Object> parameters) {
+    final analytics = _analytics ?? AnalyticsServiceProvider.instance;
+    unawaited(analytics.logEvent(event, parameters));
   }
 
   // ---------------------------------------------------------------------
