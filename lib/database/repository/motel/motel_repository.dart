@@ -20,8 +20,8 @@ class MotelRepository {
     required this.apiKey,
     required Future<MotelDao> Function() daoProvider,
     http.Client? httpClient,
-  })  : _daoProvider = daoProvider,
-        _httpClient = httpClient ?? http.Client();
+  }) : _daoProvider = daoProvider,
+       _httpClient = httpClient ?? http.Client();
 
   final String baseUrl;
   final String apiKey;
@@ -38,12 +38,7 @@ class MotelRepository {
     try {
       final uri = Uri.parse(
         '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/rest/v1/motels',
-      ).replace(
-        queryParameters: {
-          'select': '*',
-          'order': 'name.asc',
-        },
-      );
+      ).replace(queryParameters: {'select': '*', 'order': 'name.asc'});
       final response = await _httpClient.get(
         uri,
         headers: {'apikey': apiKey, 'Accept': 'application/json'},
@@ -105,9 +100,7 @@ class MotelRepository {
       final decoded =
           jsonDecode(utf8.decode(response.bodyBytes)) as List<dynamic>;
       if (decoded.isEmpty) {
-        throw const MotelRepositoryException(
-          'No fue posible crear el motel',
-        );
+        throw const MotelRepositoryException('No fue posible crear el motel');
       }
       final motel = _fromJson(Map<String, dynamic>.from(decoded.first as Map));
       await dao.upsert(MotelEntity.fromModel(motel));
@@ -166,7 +159,9 @@ class MotelRepository {
       rethrow;
     } catch (e) {
       if (e is MotelRepositoryException) rethrow;
-      throw const MotelRepositoryException('No fue posible actualizar el motel');
+      throw const MotelRepositoryException(
+        'No fue posible actualizar el motel',
+      );
     }
   }
 
@@ -211,7 +206,60 @@ class MotelRepository {
       rethrow;
     } catch (e) {
       if (e is MotelRepositoryException) rethrow;
-      throw const MotelRepositoryException('No fue posible actualizar el motel');
+      throw const MotelRepositoryException(
+        'No fue posible actualizar el motel',
+      );
+    }
+  }
+
+  /// Reasigna todos los moteles de [fromOwnerId] a [toOwnerId].
+  ///
+  /// Primero actualiza Supabase con un solo `PATCH` y solo si responde bien
+  /// refresca la caché local. Si falla lanza [MotelRepositoryException]: el
+  /// llamador no debe continuar (se dejarían moteles huérfanos).
+  Future<void> reassignMoteles({
+    required String fromOwnerId,
+    required String toOwnerId,
+  }) async {
+    if (fromOwnerId.trim().isEmpty || toOwnerId.trim().isEmpty) {
+      throw const MotelRepositoryException(
+        'Se requieren los propietarios de origen y destino.',
+      );
+    }
+    final dao = await _daoProvider();
+
+    if (baseUrl.trim().isEmpty || apiKey.trim().isEmpty) {
+      await dao.reassignOwner(fromOwnerId, toOwnerId);
+      return;
+    }
+
+    try {
+      final uri = Uri.parse(
+        '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/rest/v1/motels',
+      ).replace(queryParameters: {'owner_id': 'eq.$fromOwnerId'});
+      final response = await _httpClient.patch(
+        uri,
+        headers: {
+          'apikey': apiKey,
+          'Content-Type': 'application/json',
+          'Prefer': 'return=minimal',
+        },
+        body: jsonEncode({'owner_id': toOwnerId}),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw MotelRepositoryException(
+          'Supabase respondió con estado ${response.statusCode} al reasignar '
+          'los moteles.',
+        );
+      }
+      await dao.reassignOwner(fromOwnerId, toOwnerId);
+    } on MotelRepositoryException {
+      rethrow;
+    } catch (_) {
+      throw const MotelRepositoryException(
+        'No fue posible reasignar los moteles. Revisa tu conexión e intenta '
+        'de nuevo.',
+      );
     }
   }
 

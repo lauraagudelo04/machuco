@@ -85,9 +85,7 @@ class MotelController {
     if (ownerId == null || ownerId.trim().isEmpty) return const [];
     if (_repository == null) {
       await Future.delayed(const Duration(seconds: 1));
-      return _mockDatabase
-          .where((motel) => motel.ownerId == ownerId)
-          .toList();
+      return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
     }
     final motels = await _repository.getMotels();
     return motels.where((motel) => motel.ownerId == ownerId).toList();
@@ -123,9 +121,9 @@ class MotelController {
     if (_repository == null) {
       await Future.delayed(const Duration(milliseconds: 400));
       return _mockDatabase.cast<Motel?>().firstWhere(
-            (motel) => motel?.id == id,
-            orElse: () => null,
-          );
+        (motel) => motel?.id == id,
+        orElse: () => null,
+      );
     }
     final motels = await _repository.getMotels();
     for (final motel in motels) {
@@ -153,6 +151,43 @@ class MotelController {
       return;
     }
     await _repository.updateMotel(updatedMotel);
+  }
+
+  /// Reasigna todos los moteles de un propietario a otro.
+  ///
+  /// Se usa antes de eliminar una cuenta: si falla, la eliminación no debe
+  /// continuar para no dejar moteles huérfanos.
+  Future<void> reassignMoteles({
+    required String fromOwnerId,
+    required String toOwnerId,
+  }) async {
+    if (_repository == null) {
+      await Future.delayed(const Duration(milliseconds: 300));
+      for (var i = 0; i < _mockDatabase.length; i++) {
+        final current = _mockDatabase[i];
+        if (current.ownerId != fromOwnerId) continue;
+        _mockDatabase[i] = Motel(
+          id: current.id,
+          ownerId: toOwnerId,
+          name: current.name,
+          email: current.email,
+          roomCount: current.roomCount,
+          nit: current.nit,
+          address: current.address,
+          phone: current.phone,
+          description: current.description,
+          generalLocation: current.generalLocation,
+          paymentMethods: current.paymentMethods,
+          imageUrls: current.imageUrls,
+          isAvailable: current.isAvailable,
+        );
+      }
+      return;
+    }
+    await _repository.reassignMoteles(
+      fromOwnerId: fromOwnerId,
+      toOwnerId: toOwnerId,
+    );
   }
 
   Future<void> toggleMotelStatus(String motelId) async {

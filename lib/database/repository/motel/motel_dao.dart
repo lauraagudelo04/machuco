@@ -18,6 +18,12 @@ abstract class MotelDao {
   @Query('DELETE FROM motels')
   Future<void> deleteAll();
 
+  /// Reasigna en la caché local todos los moteles de un propietario.
+  @Query(
+    'UPDATE motels SET owner_id = :toOwnerId WHERE owner_id = :fromOwnerId',
+  )
+  Future<void> reassignOwner(String fromOwnerId, String toOwnerId);
+
   @transaction
   Future<void> replaceAll(List<MotelEntity> motels) async {
     await deleteAll();

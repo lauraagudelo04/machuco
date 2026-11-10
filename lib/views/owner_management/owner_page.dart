@@ -99,6 +99,98 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
       ..showSnackBar(SnackBar(content: Text(message)));
   }
 
+  /// Pide a quién reasignar los moteles antes de eliminar al propietario.
+  ///
+  /// Devuelve el id del propietario destino, o `null` si se canceló. Si no hay
+  /// otros propietarios solo se informa el motivo.
+  Future<String?> _askTransferTarget(OwnerDeletionBlocker blocker) async {
+    if (blocker.candidates.isEmpty) {
+      await showDialog<void>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('No hay otro propietario'),
+          content: Text(
+            '${blocker.ownerName} tiene ${blocker.motelNames.length} moteles '
+            'vinculados y no hay otro propietario para reasignarlos. Registra '
+            'u habilita otro propietario primero.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Entendido'),
+            ),
+          ],
+        ),
+      );
+      return null;
+    }
+
+    var selected = blocker.candidates.first.id;
+    return showDialog<String>(
+      context: context,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: Text('Moteles de ${blocker.ownerName}'),
+              content: SizedBox(
+                width: 440,
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${blocker.motelNames.length} moteles vinculados. '
+                        'Elige a quién reasignarlos antes de eliminar la '
+                        'cuenta:',
+                      ),
+                      const SizedBox(height: AppSpacing.s3),
+                      for (final name in blocker.motelNames)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: AppSpacing.s1),
+                          child: Text('• $name'),
+                        ),
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(
+                        'Reasignar a',
+                        style: Theme.of(context).textTheme.labelLarge,
+                      ),
+                      const SizedBox(height: AppSpacing.s2),
+                      Wrap(
+                        spacing: AppSpacing.s2,
+                        runSpacing: AppSpacing.s2,
+                        children: [
+                          for (final candidate in blocker.candidates)
+                            ChoiceChip(
+                              label: Text(candidate.fullName),
+                              selected: selected == candidate.id,
+                              onSelected: (_) =>
+                                  setDialogState(() => selected = candidate.id),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Cancelar'),
+                ),
+                FilledButton(
+                  onPressed: () => Navigator.of(context).pop(selected),
+                  child: const Text('Reasignar y eliminar'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   /// Aviso del banner; añade el estado del reintento automático cuando aplica.
   String _retryBannerMessage() {
     final message = _controller.syncWarningMessage ?? '';
@@ -186,8 +278,29 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
   Future<void> _deleteOwner(Owner owner) async {
     if (!await _confirmDeletion(owner)) return;
     if (!mounted) return;
-    final deleted = await _controller.deleteOwner(owner.id);
+    var deleted = await _controller.deleteOwner(owner.id);
     if (!mounted) return;
+
+    // Si tiene moteles, el controlador deja el bloqueo con la lista y los
+    // propietarios disponibles: aquí se pide a quién reasignarlos.
+    final blocker = _controller.lastDeletionBlocker;
+    if (deleted == null && blocker != null) {
+      final targetId = await _askTransferTarget(blocker);
+      if (!mounted || targetId == null) return;
+      deleted = await _controller.deleteOwner(
+        owner.id,
+        transferToOwnerId: targetId,
+      );
+      if (!mounted) return;
+      if (deleted != null) {
+        _showMessage(
+          '${deleted.fullName} fue eliminado y sus moteles quedaron con '
+          '${blocker.candidates.firstWhere((c) => c.id == targetId).fullName}.',
+        );
+        return;
+      }
+    }
+
     if (deleted == null) {
       _showMessage(
         _controller.lastError ?? 'No se pudo eliminar el propietario.',

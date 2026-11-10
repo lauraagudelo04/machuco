@@ -35,6 +35,9 @@ class _OwnerChangePasswordPageState extends State<OwnerChangePasswordPage> {
     super.initState();
     _ownsController = widget.controller == null;
     _controller = widget.controller ?? OwnerProfileController();
+    // Si la pantalla se abre desde la tabla de rutas, el controlador llega
+    // vacío: se carga para mostrar el aviso de contraseña temporal.
+    if (_controller.profile == null) _controller.load();
   }
 
   @override

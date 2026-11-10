@@ -146,12 +146,22 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And Si la cuenta era de contraseña temporal, se limpia mustChangePassword
     And La app informa "Contraseña actualizada correctamente"
 
-  Scenario: Bloquear la eliminación de un propietario con moteles
+  Scenario: Reasignar moteles al eliminar un propietario
     Given El propietario tiene al menos un motel vinculado en Supabase
     When El administrador confirma su eliminación
-    Then El sistema no elimina la cuenta ni la fila local
-    And Muestra cuántos moteles tiene y sus nombres
-    And Le pide reasignarlos o eliminarlos primero
+    Then El sistema no elimina la cuenta todavía
+    And Abre un cuadro con los nombres de sus moteles
+    And Muestra los demás propietarios para elegir el destino
+    When El administrador elige un destino y confirma
+    Then Los moteles se reasignan a ese propietario en Supabase
+    And La cuenta del propietario eliminado se borra
+
+  Scenario: No se puede eliminar si la reasignación falla
+    Given El propietario tiene moteles vinculados
+    And La reasignación falla por falta de conexión
+    When El administrador confirma la transferencia
+    Then No se elimina la cuenta ni la fila local
+    And Se informa que los moteles no se pudieron reasignar
 
   Scenario: Eliminar un propietario sin conexión
     Given El dispositivo está en modo avión
@@ -185,9 +195,8 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
 
 ## Tareas futuras (no implementadas)
 
-- **Transferencia automática de moteles** en el flujo de eliminación de un
-  propietario: elegir otro propietario y reasignar el `owner_id` de sus moteles
-  antes de borrar la cuenta (hoy solo se bloquea y se pide reasignar a mano).
+- **Eliminar los moteles** desde el cuadro de transferencia, para cuando no se
+  quieran reasignar a otro propietario.
 - **Guard de contraseña temporal para propietarios**: si `mustChangePassword`
   está activo al iniciar sesión, exigir el cambio antes de entrar (hoy el
   cambio está disponible solo desde «Mi perfil»).

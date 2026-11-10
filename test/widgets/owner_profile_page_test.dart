@@ -7,6 +7,7 @@ import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/views/motel/owner_view/owner_change_password_page.dart';
 import 'package:machuco/views/motel/owner_view/owner_profile_page.dart';
 
 class _FakeUserProfileRepository implements UserProfileRepository {
@@ -37,7 +38,35 @@ class _FakeUserProfileRepository implements UserProfileRepository {
 Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
 
 void main() {
+  testWidgets('el botón Cambiar contraseña abre la pantalla', (tester) async {
+    final controller = OwnerProfileController(
+      repository: _FakeUserProfileRepository(
+        const UserProfile(
+          uid: 'uid-owner',
+          fullName: 'Juan Camilo Garcia',
+          email: 'juan.garcia@example.com',
+          phoneNumber: '+573102781291',
+          role: RegisteredUserRole.owner,
+          accountStatus: AccountStatus.active,
+        ),
+      ),
+      currentUserId: () => 'uid-owner',
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_wrap(OwnerProfilePage(controller: controller)));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('Cambiar contraseña'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(OwnerChangePasswordPage), findsOneWidget);
+  });
+
   testWidgets('muestra los datos reales del propietario', (tester) async {
+    tester.view.physicalSize = const Size(800, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
     final controller = OwnerProfileController(
       repository: _FakeUserProfileRepository(
         const UserProfile(
@@ -56,9 +85,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      _wrap(OwnerProfilePage(controller: controller)),
-    );
+    await tester.pumpWidget(_wrap(OwnerProfilePage(controller: controller)));
     await tester.pumpAndSettle();
 
     expect(find.text('Juan Camilo Garcia'), findsWidgets);

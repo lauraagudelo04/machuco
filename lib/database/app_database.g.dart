@@ -1212,6 +1212,16 @@ class _$MotelDao extends MotelDao {
   }
 
   @override
+  Future<void> reassignOwner(
+    String fromOwnerId,
+    String toOwnerId,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE motels SET owner_id = ?2 WHERE owner_id = ?1',
+        arguments: [fromOwnerId, toOwnerId]);
+  }
+
+  @override
   Future<void> upsert(MotelEntity motel) async {
     await _motelEntityInsertionAdapter.insert(
         motel, OnConflictStrategy.replace);

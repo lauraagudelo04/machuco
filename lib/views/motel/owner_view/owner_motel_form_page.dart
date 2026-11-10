@@ -126,8 +126,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       id: widget.isEditing && widget.motel != null
           ? widget.motel!.id
           : 'motel_${DateTime.now().millisecondsSinceEpoch}',
-      ownerId:
-          widget.ownerId ?? widget.motel?.ownerId ?? CurrentUser.uid ?? '',
+      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? CurrentUser.uid ?? '',
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       roomCount: roomCountParsed,

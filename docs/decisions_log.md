@@ -665,3 +665,19 @@ solo el primer nombre.
 - Quedan como tareas futuras la transferencia automática de moteles al
   eliminar un propietario y el guard que obligue a cambiar la contraseña
   temporal al iniciar sesión.
+
+## 2026-11-09 — Transferencia de moteles al eliminar un propietario
+
+**Contexto:** el borrado de un propietario con moteles se bloqueaba con un
+mensaje, obligando a reasignar los moteles a mano por fuera de la app.
+
+**Decisión:** el mismo flujo de eliminación reasigna los moteles. El controlador
+expone `OwnerDeletionBlocker` (moteles + demás propietarios como candidatos) y
+la pantalla abre un cuadro con la lista de moteles y un selector de destino. Al
+confirmar se ejecuta `MotelRepository.reassignMoteles` (un `PATCH` a Supabase
+más la caché local) y solo entonces se borra `users/{uid}`. Si la reasignación
+falla no se elimina nada. Queda como tarea futura poder **eliminar** los
+moteles desde ese mismo cuadro.
+
+Además, las acciones de «Mi perfil» pasan a una barra inferior fija: el botón
+de cambiar contraseña quedaba al final del listado y no siempre era visible.

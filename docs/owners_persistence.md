@@ -190,29 +190,32 @@ firebase deploy --only firestore:rules,indexes
 
 ## Eliminación de propietarios con moteles
 
-Un propietario **no se elimina si tiene moteles vinculados** en Supabase: los
+Un propietario **con moteles vinculados** no se elimina sin reasignarlos: los
 moteles quedarían huérfanos (ningún propietario los vería y las reservas
 apuntarían a una cuenta inexistente).
 
 - `OwnerController.deleteOwner` consulta los moteles del propietario antes de
   tocar nada (`MotelController.getMotelsByOwnerId`, con la caché local como
   respaldo de `MotelRepository`).
-- Si hay al menos uno, devuelve un error con el número y los nombres:
-  «No se puede eliminar a X: tiene N moteles vinculados (A, B). Reasígnalos o
-  elimínalos primero.» No se marca `pendingDelete` ni se reintenta.
-- Si no se pudo verificar (sin red), también se bloquea y se pide reintentar:
-  es preferible no borrar a dejar moteles huérfanos.
-- La salida es reasignar el `owner_id` de los moteles o eliminarlos; después el
-  borrado sigue su curso normal.
+- Si hay al menos uno, el controlador expone `lastDeletionBlocker` con la lista
+  de moteles y los **demás propietarios** como candidatos; la pantalla
+  (`owner_page.dart`) abre un cuadro con los nombres de los moteles y un
+  selector de destino.
+- Al confirmar, `MotelRepository.reassignMoteles` reasigna el `owner_id` de
+  todos los moteles con un solo `PATCH` a Supabase y actualiza la caché local;
+  solo si eso sale bien se elimina la cuenta (`users/{uid}` + fila local).
+- Si la reasignación falla, no se borra nada y se informa del motivo. Si el
+  propietario es el único, se avisa que no hay destino posible.
+- Sin conexión el bloqueo no se puede verificar y se pide reintentar: es
+  preferible no borrar a dejar moteles huérfanos.
 
 ## Tareas futuras
 
 Pendientes acordados, sin implementar todavía:
 
-- **Transferencia automática de moteles** al eliminar un propietario: hoy el
-  borrado se bloquea y el administrador debe reasignar `owner_id` o eliminar
-  los moteles a mano. La mejora es elegir otro propietario en el mismo flujo y
-  reasignar todos sus moteles antes de borrar la cuenta.
+- **Eliminar los moteles** del propietario desde el mismo cuadro de
+  transferencia, para cuando no se quieran reasignar a nadie (hoy solo se
+  reasignan).
 - **Guard de contraseña temporal para propietarios** (paridad con
   `AdminRouteGuard`): si `mustChangePassword` sigue activo al iniciar sesión,
   forzar la pantalla de cambio antes de entrar a la app. Hoy el cambio existe

@@ -33,6 +33,7 @@ void main() {
     OwnerCloudRepository? cloudRepository,
     String? currentUserId = 'admin-1',
     Future<List<String>> Function(String ownerId)? motelNamesLoader,
+    Future<void> Function(String fromOwnerId, String toOwnerId)? motelTransfer,
   }) {
     final controller = OwnerController(
       service: OwnerService(repository: OwnerRepository(database: database)),
@@ -43,6 +44,7 @@ void main() {
       // Por defecto el propietario no tiene moteles: el borrado sigue su
       // curso. Los tests del bloqueo inyectan un cargador con nombres.
       motelNamesLoader: motelNamesLoader ?? (_) async => const [],
+      motelTransfer: motelTransfer ?? (_, _) async {},
     );
     // Cancela el temporizador de reintentos al terminar cada prueba.
     addTearDown(controller.dispose);
@@ -654,6 +656,128 @@ void main() {
         await OwnerRepository(database: database).findPendingDeletes(),
         isEmpty,
       );
+    });
+
+    test(
+      'el bloqueo incluye moteles y candidatos sin el propietario',
+      () async {
+        final cloud = _FakeOwnerCloudRepository()
+          ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+        final controller = buildController(
+          cloudRepository: cloud,
+          motelNamesLoader: (_) async => const ['Motel Uno', 'Motel Dos'],
+        );
+        await controller.init();
+
+        final deleted = await controller.deleteOwner('uid-1');
+
+        expect(deleted, isNull);
+        final blocker = controller.lastDeletionBlocker;
+        expect(blocker, isNotNull);
+        expect(blocker!.ownerId, 'uid-1');
+        expect(blocker.motelNames, ['Motel Uno', 'Motel Dos']);
+        expect(blocker.candidates, isNotEmpty);
+        expect(
+          blocker.candidates.any((candidate) => candidate.id == 'uid-1'),
+          isFalse,
+        );
+      },
+    );
+
+    test('reasigna los moteles y después elimina al propietario', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final transfers = <String>[];
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (_) async => const ['Motel Uno'],
+        motelTransfer: (from, to) async => transfers.add('$from->$to'),
+      );
+      await controller.init();
+      final target = controller.owners.firstWhere(
+        (owner) => owner.id != 'uid-1',
+      );
+
+      final deleted = await controller.deleteOwner(
+        'uid-1',
+        transferToOwnerId: target.id,
+      );
+
+      expect(deleted, isNotNull);
+      expect(transfers, ['uid-1->${target.id}']);
+      expect(cloud.remote.containsKey('uid-1'), isFalse);
+      expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
+      expect(controller.lastDeletionBlocker, isNull);
+    });
+
+    test('si falla la reasignación no elimina la cuenta', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (_) async => const ['Motel Uno'],
+        motelTransfer: (_, _) async => throw Exception('sin red'),
+      );
+      await controller.init();
+      final target = controller.owners.firstWhere(
+        (owner) => owner.id != 'uid-1',
+      );
+
+      final deleted = await controller.deleteOwner(
+        'uid-1',
+        transferToOwnerId: target.id,
+      );
+
+      expect(deleted, isNull);
+      expect(controller.lastError, contains('No se pudieron reasignar'));
+      expect(cloud.remote.containsKey('uid-1'), isTrue);
+      expect(controller.owners.any((owner) => owner.id == 'uid-1'), isTrue);
+    });
+
+    test('rechaza reasignar al mismo propietario', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      var transferred = false;
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (_) async => const ['Motel Uno'],
+        motelTransfer: (_, _) async => transferred = true,
+      );
+      await controller.init();
+
+      final deleted = await controller.deleteOwner(
+        'uid-1',
+        transferToOwnerId: 'uid-1',
+      );
+
+      expect(deleted, isNull);
+      expect(transferred, isFalse);
+      expect(controller.lastError, contains('distinto'));
+      expect(cloud.remote.containsKey('uid-1'), isTrue);
+    });
+
+    test('no elimina si no hay otro propietario para reasignar', () async {
+      // Solo queda el propietario remoto en la lista: sin candidatos.
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (ownerId) async =>
+            ownerId == 'uid-1' ? const ['Motel Uno'] : const [],
+      );
+      await controller.init();
+      // Se eliminan los demás propietarios locales para dejar solo el remoto.
+      for (final owner in controller.owners.toList()) {
+        if (owner.id != 'uid-1') {
+          await controller.deleteOwner(owner.id);
+        }
+      }
+
+      final deleted = await controller.deleteOwner('uid-1');
+
+      expect(deleted, isNull);
+      expect(controller.lastDeletionBlocker?.candidates, isEmpty);
+      expect(controller.lastError, contains('No se puede eliminar'));
     });
 
     test('no elimina si no se pudo verificar los moteles', () async {

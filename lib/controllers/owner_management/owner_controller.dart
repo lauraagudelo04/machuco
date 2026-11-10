@@ -17,6 +17,28 @@ import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
 import 'package:machuco/service/owner/owner_sync_scheduler.dart';
 
+/// Motivos por los que no se puede eliminar a un propietario todavía.
+///
+/// La vista lo usa para pedir a quién reasignar los moteles antes de borrar
+/// la cuenta.
+class OwnerDeletionBlocker {
+  const OwnerDeletionBlocker({
+    required this.ownerId,
+    required this.ownerName,
+    required this.motelNames,
+    required this.candidates,
+  });
+
+  final String ownerId;
+  final String ownerName;
+
+  /// Moteles vinculados que deben reasignarse.
+  final List<String> motelNames;
+
+  /// Otros propietarios a los que se pueden transferir (sin el que se borra).
+  final List<Owner> candidates;
+}
+
 const _minimumFullNameLength = 3;
 
 final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
@@ -52,6 +74,7 @@ class OwnerController extends ChangeNotifier {
     String? Function()? currentUserId,
     OwnerSyncRetryScheduler? syncRetryScheduler,
     Future<List<String>> Function(String ownerId)? motelNamesLoader,
+    Future<void> Function(String fromOwnerId, String toOwnerId)? motelTransfer,
   }) : _service = service ?? OwnerService(),
        _documentTypeRepository =
            documentTypeRepository ?? DocumentTypeRepository(),
@@ -59,6 +82,7 @@ class OwnerController extends ChangeNotifier {
            cloudRepository ??
            (service == null ? FirestoreOwnerCloudRepository() : null),
        _motelNamesLoader = motelNamesLoader ?? _loadMotelNames,
+       _motelTransfer = motelTransfer ?? _transferMotels,
        _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
     _syncRetry =
         syncRetryScheduler ??
@@ -89,6 +113,10 @@ class OwnerController extends ChangeNotifier {
   /// dejarlos huérfanos. Es inyectable para probar el bloqueo sin Supabase.
   final Future<List<String>> Function(String ownerId) _motelNamesLoader;
 
+  /// Reasigna los moteles de un propietario a otro antes de eliminarlo.
+  final Future<void> Function(String fromOwnerId, String toOwnerId)
+  _motelTransfer;
+
   /// Preferencias locales del módulo. Es opcional para que los tests de
   /// persistencia no dependan de `shared_preferences`.
   final OwnerPreferences? _preferences;
@@ -110,6 +138,7 @@ class OwnerController extends ChangeNotifier {
   String? _syncWarningMessage;
   late final OwnerSyncRetryScheduler _syncRetry;
   bool _lastDeletionIsPending = false;
+  OwnerDeletionBlocker? _deletionBlocker;
   Future<void>? _backgroundSync;
 
   List<CountryPhoneCode> _countryPhoneCodes = const [];
@@ -165,6 +194,11 @@ class OwnerController extends ChangeNotifier {
 
   /// `true` si la última eliminación quedó pendiente de borrar en Firestore.
   bool get lastDeletionIsPending => _lastDeletionIsPending;
+
+  /// Moteles y propietarios disponibles cuando la eliminación quedó bloqueada.
+  ///
+  /// La vista lo usa para pedir a quién reasignar los moteles y reintentar.
+  OwnerDeletionBlocker? get lastDeletionBlocker => _deletionBlocker;
 
   /// Completa cuando termina el envío en segundo plano de la última escritura.
   ///
@@ -510,7 +544,10 @@ class OwnerController extends ChangeNotifier {
   /// inexistente). Con conexión se borra primero el documento remoto; sin
   /// conexión la fila se oculta con `pendingDelete = 1` y la sincronización la
   /// borra en Firestore cuando vuelva la red.
-  Future<Owner?> deleteOwner(String ownerId) async {
+  Future<Owner?> deleteOwner(
+    String ownerId, {
+    String? transferToOwnerId,
+  }) async {
     final owner = _findOwner(ownerId);
     if (owner == null) {
       _lastError = 'El propietario ya no existe.';
@@ -528,10 +565,47 @@ class OwnerController extends ChangeNotifier {
       notifyListeners();
       return null;
     }
+
+    _deletionBlocker = null;
     if (motelNames.isNotEmpty) {
-      _lastError = _motelsBlockMessage(owner, motelNames);
-      notifyListeners();
-      return null;
+      final blocker = OwnerDeletionBlocker(
+        ownerId: ownerId,
+        ownerName: owner.fullName,
+        motelNames: List.unmodifiable(motelNames),
+        candidates: List.unmodifiable(
+          _owners.where((candidate) => candidate.id != ownerId),
+        ),
+      );
+      _deletionBlocker = blocker;
+
+      final target = transferToOwnerId?.trim() ?? '';
+      if (target.isEmpty) {
+        _lastError = _motelsBlockMessage(owner, motelNames);
+        notifyListeners();
+        return null;
+      }
+      final validTarget =
+          target != ownerId &&
+          blocker.candidates.any((candidate) => candidate.id == target);
+      if (!validTarget) {
+        _lastError =
+            'Elige un propietario distinto para reasignar los moteles de '
+            '${owner.fullName}.';
+        notifyListeners();
+        return null;
+      }
+
+      try {
+        await _motelTransfer(ownerId, target);
+      } catch (_) {
+        _lastError =
+            'No se pudieron reasignar los moteles de ${owner.fullName}, así '
+            'que no se eliminó la cuenta. Revisa tu conexión e inténtalo de '
+            'nuevo.';
+        notifyListeners();
+        return null;
+      }
+      _deletionBlocker = null;
     }
 
     _lastDeletionIsPending = false;
@@ -759,6 +833,13 @@ class OwnerController extends ChangeNotifier {
     }
     return null;
   }
+
+  /// Reasigna los moteles antes de eliminar la cuenta.
+  static Future<void> _transferMotels(String fromOwnerId, String toOwnerId) =>
+      MotelController.persistent().reassignMoteles(
+        fromOwnerId: fromOwnerId,
+        toOwnerId: toOwnerId,
+      );
 
   /// Moteles vinculados según Supabase (con la caché local como respaldo).
   static Future<List<String>> _loadMotelNames(String ownerId) async {

@@ -118,10 +118,7 @@ class _FakePasswordChangeService implements PasswordChangeService {
       );
     }
     if (failNetwork) {
-      throw const AuthFailure(
-        AuthFailureType.network,
-        'No hay conexión.',
-      );
+      throw const AuthFailure(AuthFailureType.network, 'No hay conexión.');
     }
   }
 }
@@ -298,39 +295,45 @@ void main() {
     expect(controller.passwordError, contains('débil'));
   });
 
-  test('changePassword pide iniciar sesión de nuevo si Firebase lo exige', () async {
-    final repository = _FakeUserProfileRepository(profile: _profile());
-    final passwords = _FakePasswordChangeService()..failRecent = true;
-    final controller = _buildController(
-      repository,
-      passwordChangeService: passwords,
-    );
-    addTearDown(controller.dispose);
+  test(
+    'changePassword pide iniciar sesión de nuevo si Firebase lo exige',
+    () async {
+      final repository = _FakeUserProfileRepository(profile: _profile());
+      final passwords = _FakePasswordChangeService()..failRecent = true;
+      final controller = _buildController(
+        repository,
+        passwordChangeService: passwords,
+      );
+      addTearDown(controller.dispose);
 
-    expect(
-      await controller.changePassword(newPassword: 'claveSegura123'),
-      isFalse,
-    );
-    expect(controller.passwordError, contains('inicia sesión de nuevo'));
-  });
+      expect(
+        await controller.changePassword(newPassword: 'claveSegura123'),
+        isFalse,
+      );
+      expect(controller.passwordError, contains('inicia sesión de nuevo'));
+    },
+  );
 
-  test('avisa si la contraseña cambió pero no se pudo limpiar la marca', () async {
-    final repository = _FakeUserProfileRepository(
-      profile: _profile(mustChangePassword: true),
-    )..failClear = true;
-    final passwords = _FakePasswordChangeService();
-    final controller = _buildController(
-      repository,
-      passwordChangeService: passwords,
-    );
-    addTearDown(controller.dispose);
-    await controller.load();
+  test(
+    'avisa si la contraseña cambió pero no se pudo limpiar la marca',
+    () async {
+      final repository = _FakeUserProfileRepository(
+        profile: _profile(mustChangePassword: true),
+      )..failClear = true;
+      final passwords = _FakePasswordChangeService();
+      final controller = _buildController(
+        repository,
+        passwordChangeService: passwords,
+      );
+      addTearDown(controller.dispose);
+      await controller.load();
 
-    final changed = await controller.changePassword(
-      newPassword: 'NuevaClave123',
-    );
+      final changed = await controller.changePassword(
+        newPassword: 'NuevaClave123',
+      );
 
-    expect(changed, isFalse);
-    expect(controller.passwordError, contains('contraseña cambió'));
-  });
+      expect(changed, isFalse);
+      expect(controller.passwordError, contains('contraseña cambió'));
+    },
+  );
 }
