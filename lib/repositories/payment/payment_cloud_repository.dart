@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_firestore_document.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
@@ -57,10 +58,15 @@ class FirestorePaymentCloudRepository implements PaymentCloudRepository {
         payment: payment,
         paymentMethodName: paymentMethodName,
       );
-      await _payments
-          .doc(payment.id)
-          .set(document.toFirestore())
-          .timeout(requestTimeout);
+      if (payment.id == ReservationPaymentTerms.paymentId(payment.bookingId)) {
+        await _saveLinkedPayment(document).timeout(requestTimeout);
+      } else {
+        // Historical records keep their id; rules only allow updating them.
+        await _payments
+            .doc(payment.id)
+            .set(document.toFirestore())
+            .timeout(requestTimeout);
+      }
     } on FirebaseException catch (error) {
       throw _map(error);
     } on TimeoutException {
@@ -69,6 +75,83 @@ class FirestorePaymentCloudRepository implements PaymentCloudRepository {
         'Sin conexión: el pago permanece guardado en este dispositivo.',
       );
     }
+  }
+
+  /// The payment and reservation are committed together remotely. A failed
+  /// transaction leaves the SQLite receipt intact for an explicit retry.
+  Future<void> _saveLinkedPayment(PaymentFirestoreDocument document) async {
+    final payment = document.payment;
+    final reservationRef = _firestore
+        .collection(FirestoreCollections.reservations)
+        .doc(payment.bookingId);
+    await _firestore.runTransaction((transaction) async {
+      final snapshot = await transaction.get(reservationRef);
+      final reservation = snapshot.data();
+      if (reservation == null ||
+          reservation['ownerId'] != document.ownerId ||
+          reservation['guestId'] != payment.clientId ||
+          reservation['motelId'] != payment.motelId ||
+          reservation['roomId'] != payment.roomId ||
+          reservation['total'] != payment.amount ||
+          reservation['checkIn'] !=
+              Timestamp.fromDate(payment.reservationDate)) {
+        throw const PaymentCloudRepositoryException(
+          PaymentCloudFailureType.invalidData,
+          'El pago no coincide con la reserva en Firebase. Actualiza los datos.',
+        );
+      }
+      final status = reservation['status'];
+      final updates = <String, dynamic>{
+        'updatedAt': FieldValue.serverTimestamp(),
+      };
+      if (payment.status == PaymentStatus.pending) {
+        if (status != 'pending' ||
+            (reservation['paymentMethod'] != null &&
+                reservation['paymentMethod'] !=
+                    ReservationPaymentTerms.payAtProperty)) {
+          throw const PaymentCloudRepositoryException(
+            PaymentCloudFailureType.invalidData,
+            'La reserva ya no admite un pago pendiente. Actualiza los datos.',
+          );
+        }
+        updates['paymentMethod'] = ReservationPaymentTerms.payAtProperty;
+      } else if (payment.status == PaymentStatus.paid) {
+        if (![
+          'pending',
+          'upcoming',
+          'active',
+          'completed',
+          'cancelled',
+        ].contains(status)) {
+          throw const PaymentCloudRepositoryException(
+            PaymentCloudFailureType.invalidData,
+            'La reserva ya no admite recibir el pago. El comprobante local se conserva.',
+          );
+        }
+        if (document.paymentMethodName == null ||
+            payment.paidAt == null ||
+            payment.paymentMethodId == null ||
+            payment.receiptNumber == null) {
+          throw const PaymentCloudRepositoryException(
+            PaymentCloudFailureType.invalidData,
+            'Faltan el método, la fecha o el comprobante del pago recibido.',
+          );
+        }
+        // Rules distinguish a new receipt from a replay and reject receiving
+        // money for a cancelled reservation. No read of a possibly missing
+        // payment is needed (the client has no Payment read permission).
+        if (status == 'pending') {
+          updates['status'] = DateTime.now().isBefore(payment.reservationDate)
+              ? 'upcoming'
+              : 'active';
+          updates['paymentMethod'] = document.paymentMethodName;
+          updates['invoiceAccessStatus'] = 'pending';
+        }
+      }
+      transaction.set(_payments.doc(payment.id), document.toFirestore());
+      // Never reset a paid/cancelled reservation during an idempotent replay.
+      if (updates.length > 1) transaction.update(reservationRef, updates);
+    });
   }
 
   @override

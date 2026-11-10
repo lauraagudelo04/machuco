@@ -1,10 +1,11 @@
 /// Modelos de dominio para la reserva de habitaciones del cliente.
 ///
 /// Todo el flujo de "Reserva de habitación" y "Gestión de mis reservas" gira
-/// en torno a [Reservation]. No existe backend real: estos modelos son la
-/// forma que usa `ClientBookingController` para representar reservas
-/// mantenidas en memoria.
+/// en torno a [Reservation], compartida por los tres roles y persistida en
+/// SQLite con sincronización Firestore. El modelo no procesa cobros bancarios.
 library;
+
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 
 /// Estado de una reserva. Nunca se debe representar el estado con cadenas
 /// mágicas: todo el dominio de reservas gira en torno a este enum estricto.
@@ -136,9 +137,13 @@ class Reservation {
   /// Estado del acceso a la factura. Ver [InvoiceAccessStatus].
   final InvoiceAccessStatus invoiceAccessStatus;
 
-  /// Method used to pay the reservation (for example `Efectivo`). `null`
-  /// while the reservation has not been paid.
+  /// `En el Local` records where a pending payment will be received. Once
+  /// received, this is the catalog method name (for example `Efectivo`).
+  /// A non-null value alone does NOT prove that money was received.
   final String? paymentMethod;
+
+  bool get isPayAtProperty =>
+      paymentMethod == ReservationPaymentTerms.payAtProperty;
 
   Duration get stayDuration => checkOut.difference(checkIn);
 
