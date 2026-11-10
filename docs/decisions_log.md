@@ -862,4 +862,11 @@ equipo ya modificó) y sin agregar `firebase_analytics`.
 **Verificado:** un error de prueba en el sabor `dev` (emulador Android)
 apareció como problema FATAL en la consola de Firebase.
 
-Detalle y cómo probarlo: `docs/crashlytics.md`.
+**Cómo probarlo:** corre el sabor `dev` en un emulador Android (Crashlytics no
+funciona en web ni escritorio), provoca un error de prueba con
+`FirebaseCrashlytics.instance.crash()` en un botón temporal y vuelve a abrir
+la app: el reporte se envía en el siguiente arranque. En la consola, elige la
+app `Machuco Dev` (`co.machuco.app.dev`) en el selector.
+
+Los reportes salen con el mensaje del error: no pongas datos personales en el
+texto de una excepción.
