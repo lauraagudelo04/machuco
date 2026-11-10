@@ -6,13 +6,20 @@ import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/database/repository/phone_country_code/supabase_phone_country_code_repository.dart';
+import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/client/client_model.dart';
+import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/password_change_service.dart';
 import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 class ClientController extends ChangeNotifier {
-  ClientController._();
+  ClientController._({PasswordChangeService? passwordChangeService})
+      : _passwordChangeService =
+            passwordChangeService ?? FirebasePasswordChangeService();
+
   static final ClientController instance = ClientController._();
 
+  final PasswordChangeService _passwordChangeService;
   late PhoneCountryCodeRepository _phoneCountryCodeRepo;
   late UserProfileRepository _userProfileRepo;
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -31,12 +38,30 @@ class ClientController extends ChangeNotifier {
   bool get isLoading => _isLoading;
   String? get errorMessage => _errorMessage;
 
+  bool get canChangePassword {
+    final user = _auth.currentUser;
+    if (user == null) return false;
+    return user.providerData.any((info) => info.providerId == 'password');
+  }
+
+  String get authProviderName {
+    final user = _auth.currentUser;
+    if (user == null) return '';
+
+    for (final info in user.providerData) {
+      if (info.providerId == 'google.com') return 'Google';
+      if (info.providerId == 'github.com') return 'GitHub';
+    }
+    return 'un proveedor externo';
+  }
+
   Future<void> _initRepositories() async {
     if (!_isInitialized) {
       _phoneCountryCodeRepo = PhoneCountryCodeRepository(
         baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
         apiKey: SupabasePhoneCountryCodeConfig.apiKey,
-        daoProvider: () async => (await AppDatabaseProvider.database).phoneCountryCodeDao,
+        daoProvider: () async =>
+            (await AppDatabaseProvider.database).phoneCountryCodeDao,
       );
       _userProfileRepo = FirestoreUserProfileRepository();
       _countryCodes = await _phoneCountryCodeRepo.getCountryCodes();
@@ -97,26 +122,70 @@ class ClientController extends ChangeNotifier {
 
     try {
       await _initRepositories();
-      final querySnapshot = await _firestore
-          .collection('users')
-          .where('role', isEqualTo: 'client')
+      final currentUser = _auth.currentUser;
+
+      if (currentUser == null) {
+        _allClients = [];
+        return;
+      }
+
+      final reservationsSnapshot = await _firestore
+          .collection('reservations')
+          .where('ownerId', isEqualTo: currentUser.uid)
           .get();
 
-      _allClients = querySnapshot.docs.map((doc) {
-        final data = doc.data();
-        final rawPhone = (data['phoneNumber'] ?? '') as String;
-        final (code, phone) = _parsePhoneNumber(rawPhone);
+      final guestIds = reservationsSnapshot.docs
+          .where((doc) {
+            final data = doc.data();
+            final status =
+                (data['status'] ?? '').toString().toLowerCase().trim();
+            return status != ReservationStatus.cancelled.name &&
+                status != ReservationStatus.completed.name;
+          })
+          .map((doc) => doc.data()['guestId'] as String?)
+          .where((id) => id != null && id.isNotEmpty)
+          .cast<String>()
+          .toSet()
+          .toList();
 
-        return ClientModel(
-          uid: doc.id,
-          name: (data['fullName'] ?? '') as String,
-          email: (data['email'] ?? '') as String,
-          phone: phone,
-          countryCode: code,
+      if (guestIds.isEmpty) {
+        _allClients = [];
+        return;
+      }
+
+      final List<ClientModel> clients = [];
+
+      for (var i = 0; i < guestIds.length; i += 30) {
+        final chunk = guestIds.sublist(
+          i,
+          i + 30 > guestIds.length ? guestIds.length : i + 30,
         );
-      }).toList();
+
+        final usersSnapshot = await _firestore
+            .collection('users')
+            .where(FieldPath.documentId, whereIn: chunk)
+            .get();
+
+        for (final doc in usersSnapshot.docs) {
+          final data = doc.data();
+          final rawPhone = (data['phoneNumber'] ?? '') as String;
+          final (code, phone) = _parsePhoneNumber(rawPhone);
+
+          clients.add(
+            ClientModel(
+              uid: doc.id,
+              name: (data['fullName'] ?? '') as String,
+              email: (data['email'] ?? '') as String,
+              phone: phone,
+              countryCode: code,
+            ),
+          );
+        }
+      }
+
+      _allClients = clients;
     } catch (e) {
-      debugPrint('Error obteniendo clientes de Firestore: $e');
+      debugPrint('Error obteniendo clientes vinculados de Firestore: $e');
       _errorMessage = 'No pudimos cargar el listado de clientes.';
     } finally {
       _isLoading = false;
@@ -155,6 +224,38 @@ class ClientController extends ChangeNotifier {
       return true;
     } catch (e) {
       _errorMessage = 'No fue posible actualizar el perfil.';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+    if (!canChangePassword) {
+      _errorMessage =
+          'Tu cuenta está autenticada con $authProviderName. Debes administrar tu contraseña directamente en esa plataforma.';
+      notifyListeners();
+      return false;
+    }
+
+    _isLoading = true;
+    _errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _passwordChangeService.changePassword(
+        newPassword: newPassword,
+      );
+      return true;
+    } on AuthFailure catch (e) {
+      _errorMessage = e.message;
+      return false;
+    } catch (e) {
+      _errorMessage = 'Ocurrió un error inesperado. Inténtalo de nuevo.';
       return false;
     } finally {
       _isLoading = false;
