@@ -1,0 +1,8 @@
+targets:
+  $default:
+    builders:
+      floor_generator:
+        # Only the database declares @Database. Avoid parsing unrelated UI
+        # with Floor 1.5's older analyzer (for example null-aware elements).
+        generate_for:
+          - lib/database/app_database.dart

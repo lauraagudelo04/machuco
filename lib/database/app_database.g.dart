@@ -760,6 +760,57 @@ class _$PaymentDao extends PaymentDao {
   }
 
   @override
+  Future<ReservationEntity?> findReservationForPayment(String id) async {
+    return _queryAdapter.query(
+      'SELECT * FROM reservations WHERE id = ?1 LIMIT 1',
+      mapper: (Map<String, Object?> row) => ReservationEntity(
+        id: row['id'] as String,
+        requestId: row['requestId'] as String,
+        motelId: row['motelId'] as String,
+        motelName: row['motelName'] as String,
+        roomId: row['roomId'] as String,
+        roomName: row['roomName'] as String,
+        roomNumber: row['roomNumber'] as String,
+        checkIn: row['checkIn'] as int,
+        checkOut: row['checkOut'] as int,
+        stayMode: row['stayMode'] as String,
+        guestCount: row['guestCount'] as int,
+        roomTotal: row['roomTotal'] as int,
+        total: row['total'] as int,
+        status: row['status'] as String,
+        createdAt: row['createdAt'] as int,
+        guestId: row['guestId'] as String,
+        guestName: row['guestName'] as String,
+        categoryId: row['categoryId'] as int?,
+        cancellationReason: row['cancellationReason'] as String?,
+        invoiceAccessStatus: row['invoiceAccessStatus'] as String,
+        paymentMethod: row['paymentMethod'] as String?,
+      ),
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<void> selectPaymentPlace(String id, String place) async {
+    await _queryAdapter.queryNoReturn(
+      'UPDATE reservations SET paymentMethod = ?2 WHERE id = ?1',
+      arguments: [id, place],
+    );
+  }
+
+  @override
+  Future<void> updateReservationAfterReceipt(
+    String id,
+    String status,
+    String method,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+      'UPDATE reservations SET status = ?2, paymentMethod = ?3, invoiceAccessStatus = \'pending\' WHERE id = ?1',
+      arguments: [id, status, method],
+    );
+  }
+
+  @override
   Future<void> deleteLegacyDemoPayments() async {
     await _queryAdapter.queryNoReturn(
       'DELETE FROM payments WHERE id IN (\'pay-001\', \'pay-002\', \'pay-003\', \'owner-pay-001\', \'owner-pay-002\', \'owner-pay-003\')',
@@ -832,6 +883,27 @@ class _$PaymentDao extends PaymentDao {
       entries,
       OnConflictStrategy.abort,
     );
+  }
+
+  @override
+  Future<PaymentRecord> createPendingReservationPayment(
+    PaymentRecord payment,
+    int nowMilliseconds,
+  ) async {
+    if (database is sqflite.Transaction) {
+      return super.createPendingReservationPayment(payment, nowMilliseconds);
+    } else {
+      return (database as sqflite.Database).transaction<PaymentRecord>((
+        transaction,
+      ) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        return transactionDatabase.paymentDao.createPendingReservationPayment(
+          payment,
+          nowMilliseconds,
+        );
+      });
+    }
   }
 
   @override

@@ -17,6 +17,7 @@ class _FakeCheckout implements PaymentCheckoutController {
   /// Number of card registrations that fail before one succeeds.
   int failuresBeforeSuccess;
   final registeredCardPayments = <String>[];
+  final registeredLocalPayments = <String>[];
 
   @override
   Future<PaymentCheckoutResult> registerCardPayment(
@@ -52,7 +53,25 @@ class _FakeCheckout implements PaymentCheckoutController {
   @override
   Future<PaymentCheckoutResult> registerPendingLocalPayment(
     Reservation reservation,
-  ) => throw UnimplementedError();
+  ) async {
+    registeredLocalPayments.add(reservation.id);
+    return PaymentCheckoutResult(
+      payment: PaymentRecord(
+        id: 'pay-${reservation.id}',
+        bookingId: reservation.id,
+        bookingReference: reservation.requestId,
+        clientId: reservation.guestId,
+        client: reservation.guestName,
+        motelId: reservation.motelId,
+        motel: reservation.motelName,
+        roomId: reservation.roomId,
+        room: reservation.roomName,
+        reservationDate: reservation.checkIn,
+        amount: reservation.total,
+        status: PaymentStatus.pending,
+      ),
+    );
+  }
 }
 
 Future<void> _payWithCard(
@@ -115,6 +134,68 @@ void main() {
     BookingRepositoryProvider.instance = originalRepository;
   });
 
+  testWidgets(
+    'the real card sandbox cannot confirm Booking or navigate to an invoice',
+    (tester) async {
+      final pending = (await BookingRepositoryProvider.instance.getAll())
+          .firstWhere((r) => r.status == ReservationStatus.pending);
+      var confirmations = 0;
+      await _payWithCard(
+        tester,
+        pending,
+        checkoutController: PaymentCheckoutController(
+          repository: PaymentRepository(),
+        ),
+        confirmReservationPayment: (_) async {
+          confirmations++;
+          return true;
+        },
+      );
+      expect(confirmations, 0);
+      expect(find.textContaining('Tarjeta es una simulación'), findsOneWidget);
+      expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
+      expect(
+        (await BookingRepositoryProvider.instance.getById(pending.id))!.status,
+        ReservationStatus.pending,
+      );
+    },
+  );
+
+  testWidgets(
+    'En el Local returns to reservations without presenting a paid invoice',
+    (tester) async {
+      tester.view.physicalSize = const Size(800, 1800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final pending = (await BookingRepositoryProvider.instance.getAll())
+          .firstWhere((r) => r.status == ReservationStatus.pending);
+      final checkout = _FakeCheckout();
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: PaymentMethodSelectionPage(
+            reservation: pending,
+            checkoutController: checkout,
+          ),
+          onGenerateRoute: (settings) => MaterialPageRoute<void>(
+            builder: (_) => Scaffold(body: Text('route:${settings.name}')),
+          ),
+        ),
+      );
+      await tester.tap(find.text('En el Local'));
+      await tester.pumpAndSettle();
+      await tester.ensureVisible(find.text('Finalizar'));
+      await tester.tap(find.text('Finalizar'));
+      await tester.pumpAndSettle();
+      expect(checkout.registeredLocalPayments, [pending.id]);
+      expect(
+        find.text('route:${AppRoutes.clientReservations}'),
+        findsOneWidget,
+      );
+      expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
+    },
+  );
+
   testWidgets('card payment success confirms the pending reservation', (
     tester,
   ) async {
@@ -146,7 +227,7 @@ void main() {
 
     await _payWithCard(tester, notPending, checkoutController: checkout);
 
-    expect(checkout.registeredCardPayments, isEmpty);
+    expect(checkout.registeredCardPayments, [notPending.id]);
 
     expect(find.textContaining('No pudimos confirmar el pago'), findsOneWidget);
     expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
@@ -210,4 +291,3 @@ void main() {
     expect(find.text('route:${AppRoutes.invoice}'), findsOneWidget);
   });
 }
-

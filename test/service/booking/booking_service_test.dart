@@ -62,6 +62,54 @@ void main() {
     seed(const []);
   });
 
+  group('pay at property contract', () {
+    test(
+      'keeps the reservation pending after 15 minutes and after check-in',
+      () async {
+        final pending = reservation(
+          status: ReservationStatus.pending,
+          paymentMethod: 'En el Local',
+          createdAt: at(10, 9),
+        );
+        seed([pending]);
+        clock = at(11, 12);
+        expect(
+          (await service.syncStatuses()).single.status,
+          ReservationStatus.pending,
+        );
+        expect(service.remainingPendingTime(pending), isNull);
+      },
+    );
+
+    test('still expires an abandoned checkout', () {
+      final pending = reservation(
+        status: ReservationStatus.pending,
+        createdAt: at(10, 9),
+      );
+      expect(
+        service.resolveReservation(pending).status,
+        ReservationStatus.cancelled,
+      );
+    });
+
+    test(
+      'the client or owner can explicitly cancel a pay-at-property reservation',
+      () async {
+        seed([
+          reservation(
+            status: ReservationStatus.pending,
+            paymentMethod: 'En el Local',
+          ),
+        ]);
+        final cancelled = await service.cancelReservation(
+          'r1',
+          'El cliente no llegó',
+        );
+        expect(cancelled.status, ReservationStatus.cancelled);
+      },
+    );
+  });
+
   group('isSlotAvailable', () {
     // Existing reservation: 14:00-18:00 -> room blocked until 19:00.
     setUp(() => seed([reservation()]));
