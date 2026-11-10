@@ -28,7 +28,7 @@ import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 import 'package:machuco/views/invoice/invoice_page.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
-import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/pqrs_page.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';

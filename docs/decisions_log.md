@@ -673,3 +673,99 @@ implementar Firebase SQL Connect (antes Data Connect).
 otros módulos lo consulten desde sus reglas. Lo escriben el administrador y
 el propietario activo con su propio `ownerId`. La regla `room_motels` de la
 rama de habitaciones no se modificó.
+
+## 2026-11-10 — Almacenamiento de imágenes de PQRS: bytes en Firestore
+
+**Hallazgo:** el módulo PQRS necesita adjuntar hasta 3 fotos al radicar,
+comentar o registrar un avance. Hasta ahora los adjuntos estaban simulados y
+el almacenamiento de imágenes figuraba como decisión pendiente en
+`README.md#estado-y-decisiones-pendientes`. Contexto completo en
+`contexts/people/feature_josemanuelpavas.feature.md`.
+
+**Decisión:**
+
+- Las fotos se guardan **en Firestore** como `Blob` en la subcolección
+  `pqrs/{pqrsId}/photos/{photoId}`. No se usa Firebase Storage ni servicios
+  externos (Supabase, R2, Cloudinary).
+- Razones: demo universitaria que debe quedarse en el plan Spark (Storage y
+  Cloud Functions exigen Blaze); un solo proveedor y un solo juego de reglas;
+  la PQRS, su entrada de trazabilidad y las fotos se escriben en un mismo
+  `WriteBatch` (todo o nada, sin fotos huérfanas); la subcolección evita
+  descargar fotos al listar.
+- Se descartó base64 dentro del documento (pesado, límite de 1 MiB) y los
+  buckets externos (más infraestructura de la necesaria para una demo).
+- Límites: máximo 3 fotos por entrada de trazabilidad, comprimidas en el
+  cliente (`imageQuality` ~60, `maxWidth` ~1280), cada una < 900 KB; solo
+  JPEG, PNG o WebP; IDs fijos por entrada (`<traceId>_1` a `<traceId>_3`);
+  inmutables (sin edición ni borrado); se cargan solo en el detalle.
+- Las reglas de Firestore validan autor, tamaño, tipo de imagen y que
+  quien escribe o lee sea el cliente dueño o el `ownerId` del motel.
+
+**Acordado por el equipo (2026-11-10):**
+
+- La dependencia para elegir y comprimir fotos es `image_picker`.
+- Si el proyecto pasa a producción, las fotos se moverán a un bucket y en
+  Firestore solo se guardará la ruta.
+
+**Pendiente:**
+
+- Agregar `image_picker` a `pubspec.yaml` al implementar la funcionalidad.
+- Cuotas de Spark (1 MiB por documento, 1 GiB almacenado, 50k lecturas/día):
+  suficientes para la demo.
+- Escribir las reglas de `pqrs` y `photos` en `firestore.rules`.
+
+## 2026-11-10 — PQRS: caché y cola local en Floor, y formatos de imagen en Supabase (rama `feature_josemanuelpavas`)
+
+**Estado:** aprobada por el responsable del módulo. Detalle en
+`contexts/people/feature_josemanuelpavas.feature.md`.
+
+- Firestore sigue siendo la base principal de PQRS; Floor guarda una caché de
+  lectura y una cola de envío (`pending_sync`, `synced`, `failed`). Firestore
+  manda en cualquier conflicto. Las fotos en SQLite solo existen en la cola.
+- El maestro `allowed_image_formats` (Supabase, REST) define los formatos y el
+  tamaño máximo; con caché Floor y respaldo JPEG/PNG/WebP. Las reglas de
+  Firestore no pueden consultar Supabase y mantienen una lista fija mínima.
+- Migración de SQLite: la base está en la versión 17 en el código, así que la
+  siguiente libre sería la 18. La cifra "la próxima migración usa la 16" de la
+  entrada del 2026-11-07 está desactualizada.
+- Hallazgo de seguridad: `SupabaseConfig` trae una llave publicable por
+  defecto escrita en el código; conviene inyectarla solo con `--dart-define`.
+
+**Ampliación (2026-11-10), configuración en Supabase (D10):** la configuración en Supabase vive en tres tablas
+de solo lectura. `pqrs_types` (catálogo de tipos): `code` (`peticion`,
+`queja`, `reclamo`, `sugerencia`; es lo único que se guarda en el campo `type`
+de Firestore), `name`, `description`, `response_days` (15, solo para mostrar
+una fecha estimada informativa), `allows_photos`, `sort_order`, `is_active`,
+`created_at`, `updated_at`. `allowed_image_formats`: `mime_type`, `extensions`,
+`signatures` (`offset` + `hex`), `max_size_bytes` (900 KB = 921600),
+`is_active`, `description`, `created_at`, `updated_at`. `pqrs_settings` (una
+fila, `id = 1`): `max_photos`, `image_quality`, `max_width_px`,
+`max_height_px`, `updated_at`. `set_updated_at()` y sus triggers `BEFORE UPDATE`
+mantienen `updated_at`. RLS: solo lectura para `anon` y `authenticated`; los
+formatos y tipos solo se exponen con `is_active = true`; sin políticas de escritura
+(se edita desde el panel o con `service_role`). La app valida MIME o extensión,
+`signatures`, tamaño y cantidad con una función pura, y reemplaza la caché con
+la respuesta completa. Las reglas de Firestore no leen Supabase y repiten tipo
+de imagen, tamaño, cantidad y la lista de `code` válidos (agregar uno exige
+actualizar las reglas y el enum `PqrsType`). Se mantiene el paquete `http`; `supabase_flutter` queda como
+decisión tomada (D15). El SQL completo e idempotente está en
+`supabase/migrations/202611100001_create_pqrs_config.sql`; el equipo lo aplica
+en Supabase junto con el RLS de solo lectura.
+
+**Decisiones del módulo aprobadas (2026-11-10):** el responsable del módulo
+aprobó D1 a D18 de
+`contexts/people/feature_josemanuelpavas.feature.md`, incluida **D10** (las
+tres tablas de Supabase: `allowed_image_formats`, `pqrs_settings` y
+`pqrs_types`). La migración 17 a 18 de SQLite incluye las 6 tablas locales (4
+de cola y caché de PQRS y 2 de caché de maestros). Cualquier cliente activo puede radicar sobre cualquier motel (D4).
+El cierre automático se reemplaza por un **cierre por vencimiento sin Cloud
+Functions** (D3): una PQRS en `resolved` guarda `resolvedAt`; pasados 7 días
+corridos sin respuesta del cliente, el propietario puede cerrarla con "Cerrar
+por falta de respuesta" (`closedBy = owner_timeout`, mensaje fijo en la
+trazabilidad). Las reglas de Firestore lo exigen con
+`request.time > resource.data.resolvedAt + duration.value(7, 'd')`; el plazo es
+una constante en la app y en las reglas. La tasa de cierre por cliente (D5)
+cuenta como numerador solo los `closed` con `closedBy = client`. La vista de
+PQRS del módulo es `lib/views/pqrs/pqrs_page.dart` (`snake_case`) y
+`lib/routes/routes.dart` la importa con ese nombre. La única dependencia nueva
+acordada es `image_picker`.
