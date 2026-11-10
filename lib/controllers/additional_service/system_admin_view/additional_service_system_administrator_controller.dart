@@ -1,5 +1,9 @@
 import 'package:flutter/foundation.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_category_repository.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_cloud_repository.dart';
+import 'package:machuco/database/repository/additional_service/additional_service_repository.dart';
 import 'package:machuco/models/additional_service/additional_service.dart';
+import 'package:machuco/service/firebase/current_user.dart';
 
 // Datos de salida del controlador: un record de Dart, sin exponer el modelo.
 typedef AdditionalServiceData = ({
@@ -13,107 +17,34 @@ typedef AdditionalServiceData = ({
 });
 
 class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
-  AdditionalServiceSystemAdministratorController({required this.motelId});
+  AdditionalServiceSystemAdministratorController({
+    required this.motelId,
+    AdditionalServiceRepository? serviceRepository,
+    AdditionalServiceCategoryRepository? categoryRepository,
+    AdditionalServiceCloudRepository? cloudRepository,
+    String? Function()? currentUserId,
+  }) : _cloudOverride = cloudRepository,
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid),
+       _serviceRepository = serviceRepository ?? AdditionalServiceRepository(),
+       _categoryRepository =
+           categoryRepository ?? AdditionalServiceCategoryRepository();
 
   final String motelId;
+  final AdditionalServiceRepository _serviceRepository;
+  final AdditionalServiceCategoryRepository _categoryRepository;
+  final AdditionalServiceCloudRepository? _cloudOverride;
+  final String? Function() _currentUserId;
 
-  // Datos temporales en memoria, compartidos al volver a abrir una vista.
-  static const List<AdditionalService> _motel1Services = [
-    AdditionalService(
-      id: '1',
-      motelId: '1',
-      name: 'Decoración romántica',
-      description: 'Pétalos, globos y velas para la habitación.',
-      category: 'Experiencias',
-      price: 45000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '2',
-      motelId: '1',
-      name: 'Desayuno para dos',
-      description: 'Desayuno completo entregado en la habitación.',
-      category: 'Alimentación',
-      price: 28000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '3',
-      motelId: '1',
-      name: 'Salida extendida',
-      description: 'Dos horas adicionales de estadía.',
-      category: 'Estadía',
-      price: 30000,
-      active: false,
-    ),
-  ];
+  // Se crea al primer uso para no tocar Firebase al construir el controller.
+  late final AdditionalServiceCloudRepository _cloud =
+      _cloudOverride ?? FirestoreAdditionalServiceCloudRepository();
 
-  static const List<AdditionalService> _motel2Services = [
-    AdditionalService(
-      id: '4',
-      motelId: '2',
-      name: 'Limpieza adicional',
-      description: 'Limpieza de la habitación durante la estadía.',
-      category: 'Servicios',
-      price: 12000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '5',
-      motelId: '2',
-      name: 'Cena para dos',
-      description: 'Cena especial con bebida para dos personas.',
-      category: 'Alimentación',
-      price: 65000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '6',
-      motelId: '2',
-      name: 'Masaje relajante',
-      description: 'Sesión de masaje de treinta minutos.',
-      category: 'Bienestar',
-      price: 55000,
-      active: false,
-    ),
-  ];
+  final List<AdditionalService> _services = [];
 
-  static const List<AdditionalService> _motel3Services = [
-    AdditionalService(
-      id: '7',
-      motelId: '3',
-      name: 'Acceso al jacuzzi',
-      description: 'Una hora de uso privado del jacuzzi.',
-      category: 'Bienestar',
-      price: 40000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '8',
-      motelId: '3',
-      name: 'Tabla de pasabocas',
-      description: 'Selección de pasabocas para compartir.',
-      category: 'Alimentación',
-      price: 25000,
-      active: true,
-    ),
-    AdditionalService(
-      id: '9',
-      motelId: '3',
-      name: 'Decoración de cumpleaños',
-      description: 'Globos y decoración para una celebración.',
-      category: 'Celebraciones',
-      price: 35000,
-      active: false,
-    ),
-  ];
-
-  static final List<AdditionalService> _services = [
-    ..._motel1Services,
-    ..._motel2Services,
-    ..._motel3Services,
-  ];
-  static int _nextServiceSequence = 10;
+  List<String> _categories = const [];
+  bool _loading = false;
+  String? _categoriesError;
+  String? _syncError;
 
   String? _nameError;
   String? _descriptionError;
@@ -122,6 +53,84 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
 
   List<AdditionalServiceData> get services =>
       getAdditionalServicesByMotelId(motelId);
+
+  List<String> get categories => List.unmodifiable(_categories);
+  bool get isLoading => _loading;
+  String? get categoriesError => _categoriesError;
+
+  /// Último error al hablar con Firestore; `null` si todo salió bien.
+  String? get syncError => _syncError;
+
+  Future<void> load() async {
+    _loading = true;
+    notifyListeners();
+
+    try {
+      final services = await _serviceRepository.findAll();
+      _services
+        ..clear()
+        ..addAll(services);
+
+      // Las categorías vienen de Supabase y no dependen de Firestore: se piden
+      // primero para que un fallo o demora de la nube no las bloquee.
+      await _loadCategories();
+      await _refreshFromCloud();
+    } finally {
+      _loading = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> _loadCategories() async {
+    try {
+      final loaded = await _categoryRepository.getCategories();
+      _categories = loaded
+          .map((c) => c.name)
+          .where((name) => name.trim().isNotEmpty)
+          .toList(growable: false);
+      _categoriesError = null;
+    } catch (error) {
+      _categoriesError = error.toString();
+      _categories = const [];
+    }
+  }
+
+  /// Firestore es la fuente de verdad; SQLite es la copia para uso sin red.
+  /// Si la consulta falla se conserva lo local y se informa en [syncError].
+  Future<void> _refreshFromCloud() async {
+    try {
+      final remote = await _cloud.listByMotel(motelId);
+      await _serviceRepository.replaceForMotel(motelId, remote);
+      _services
+        ..removeWhere((service) => service.motelId == motelId)
+        ..addAll(remote);
+      _syncError = null;
+    } on AdditionalServiceCloudException catch (error) {
+      _syncError = error.message;
+    }
+  }
+
+  /// Ejecuta [action] contra Firestore. Devuelve `false` y deja el mensaje en
+  /// [syncError] si falla, para no dejar la copia local adelantada a la nube.
+  Future<bool> _pushToCloud(
+    Future<void> Function(String ownerId) action,
+  ) async {
+    final ownerId = _currentUserId();
+    if (ownerId == null || ownerId.isEmpty) {
+      _syncError = 'Inicia sesión para gestionar los servicios adicionales.';
+      notifyListeners();
+      return false;
+    }
+    try {
+      await action(ownerId);
+      _syncError = null;
+      return true;
+    } on AdditionalServiceCloudException catch (error) {
+      _syncError = error.message;
+      notifyListeners();
+      return false;
+    }
+  }
 
   List<AdditionalServiceData> getAdditionalServicesByMotelId(String motelId) =>
       List.unmodifiable(
@@ -196,13 +205,13 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     _priceError = null;
   }
 
-  bool saveAdditionalService({
+  Future<bool> saveAdditionalService({
     String? serviceId,
     required String name,
     required String description,
     required String category,
     required String priceText,
-  }) {
+  }) async {
     final normalizedName = name.trim();
     final normalizedDescription = description.trim();
     final normalizedCategory = category.trim();
@@ -228,47 +237,66 @@ class AdditionalServiceSystemAdministratorController extends ChangeNotifier {
     }
 
     if (serviceId == null) {
-      _services.add(
-        AdditionalService(
-          id: (_nextServiceSequence++).toString(),
-          motelId: motelId,
-          name: normalizedName,
-          description: normalizedDescription,
-          category: normalizedCategory,
-          price: price!,
-          active: true,
-        ),
+      final newService = AdditionalService(
+        id: DateTime.now().microsecondsSinceEpoch.toString(),
+        motelId: motelId,
+        name: normalizedName,
+        description: normalizedDescription,
+        category: normalizedCategory,
+        price: price!,
+        active: true,
       );
+      final saved = await _pushToCloud(
+        (ownerId) => _cloud.create(ownerId: ownerId, service: newService),
+      );
+      if (!saved) return false;
+      _services.add(newService);
+      await _serviceRepository.insertService(newService);
     } else {
       final index = _services.indexWhere(
         (item) => item.id == serviceId && item.motelId == motelId,
       );
       if (index < 0) return false;
-      _services[index] = _services[index].copyWith(
+      final updated = _services[index].copyWith(
         name: normalizedName,
         description: normalizedDescription,
         category: normalizedCategory,
         price: price!,
       );
+      final saved = await _pushToCloud((_) => _cloud.update(updated));
+      if (!saved) return false;
+      _services[index] = updated;
+      await _serviceRepository.updateService(updated);
     }
     notifyListeners();
     return true;
   }
 
-  void toggleAdditionalServiceActive(String serviceId) {
+  Future<void> toggleAdditionalServiceActive(String serviceId) async {
     final index = _services.indexWhere(
       (item) => item.id == serviceId && item.motelId == motelId,
     );
     if (index < 0) return;
     final current = _services[index];
-    _services[index] = current.copyWith(active: !current.active);
+    final updated = current.copyWith(active: !current.active);
+    final saved = await _pushToCloud((_) => _cloud.update(updated));
+    if (!saved) return;
+    _services[index] = updated;
+    await _serviceRepository.updateService(updated);
     notifyListeners();
   }
 
-  void deleteAdditionalService(String serviceId) {
+  Future<void> deleteAdditionalService(String serviceId) async {
+    final removed = _services.any(
+      (item) => item.id == serviceId && item.motelId == motelId,
+    );
+    if (!removed) return;
+    final deleted = await _pushToCloud((_) => _cloud.delete(serviceId));
+    if (!deleted) return;
     _services.removeWhere(
       (item) => item.id == serviceId && item.motelId == motelId,
     );
+    await _serviceRepository.deleteService(serviceId);
     notifyListeners();
   }
 }

@@ -44,6 +44,22 @@
   `MotelRepositoryException`.
 - Escrituras: requieren red; si salen bien actualizan la caché con `upsert`.
 
+## Copia en Firestore (`motels`)
+- Las reglas de Firestore no pueden consultar SQL Connect. Cada motel se
+  copia en `motels/{motelId}` (mismo UUID) para que otros módulos, como
+  habitaciones, lo verifiquen desde Firestore.
+- `FirestoreMotelRegistry` (`lib/database/repository/motel/motel_firestore_registry.dart`)
+  escribe todos los campos del motel más `updatedAt` después de cada
+  creación, edición o cambio de disponibilidad en SQL Connect.
+- Regla (bloque propio en `firestore.rules`): leen los usuarios con sesión;
+  escriben el administrador y el propietario activo (este solo con su
+  propio `ownerId`); no se borran.
+- Si Firestore falla, el motel queda guardado en SQL Connect y se muestra
+  "El motel se guardó, pero no se pudo registrar para las habitaciones.
+  Vuelve a guardarlo para reintentar."
+- La regla `room_motels` de habitaciones no se modificó; si esa rama quiere
+  usar esta copia, el cambio es suyo.
+
 ## Pruebas
 - `test/repositories/motel/sql_connect_motel_repository_test.dart` (gateway
   falso + SQLite en memoria) y `test/repositories/motel/motel_dao_test.dart`.

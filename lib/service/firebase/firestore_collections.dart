@@ -22,6 +22,13 @@ abstract final class FirestoreCollections {
   /// `date` (Timestamp) para poder ordenar la lista.
   static const reviews = 'reviews';
 
+  /// Copia de los moteles de Firebase SQL Connect (`motels/{motelId}`, mismo
+  /// UUID), para que otros módulos y sus reglas los consulten en Firestore.
+  static const motels = 'motels';
+
+  /// Additional services offered by a motel (`additionalServices/{id}`).
+  static const additionalServices = 'additionalServices';
+
   /// Reservations shared by client, motel owner and admin
   /// (`reservations/{reservationId}`), cached locally in SQLite.
   static const reservations = 'reservations';

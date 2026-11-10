@@ -4,19 +4,23 @@ import './../../../models/motel/motel_model.dart';
 import './../../../routes/routes.dart';
 import './../../../controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
 import './../../review/add_review_page.dart'; 
+import './../../../widgets/additional_service/additional_services_section.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
-  const ClientMotelDetailPage({super.key, required this.motel});
+  const ClientMotelDetailPage({
+    super.key,
+    required this.motel,
+    this.additionalServiceController,
+  });
 
   final Motel motel;
 
+  /// Permite inyectar el controller en pruebas; por defecto se crea uno.
+  final AdditionalServiceSystemAdministratorController?
+      additionalServiceController;
+
   @override
   Widget build(BuildContext context) {
-    final additionalServiceController =
-        AdditionalServiceSystemAdministratorController(motelId: motel.id);
-    final activeServices =
-        additionalServiceController.getActiveAdditionalServicesByMotelId(motel.id);
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
@@ -144,29 +148,10 @@ class ClientMotelDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  Text('Servicios Adicionales',
-                      style: Theme.of(context).textTheme.headlineSmall),
-                  const SizedBox(height: AppSpacing.s3),
-                  if (activeServices.isEmpty)
-                    Text(
-                      'No hay servicios adicionales disponibles para este motel.',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
-                    )
-                  else
-                    Wrap(
-                      spacing: AppSpacing.s2,
-                      runSpacing: AppSpacing.s2,
-                      children: activeServices
-                          .map(
-                            (service) => _ServiceChip(
-                              label:
-                                  '${service.name} (\$${service.price.toString()})',
-                            ),
-                          )
-                          .toList(),
-                    ),
+                  AdditionalServicesSection(
+                    motelId: motel.id,
+                    controller: additionalServiceController,
+                  ),
                   const SizedBox(height: AppSpacing.s5),
 
                   const Divider(),

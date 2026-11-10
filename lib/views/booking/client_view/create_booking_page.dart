@@ -82,6 +82,8 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
         )
         .name;
     _servicesController.addListener(_refresh);
+    // Sin load() los servicios del motel nunca se consultan y no hay qué elegir.
+    _servicesController.load();
     _bookingController.addListener(_refresh);
     unawaited(_bookingController.refresh());
     unawaited(_bookingController.loadCategories());
