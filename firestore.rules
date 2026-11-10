@@ -617,6 +617,86 @@ service cloud.firestore {
       allow delete: if isAdmin();
     }
 
+    // Registro de autoridad. Crear desde la consola con un usuario administrador.
+    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    match /room_motels/{motelId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
+    // sin crear manualmente el registro; si existe, el registro prevalece.
+    // Al transferir el motel, actualizar este permiso o crear el registro.
+    function ownsRoomMotel(data) {
+      return isActiveOwner()
+        && data.ownerId == request.auth.uid
+        && (
+          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
+              == request.auth.uid)
+          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+            && data.motelId == 'motel_1793753270427'
+            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
+        );
+    }
+
+    function validRoomBase(data, id) {
+      return data.id == id
+        && data.motelId is string && data.motelId.size() > 0
+        && data.ownerId is string
+        && data.name is string && data.name.size() > 0
+        && data.deleted is bool
+        && data.updatedAt == request.time;
+    }
+
+    function canReadRooms() {
+      return isAdmin() || isActiveOwner() || isActiveClient();
+    }
+
+    match /room_types/{typeId} {
+      allow read: if canReadRooms();
+      allow create: if ownsRoomMotel(request.resource.data)
+        && validRoomBase(request.resource.data, typeId)
+        && request.resource.data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'deleted', 'updatedAt']);
+      allow update: if ownsRoomMotel(resource.data)
+        && ownsRoomMotel(request.resource.data)
+        && request.resource.data.motelId == resource.data.motelId
+        && validRoomBase(request.resource.data, typeId)
+        && request.resource.data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'deleted', 'updatedAt']);
+      allow delete: if false; // Borrado lógico para sincronizar otros dispositivos.
+    }
+
+    function validRoom(data, id) {
+      let type = get(/databases/$(database)/documents/room_types/$(data.idType)).data;
+      return validRoomBase(data, id)
+        && data.keys().hasOnly([
+          'id', 'motelId', 'ownerId', 'name', 'description', 'idType',
+          'pricePerHour', 'roomNumber', 'capacity', 'imageUrls', 'isActive',
+          'includedServices', 'deleted', 'updatedAt'])
+        && data.description is string
+        && data.idType is string
+        && data.pricePerHour is int && data.pricePerHour >= 0
+        && data.roomNumber is string && data.roomNumber.size() > 0
+        && data.capacity is int && data.capacity > 0
+        && data.imageUrls is list && data.includedServices is list
+        && data.isActive is bool
+        && type.motelId == data.motelId && type.ownerId == data.ownerId
+        && (data.deleted || !type.deleted);
+    }
+
+    match /rooms/{roomId} {
+      allow read: if canReadRooms();
+      allow create: if ownsRoomMotel(request.resource.data)
+        && validRoom(request.resource.data, roomId);
+      allow update: if ownsRoomMotel(resource.data)
+        && ownsRoomMotel(request.resource.data)
+        && request.resource.data.motelId == resource.data.motelId
+        && validRoom(request.resource.data, roomId);
+      allow delete: if false;
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {

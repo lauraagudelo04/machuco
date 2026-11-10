@@ -282,6 +282,17 @@ final class FirebaseSocialAuthService implements SocialAuthService {
     if (_cancelCodes.contains(e.code) || message.contains('access_denied')) {
       return const SocialAuthCancelled();
     }
+    if (e.code == 'unsupported-platform' ||
+        e.code == 'unsupported-platform-operation') {
+      return SocialAuthError(
+        AuthFailure(
+          AuthFailureType.providerMisconfigured,
+          'El ingreso con ${kind.displayName} no está disponible en esta '
+          'plataforma. Usa la versión web o Android, o ingresa con correo '
+          'y contraseña si tu cuenta tiene ese método.',
+        ),
+      );
+    }
     if (e.code == 'account-exists-with-different-credential') {
       _pendingCredential = e.credential;
       _pendingProvider = kind;

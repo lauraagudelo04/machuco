@@ -25,3 +25,4 @@
 ## Integración
 - `MotelController` mantiene comportamiento mock por defecto (`MotelController()`). `MotelController.persistent()` usa repositorio real con credenciales desde `SupabasePhoneCountryCodeConfig`.
 - Vistas del propietario usan `MotelController.persistent()` con manejo de errores (SnackBar) y restauración de estado en toggle.
+- Moteles e indicativos usan por defecto la URL y clave publicable del proyecto, igual que los repositorios de clientes y pagos. Se puede iniciar con `flutter run` sin parámetros adicionales. Para otro entorno, pasar `SUPABASE_URL` y `SUPABASE_ANON_KEY` (o `SUPABASE_PUBLISHABLE_KEY`) mediante `--dart-define`. Los cambios en estas constantes requieren detener la app y volver a ejecutarla.

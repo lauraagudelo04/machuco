@@ -30,6 +30,88 @@ void main() {
     await directory.delete(recursive: true);
   });
 
+  test(
+    'evento y cambio sobreviven reapertura y están separados por usuario',
+    () async {
+      const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Suite');
+      await dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) => local.upsertRoomType(type),
+      );
+      await database.close();
+      database = await AppDatabaseProvider.open(
+        name: '${directory.path}${Platform.pathSeparator}rooms.db',
+      );
+      dao = database.roomDao;
+      expect((await dao.getRoomTypes()).single.id, type.id);
+      expect(await dao.pendingChanges('owner-2'), isEmpty);
+      final pending = await dao.pendingChanges('owner-1');
+      expect(pending, hasLength(1));
+      await dao.acknowledgeChange(pending.single['sequence']! as int);
+      expect(await dao.pendingChanges('owner-1'), isEmpty);
+    },
+  );
+
+  test('fallo local revierte el cambio y su evento', () async {
+    const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Suite');
+    await expectLater(
+      dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) async {
+          await local.upsertRoomType(type);
+          throw StateError('fallo simulado');
+        },
+      ),
+      throwsStateError,
+    );
+    expect(await dao.getRoomTypes(), isEmpty);
+    expect(await dao.pendingChanges('owner-1'), isEmpty);
+  });
+
+  test(
+    'descarga no pisa un cambio pendiente y aplica borrados confirmados',
+    () async {
+      const type = RoomTypeData(id: 'sync-type', motelId: 'm1', name: 'Local');
+      await dao.mutateAndEnqueue(
+        uid: 'owner-1',
+        collection: 'room_types',
+        id: type.id,
+        payload: type.toJson(),
+        mutate: (local) => local.upsertRoomType(type),
+      );
+      await dao.mergeRemote([type.copyWith(name: 'Remoto')], [], [], [type.id]);
+      expect((await dao.getRoomTypes()).single.name, 'Local');
+      final event = (await dao.pendingChanges('owner-1')).single;
+      await dao.acknowledgeChange(event['sequence']! as int);
+      await dao.mergeRemote([], [], [], [type.id]);
+      expect(await dao.getRoomTypes(), isEmpty);
+    },
+  );
+
+  test('migración 13 a 14 agrega cola sin perder tipos', () async {
+    const type = RoomTypeData(
+      id: 'migration-type',
+      motelId: 'm1',
+      name: 'Suite',
+    );
+    await dao.upsertRoomType(type);
+    await database.database.execute('DROP TABLE room_sync_queue');
+    await database.database.execute('PRAGMA user_version = 13');
+    await database.close();
+    database = await AppDatabaseProvider.open(
+      name: '${directory.path}${Platform.pathSeparator}rooms.db',
+    );
+    dao = database.roomDao;
+    expect((await dao.getRoomTypes()).single.id, type.id);
+    expect(await dao.pendingChanges('u1'), isEmpty);
+  });
+
   test('persiste y recupera habitaciones', () async {
     const room = RoomVisualData(
       id: 'room-1',

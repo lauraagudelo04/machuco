@@ -12,6 +12,89 @@ class RoomDao {
 
   final DatabaseProvider _databaseProvider;
 
+  /// La mutación y su evento se confirman juntos o se revierten juntos.
+  Future<void> mutateAndEnqueue({
+    required String uid,
+    required String collection,
+    required String id,
+    required Map<String, dynamic> payload,
+    required Future<void> Function(RoomDao dao) mutate,
+  }) async {
+    final database = await _databaseProvider();
+    await database.transaction((transaction) async {
+      final dao = RoomDao(_databaseProvider).._transaction = transaction;
+      await mutate(dao);
+      await transaction.insert('room_sync_queue', {
+        'uid': uid,
+        'collection_name': collection,
+        'document_id': id,
+        'payload': jsonEncode(payload),
+      });
+    });
+  }
+
+  DatabaseExecutor? _transaction;
+  Future<DatabaseExecutor> get _executor async =>
+      _transaction ?? await _databaseProvider();
+
+  Future<List<Map<String, Object?>>> pendingChanges(String uid) async =>
+      (await _databaseProvider()).query(
+        'room_sync_queue',
+        where: 'uid = ?',
+        whereArgs: [uid],
+        orderBy: 'sequence ASC',
+      );
+
+  Future<void> acknowledgeChange(int sequence) async =>
+      (await _databaseProvider()).delete(
+        'room_sync_queue',
+        where: 'sequence = ?',
+        whereArgs: [sequence],
+      );
+
+  Future<void> mergeRemote(
+    List<RoomTypeData> types,
+    List<RoomVisualData> rooms,
+    List<String> deletedRooms,
+    List<String> deletedTypes,
+  ) async {
+    final database = await _databaseProvider();
+    await database.transaction((transaction) async {
+      final pending = await transaction.query('room_sync_queue');
+      final protected = pending
+          .map((row) => '${row['collection_name']}/${row['document_id']}')
+          .toSet();
+      for (final type in types) {
+        if (!protected.contains('room_types/${type.id}')) {
+          await _upsertRoomType(transaction, type);
+        }
+      }
+      for (final id in deletedRooms) {
+        if (!protected.contains('rooms/$id')) {
+          await transaction.delete('rooms', where: 'id = ?', whereArgs: [id]);
+        }
+      }
+      for (final room in rooms) {
+        if (!protected.contains('rooms/${room.id}')) {
+          await transaction.insert(
+            'rooms',
+            _roomToMap(room),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      }
+      for (final id in deletedTypes) {
+        if (!protected.contains('room_types/$id')) {
+          await transaction.rawDelete(
+            'DELETE FROM room_types WHERE id = ? '
+            'AND NOT EXISTS (SELECT 1 FROM rooms WHERE type_id = ?)',
+            [id, id],
+          );
+        }
+      }
+    });
+  }
+
   Future<String> getDatabasePath() async => (await _databaseProvider()).path;
 
   /// También limpia bases ya abiertas durante una sesión de desarrollo.
@@ -37,7 +120,7 @@ class RoomDao {
   }
 
   Future<void> upsertRoom(RoomVisualData room) async {
-    final database = await _databaseProvider();
+    final database = await _executor;
     await database.insert(
       'rooms',
       _roomToMap(room),
@@ -46,7 +129,7 @@ class RoomDao {
   }
 
   Future<void> deleteRoom(String roomId) async {
-    final database = await _databaseProvider();
+    final database = await _executor;
     await database.delete('rooms', where: 'id = ?', whereArgs: [roomId]);
   }
 
@@ -66,14 +149,13 @@ class RoomDao {
   }
 
   Future<void> upsertRoomType(RoomTypeData roomType) async {
-    final database = await _databaseProvider();
+    final database = await _executor;
     await _upsertRoomType(database, roomType);
   }
 
   Future<void> deleteRoomType(String typeId) async {
-    final database = await _databaseProvider();
-    await database.transaction((transaction) async {
-      final rooms = await transaction.query(
+    Future<void> remove(DatabaseExecutor database) async {
+      final rooms = await database.query(
         'rooms',
         columns: ['id'],
         where: 'type_id = ?',
@@ -85,12 +167,14 @@ class RoomDao {
           'No puedes eliminar un tipo con habitaciones asociadas.',
         );
       }
-      await transaction.delete(
-        'room_types',
-        where: 'id = ?',
-        whereArgs: [typeId],
-      );
-    });
+      await database.delete('room_types', where: 'id = ?', whereArgs: [typeId]);
+    }
+
+    if (_transaction != null) {
+      await remove(_transaction!);
+    } else {
+      await (await _databaseProvider()).transaction(remove);
+    }
   }
 
   Future<List<RoomService>> getIncludedServices() async {

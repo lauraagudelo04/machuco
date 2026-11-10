@@ -38,7 +38,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 15,
+  version: 16,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -102,6 +102,7 @@ class AppDatabaseProvider {
         migration12To13,
         migration13To14,
         migration14To15,
+        migration15To16,
       ])
       .addCallback(
         Callback(
@@ -119,6 +120,7 @@ Future<void> _createManualSchemas(
   int version,
 ) async {
   await _createRoomSchema(database, version);
+  await createRoomSyncSchema(database);
   await _createAuthCatalogSchema(database);
 }
 
@@ -408,7 +410,9 @@ final migration12To13 = Migration(12, 13, deleteLegacyRoomMockData);
 /// Es idempotente porque esta tabla se creó antes como v13 en la rama de
 /// autenticación: esas bases ya la tienen y conservan su fila. Su limpieza de
 /// ejemplos de room la hace `RoomDao.removeLegacyMockData`.
-final migration13To14 = Migration(13, 14, (database) async {
+Future<void> _createAuthUserProfileSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `auth_user_profile` ('
     '`uid` TEXT NOT NULL, `email` TEXT NOT NULL, '
@@ -417,12 +421,31 @@ final migration13To14 = Migration(13, 14, (database) async {
     '`phone_country_code_id` INTEGER, `phone_number` TEXT, '
     '`company_name` TEXT, `synced_at` TEXT NOT NULL, PRIMARY KEY (`uid`))',
   );
-});
+}
+
+Future<void> createRoomSyncSchema(sqflite.DatabaseExecutor database) async {
+  await database.execute('''CREATE TABLE IF NOT EXISTS room_sync_queue (
+    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+    uid TEXT NOT NULL,
+    collection_name TEXT NOT NULL,
+    document_id TEXT NOT NULL,
+    payload TEXT NOT NULL
+  )''');
+}
+
+Future<void> _completeAuthAndRoomSyncSchemas(
+  sqflite.DatabaseExecutor database,
+) async {
+  await _createAuthUserProfileSchema(database);
+  await createRoomSyncSchema(database);
+}
+
+final migration13To14 = Migration(13, 14, _completeAuthAndRoomSyncSchemas);
 
 /// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
 /// genera para `ReservationCategory`, `ReservationEntity` y
 /// `ReservationLineItemEntity`.
-final migration14To15 = Migration(14, 15, (database) async {
+Future<void> _createReservationSchema(sqflite.DatabaseExecutor database) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
     '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
@@ -463,4 +486,14 @@ final migration14To15 = Migration(14, 15, (database) async {
     'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
     'ON `reservation_line_items` (`reservationId`)',
   );
-});
+}
+
+Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
+  await _completeAuthAndRoomSyncSchemas(database);
+  await _createReservationSchema(database);
+}
+
+final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+
+/// Completa las dos variantes de v15 conservando los datos de ambas ramas.
+final migration15To16 = Migration(15, 16, _completeMergedSchemas);
