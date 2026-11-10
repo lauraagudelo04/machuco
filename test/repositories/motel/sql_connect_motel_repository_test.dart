@@ -2,7 +2,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
+import 'package:machuco/database/repository/motel/motel_firestore_registry.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/database/repository/motel/motel_sql_connect_gateway.dart';
 import 'package:machuco/database/repository/motel/sql_connect_motel_repository.dart';
@@ -31,6 +33,8 @@ class _FakeGateway implements MotelSqlConnectGateway {
   Object? error;
   int rowsUpdated = 1;
   Motel? lastCreatedForOwner;
+  int allRequests = 0;
+  int availableRequests = 0;
 
   void _maybeThrow() {
     final e = error;
@@ -39,6 +43,7 @@ class _FakeGateway implements MotelSqlConnectGateway {
 
   @override
   Future<List<Motel>> listAll() async {
+    allRequests++;
     _maybeThrow();
     return all;
   }
@@ -51,6 +56,7 @@ class _FakeGateway implements MotelSqlConnectGateway {
 
   @override
   Future<List<Motel>> listAvailable() async {
+    availableRequests++;
     _maybeThrow();
     return all.where((m) => m.isAvailable).toList();
   }
@@ -90,6 +96,18 @@ class _FakeGateway implements MotelSqlConnectGateway {
   Future<int> setMineAvailability(String id, bool isAvailable) async {
     _maybeThrow();
     return rowsUpdated;
+  }
+}
+
+/// Doble de la copia en Firestore (`motels`).
+class _FakeRegistry implements MotelFirestoreRegistry {
+  final saved = <Motel>[];
+  bool fail = false;
+
+  @override
+  Future<void> save(Motel motel) async {
+    if (fail) throw Exception('firestore caído');
+    saved.add(motel);
   }
 }
 
@@ -133,6 +151,26 @@ void main() {
     expect(cached.map((e) => e.id), containsAll(['1', '2']));
     expect(cached.map((e) => e.id), isNot(contains('viejo')));
   });
+
+  test(
+    'el catálogo de cliente usa disponibles, conserva IDs y no filtra por propietario',
+    () async {
+      gateway.all = [
+        _motel('11111111-1111-4111-8111-111111111111'),
+        _motel('22222222-2222-4222-8222-222222222222', ownerId: 'uid-2'),
+        _motel('inactive', available: false),
+      ];
+      final controller = MotelController(repository: repository);
+      final catalog = await controller.getRecommendedMotels();
+      expect(gateway.availableRequests, 1);
+      expect(gateway.allRequests, 0);
+      expect(catalog.map((motel) => motel.id), [
+        '11111111-1111-4111-8111-111111111111',
+        '22222222-2222-4222-8222-222222222222',
+      ]);
+      expect(catalog.last.ownerId, 'uid-2');
+    },
+  );
 
   test('getMyMotels sin red devuelve solo los del usuario en caché', () async {
     await database.motelDao.upsertAll([
@@ -228,5 +266,59 @@ void main() {
     final motel = await repository.getMotelById('1');
 
     expect(motel?.id, '1');
+  });
+
+  group('copia en Firestore (motels)', () {
+    late _FakeRegistry registry;
+
+    setUp(() {
+      registry = _FakeRegistry();
+      repository = SqlConnectMotelRepository(
+        gateway: gateway,
+        daoProvider: () async => database.motelDao,
+        currentUid: () => 'uid-1',
+        firestoreRegistry: registry,
+      );
+    });
+
+    test(
+      'el propietario crea el motel y queda registrado con su uid',
+      () async {
+        await repository.addMyMotel(_motel('', ownerId: 'owner-fijo'));
+
+        expect(registry.saved.single.id, 'new-id');
+        expect(registry.saved.single.ownerId, 'uid-1');
+      },
+    );
+
+    test('el administrador crea el motel para otro propietario', () async {
+      await repository.addMotelForOwner(_motel('', ownerId: 'uid-9'));
+
+      expect(registry.saved.single.id, 'admin-id');
+      expect(registry.saved.single.ownerId, 'uid-9');
+    });
+
+    test('al cambiar la disponibilidad se actualiza el registro', () async {
+      await database.motelDao.upsert(MotelEntity.fromModel(_motel('1')));
+
+      await repository.setMyMotelAvailability('1', false);
+
+      expect(registry.saved.single.isAvailable, isFalse);
+    });
+
+    test('si Firestore falla avisa que hay que reintentar', () {
+      registry.fail = true;
+
+      expect(
+        repository.addMyMotel(_motel('')),
+        throwsA(
+          isA<MotelRepositoryException>().having(
+            (e) => e.message,
+            'message',
+            contains('no se pudo registrar para las habitaciones'),
+          ),
+        ),
+      );
+    });
   });
 }

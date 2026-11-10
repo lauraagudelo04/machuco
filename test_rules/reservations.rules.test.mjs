@@ -151,9 +151,9 @@ describe('leer reservas', () => {
 });
 
 describe('cambiar el estado', () => {
-  test('[RES-07] el cliente paga y luego cancela su reserva', async () => {
+  test('[RES-07] el cliente no acredita un sandbox, pero puede cancelar', async () => {
     const ref = doc(as('client'), 'reservations/r-existing');
-    await assertSucceeds(
+    await assertFails(
       updateDoc(ref, {
         status: 'upcoming',
         paymentMethod: 'Tarjeta',

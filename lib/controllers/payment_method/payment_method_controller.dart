@@ -203,7 +203,7 @@ class PaymentMethodController extends ChangeNotifier {
 
     // Sandbox local: no se envían ni almacenan datos bancarios.
     _model.status = PaymentProcessStatus.approved;
-    _model.message = 'Pago de $formattedAmount APROBADO correctamente.';
+    _model.message = 'Simulación completada. No se realizó un cobro bancario.';
     notifyListeners();
   }
 

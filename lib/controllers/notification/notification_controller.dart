@@ -22,7 +22,6 @@ class NotificationController extends ChangeNotifier {
   }
 
   static const demoClientUser = 'laura@machuco.com';
-  static const demoOwnerUser = 'owner-1020304050';
   static const _lastTypeFilterIdKey = 'lastTypeFilterId';
 
   final String? recipientUid;

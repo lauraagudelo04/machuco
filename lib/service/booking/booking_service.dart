@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:math';
 
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
@@ -158,7 +159,8 @@ class BookingService {
 
   /// Maximum time a reservation may stay `pending` without payment before it
   /// is cancelled automatically and its slot is released.
-  static const Duration pendingPaymentTimeout = Duration(minutes: 15);
+  static const Duration pendingPaymentTimeout =
+      ReservationPaymentTerms.checkoutTimeout;
 
   /// Longest continuous stay allowed.
   static const Duration maxStayDuration = Duration(hours: 24);
@@ -206,6 +208,7 @@ class BookingService {
     var resolved = reservation;
 
     if (resolved.status == ReservationStatus.pending &&
+        !resolved.isPayAtProperty &&
         current.difference(resolved.createdAt) >= pendingPaymentTimeout) {
       return resolved.copyWith(
         status: ReservationStatus.cancelled,
@@ -233,7 +236,10 @@ class BookingService {
   /// reservation is not pending (anymore).
   Duration? remainingPendingTime(Reservation reservation) {
     final resolved = resolveReservation(reservation);
-    if (resolved.status != ReservationStatus.pending) return null;
+    if (resolved.status != ReservationStatus.pending ||
+        resolved.isPayAtProperty) {
+      return null;
+    }
     final remaining =
         pendingPaymentTimeout - now.difference(resolved.createdAt);
     return remaining.isNegative ? Duration.zero : remaining;

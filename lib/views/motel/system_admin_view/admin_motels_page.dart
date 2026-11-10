@@ -31,7 +31,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
   int _selectedIndex = 0; 
   
   final MotelController _motelController = MotelController();
-  final OwnerController _ownerController = OwnerController();
+  final OwnerController _ownerController = OwnerController.instance;
   
   List<Motel> _motels = [];
   List<Owner> _owners = [];
@@ -49,7 +49,10 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
 
   Future<void> _loadOwnersAndMotels() async {
     setState(() => _isLoading = true);
-    
+
+    // La instancia es compartida: se recarga desde la base para que el listado
+    // refleje los cambios hechos en otras pantallas del módulo.
+    await _ownerController.init();
     final ownersList = _ownerController.owners;
     _owners = ownersList;
     
@@ -58,7 +61,8 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
     } else if (_owners.isNotEmpty) {
       _currentOwnerId = _owners.first.id;
     } else {
-      _currentOwnerId = 'owner-1020304050'; 
+      // Sin propietarios no se inventa un id: el listado queda vacío.
+      _currentOwnerId = '';
     }
 
     final motelesObtenidos = await _motelController.getMotelsByOwnerId(_currentOwnerId);
@@ -280,7 +284,7 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
               children: [
                 Text('Gestión de Establecimientos', style: Theme.of(context).textTheme.headlineSmall),
                 Chip(
-                  label: Text(currentOwnerName.split(' ').first, style: const TextStyle(fontSize: 12)),
+                  label: Text(currentOwnerName, style: const TextStyle(fontSize: 12)),
                   backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
                 ),
               ],

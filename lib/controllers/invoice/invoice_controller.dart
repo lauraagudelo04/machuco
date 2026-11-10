@@ -22,7 +22,7 @@ enum InvoiceLoadStatus {
   error,
 }
 
-/// Conecta la pantalla de factura con [InvoiceRepository] (Supabase).
+/// Conecta la pantalla de factura con [InvoiceRepository] (Cloud Firestore).
 ///
 /// Además recuerda entre sesiones (vía [LocalPreferencesService], namespace
 /// `invoices`) qué reservas ya tienen su factura descargada y cuándo. Solo se
@@ -32,7 +32,7 @@ class InvoiceController extends ChangeNotifier {
     InvoiceRepository? repository,
     LocalPreferencesService? preferences,
     InvoicePdfService? pdfService,
-  }) : _repository = repository ?? SupabaseInvoiceRepository(),
+  }) : _repository = repository ?? FirestoreInvoiceRepository(),
        _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'invoices'),
        _pdfService = pdfService ?? const PrintingInvoicePdfService();
@@ -74,7 +74,7 @@ class InvoiceController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Consulta la factura de [reservation] en Supabase y, si aún no existe y
+  /// Consulta la factura de [reservation] en Firebase y, si aún no existe y
   /// la reserva ya está pagada, la emite.
   ///
   /// [paymentMethod] llega cuando se viene directamente del flujo de pago.

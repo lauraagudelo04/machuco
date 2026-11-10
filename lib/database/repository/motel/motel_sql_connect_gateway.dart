@@ -1,4 +1,7 @@
+import 'dart:convert';
+
 import 'package:firebase_data_connect/firebase_data_connect.dart';
+import 'package:flutter/foundation.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/service/sql_connect/motel_connector/motel.dart';
 import 'package:machuco/service/sql_connect/sql_connect_config.dart';
@@ -183,7 +186,7 @@ class GeneratedMotelSqlConnectGateway implements MotelSqlConnectGateway {
 
 /// Traduce los errores de SQL Connect a mensajes para el usuario.
 String sqlConnectErrorMessage(Object error, {required String fallback}) {
-  final text = error.toString().toLowerCase();
+  final text = _sqlConnectErrorMessages(error).join(' ').toLowerCase();
   if (text.contains('motels_nit_uidx') ||
       (text.contains('duplicate') && text.contains('nit'))) {
     return 'Ya existe un motel con ese NIT';
@@ -195,5 +198,64 @@ String sqlConnectErrorMessage(Object error, {required String fallback}) {
   if (text.contains('unauthenticated') || text.contains('unauthorized')) {
     return 'Debes iniciar sesión para administrar moteles';
   }
+  if (text.contains('permission_denied') ||
+      text.contains('permission denied')) {
+    return 'SQL Connect no permitió la operación. Revisa los permisos de la sesión.';
+  }
+  if (text.contains('socketexception') ||
+      text.contains('failed host lookup') ||
+      text.contains('connection refused') ||
+      text.contains('timed out')) {
+    return 'No se pudo conectar con SQL Connect. Comprueba la conexión e inténtalo nuevamente.';
+  }
   return fallback;
+}
+
+/// Keep nested GraphQL failures: the SDK's top-level message can be empty.
+List<String> _sqlConnectErrorMessages(Object error) {
+  final messages = <String>[error.toString()];
+  if (error is DataConnectOperationError) {
+    messages.addAll(error.response.errors.map((entry) => entry.message));
+  }
+  if (error is DataConnectError && error.message != null) {
+    final message = error.message!;
+    final match = RegExp(r"with a message '([\s\S]*)'$").firstMatch(message);
+    if (match != null) {
+      try {
+        final body = jsonDecode(match.group(1)!);
+        if (body is Map && body['error'] is Map) {
+          final details = body['error'] as Map;
+          messages.add(
+            '${details['status'] ?? ''}: ${details['message'] ?? ''}',
+          );
+        }
+      } on FormatException {
+        // Some proxies return text rather than a JSON error envelope.
+      }
+    }
+  }
+  return messages;
+}
+
+/// Debug diagnostics only; never print the request, credentials or form data.
+void logSqlConnectMotelError(Object error) {
+  if (!kDebugMode) return;
+  String redact(String text) => text
+      .replaceAll(
+        RegExp(r'Bearer\s+\S+', caseSensitive: false),
+        'Bearer [redacted]',
+      )
+      .replaceAll(RegExp(r'\beyJ[A-Za-z0-9_.-]+'), '[token]')
+      .replaceAll(RegExp(r'sb_[A-Za-z0-9_-]+'), '[key]')
+      .replaceAll(
+        RegExp(r'[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}', caseSensitive: false),
+        '[email]',
+      )
+      .replaceAll(RegExp(r'\d{7,}'), '[number]')
+      .replaceAll(RegExp(r'''(["']).*?\1'''), '[quoted]');
+  debugPrint('Motel SQL Connect: ${error.runtimeType}');
+  for (final message in _sqlConnectErrorMessages(error)) {
+    final safe = redact(message);
+    debugPrint(safe.length > 1200 ? '${safe.substring(0, 1200)}…' : safe);
+  }
 }
