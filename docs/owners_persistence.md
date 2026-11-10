@@ -165,6 +165,38 @@ Para publicarlas (y los índices):
 firebase deploy --only firestore:rules,indexes
 ```
 
+## Vista del propietario y perfil
+
+- La pantalla de moteles del propietario (`owner_motels_page.dart`) usa el uid
+  real de la sesión (`CurrentUser.uid`) y su perfil de `users/{uid}` para
+  mostrar el nombre en el menú y el chip. Ya no existe el `DropdownButton` con
+  propietarios de ejemplo ni el id `owner-1020304050`.
+- `MotelController.getMyMotels()` filtra por el uid de la sesión (inyectable en
+  los tests). El formulario de motel también usa ese uid como dueño por
+  defecto, y la vista de administración ya no cae en un id ficticio.
+- El propietario tiene **Mi perfil** en el menú (`/motels/owner/profile`):
+  muestra nombre, correo, teléfono, NIT, tipo de persona, plan y estado de la
+  cuenta. Solo puede editar **nombre y teléfono**, que es lo que
+  `firestore.rules` permite autoeditar; el documento y el estado los cambia un
+  administrador.
+
+## Eliminación de propietarios con moteles
+
+Un propietario **no se elimina si tiene moteles vinculados** en Supabase: los
+moteles quedarían huérfanos (ningún propietario los vería y las reservas
+apuntarían a una cuenta inexistente).
+
+- `OwnerController.deleteOwner` consulta los moteles del propietario antes de
+  tocar nada (`MotelController.getMotelsByOwnerId`, con la caché local como
+  respaldo de `MotelRepository`).
+- Si hay al menos uno, devuelve un error con el número y los nombres:
+  «No se puede eliminar a X: tiene N moteles vinculados (A, B). Reasígnalos o
+  elimínalos primero.» No se marca `pendingDelete` ni se reintenta.
+- Si no se pudo verificar (sin red), también se bloquea y se pide reintentar:
+  es preferible no borrar a dejar moteles huérfanos.
+- La salida es reasignar el `owner_id` de los moteles o eliminarlos; después el
+  borrado sigue su curso normal.
+
 ## shared_preferences
 
 - `OwnerPreferences` (namespace `owners`) guarda `lastCountryCodeId`: el último

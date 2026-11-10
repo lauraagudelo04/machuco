@@ -32,6 +32,7 @@ void main() {
     OwnerPreferences? preferences,
     OwnerCloudRepository? cloudRepository,
     String? currentUserId = 'admin-1',
+    Future<List<String>> Function(String ownerId)? motelNamesLoader,
   }) {
     final controller = OwnerController(
       service: OwnerService(repository: OwnerRepository(database: database)),
@@ -39,6 +40,9 @@ void main() {
       preferences: preferences,
       cloudRepository: cloudRepository,
       currentUserId: () => currentUserId,
+      // Por defecto el propietario no tiene moteles: el borrado sigue su
+      // curso. Los tests del bloqueo inyectan un cargador con nombres.
+      motelNamesLoader: motelNamesLoader ?? (_) async => const [],
     );
     // Cancela el temporizador de reintentos al terminar cada prueba.
     addTearDown(controller.dispose);
@@ -624,6 +628,49 @@ void main() {
         );
       },
     );
+
+    test('no elimina un propietario con moteles vinculados', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (_) async => const [
+          'Motel Paraíso Élite',
+          'Motel El Edén',
+        ],
+      );
+      await controller.init();
+      final totalBefore = controller.owners.length;
+
+      final deleted = await controller.deleteOwner('uid-1');
+
+      expect(deleted, isNull);
+      expect(controller.lastError, contains('No se puede eliminar'));
+      expect(controller.lastError, contains('2 moteles vinculados'));
+      expect(controller.lastError, contains('Motel Paraíso Élite'));
+      expect(cloud.remote.containsKey('uid-1'), isTrue);
+      expect(controller.owners, hasLength(totalBefore));
+      expect(
+        await OwnerRepository(database: database).findPendingDeletes(),
+        isEmpty,
+      );
+    });
+
+    test('no elimina si no se pudo verificar los moteles', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(
+        cloudRepository: cloud,
+        motelNamesLoader: (_) async => throw Exception('sin red'),
+      );
+      await controller.init();
+
+      final deleted = await controller.deleteOwner('uid-1');
+
+      expect(deleted, isNull);
+      expect(controller.lastError, contains('No se pudo verificar'));
+      expect(cloud.remote.containsKey('uid-1'), isTrue);
+    });
 
     test('el pull remoto no resucita un borrado pendiente', () async {
       final cloud = _FakeOwnerCloudRepository()

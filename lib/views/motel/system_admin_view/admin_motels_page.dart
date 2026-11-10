@@ -61,7 +61,8 @@ class _AdminMotelsPageState extends State<AdminMotelsPage> {
     } else if (_owners.isNotEmpty) {
       _currentOwnerId = _owners.first.id;
     } else {
-      _currentOwnerId = 'owner-1020304050'; 
+      // Sin propietarios no se inventa un id: el listado queda vacío.
+      _currentOwnerId = '';
     }
 
     final motelesObtenidos = await _motelController.getMotelsByOwnerId(_currentOwnerId);

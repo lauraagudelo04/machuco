@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
@@ -50,12 +51,14 @@ class OwnerController extends ChangeNotifier {
     OwnerCloudRepository? cloudRepository,
     String? Function()? currentUserId,
     OwnerSyncRetryScheduler? syncRetryScheduler,
+    Future<List<String>> Function(String ownerId)? motelNamesLoader,
   }) : _service = service ?? OwnerService(),
        _documentTypeRepository =
            documentTypeRepository ?? DocumentTypeRepository(),
        _cloudRepository =
            cloudRepository ??
            (service == null ? FirestoreOwnerCloudRepository() : null),
+       _motelNamesLoader = motelNamesLoader ?? _loadMotelNames,
        _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
     _syncRetry =
         syncRetryScheduler ??
@@ -79,6 +82,12 @@ class OwnerController extends ChangeNotifier {
   final OwnerCloudRepository? _cloudRepository;
 
   final String? Function() _currentUserId;
+
+  /// Devuelve los nombre de los moteles vinculados a un propietario.
+  ///
+  /// Se usa antes de eliminar: un propietario con moteles no se borra para no
+  /// dejarlos huérfanos. Es inyectable para probar el bloqueo sin Supabase.
+  final Future<List<String>> Function(String ownerId) _motelNamesLoader;
 
   /// Preferencias locales del módulo. Es opcional para que los tests de
   /// persistencia no dependan de `shared_preferences`.
@@ -495,15 +504,32 @@ class OwnerController extends ChangeNotifier {
 
   /// Elimina un propietario de forma permanente y devuelve el que se quitó.
   ///
-  /// A diferencia de [setActiveState], la operación no se puede deshacer. Con
-  /// conexión se borra primero el documento remoto; sin conexión la fila se
-  /// oculta con `pendingDelete = 1` y la sincronización la borra en Firestore
-  /// cuando vuelva la red. Así el próximo pull no la resucita y el usuario ve
-  /// el listado consistente de inmediato.
+  /// A diferencia de [setActiveState], la operación no se puede deshacer. Un
+  /// propietario con moteles vinculados no se elimina: sus moteles quedarían
+  /// huérfanos (nadie los vería y las reservas apuntarían a una cuenta
+  /// inexistente). Con conexión se borra primero el documento remoto; sin
+  /// conexión la fila se oculta con `pendingDelete = 1` y la sincronización la
+  /// borra en Firestore cuando vuelva la red.
   Future<Owner?> deleteOwner(String ownerId) async {
     final owner = _findOwner(ownerId);
     if (owner == null) {
       _lastError = 'El propietario ya no existe.';
+      notifyListeners();
+      return null;
+    }
+
+    final List<String> motelNames;
+    try {
+      motelNames = await _motelNamesLoader(ownerId);
+    } catch (_) {
+      _lastError =
+          'No se pudo verificar si ${owner.fullName} tiene moteles vinculados. '
+          'Revisa tu conexión e inténtalo de nuevo.';
+      notifyListeners();
+      return null;
+    }
+    if (motelNames.isNotEmpty) {
+      _lastError = _motelsBlockMessage(owner, motelNames);
       notifyListeners();
       return null;
     }
@@ -732,6 +758,23 @@ class OwnerController extends ChangeNotifier {
       if (code.dialCode == dial) return code.id;
     }
     return null;
+  }
+
+  /// Moteles vinculados según Supabase (con la caché local como respaldo).
+  static Future<List<String>> _loadMotelNames(String ownerId) async {
+    final motels = await MotelController.persistent().getMotelsByOwnerId(
+      ownerId,
+    );
+    return [for (final motel in motels) motel.name];
+  }
+
+  String _motelsBlockMessage(Owner owner, List<String> names) {
+    final cantidad = names.length;
+    final plural = cantidad == 1 ? 'motel vinculado' : 'moteles vinculados';
+    final shown = names.take(3).join(', ');
+    final rest = cantidad > 3 ? ' y ${cantidad - 3} más' : '';
+    return 'No se puede eliminar a ${owner.fullName}: tiene $cantidad $plural '
+        '($shown$rest). Reasígnalos o elimínalos primero.';
   }
 
   Owner? _findOwner(String id) {

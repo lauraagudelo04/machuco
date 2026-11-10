@@ -628,3 +628,22 @@ aparecían como propietarios que no existen en Firebase.
 usuarios con `role = owner`. La migración **18→19** borra del dispositivo las
 filas con id `owner-...` (idempotente: un uid de Firebase Auth nunca empieza
 por ese prefijo). La próxima rama que migre usa la 20.
+
+## 2026-11-09 — Perfil del propietario y bloqueo de eliminación con moteles
+
+**Contexto:** la vista de moteles del propietario usaba un id y nombres
+quemados (`owner-1020304050`, «Laura Gómez») y no existía una pantalla para que
+el propietario viera o ajustara sus datos. Además, borrar un propietario con
+moteles dejaba los moteles huérfanos.
+
+**Decisión:**
+
+- La vista toma el uid de `CurrentUser` y el nombre de `users/{uid}`; se retira
+  el selector de propietarios de ejemplo.
+- Se agrega «Mi perfil» (`/motels/owner/profile`): el propietario ve sus datos
+  y edita solo nombre y teléfono, que es lo que las reglas permiten
+  autoeditar. El documento, el rol y el estado siguen siendo del administrador.
+- `deleteOwner` se bloquea si el propietario tiene moteles: se listan los
+  nombres y se pide reasignarlos o eliminarlos. Si no se puede verificar por
+  falta de red, también se bloquea. No se elige transferencia automática para
+  no reasignar moteles sin que un humano lo confirme.

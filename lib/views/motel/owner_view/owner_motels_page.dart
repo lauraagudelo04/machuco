@@ -9,6 +9,10 @@ import '../../payment/owner_view/owner_payment_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
+import '../../../service/auth/auth_preferences.dart';
+import '../../../service/firebase/current_user.dart';
+import '../../../database/repository/auth/user_profile_repository.dart';
+import 'owner_profile_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -27,21 +31,66 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String _searchQuery = '';
 
-  String _currentOwnerId = 'owner-1020304050';
-  final Map<String, String> _dummyOwners = {
-    'owner-1020304050': 'Laura Gómez (Propietaria)',
-    'owner-900123456': 'Inversiones Machuco S.A.S.',
-    'owner-345678': 'Simón Restrepo',
-  };
+  /// Uid del propietario con la sesión iniciada. Antes esta pantalla usaba un
+  /// id y una lista de nombres quemados de la etapa de desarrollo.
+  late final String _currentOwnerId = CurrentUser.uid ?? '';
+  String? _ownerName;
+  String? _ownerEmail;
+
+  /// Nombre a mostrar: el del perfil de `users/{uid}`, o su correo.
+  String get _displayName {
+    final name = _ownerName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final email = _ownerEmail?.trim();
+    if (email != null && email.isNotEmpty) return email;
+    return 'Propietario';
+  }
+
+  String get _firstName => _displayName.split(' ').first;
 
   @override
   void initState() {
     super.initState();
+    _loadSession();
     _loadMotels();
+  }
+
+  /// Carga el nombre y el correo reales de la sesión para el menú y el chip.
+  ///
+  /// Si Firebase no responde se conserva el correo de `shared_preferences`:
+  /// el encabezado nunca bloquea el listado de moteles.
+  Future<void> _loadSession() async {
+    try {
+      final email = await AuthPreferences().loadCurrentUserEmail();
+      if (mounted && email != null) setState(() => _ownerEmail = email);
+    } catch (_) {
+      // Sin preferencias disponibles se usa el perfil o el texto genérico.
+    }
+    if (_currentOwnerId.isEmpty) return;
+    try {
+      final profile = await FirestoreUserProfileRepository().getProfile(
+        _currentOwnerId,
+      );
+      if (!mounted || profile == null) return;
+      setState(() {
+        _ownerName = profile.fullName;
+        _ownerEmail = profile.email;
+      });
+    } catch (_) {
+      // Sin conexión se mantiene el correo guardado localmente.
+    }
   }
 
   Future<void> _loadMotels() async {
     setState(() => _isLoading = true);
+
+    if (_currentOwnerId.isEmpty) {
+      setState(() {
+        _motels = [];
+        _isLoading = false;
+      });
+      return;
+    }
 
     try {
       final motelesObtenidos = await _motelController.getMotelsByOwnerId(
@@ -147,36 +196,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _currentOwnerId,
-            dropdownColor: Theme.of(context).cardColor,
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-            items: _dummyOwners.entries.map((entry) {
-              return DropdownMenuItem<String>(
-                value: entry.key,
-                child: Text(
-                  entry.value,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-              );
-            }).toList(),
-            onChanged: (String? newOwnerId) {
-              if (newOwnerId != null && newOwnerId != _currentOwnerId) {
-                setState(() {
-                  _currentOwnerId = newOwnerId;
-                  _searchQuery = '';
-                });
-                _loadMotels();
-              }
-            },
-          ),
+        title: Text(
+          'Mis moteles',
+          style: Theme.of(
+            context,
+          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         leadingWidth: 68,
         leading: Padding(
@@ -233,11 +257,24 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: ${_dummyOwners[_currentOwnerId]}',
+                    'Sesión: $_displayName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
               ),
+            ),
+            _MenuTile(
+              icon: Icons.person_outline,
+              title: 'Mi perfil',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const OwnerProfilePage(),
+                  ),
+                );
+              },
             ),
             _MenuTile(
               icon: Icons.card_membership_outlined,
@@ -289,7 +326,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _dummyOwners[_currentOwnerId]?.split(' ').first ?? '',
+                    _firstName,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(
@@ -314,9 +351,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _motels.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Aún no tienes establecimientos registrados.',
+                        _currentOwnerId.isEmpty
+                            ? 'Inicia sesión para ver tus establecimientos.'
+                            : 'Aún no tienes establecimientos registrados.',
                       ),
                     )
                   : filteredMotels.isEmpty

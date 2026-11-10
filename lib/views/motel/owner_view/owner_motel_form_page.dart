@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import './../../../controllers/motel/motel_controller.dart';
+import '../../../service/firebase/current_user.dart';
 import '../../../utils/motel_form_validators.dart';
 import '../../../widgets/motel/phone_number_field.dart';
 
@@ -125,7 +126,8 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       id: widget.isEditing && widget.motel != null
           ? widget.motel!.id
           : 'motel_${DateTime.now().millisecondsSinceEpoch}',
-      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner-1020304050',
+      ownerId:
+          widget.ownerId ?? widget.motel?.ownerId ?? CurrentUser.uid ?? '',
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
       roomCount: roomCountParsed,

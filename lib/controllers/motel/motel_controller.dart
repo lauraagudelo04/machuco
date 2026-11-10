@@ -1,10 +1,15 @@
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 class MotelController {
-  MotelController({MotelRepository? repository}) : _repository = repository;
+  MotelController({
+    MotelRepository? repository,
+    String? Function()? currentUserId,
+  }) : _repository = repository,
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid);
 
   factory MotelController.persistent() {
     return MotelController(
@@ -20,6 +25,9 @@ class MotelController {
   }
 
   final MotelRepository? _repository;
+
+  /// Uid del propietario con la sesión iniciada. Inyectable para los tests.
+  final String? Function() _currentUserId;
 
   static final List<Motel> _mockDatabase = [
     Motel(
@@ -73,16 +81,16 @@ class MotelController {
   ];
 
   Future<List<Motel>> getMyMotels() async {
+    final ownerId = _currentUserId();
+    if (ownerId == null || ownerId.trim().isEmpty) return const [];
     if (_repository == null) {
       await Future.delayed(const Duration(seconds: 1));
-      const currentLoggedInUserId = 'owner-1020304050';
       return _mockDatabase
-          .where((motel) => motel.ownerId == currentLoggedInUserId)
+          .where((motel) => motel.ownerId == ownerId)
           .toList();
     }
     final motels = await _repository.getMotels();
-    const currentLoggedInUserId = 'owner-1020304050';
-    return motels.where((motel) => motel.ownerId == currentLoggedInUserId).toList();
+    return motels.where((motel) => motel.ownerId == ownerId).toList();
   }
 
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {

@@ -124,6 +124,27 @@ Feature: CRUD de propietarios de moteles — registro, edición y consulta
     And El cambio pendiente se envía a users
     And El aviso desaparece
 
+  Scenario: El propietario ve sus propios datos en la vista de moteles
+    Given El propietario inició sesión con Firebase
+    When Abre la pantalla de moteles
+    Then El menú muestra "Sesión: {nombre real}" y el chip su primer nombre
+    And Solo se listan los moteles cuyo owner_id es su uid
+    And No aparece ningún selector de propietarios de ejemplo
+
+  Scenario: El propietario edita su perfil
+    Given El propietario inició sesión con Firebase
+    When Abre "Mi perfil" desde el menú
+    Then Ve su nombre, correo, teléfono, documento y estado de cuenta
+    And Puede cambiar su nombre y su teléfono
+    And No puede cambiar su correo, documento ni estado
+
+  Scenario: Bloquear la eliminación de un propietario con moteles
+    Given El propietario tiene al menos un motel vinculado en Supabase
+    When El administrador confirma su eliminación
+    Then El sistema no elimina la cuenta ni la fila local
+    And Muestra cuántos moteles tiene y sus nombres
+    And Le pide reasignarlos o eliminarlos primero
+
   Scenario: Eliminar un propietario sin conexión
     Given El dispositivo está en modo avión
     And Existe un propietario sincronizado en Firestore
