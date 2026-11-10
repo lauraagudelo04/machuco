@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_colors.dart';
+import 'package:machuco/core/design_system/tokens/app_opacity.dart';
 import 'package:machuco/core/design_system/tokens/app_radius.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/utils/currency_formatter.dart';
@@ -125,7 +126,9 @@ class MotelReservationKpiCard extends StatelessWidget {
                     vertical: AppSpacing.s1,
                   ),
                   decoration: BoxDecoration(
-                    color: highlightColor.withValues(alpha: .14),
+                    color: highlightColor.withValues(
+                      alpha: AppOpacity.selectedFill,
+                    ),
                     borderRadius: BorderRadius.circular(AppRadius.pill),
                   ),
                   child: Row(

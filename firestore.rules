@@ -95,6 +95,79 @@ service cloud.firestore {
       ];
     }
 
+    // Reservas: campos y tipos permitidos (mismo esquema que
+    // ReservationFirestoreDocument en la app).
+    function hasValidReservationFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'guestId', 'guestName', 'requestId', 'motelId',
+          'motelName', 'roomId', 'roomName', 'roomNumber', 'checkIn',
+          'checkOut', 'stayMode', 'guestCount', 'services', 'products',
+          'roomTotal', 'total', 'status', 'createdAt', 'invoiceAccessStatus',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'guestId', 'guestName', 'requestId', 'motelId',
+          'motelName', 'roomId', 'roomName', 'roomNumber', 'checkIn',
+          'checkOut', 'stayMode', 'guestCount', 'services', 'products',
+          'roomTotal', 'total', 'status', 'createdAt', 'categoryId',
+          'cancellationReason', 'invoiceAccessStatus', 'paymentMethod',
+          'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.guestId is string && data.guestId.size() > 0
+        && data.guestName is string && data.guestName.size() <= 100
+        && data.requestId is string && data.requestId.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.motelName is string && data.motelName.size() > 0
+        && data.roomId is string && data.roomId.size() > 0
+        && data.roomName is string && data.roomName.size() > 0
+        && data.roomNumber is string && data.roomNumber.size() > 0
+        && data.checkIn is timestamp
+        && data.checkOut is timestamp
+        && data.checkOut > data.checkIn
+        && data.stayMode in ['dateTimeRange', 'dateWithHourBlock']
+        && data.guestCount is int && data.guestCount > 0
+        && data.services is list && data.services.size() <= 50
+        && data.products is list && data.products.size() <= 50
+        && data.roomTotal is int && data.roomTotal >= 0
+        && data.total is int && data.total >= data.roomTotal
+        && data.status in
+          ['pending', 'active', 'upcoming', 'completed', 'cancelled']
+        && data.createdAt is timestamp
+        && (!('categoryId' in data) || data.categoryId is int)
+        && (!('cancellationReason' in data)
+          || (data.cancellationReason is string
+            && data.cancellationReason.size() > 0
+            && data.cancellationReason.size() <= 500))
+        && data.invoiceAccessStatus in
+          ['notApplicable', 'pending', 'available']
+        && (!('paymentMethod' in data)
+          || (data.paymentMethod is string
+            && data.paymentMethod.size() > 0
+            && data.paymentMethod.size() <= 100))
+        && data.updatedAt == request.time;
+    }
+
+    // Mismas transiciones que BookingService: pago, cancelacion y las que
+    // ocurren por el paso del tiempo (pueden encadenarse en una escritura).
+    function isValidReservationTransition(previous, next) {
+      return previous == next
+        || (previous == 'pending'
+          && next in ['upcoming', 'active', 'completed', 'cancelled'])
+        || (previous == 'upcoming'
+          && next in ['active', 'completed', 'cancelled'])
+        || (previous == 'active' && next == 'completed');
+    }
+
+    // El cliente, el propietario del motel o el admin pueden avanzar el
+    // estado; nunca cambiar quien es el cliente, el motel, las fechas o el
+    // valor de la reserva.
+    function isReservationParticipant(data) {
+      return isAdmin()
+        || (isActiveClient() && data.guestId == request.auth.uid)
+        || (isActiveOwner() && data.ownerId == request.auth.uid);
+    }
+
     // Nombre y celular con tipo y largo acotados (mismos limites que la app).
     function hasValidContactFields(data) {
       return data.fullName is string
@@ -298,19 +371,21 @@ service cloud.firestore {
     // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
     // se pueden asignar en la creacion (valores iniciales) o por un admin.
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin() || isActiveOwner());
 
       // Registro publico (nunca admin; cliente activo, propietario pendiente)
       // o creacion de un administrador por otro administrador activo.
-      allow create: if isPublicRegistration(uid) || isAdminCreation(uid);
+      allow create: if isPublicRegistration(uid) || isAdminCreation(uid) || isActiveOwner()
+        || isAdminOwnerCreation(uid);
 
       // Un admin activo (a) atiende solicitudes de propietarios pendientes
-      // (ver isOwnerApprovalDecision), (b) habilita/deshabilita cuentas que
-      // no son de administrador, (c) edita datos de contacto de un admin
-      // activo o (d) anonimiza un admin activo; nunca cambia el rol ni el
-      // correo. El propio usuario solo puede cambiar su nombre y su celular y,
-      // si es un admin con contrasena temporal, limpiar mustChangePassword.
-      // Ninguna rama modifica una cuenta anonimizada.
+      // (ver isOwnerApprovalDecision), (b) crea y edita propietarios
+      // (isAdminOwnerCreation / isAdminOwnerEdit), (c) habilita/deshabilita
+      // cuentas que no son de administrador, (d) edita datos de contacto de
+      // un admin activo o (e) anonimiza un admin activo; nunca cambia el rol
+      // ni el correo. El propio usuario solo puede cambiar su nombre y su
+      // celular y, si es un admin con contrasena temporal, limpiar
+      // mustChangePassword. Ninguna rama modifica una cuenta anonimizada.
       allow update: if resource.data.get('accountStatus', '') != 'anonymized'
         && (isOwnerApprovalDecision(uid)
         || (isActiveAdmin()
@@ -320,6 +395,7 @@ service cloud.firestore {
               .hasOnly(['accountStatus'])
           && request.resource.data.accountStatus in ['active', 'disabled'])
         || isAdminContactEdit()
+        || isAdminOwnerEdit()
         || isAdminAnonymization()
         || (isSignedIn()
           && request.auth.uid == uid
@@ -331,13 +407,16 @@ service cloud.firestore {
               && request.resource.data.mustChangePassword == false))));
 
       // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
-      // tras reautenticarse). Las subcolecciones no se borran en cascada.
-      // Un admin no lo borra: se anonimiza (ver isAdminAnonymization) para
-      // conservar la auditoria y respetar "siempre hay un admin activo".
-      allow delete: if isSignedIn()
-        && request.auth.uid == uid
-        && resource.data.role != 'admin'
-        && resource.data.get('accountStatus', '') != 'anonymized';
+      // tras reautenticarse) y un admin activo puede borrar cuentas que no
+      // son de administrador (propietarios y clientes). Las subcolecciones no
+      // se borran en cascada. Un admin no se borra: se anonimiza (ver
+      // isAdminAnonymization) para conservar la auditoria y respetar
+      // "siempre hay un admin activo".
+      allow delete: if (isSignedIn()
+          && request.auth.uid == uid
+          && resource.data.role != 'admin'
+          && resource.data.get('accountStatus', '') != 'anonymized')
+        || (isActiveAdmin() && resource.data.role != 'admin');
 
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
@@ -407,6 +486,108 @@ service cloud.firestore {
           request.resource.data.status
         )
         && hasValidPaymentFields(request.resource.data);
+
+      allow delete: if false;
+    }
+
+    // Propietarios: son usuarios registrados (`users/{uid}` con role owner).
+    // El panel de administracion crea la cuenta con password temporal y
+    // escribe los datos legales; `nit` y `personType` se mantienen
+    // sincronizados con `documentNumber` y `documentType` para que el
+    // documento siga siendo valido para el registro y la aprobacion.
+    function hasValidOwnerManagementFields(data) {
+      return data.documentType in [
+          'citizenshipCard', 'foreignerCard', 'taxId', 'passport',
+          'identityCard']
+        && data.documentNumber is string
+        && data.documentNumber.size() >= 5 && data.documentNumber.size() <= 20
+        && data.personType in ['natural', 'juridica']
+        && data.nit is string && data.nit == data.documentNumber
+        && (!('address' in data)
+          || (data.address is string && data.address.size() <= 200))
+        && (!('countryCode' in data)
+          || (data.countryCode is string
+            && data.countryCode.size() >= 2 && data.countryCode.size() <= 6))
+        && (!('countryName' in data)
+          || (data.countryName is string && data.countryName.size() <= 60))
+        && (!('phone' in data)
+          || (data.phone is string && data.phone.size() <= 25));
+    }
+
+    // Un admin activo crea la cuenta de un propietario: nace activa o
+    // pendiente de aprobacion (lo decide el admin), con password temporal y
+    // auditada. El correo debe ser el de la cuenta de Auth recien creada.
+    function isAdminOwnerCreation(uid) {
+      let data = request.resource.data;
+      return isActiveAdmin()
+        && request.auth.uid != uid
+        && data.role == 'owner'
+        && data.accountStatus in ['active', 'pending_approval']
+        && data.keys().hasAll([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'createdBy', 'mustChangePassword', 'documentType',
+          'documentNumber', 'nit', 'personType'])
+        && data.keys().hasOnly([
+          'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
+          'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
+          'personType', 'nit', 'companyName', 'planId', 'documentType',
+          'documentNumber', 'address', 'countryCode', 'countryName', 'phone',
+          'createdBy', 'mustChangePassword', 'updatedBy', 'updatedAt'])
+        && hasValidContactFields(data)
+        && hasValidCommonExtras(data)
+        && hasValidOwnerManagementFields(data)
+        && data.email is string && data.email.size() <= 254
+        && data.email.matches('^[^@ ]+@[^@ ]+\\.[^@ ]+$')
+        && data.mustChangePassword == true
+        && data.createdBy == request.auth.uid
+        && data.createdAt == request.time;
+    }
+
+    // Un admin activo edita los datos legales y de contacto de un
+    // propietario. Nunca el correo, el rol ni el estado.
+    function isAdminOwnerEdit() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'owner'
+        && after.role == 'owner'
+        && after.accountStatus == before.accountStatus
+        && after.email == before.email
+        && after.diff(before).affectedKeys().hasOnly([
+          'fullName', 'firstNames', 'lastNames', 'phone', 'phoneNumber',
+          'phoneCountryCodeId', 'documentType', 'documentNumber', 'nit',
+          'personType', 'address', 'countryCode', 'countryName',
+          'companyName', 'planId', 'updatedBy', 'updatedAt'])
+        && hasValidContactFields(after)
+        && hasValidCommonExtras(after)
+        && hasValidOwnerManagementFields(after)
+        && after.updatedBy == request.auth.uid
+        && after.updatedAt == request.time;
+    }
+
+    // Reservas compartidas por cliente, propietario y administrador
+    // (ReservationCloudRepository). El cliente ve las suyas, el propietario
+    // las de sus moteles (ownerId) y el admin todas. Solo el cliente las crea,
+    // a su nombre. El estado inicial puede no ser `pending` si la reserva se
+    // pago sin conexion antes de sincronizarse.
+    match /reservations/{reservationId} {
+      allow read: if isReservationParticipant(resource.data);
+
+      allow create: if isActiveClient()
+        && request.resource.data.guestId == request.auth.uid
+        && request.resource.data.ownerId != request.auth.uid
+        && hasValidReservationFields(request.resource.data);
+
+      allow update: if isReservationParticipant(resource.data)
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'cancellationReason', 'invoiceAccessStatus',
+          'paymentMethod', 'updatedAt'
+        ])
+        && isValidReservationTransition(
+          resource.data.status,
+          request.resource.data.status
+        )
+        && hasValidReservationFields(request.resource.data);
 
       allow delete: if false;
     }

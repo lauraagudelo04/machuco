@@ -19,8 +19,13 @@ import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:machuco/models/additional_service/additional_service_category.dart';
 import 'package:machuco/models/additional_service/additional_service_entry.dart';
+import 'package:machuco/models/booking/reservation_category.dart';
+import 'package:machuco/models/booking/reservation_entity.dart';
+import 'package:machuco/models/booking/reservation_line_item_entity.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/booking/reservation_category_dao.dart';
+import 'package:machuco/repositories/booking/reservation_dao.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/database/repository/phone_country_code/phone_country_code_repository.dart';
@@ -37,7 +42,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 15,
+  version: 16,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -51,6 +56,9 @@ part 'app_database.g.dart';
     AuthUserProfileEntry,
     AdditionalServiceCategory,
     AdditionalServiceEntry,
+    ReservationCategory,
+    ReservationEntity,
+    ReservationLineItemEntity,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -69,6 +77,10 @@ abstract class AppDatabase extends FloorDatabase {
   PhoneCountryCodeDao get phoneCountryCodeDao;
   MotelDao get motelDao;
   AuthUserProfileDao get authUserProfileDao;
+
+  ReservationCategoryDao get reservationCategoryDao;
+
+  ReservationDao get reservationDao;
 }
 
 class AppDatabaseProvider {
@@ -98,6 +110,7 @@ class AppDatabaseProvider {
         migration12To13,
         migration13To14,
         migration14To15,
+        migration15To16,
       ])
       .addCallback(
         Callback(
@@ -415,10 +428,56 @@ final migration13To14 = Migration(13, 14, (database) async {
   );
 });
 
+/// Reservas (módulo booking). Debe coincidir con los `CREATE TABLE` que Floor
+/// genera para `ReservationCategory`, `ReservationEntity` y
+/// `ReservationLineItemEntity`.
+final migration14To15 = Migration(14, 15, (database) async {
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_categories` (`id` INTEGER NOT NULL, '
+    '`name` TEXT NOT NULL, PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservations` (`id` TEXT NOT NULL, '
+    '`requestId` TEXT NOT NULL, `motelId` TEXT NOT NULL, '
+    '`motelName` TEXT NOT NULL, `roomId` TEXT NOT NULL, '
+    '`roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, '
+    '`checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, '
+    '`stayMode` TEXT NOT NULL, `guestCount` INTEGER NOT NULL, '
+    '`roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, '
+    '`status` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, '
+    '`guestId` TEXT NOT NULL, `guestName` TEXT NOT NULL, '
+    '`categoryId` INTEGER, `cancellationReason` TEXT, '
+    '`invoiceAccessStatus` TEXT NOT NULL, `paymentMethod` TEXT, '
+    'PRIMARY KEY (`id`))',
+  );
+  await database.execute(
+    'CREATE TABLE IF NOT EXISTS `reservation_line_items` ('
+    '`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, '
+    '`reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, '
+    '`itemId` TEXT NOT NULL, `name` TEXT NOT NULL, '
+    '`unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, '
+    '`position` INTEGER NOT NULL, '
+    'FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) '
+    'ON UPDATE NO ACTION ON DELETE CASCADE)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_requestId` '
+    'ON `reservations` (`requestId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservations_motelId` '
+    'ON `reservations` (`motelId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_reservation_line_items_reservationId` '
+    'ON `reservation_line_items` (`reservationId`)',
+  );
+});
+
 /// Agrega el maestro de categorías de servicios adicionales y la tabla
 /// local de servicios adicionales. También completa las tablas de pagos y
 /// clientes en bases que quedaron en la versión 7 con otro esquema.
-final migration14To15 = Migration(14, 15, (database) async {
+final migration15To16 = Migration(15, 16, (database) async {
   await _createPaymentSchema(database);
   await _createClientSchema(database);
   await database.execute(
