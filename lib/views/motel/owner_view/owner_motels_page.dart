@@ -48,9 +48,8 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
       if (_currentOwnerId.isEmpty) {
         throw StateError('Inicia sesión para consultar tus moteles.');
       }
-      final motelesObtenidos = await _motelController.getMotelsByOwnerId(
-        _currentOwnerId,
-      );
+      // El backend filtra por el propietario de la sesión (token de Firebase).
+      final motelesObtenidos = await _motelController.getMyMotels();
 
       if (!mounted) return;
       setState(() {

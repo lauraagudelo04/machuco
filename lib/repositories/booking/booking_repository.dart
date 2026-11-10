@@ -1,6 +1,7 @@
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
-import 'package:machuco/database/repository/motel/motel_repository.dart';
+import 'package:machuco/database/repository/motel/motel_sql_connect_gateway.dart';
+import 'package:machuco/database/repository/motel/sql_connect_motel_repository.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/booking/reservation_entity.dart';
 import 'package:machuco/models/booking/reservation_line_item_entity.dart';
@@ -10,7 +11,6 @@ import 'package:machuco/repositories/booking/reservation_cloud_repository.dart';
 import 'package:machuco/repositories/booking/reservation_mapper.dart';
 import 'package:machuco/repositories/booking/synced_booking_repository.dart';
 import 'package:machuco/service/firebase/current_user.dart';
-import 'package:machuco/service/phone_country_code/supabase_phone_country_code_config.dart';
 
 /// Storage access for reservations. Controllers and the booking service
 /// depend on this interface only, so a persistent implementation (for
@@ -204,22 +204,19 @@ class BookingRepositoryProvider {
   /// `main` after Firebase is initialized; tests keep the in-memory default.
   static void useDatabase() {
     final profiles = FirestoreUserProfileRepository();
-    final motels = MotelRepository(
-      baseUrl: SupabasePhoneCountryCodeConfig.baseUrl,
-      apiKey: SupabasePhoneCountryCodeConfig.apiKey,
+    // Motels live in Firebase SQL Connect (see docs/sql_connect.md).
+    final motels = SqlConnectMotelRepository(
+      gateway: GeneratedMotelSqlConnectGateway(),
       daoProvider: () async => (await AppDatabaseProvider.database).motelDao,
+      currentUid: () => CurrentUser.uidOrNull,
     );
     instance = SyncedBookingRepository(
       local: LazyBookingRepository(),
       cloud: FirestoreReservationCloudRepository(),
       currentUid: () => CurrentUser.uidOrNull,
       roleOf: (uid) async => (await profiles.getProfile(uid))?.role,
-      ownerIdForMotel: (motelId) async {
-        for (final motel in await motels.getMotels()) {
-          if (motel.id == motelId) return motel.ownerId;
-        }
-        return null;
-      },
+      ownerIdForMotel: (motelId) async =>
+          (await motels.getMotelById(motelId))?.ownerId,
     );
   }
 }
