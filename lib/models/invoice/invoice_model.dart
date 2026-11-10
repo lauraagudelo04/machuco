@@ -4,36 +4,26 @@ import 'package:machuco/models/payment_method/payment_method_model.dart';
 /// Línea de servicio o producto "congelada" dentro de una factura.
 class InvoiceLineItem {
   const InvoiceLineItem({
+    required this.id,
     required this.name,
     required this.unitPrice,
     required this.quantity,
   });
 
-  factory InvoiceLineItem.fromJson(Map<String, dynamic> json) =>
-      InvoiceLineItem(
-        name: json['name'] as String,
-        unitPrice: (json['unit_price'] as num).toInt(),
-        quantity: (json['quantity'] as num).toInt(),
-      );
-
   factory InvoiceLineItem.fromReservationItem(ReservationLineItem item) =>
       InvoiceLineItem(
+        id: item.id,
         name: item.name,
         unitPrice: item.unitPrice,
         quantity: item.quantity,
       );
 
+  final String id;
   final String name;
   final int unitPrice;
   final int quantity;
 
   int get subtotal => unitPrice * quantity;
-
-  Map<String, dynamic> toJson() => {
-    'name': name,
-    'unit_price': unitPrice,
-    'quantity': quantity,
-  };
 }
 
 /// Datos del pago visibles en la factura. Nunca contiene el número completo
@@ -54,7 +44,7 @@ class InvoicePayment {
     final holder = paymentMethod.cardHolder.trim();
     final hasCard = digits.length >= 4;
     return InvoicePayment(
-      concept: paymentMethod.concept,
+      concept: paymentMethod.concept.trim(),
       amount: paymentMethod.amount,
       cardHolder: holder.isEmpty ? null : holder,
       cardLast4: hasCard ? digits.substring(digits.length - 4) : null,
@@ -69,10 +59,11 @@ class InvoicePayment {
   final int? installments;
 }
 
-/// Factura emitida y guardada en Supabase (tabla `invoices`).
+/// Factura emitida y guardada en Cloud Firestore (`invoices/{reservationId}`).
 ///
 /// Es una copia inmutable de la reserva y del pago en el momento de emitirla:
-/// si la reserva o el catálogo cambian después, la factura no cambia.
+/// si la reserva o el catálogo cambian después, la factura no cambia. Hay
+/// como máximo una factura por reserva, por eso [id] es el id de la reserva.
 class InvoiceModel {
   const InvoiceModel({
     required this.id,
@@ -94,45 +85,41 @@ class InvoiceModel {
     this.payment,
   });
 
-  factory InvoiceModel.fromJson(Map<String, dynamic> json) {
-    final concept = json['payment_concept'] as String?;
-    final amount = json['payment_amount'] as num?;
-    return InvoiceModel(
-      id: (json['id'] as num).toInt(),
-      invoiceNumber: json['invoice_number'] as String,
-      reservationId: json['reservation_id'] as String,
-      clientId: json['client_id'] as String?,
-      clientName: json['client_name'] as String?,
-      motelId: json['motel_id'] as String,
-      motelName: json['motel_name'] as String,
-      roomName: json['room_name'] as String,
-      roomNumber: json['room_number'] as String,
-      checkIn: DateTime.parse(json['check_in'] as String).toLocal(),
-      checkOut: DateTime.parse(json['check_out'] as String).toLocal(),
-      guestCount: (json['guest_count'] as num).toInt(),
-      items: (json['items'] as List<dynamic>)
-          .map(
-            (item) => InvoiceLineItem.fromJson(
-              Map<String, dynamic>.from(item as Map),
-            ),
-          )
-          .toList(growable: false),
-      roomTotal: (json['room_total'] as num).toInt(),
-      total: (json['total'] as num).toInt(),
-      payment: concept == null || amount == null
-          ? null
-          : InvoicePayment(
-              concept: concept,
-              amount: amount.toInt(),
-              cardHolder: json['card_holder'] as String?,
-              cardLast4: json['card_last4'] as String?,
-              installments: (json['installments'] as num?)?.toInt(),
-            ),
-      issuedAt: DateTime.parse(json['issued_at'] as String).toLocal(),
-    );
-  }
+  /// Construye la factura de [reservation] tal como debe quedar guardada.
+  ///
+  /// [issuedAt] es provisional: Firestore guarda la hora del servidor.
+  factory InvoiceModel.fromReservation(
+    Reservation reservation, {
+    PaymentMethodModel? paymentMethod,
+    DateTime? issuedAt,
+  }) => InvoiceModel(
+    id: reservation.id,
+    invoiceNumber: numberFor(reservation.id),
+    reservationId: reservation.id,
+    clientId: reservation.guestId.isEmpty ? null : reservation.guestId,
+    clientName: reservation.guestName.trim().isEmpty
+        ? null
+        : reservation.guestName.trim(),
+    motelId: reservation.motelId,
+    motelName: reservation.motelName,
+    roomName: reservation.roomName,
+    roomNumber: reservation.roomNumber,
+    checkIn: reservation.checkIn,
+    checkOut: reservation.checkOut,
+    guestCount: reservation.guestCount,
+    items: List.unmodifiable([
+      for (final item in [...reservation.services, ...reservation.products])
+        InvoiceLineItem.fromReservationItem(item),
+    ]),
+    roomTotal: reservation.roomTotal,
+    total: reservation.total,
+    payment: paymentMethod == null
+        ? null
+        : InvoicePayment.fromPaymentMethod(paymentMethod),
+    issuedAt: issuedAt ?? DateTime.now(),
+  );
 
-  final int id;
+  final String id;
   final String invoiceNumber;
   final String reservationId;
   final String? clientId;
@@ -147,44 +134,20 @@ class InvoiceModel {
   final List<InvoiceLineItem> items;
   final int roomTotal;
 
-  /// Total calculado por Supabase (habitación + servicios + productos).
+  /// Total de la reserva (habitación + servicios + productos), copiado de la
+  /// reserva guardada en Firebase al emitir la factura.
   final int total;
   final InvoicePayment? payment;
   final DateTime issuedAt;
 
-  /// Cuerpo que recibe la función `issue_invoice` de Supabase. El total no se
-  /// envía: lo calcula el backend a partir de `room_total` e `items`.
-  static Map<String, dynamic> issuePayload(
-    Reservation reservation,
-    PaymentMethodModel? paymentMethod,
-  ) {
-    final payment = paymentMethod == null
-        ? null
-        : InvoicePayment.fromPaymentMethod(paymentMethod);
-    return {
-      'reservation_id': reservation.id,
-      'client_id': reservation.guestId.isEmpty ? null : reservation.guestId,
-      'client_name': reservation.guestName.isEmpty
-          ? null
-          : reservation.guestName,
-      'motel_id': reservation.motelId,
-      'motel_name': reservation.motelName,
-      'room_name': reservation.roomName,
-      'room_number': reservation.roomNumber,
-      'check_in': reservation.checkIn.toUtc().toIso8601String(),
-      'check_out': reservation.checkOut.toUtc().toIso8601String(),
-      'guest_count': reservation.guestCount,
-      'items': [
-        for (final item in [...reservation.services, ...reservation.products])
-          InvoiceLineItem.fromReservationItem(item).toJson(),
-      ],
-      'room_total': reservation.roomTotal,
-      'payment_concept': payment?.concept,
-      'payment_amount': payment?.amount,
-      'card_holder': payment?.cardHolder,
-      'card_last4': payment?.cardLast4,
-      'installments': payment?.installments,
-    };
+  /// Número visible de la factura. Se deriva del id de la reserva, así que es
+  /// único y estable aunque la emisión se reintente.
+  static String numberFor(String reservationId) {
+    final code = reservationId.toUpperCase().replaceAll(
+      RegExp(r'[^A-Z0-9]'),
+      '',
+    );
+    return 'FAC-${code.length > 20 ? code.substring(code.length - 20) : code}';
   }
 
   @override
