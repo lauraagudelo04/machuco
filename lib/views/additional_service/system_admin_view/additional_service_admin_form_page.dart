@@ -48,21 +48,33 @@ class _AdditionalServiceAdminFormPageState
     _priceController = TextEditingController(
       text: service == null ? '' : '${service.price}',
     );
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _controller.load();
+    });
   }
 
   void _refresh() {
     if (mounted) setState(() {});
   }
 
-  void _save() {
-    final saved = _controller.saveAdditionalService(
+  void _save() async {
+    final saved = await _controller.saveAdditionalService(
       serviceId: widget.serviceId,
       name: _nameController.text,
       description: _descriptionController.text,
       category: _categoryController.text,
       priceText: _priceController.text,
     );
-    if (!saved) return;
+    if (!mounted) return;
+    if (!saved) {
+      final error = _controller.syncError;
+      if (error != null) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(error)));
+      }
+      return;
+    }
     Navigator.of(context).pop(true);
   }
 
@@ -124,13 +136,38 @@ class _AdditionalServiceAdminFormPageState
                     maxLines: 3,
                   ),
                   const SizedBox(height: AppSpacing.s4),
-                  AppTextField(
-                    label: 'Categoría',
-                    hint: 'Ej. Experiencias',
-                    controller: _categoryController,
-                    errorText: _controller.categoryError,
-                    prefixIcon: const Icon(Icons.category_outlined),
-                    textInputAction: TextInputAction.next,
+                  DropdownButtonFormField<String>(
+                    decoration: InputDecoration(
+                      labelText: 'Categoría',
+                      hintText: 'Ej. Experiencias',
+                      prefixIcon: const Icon(Icons.category_outlined),
+                      errorText: _controller.categoryError,
+                      // Si el maestro no cargó, explica por qué en vez de dejar
+                      // el desplegable vacío sin ninguna pista.
+                      helperText:
+                          _controller.categories.isEmpty &&
+                              _controller.categoriesError != null
+                          ? _controller.categoriesError
+                          : null,
+                      helperMaxLines: 3,
+                    ),
+                    value:
+                        _controller.categories.contains(
+                          _categoryController.text,
+                        )
+                        ? _categoryController.text
+                        : null,
+                    items: _controller.categories.map((String category) {
+                      return DropdownMenuItem<String>(
+                        value: category,
+                        child: Text(category),
+                      );
+                    }).toList(),
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        _categoryController.text = value;
+                      }
+                    },
                   ),
                   const SizedBox(height: AppSpacing.s4),
                   AppTextField(

@@ -16,6 +16,9 @@ abstract final class FirestoreCollections {
 
   static const payments = 'payments';
 
+  /// Additional services offered by a motel (`additionalServices/{id}`).
+  static const additionalServices = 'additionalServices';
+
   /// Reservations shared by client, motel owner and admin
   /// (`reservations/{reservationId}`), cached locally in SQLite.
   static const reservations = 'reservations';
