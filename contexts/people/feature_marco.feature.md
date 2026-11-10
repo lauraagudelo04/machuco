@@ -308,9 +308,10 @@ indicativo telefónico se toma del maestro de indicativos en Supabase.
 
 ## Notas para los agentes
 
-- `MotelController.getMyMotels()` todavía usa un owner_id fijo
-  ('owner-1020304050'); debe reemplazarse por el usuario autenticado y el
-  filtro por dueño debe hacerse en la consulta al backend.
+- `getMyMotels()` ya filtra en el backend con `auth.uid` (SQL Connect). Queda
+  en la vista del propietario el selector de propietarios de prueba
+  (`_dummyOwners`) y la vista del administrador aún usa `MotelController()`
+  con datos de ejemplo.
 - Repositorio de indicativos unificado (acordado con Juan José):
   `PhoneCountryCodeRepository` en
   lib/database/repository/phone_country_code/supabase_phone_country_code_repository.dart.
