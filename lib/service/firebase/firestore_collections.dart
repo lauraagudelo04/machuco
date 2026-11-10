@@ -10,6 +10,10 @@ abstract final class FirestoreCollections {
   static const subscriptions = 'subscriptions';
 
   /// Payment records synchronized from the owner's local SQLite database.
+  static const rooms = 'rooms';
+  static const roomTypes = 'room_types';
+  static const roomMotels = 'room_motels';
+
   static const payments = 'payments';
 
   /// Additional services offered by a motel (`additionalServices/{id}`).

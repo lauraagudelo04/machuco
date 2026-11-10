@@ -60,9 +60,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 14 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 16 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 16);
+    expect(await raw().getVersion(), 17);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -75,7 +75,7 @@ void main() {
   });
 
   test(
-    '[MIG-02] de v11 a v16 aplica todas las migraciones sin perder datos',
+    '[MIG-02] de v11 a v17 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
@@ -98,7 +98,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 16);
+      expect(await raw().getVersion(), 17);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _columns(raw(), 'clients'), isNot(contains('password')));
       final clients = await raw().query('clients');
@@ -121,11 +121,62 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 16);
+    expect(await raw().getVersion(), 17);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
     final clients = await raw().query('clients');
     expect(clients.single['email'], 'ana@example.com');
   });
+
+  for (final missingTable in ['auth_user_profile', 'room_sync_queue']) {
+    test(
+      'v14 completa $missingTable y conserva los datos existentes',
+      () async {
+        await raw().execute('DROP TABLE $missingTable');
+        await raw().insert('clients', {
+          'name': 'Ana',
+          'phone': '3001234567',
+          'email': 'ana@example.com',
+          'country_code': '+57',
+        });
+        await raw().setVersion(14);
+
+        await reopen();
+
+        expect(await raw().getVersion(), 17);
+        expect(await _tableExists(raw(), 'auth_user_profile'), isTrue);
+        expect(await _tableExists(raw(), 'room_sync_queue'), isTrue);
+        expect(
+          (await raw().query('clients')).single['email'],
+          'ana@example.com',
+        );
+      },
+    );
+  }
+
+  for (final missingTable in [
+    'auth_user_profile',
+    'room_sync_queue',
+    'reservation_categories',
+    'reservations',
+    'reservation_line_items',
+  ]) {
+    test('v15 completa $missingTable sin perder clientes', () async {
+      await raw().execute('DROP TABLE $missingTable');
+      await raw().insert('clients', {
+        'name': 'Ana',
+        'phone': '3001234567',
+        'email': 'ana@example.com',
+        'country_code': '+57',
+      });
+      await raw().setVersion(15);
+
+      await reopen();
+
+      expect(await raw().getVersion(), 17);
+      expect(await _tableExists(raw(), missingTable), isTrue);
+      expect((await raw().query('clients')).single['email'], 'ana@example.com');
+    });
+  }
 
   test('[MIG-03] 13 -> 14 es idempotente: una v13 de la rama de autenticación '
       'conserva su fila', () async {
@@ -142,7 +193,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 16);
+    expect(await raw().getVersion(), 17);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 
