@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
@@ -9,7 +10,6 @@ import '../../payment/owner_view/owner_payment_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
-import '../../../service/firebase/current_user.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -28,17 +28,12 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String _searchQuery = '';
 
-  // With a session the owner is the signed-in uid and cannot switch to
-  // another one; without it the demo owners keep working.
-  late final String? _sessionUid = CurrentUser.uidOrNull;
-  late String _currentOwnerId = _sessionUid ?? 'owner-1020304050';
-  late final Map<String, String> _dummyOwners = _sessionUid == null
-      ? const {
-          'owner-1020304050': 'Laura Gómez (Propietaria)',
-          'owner-900123456': 'Inversiones Machuco S.A.S.',
-          'owner-345678': 'Simón Restrepo',
-        }
-      : {_sessionUid: CurrentUser.emailOrNull ?? 'Mi cuenta'};
+  String get _currentOwnerId => FirebaseAuth.instance.currentUser?.uid ?? '';
+
+  String get _ownerName {
+    final user = FirebaseAuth.instance.currentUser;
+    return user?.displayName ?? user?.email ?? 'Propietario';
+  }
 
   @override
   void initState() {
@@ -50,6 +45,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     setState(() => _isLoading = true);
 
     try {
+      if (_currentOwnerId.isEmpty) {
+        throw StateError('Inicia sesión para consultar tus moteles.');
+      }
       // El backend filtra por el propietario de la sesión (token de Firebase).
       final motelesObtenidos = await _motelController.getMyMotels();
 
@@ -61,9 +59,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -95,9 +93,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     } catch (e) {
       if (!mounted) return;
       setState(() => _motels = previous);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString())),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -152,37 +150,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: DropdownButtonHideUnderline(
-          child: DropdownButton<String>(
-            value: _currentOwnerId,
-            dropdownColor: Theme.of(context).cardColor,
-            icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-              color: Colors.white,
-              fontWeight: FontWeight.bold,
-            ),
-            items: _dummyOwners.entries.map((entry) {
-              return DropdownMenuItem<String>(
-                value: entry.key,
-                child: Text(
-                  entry.value,
-                  style: TextStyle(
-                    color: Theme.of(context).textTheme.bodyLarge?.color,
-                  ),
-                ),
-              );
-            }).toList(),
-            onChanged: (String? newOwnerId) {
-              if (newOwnerId != null && newOwnerId != _currentOwnerId) {
-                setState(() {
-                  _currentOwnerId = newOwnerId;
-                  _searchQuery = '';
-                });
-                _loadMotels();
-              }
-            },
-          ),
-        ),
+        title: Text(_ownerName),
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
@@ -238,7 +206,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: ${_dummyOwners[_currentOwnerId]}',
+                    'Sesión: $_ownerName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
@@ -294,7 +262,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _dummyOwners[_currentOwnerId]?.split(' ').first ?? '',
+                    _ownerName.split(' ').first,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(
