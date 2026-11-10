@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'package:machuco/controllers/booking/system_admin_view/system_admin_booking_controller.dart';
@@ -29,6 +30,7 @@ class _AdminMotelReservationDashboardPageState
     extends State<AdminMotelReservationDashboardPage> {
   late final SystemAdminBookingController _controller;
   ReservationStatus? _statusFilter;
+  int? _categoryFilter;
   bool _hasLoadedOnce = false;
 
   @override
@@ -57,17 +59,33 @@ class _AdminMotelReservationDashboardPageState
     await _controller.loadMotelDashboard(
       widget.motelId,
       status: _statusFilter,
+      categoryId: _categoryFilter,
       simulateError: simulateError,
       simulateOffline: simulateOffline,
     );
-    if (!simulateError && !simulateOffline) {
+    if (!simulateError &&
+        !simulateOffline &&
+        _controller.errorMessage == null) {
       _hasLoadedOnce = true;
     }
   }
 
   Future<void> _applyStatusFilter(ReservationStatus? status) async {
     setState(() => _statusFilter = status);
-    await _controller.applyEvolutionStatusFilter(widget.motelId, status);
+    await _controller.applyEvolutionStatusFilter(
+      widget.motelId,
+      status,
+      categoryId: _categoryFilter,
+    );
+  }
+
+  Future<void> _applyCategoryFilter(int? categoryId) async {
+    setState(() => _categoryFilter = categoryId);
+    await _controller.applyEvolutionStatusFilter(
+      widget.motelId,
+      _statusFilter,
+      categoryId: categoryId,
+    );
   }
 
   @override
@@ -76,31 +94,33 @@ class _AdminMotelReservationDashboardPageState
       appBar: AppBar(
         title: Text(_controller.selectedMotel?.name ?? 'Dashboard de reservas'),
         actions: [
-          PopupMenuButton<String>(
-            tooltip: 'Herramientas de depuración (mock)',
-            icon: const Icon(Icons.bug_report_outlined),
-            onSelected: (action) {
-              switch (action) {
-                case 'reload':
-                  unawaited(_load());
-                case 'error':
-                  unawaited(_load(simulateError: true));
-                case 'offline':
-                  unawaited(_load(simulateOffline: true));
-              }
-            },
-            itemBuilder: (context) => const [
-              PopupMenuItem(value: 'reload', child: Text('Recargar')),
-              PopupMenuItem(
-                value: 'error',
-                child: Text('Simular error de carga'),
-              ),
-              PopupMenuItem(
-                value: 'offline',
-                child: Text('Simular sin conexión'),
-              ),
-            ],
-          ),
+          // Mock failure simulation: development builds only.
+          if (kDebugMode)
+            PopupMenuButton<String>(
+              tooltip: 'Herramientas de depuración (mock)',
+              icon: const Icon(Icons.bug_report_outlined),
+              onSelected: (action) {
+                switch (action) {
+                  case 'reload':
+                    unawaited(_load());
+                  case 'error':
+                    unawaited(_load(simulateError: true));
+                  case 'offline':
+                    unawaited(_load(simulateOffline: true));
+                }
+              },
+              itemBuilder: (context) => const [
+                PopupMenuItem(value: 'reload', child: Text('Recargar')),
+                PopupMenuItem(
+                  value: 'error',
+                  child: Text('Simular error de carga'),
+                ),
+                PopupMenuItem(
+                  value: 'offline',
+                  child: Text('Simular sin conexión'),
+                ),
+              ],
+            ),
         ],
       ),
       body: SafeArea(child: _buildBody(context)),
@@ -206,6 +226,22 @@ class _AdminMotelReservationDashboardPageState
                           );
                     unawaited(_applyStatusFilter(status));
                   },
+                ),
+                ReservationFilterGroup(
+                  label: 'Categoría',
+                  selectedValue: _categoryFilter?.toString(),
+                  options: [
+                    for (final category in _controller.categories)
+                      ReservationFilterOption(
+                        value: category.id.toString(),
+                        label: category.name,
+                      ),
+                  ],
+                  onChanged: (value) => unawaited(
+                    _applyCategoryFilter(
+                      value == null ? null : int.tryParse(value),
+                    ),
+                  ),
                 ),
               ],
             ),

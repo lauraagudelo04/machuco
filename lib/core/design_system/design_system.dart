@@ -13,6 +13,7 @@ export 'theme/app_theme_extensions.dart';
 export 'tokens/app_colors.dart';
 export 'tokens/app_gradients.dart';
 export 'tokens/app_motion.dart';
+export 'tokens/app_opacity.dart';
 export 'tokens/app_radius.dart';
 export 'tokens/app_shadows.dart';
 export 'tokens/app_spacing.dart';

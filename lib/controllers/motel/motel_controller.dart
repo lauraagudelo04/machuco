@@ -1,3 +1,4 @@
+import 'package:machuco/service/firebase/current_user.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
@@ -75,15 +76,17 @@ class MotelController {
   Future<List<Motel>> getMyMotels() async {
     if (_repository == null) {
       await Future.delayed(const Duration(seconds: 1));
-      const currentLoggedInUserId = 'owner-1020304050';
       return _mockDatabase
-          .where((motel) => motel.ownerId == currentLoggedInUserId)
+          .where((motel) => motel.ownerId == _currentOwnerId)
           .toList();
     }
     final motels = await _repository.getMotels();
-    const currentLoggedInUserId = 'owner-1020304050';
-    return motels.where((motel) => motel.ownerId == currentLoggedInUserId).toList();
+    return motels.where((motel) => motel.ownerId == _currentOwnerId).toList();
   }
+
+  /// Signed-in Firebase uid; the demo owner without a session.
+  static String get _currentOwnerId =>
+      CurrentUser.uidOrNull ?? 'owner-1020304050';
 
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {
     if (_repository == null) {
