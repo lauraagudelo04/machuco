@@ -11,4 +11,8 @@ abstract final class FirestoreCollections {
 
   /// Payment records synchronized from the owner's local SQLite database.
   static const payments = 'payments';
+
+  /// Reservations shared by client, motel owner and admin
+  /// (`reservations/{reservationId}`), cached locally in SQLite.
+  static const reservations = 'reservations';
 }

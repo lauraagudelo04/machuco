@@ -83,8 +83,10 @@ class Reservation {
     required this.createdAt,
     this.guestId = '',
     this.guestName = '',
+    this.categoryId,
     this.cancellationReason,
     this.invoiceAccessStatus = InvoiceAccessStatus.notApplicable,
+    this.paymentMethod,
   });
 
   final String id;
@@ -122,6 +124,10 @@ class Reservation {
   final String guestId;
   final String guestName;
 
+  /// Id of the `ReservationCategory` chosen before booking. Nullable for
+  /// reservations created before categories existed.
+  final int? categoryId;
+
   /// Motivo de cancelación, capturado la primera vez que la reserva pasa a
   /// `cancelled` mediante un flujo que lo exige (Propietario o Cliente).
   /// Queda visible de forma permanente en el detalle una vez existe.
@@ -129,6 +135,10 @@ class Reservation {
 
   /// Estado del acceso a la factura. Ver [InvoiceAccessStatus].
   final InvoiceAccessStatus invoiceAccessStatus;
+
+  /// Method used to pay the reservation (for example `Efectivo`). `null`
+  /// while the reservation has not been paid.
+  final String? paymentMethod;
 
   Duration get stayDuration => checkOut.difference(checkIn);
 
@@ -140,6 +150,8 @@ class Reservation {
     ReservationStatus? status,
     String? cancellationReason,
     InvoiceAccessStatus? invoiceAccessStatus,
+    int? categoryId,
+    String? paymentMethod,
   }) {
     return Reservation(
       id: id,
@@ -161,8 +173,10 @@ class Reservation {
       createdAt: createdAt,
       guestId: guestId,
       guestName: guestName,
+      categoryId: categoryId ?? this.categoryId,
       cancellationReason: cancellationReason ?? this.cancellationReason,
       invoiceAccessStatus: invoiceAccessStatus ?? this.invoiceAccessStatus,
+      paymentMethod: paymentMethod ?? this.paymentMethod,
     );
   }
 }

@@ -2,8 +2,57 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/controllers/booking/system_admin_view/system_admin_booking_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
+import 'package:machuco/service/booking/booking_service.dart';
+
+class _FailingBookingRepository implements BookingRepository {
+  @override
+  Future<List<Reservation>> getAll() => Future.error(StateError('offline'));
+
+  @override
+  Future<Reservation?> getById(String id) => Future.error(StateError('x'));
+
+  @override
+  Future<Reservation?> findByRequestId(String requestId) =>
+      Future.error(StateError('x'));
+
+  @override
+  Future<void> add(Reservation reservation) => Future.error(StateError('x'));
+
+  @override
+  Future<void> update(Reservation reservation) => Future.error(StateError('x'));
+}
 
 void main() {
+  group('SystemAdminBookingController con repositorio que falla', () {
+    SystemAdminBookingController build() => SystemAdminBookingController(
+      bookingService: BookingService(repository: _FailingBookingRepository()),
+    );
+
+    test('loadOwnerMotels expone el error recuperable y reintenta', () async {
+      final controller = build();
+
+      await controller.loadOwnerMotels('owner-1020304050');
+
+      expect(controller.errorMessage, isNotNull);
+      expect(controller.isLoading, isFalse);
+      expect(controller.motels, isEmpty);
+
+      await controller.loadOwnerMotels('owner-1020304050');
+      expect(controller.errorMessage, isNotNull);
+    });
+
+    test('loadMotelDashboard expone el error recuperable', () async {
+      final controller = build();
+
+      await controller.loadMotelDashboard('1');
+
+      expect(controller.errorMessage, isNotNull);
+      expect(controller.isLoading, isFalse);
+      expect(controller.selectedMotel, isNull);
+    });
+  });
+
   group('SystemAdminBookingController.motelsForOwner', () {
     test('filtra los moteles correctamente por propietario', () async {
       final controller = SystemAdminBookingController();
