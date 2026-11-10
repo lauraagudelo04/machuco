@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/models/notification/notification_model.dart';
+import 'package:machuco/service/room/supabase_room_config.dart';
 
 @dao
 abstract class NotificationDao {
@@ -46,18 +47,8 @@ class NotificationRepository {
            ? AppDatabaseProvider.database
            : Future.value(database),
        _get = client?.get ?? http.get,
-       _supabaseUrl =
-           supabaseUrl ??
-           const String.fromEnvironment(
-             'SUPABASE_URL',
-             defaultValue: 'https://ogrbbuwtsyezegkpwtsl.supabase.co',
-           ),
-       _publishableKey =
-           publishableKey ??
-           const String.fromEnvironment(
-             'SUPABASE_PUBLISHABLE_KEY',
-             defaultValue: 'sb_publishable_Wv16MVxsTzA89lBeocarLQ_YL33Ya_E',
-           );
+       _supabaseUrl = supabaseUrl ?? SupabaseRoomConfig.baseUrl,
+       _publishableKey = publishableKey ?? SupabaseRoomConfig.apiKey;
 
   final Future<AppDatabase> _database;
   final Future<http.Response> Function(Uri, {Map<String, String>? headers})
