@@ -273,10 +273,59 @@ class ClientController extends ChangeNotifier {
     }).toList();
   }
 
-  void unlink(ClientModel client) {
+  Future<bool> unlink(ClientModel client) async {
+  final currentUser = _auth.currentUser;
+  final guestId = client.uid;
+
+  if (currentUser == null || guestId == null || guestId.isEmpty) {
+    return false;
+  }
+
+  _isLoading = true;
+  _errorMessage = null;
+  notifyListeners();
+
+  try {
+    // 1. Consultar reservas activas/pendientes entre el propietario actual y el cliente
+    final reservationsSnapshot = await _firestore
+        .collection('reservations')
+        .where('ownerId', isEqualTo: currentUser.uid)
+        .where('guestId', isEqualTo: guestId)
+        .get();
+
+    final batch = _firestore.batch();
+    var hasActiveReservations = false;
+
+    for (final doc in reservationsSnapshot.docs) {
+      final data = doc.data();
+      final status = (data['status'] ?? '').toString().toLowerCase().trim();
+
+      if (status != ReservationStatus.cancelled.name &&
+          status != ReservationStatus.completed.name) {
+        batch.update(doc.reference, {
+          'status': ReservationStatus.cancelled.name,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+        hasActiveReservations = true;
+      }
+    }
+
+    if (hasActiveReservations) {
+      await batch.commit();
+    }
+
     _allClients.removeWhere((c) =>
         (client.id != null && c.id == client.id) ||
         (client.uid != null && c.uid == client.uid));
+
+    return true;
+  } catch (e) {
+    debugPrint('Error al desvincular el cliente en Firestore: $e');
+    _errorMessage = 'No fue posible desvincular al cliente.';
+    return false;
+  } finally {
+    _isLoading = false;
     notifyListeners();
   }
+}
 }
