@@ -7,7 +7,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test --test-concurrency=1 users.rules.test.mjs account_status.rules.test.mjs admin_access.contract.test.mjs reservations.rules.test.mjs payments.rules.test.mjs shared_collections.rules.test.mjs",
+    "test": "node --test --test-concurrency=1 users.rules.test.mjs account_status.rules.test.mjs admin_access.contract.test.mjs reservations.rules.test.mjs payments.rules.test.mjs subscriptions.rules.test.mjs shared_collections.rules.test.mjs",
     "test:emulator": "firebase emulators:exec --only firestore --project demo-machuco --config ../firebase.json \"npm test\""
   },
   "devDependencies": {

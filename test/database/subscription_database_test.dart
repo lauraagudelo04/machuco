@@ -244,7 +244,7 @@ void main() {
     },
   );
 
-  test('sin ID consulta el correo dummy y no la primera suscripción', () async {
+  test('sin ID y sin correo no consulta la primera suscripción', () async {
     database = await openEmptyDatabase();
     final repo = repository();
     await repo.saveSubscription(subscription());
@@ -268,7 +268,7 @@ void main() {
       subscription(id: 2, email: 'propietario.test@machuco.com'),
     );
     SharedPreferences.setMockInitialValues({
-      'subscription.userEmail': ' OWNER@EXAMPLE.COM ',
+      'auth.currentUserEmail': ' OWNER@EXAMPLE.COM ',
     });
     final current = await controller(repo, subscriptionId: null);
     expect(current.errorMessage, isNull);

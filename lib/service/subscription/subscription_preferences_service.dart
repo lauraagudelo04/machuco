@@ -1,20 +1,12 @@
-import 'package:machuco/service/storage/local_preferences_service.dart';
-import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+import 'package:machuco/service/auth/auth_preferences.dart';
 
 class SubscriptionPreferencesService {
-  SubscriptionPreferencesService({LocalPreferencesService? preferences})
-    : _preferences =
-          preferences ??
-          SharedPreferencesLocalService(namespace: 'subscription');
+  SubscriptionPreferencesService({AuthPreferences? preferences})
+    : _preferences = preferences ?? AuthPreferences();
 
-  final LocalPreferencesService _preferences;
+  final AuthPreferences _preferences;
 
-  /// Dummy temporal: adaptar namespace y clave cuando login publique su contrato.
-  /// No escribe datos de sesión; solo el correo tiene un valor de prueba.
-  Future<String> getUserEmail() async {
-    final email = await _preferences.getString('userEmail');
-    return email == null || email.trim().isEmpty
-        ? 'propietario.test@machuco.com'
-        : email.trim().toLowerCase();
-  }
+  /// Lee el correo de la sesión guardado por el módulo de autenticación.
+  /// Sin correo no se consulta una suscripción de prueba ni la de otro usuario.
+  Future<String?> getUserEmail() => _preferences.loadCurrentUserEmail();
 }
