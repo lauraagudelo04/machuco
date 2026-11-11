@@ -7,11 +7,13 @@ import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/repositories/booking/reservation_category_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/analytics/analytics_service.dart';
+import 'package:machuco/service/crashlytics/crash_reporting_service.dart';
 import 'package:machuco/views/login/login_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  CrashReporting.install(FirebaseCrashReporter());
   AnalyticsServiceProvider.useFirebase();
   await AppDatabaseProvider.database;
   ReservationCategoryRepositoryProvider.useDatabase();
