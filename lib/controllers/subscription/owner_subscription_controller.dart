@@ -50,12 +50,13 @@ class OwnerSubscriptionController extends ChangeNotifier {
         includeDetails: _firestoreRepository != null,
       );
       final email = await _preferences.getUserEmail();
-      final cloudData = _firestoreRepository == null ||
+      final firestoreRepository = _firestoreRepository;
+      final cloudData = firestoreRepository == null ||
               email == null ||
               email.isEmpty
           ? null
-          : await _firestoreRepository!.findByEmail(email, plans: _plans);
-      final subscription = _firestoreRepository != null
+          : await firestoreRepository.findByEmail(email, plans: _plans);
+      final subscription = firestoreRepository != null
           ? cloudData?.subscription
           : (subscriptionId == null
                 ? (email == null || email.isEmpty
@@ -68,7 +69,7 @@ class OwnerSubscriptionController extends ChangeNotifier {
                     subscriptionId,
                     plans: _plans,
                   ));
-      final payments = _firestoreRepository != null
+      final payments = firestoreRepository != null
           ? (cloudData?.payments ?? <SubscriptionPayment>[])
           : (subscription == null
                 ? <SubscriptionPayment>[]
@@ -81,7 +82,7 @@ class OwnerSubscriptionController extends ChangeNotifier {
         // Si la suscripción se construyó desde users.planId y el catálogo de
         // Supabase, este paso crea la copia completa en Firestore. Si ya
         // existía, actualiza la misma información sin cambiar su localId.
-        if (_firestoreRepository != null) {
+        if (firestoreRepository != null) {
           await _syncToFirestore(cloudData.subscription, cloudData.payments);
         }
       }
