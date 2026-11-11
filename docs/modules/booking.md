@@ -172,6 +172,17 @@ administrador.
   sobre métricas adicionales del dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación confirmada.
 
+## Cobro en efectivo y factura
+
+`OwnerCashPaymentPage` registra el cobro con
+`OwnerBookingController.registerCashPayment`, que devuelve la reserva
+pagada (`pending` pasa a `upcoming`/`active`, método `Efectivo`), y abre
+`AppRoutes.invoice` con esa reserva. `InvoicePage` (módulo de facturas) la
+emite en Firestore si aún no existe y la muestra. El cobro ya no marca
+`invoiceAccessStatus` como `pending`, porque `InvoiceController` no emite
+facturas con el acceso pendiente. Sin sesión de Firebase la factura no se
+puede emitir (el módulo de facturas trabaja sobre Firestore).
+
 ## Notificación de cancelación
 
 Cuando el propietario cancela, `OwnerBookingController.cancelReservation`

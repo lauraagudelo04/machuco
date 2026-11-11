@@ -267,8 +267,8 @@ void main() {
   });
 
   group('OwnerBookingController.registerCashPayment', () {
-    test('transiciona una reserva pending a upcoming/active y marca la '
-        'factura como pendiente', () async {
+    test('transiciona una reserva pending a upcoming/active y deja la '
+        'factura lista para emitirse', () async {
       final controller = OwnerBookingController();
       const reservationId = 'owner-reservation-003';
 
@@ -278,11 +278,15 @@ void main() {
           ? ReservationStatus.upcoming
           : ReservationStatus.active;
 
-      await controller.registerCashPayment(reservationId);
+      final paid = await controller.registerCashPayment(reservationId);
 
       final after = await controller.getById(reservationId);
       expect(after!.status, expectNextStatus);
-      expect(after.invoiceAccessStatus, InvoiceAccessStatus.pending);
+      expect(after.paymentMethod, BookingService.cashPaymentMethod);
+      expect(after.invoiceAccessStatus, isNot(InvoiceAccessStatus.pending));
+      expect(after.invoiceAccessStatus, before.invoiceAccessStatus);
+      expect(paid.id, reservationId);
+      expect(paid.status, expectNextStatus);
     });
 
     test('lanza notFound si el id de la reserva no existe', () async {

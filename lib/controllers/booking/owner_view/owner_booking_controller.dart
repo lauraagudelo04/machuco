@@ -312,18 +312,18 @@ class OwnerBookingController extends ChangeNotifier {
 
   /// Registra el cobro en efectivo de una reserva como realizado. Si la
   /// reserva seguía `pending`, además la mueve a `active`/`upcoming` según
-  /// la fecha de entrada. El acceso a la factura queda en
-  /// `InvoiceAccessStatus.pending`: la generación real de facturas está
-  /// fuera de alcance de este módulo.
+  /// la fecha de entrada. Devuelve la reserva pagada para abrir su factura
+  /// (la emite el módulo de facturas en `AppRoutes.invoice`).
   ///
   /// Lanza [ReservationCancellationException] (`notFound`) si el id no
   /// existe y [ReservationTransitionException] si la reserva está
   /// cancelada o completada.
-  Future<void> registerCashPayment(String id) async {
+  Future<Reservation> registerCashPayment(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    await _service.registerCashPayment(id);
+    final paid = await _service.registerCashPayment(id);
     await _reloadOwnedReservations();
     notifyListeners();
+    return paid;
   }
 
   Future<void> _reloadOwnedReservations() async {
