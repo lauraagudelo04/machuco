@@ -46,7 +46,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 20,
+  version: 21,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -123,6 +123,7 @@ class AppDatabaseProvider {
         migration17To18,
         migration18To19,
         migration19To20,
+        migration20To21,
       ])
       .addCallback(
         Callback(
@@ -276,11 +277,17 @@ final migration3To4 = Migration(3, 4, (database) async {
 /// colisión histórica de la versión 5 entre ambos módulos.
 final migration5To6 = Migration(5, 6, (database) async {
   await _createRoomSchema(database, 6);
+  await _createNotificationSchema(database);
+});
+
+Future<void> _createNotificationSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS notifications ('
     'id INTEGER PRIMARY KEY AUTOINCREMENT, typeId INTEGER NOT NULL, '
     'title TEXT NOT NULL, message TEXT NOT NULL, sentAt INTEGER NOT NULL, '
-    'target TEXT NOT NULL, recipientUser TEXT)',
+    'target TEXT NOT NULL, recipientUid TEXT)',
   );
   await database.execute(
     'CREATE TABLE IF NOT EXISTS notification_reads ('
@@ -292,7 +299,7 @@ final migration5To6 = Migration(5, 6, (database) async {
     'CREATE UNIQUE INDEX IF NOT EXISTS index_notification_reads_notificationId_userId '
     'ON notification_reads (notificationId, userId)',
   );
-});
+}
 
 /// Agrega los esquemas de Payment y clientes sin modificar tablas existentes.
 final migration6To7 = Migration(6, 7, (database) async {
@@ -514,7 +521,20 @@ Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
   await _createReservationSchema(database);
 }
 
-final migration14To15 = Migration(14, 15, _completeMergedSchemas);
+final migration14To15 = Migration(14, 15, (database) async {
+  await _completeMergedSchemas(database);
+  await _createNotificationSchema(database);
+  final columns = await database.rawQuery('PRAGMA table_info(notifications)');
+  if (!columns.any((column) => column['name'] == 'recipientUid')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN recipientUid TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS index_notifications_recipientUid '
+    'ON notifications (recipientUid)',
+  );
+});
 
 /// Completa las dos variantes de v15 conservando los datos de ambas ramas.
 final migration15To16 = Migration(15, 16, _completeMergedSchemas);
@@ -522,9 +542,7 @@ final migration15To16 = Migration(15, 16, _completeMergedSchemas);
 /// Esquema completo de develop: auth, room sync, reservas, pagos, clientes y
 /// servicios adicionales. Todo es idempotente, así que también sirve para
 /// completar una base que llegó desde la rama de propietarios (v19 propia).
-Future<void> _completeDevelopSchemas(
-  sqflite.DatabaseExecutor database,
-) async {
+Future<void> _completeDevelopSchemas(sqflite.DatabaseExecutor database) async {
   await _completeMergedSchemas(database);
   await _createPaymentSchema(database);
   await _createClientSchema(database);
@@ -584,6 +602,37 @@ final migration18To19 = Migration(18, 19, (database) async {
 /// esquemas de forma idempotente.
 final migration19To20 = Migration(19, 20, _completeDevelopSchemas);
 
+/// Identidad remota y snapshot de presentación para notificaciones. Los
+/// campos son opcionales para conservar los avisos ya existentes.
+final migration20To21 = Migration(20, 21, (database) async {
+  await _createNotificationSchema(database);
+  final columns = await database.rawQuery('PRAGMA table_info(notifications)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('remoteId')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN remoteId TEXT',
+    );
+  }
+  if (!names.contains('syncState')) {
+    await database.execute(
+      "ALTER TABLE notifications ADD COLUMN syncState TEXT NOT NULL DEFAULT 'synced'",
+    );
+  }
+  if (!names.contains('recipientName')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN recipientName TEXT',
+    );
+  }
+  if (!names.contains('recipientEmail')) {
+    await database.execute(
+      'ALTER TABLE notifications ADD COLUMN recipientEmail TEXT',
+    );
+  }
+  await database.execute(
+    'CREATE UNIQUE INDEX IF NOT EXISTS index_notifications_remoteId ON notifications (remoteId)',
+  );
+});
+
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
 ///
 /// Algunas bases mínimas (pruebas de migración de propietarios) no lo tienen y
@@ -598,7 +647,6 @@ Future<void> _deleteLegacyRoomMockDataIfPresent(
   if (tables.length < 2) return;
   await deleteLegacyRoomMockData(database);
 }
-
 
 /// Estado de la cuenta del propietario tal como vive en `users/{uid}`.
 ///

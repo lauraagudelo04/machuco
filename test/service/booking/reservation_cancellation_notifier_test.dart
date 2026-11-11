@@ -79,13 +79,14 @@ void main() {
 
       expect(notified, isTrue);
       final saved = await repository().findNotificationsForRecipient(
-        'guest-uid-42',
+        'Guest-UID-42',
+        role: 'client',
       );
       expect(saved, hasLength(1));
       final entry = saved.single;
       expect(entry.typeId, 7);
       expect(entry.target, NotificationTarget.specificUser.name);
-      expect(entry.recipientUser, 'guest-uid-42');
+      expect(entry.recipientUid, 'Guest-UID-42');
       expect(entry.title, 'Reserva cancelada');
       expect(entry.message, contains(reservation.motelName));
       expect(entry.message, contains('Mantenimiento de la habitación'));

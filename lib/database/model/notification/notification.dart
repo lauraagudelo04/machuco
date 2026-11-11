@@ -9,7 +9,11 @@ class NotificationEntry {
     required this.message,
     required this.sentAt,
     required this.target,
-    this.recipientUser,
+    this.recipientUid,
+    this.recipientName,
+    this.recipientEmail,
+    this.remoteId,
+    this.syncState = 'synced',
   });
 
   @PrimaryKey(autoGenerate: true)
@@ -19,7 +23,11 @@ class NotificationEntry {
   final String message;
   final DateTime sentAt;
   final String target;
-  final String? recipientUser;
+  final String? recipientUid;
+  final String? recipientName;
+  final String? recipientEmail;
+  final String? remoteId;
+  final String syncState;
 }
 
 @Entity(

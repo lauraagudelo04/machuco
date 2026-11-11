@@ -104,7 +104,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 20,
+      version: 21,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -124,7 +124,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `subscription_payments` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `subscriptionId` INTEGER NOT NULL, `date` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `paymentMethod` TEXT NOT NULL, `reference` TEXT NOT NULL, `status` TEXT NOT NULL, FOREIGN KEY (`subscriptionId`) REFERENCES `subscriptions` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUser` TEXT)');
+            'CREATE TABLE IF NOT EXISTS `notifications` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `typeId` INTEGER NOT NULL, `title` TEXT NOT NULL, `message` TEXT NOT NULL, `sentAt` INTEGER NOT NULL, `target` TEXT NOT NULL, `recipientUid` TEXT, `recipientName` TEXT, `recipientEmail` TEXT, `remoteId` TEXT, `syncState` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `notification_reads` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `notificationId` INTEGER NOT NULL, `userId` TEXT NOT NULL, `readAt` INTEGER NOT NULL, FOREIGN KEY (`notificationId`) REFERENCES `notifications` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION)');
         await database.execute(
@@ -424,7 +424,11 @@ class _$NotificationDao extends NotificationDao {
                   'message': item.message,
                   'sentAt': _subscriptionDateConverter.encode(item.sentAt),
                   'target': item.target,
-                  'recipientUser': item.recipientUser
+                  'recipientUid': item.recipientUid,
+                  'recipientName': item.recipientName,
+                  'recipientEmail': item.recipientEmail,
+                  'remoteId': item.remoteId,
+                  'syncState': item.syncState
                 }),
         _notificationReadInsertionAdapter = InsertionAdapter(
             database,
@@ -434,6 +438,23 @@ class _$NotificationDao extends NotificationDao {
                   'notificationId': item.notificationId,
                   'userId': item.userId,
                   'readAt': _subscriptionDateConverter.encode(item.readAt)
+                }),
+        _notificationEntryUpdateAdapter = UpdateAdapter(
+            database,
+            'notifications',
+            ['id'],
+            (NotificationEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'typeId': item.typeId,
+                  'title': item.title,
+                  'message': item.message,
+                  'sentAt': _subscriptionDateConverter.encode(item.sentAt),
+                  'target': item.target,
+                  'recipientUid': item.recipientUid,
+                  'recipientName': item.recipientName,
+                  'recipientEmail': item.recipientEmail,
+                  'remoteId': item.remoteId,
+                  'syncState': item.syncState
                 });
 
   final sqflite.DatabaseExecutor database;
@@ -446,6 +467,8 @@ class _$NotificationDao extends NotificationDao {
 
   final InsertionAdapter<NotificationRead> _notificationReadInsertionAdapter;
 
+  final UpdateAdapter<NotificationEntry> _notificationEntryUpdateAdapter;
+
   @override
   Future<List<NotificationEntry>> findAll() async {
     return _queryAdapter.queryList(
@@ -457,15 +480,41 @@ class _$NotificationDao extends NotificationDao {
             message: row['message'] as String,
             sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
             target: row['target'] as String,
-            recipientUser: row['recipientUser'] as String?));
+            recipientUid: row['recipientUid'] as String?,
+            recipientName: row['recipientName'] as String?,
+            recipientEmail: row['recipientEmail'] as String?,
+            remoteId: row['remoteId'] as String?,
+            syncState: row['syncState'] as String));
   }
 
   @override
-  Future<List<NotificationEntry>> findForRecipient(String recipientUser) async {
+  Future<List<NotificationEntry>> findForRecipient(
+    String recipientUid,
+    String role,
+  ) async {
     return _queryAdapter.queryList(
-        'SELECT * FROM notifications WHERE target = \'all\' OR lower(recipientUser) = lower(?1) ORDER BY sentAt DESC, id DESC',
-        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUser: row['recipientUser'] as String?),
-        arguments: [recipientUser]);
+        'SELECT * FROM notifications WHERE target = \'all\' OR (target = \'clients\' AND ?2 = \'client\') OR (target = \'owners\' AND ?2 = \'owner\') OR recipientUid = ?1 ORDER BY sentAt DESC, id DESC',
+        mapper: (Map<String, Object?> row) => NotificationEntry(id: row['id'] as int?, typeId: row['typeId'] as int, title: row['title'] as String, message: row['message'] as String, sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int), target: row['target'] as String, recipientUid: row['recipientUid'] as String?, recipientName: row['recipientName'] as String?, recipientEmail: row['recipientEmail'] as String?, remoteId: row['remoteId'] as String?, syncState: row['syncState'] as String),
+        arguments: [recipientUid, role]);
+  }
+
+  @override
+  Future<NotificationEntry?> findByRemoteId(String remoteId) async {
+    return _queryAdapter.query(
+        'SELECT * FROM notifications WHERE remoteId = ?1 LIMIT 1',
+        mapper: (Map<String, Object?> row) => NotificationEntry(
+            id: row['id'] as int?,
+            typeId: row['typeId'] as int,
+            title: row['title'] as String,
+            message: row['message'] as String,
+            sentAt: _subscriptionDateConverter.decode(row['sentAt'] as int),
+            target: row['target'] as String,
+            recipientUid: row['recipientUid'] as String?,
+            recipientName: row['recipientName'] as String?,
+            recipientEmail: row['recipientEmail'] as String?,
+            remoteId: row['remoteId'] as String?,
+            syncState: row['syncState'] as String),
+        arguments: [remoteId]);
   }
 
   @override
@@ -497,6 +546,12 @@ class _$NotificationDao extends NotificationDao {
   Future<int> insertRead(NotificationRead notificationRead) {
     return _notificationReadInsertionAdapter.insertAndReturnId(
         notificationRead, OnConflictStrategy.abort);
+  }
+
+  @override
+  Future<int> updateNotification(NotificationEntry notification) {
+    return _notificationEntryUpdateAdapter.updateAndReturnChangedRows(
+        notification, OnConflictStrategy.abort);
   }
 }
 

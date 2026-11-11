@@ -25,10 +25,10 @@ abstract final class FirestoreCollections {
 
   static const payments = 'payments';
 
+  static const notifications = 'notifications';
   /// Copia de los moteles de Firebase SQL Connect (`motels/{motelId}`, mismo
   /// UUID), para que otros módulos y sus reglas los consulten en Firestore.
   static const motels = 'motels';
-
   /// Additional services offered by a motel (`additionalServices/{id}`).
   static const additionalServices = 'additionalServices';
 
