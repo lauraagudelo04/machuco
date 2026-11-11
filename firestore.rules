@@ -136,6 +136,58 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    // Suscripciones privadas del propietario y sus pagos.
+    function hasValidSubscriptionFields(data) {
+      return data.keys().hasAll([
+          'localId', 'planId', 'planName', 'motelName', 'amount',
+          'billingPeriod', 'nextBillingDate', 'status', 'features', 'updatedAt'])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'userEmail', 'planId', 'planName', 'motelName',
+          'amount', 'billingPeriod', 'nextBillingDate', 'status', 'features', 'updatedAt'])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && (!('userEmail' in data) || data.userEmail == null
+          || (data.userEmail is string && data.userEmail.size() > 0 && data.userEmail.size() <= 254))
+        && data.planId is int && data.planId > 0
+        && data.planName is string && data.planName.size() > 0 && data.planName.size() <= 100
+        && data.motelName is string && data.motelName.size() > 0 && data.motelName.size() <= 150
+        && data.amount is int && data.amount > 0
+        && data.billingPeriod is string && data.billingPeriod.size() > 0 && data.billingPeriod.size() <= 40
+        && data.nextBillingDate is timestamp
+        && data.status in ['active', 'pending', 'cancelled']
+        && data.features is list && data.features.size() <= 50
+        && data.updatedAt == request.time;
+    }
+
+    function hasValidSubscriptionPaymentFields(data) {
+      return data.keys().hasAll([
+          'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && data.subscriptionLocalId is int && data.subscriptionLocalId > 0
+        && data.date is timestamp
+        && data.amount is int && data.amount > 0
+        && data.paymentMethod is string && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 100
+        && data.reference is string && data.reference.size() > 0 && data.reference.size() <= 200
+        && data.status in ['pending', 'completed', 'cancelled']
+        && data.updatedAt == request.time;
+    }
+
+    function subscriptionWriteAllowed(uid) {
+      return isActiveOwner() && request.auth.uid == uid;
+    }
+
+    function subscriptionPaymentMatchesParent(uid, subscriptionId, data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/users/$(uid)/subscriptions/$(subscriptionId)
+      ).data;
+      return subscription.localId == data.subscriptionLocalId;
+    }
+
     function isValidPaymentTransition(previous, next) {
       return previous == next
         || (previous == 'pending' && next in ['paid', 'cancelled'])
@@ -470,6 +522,7 @@ service cloud.firestore {
         && resource.data.role != 'admin'
         && resource.data.get('accountStatus', '') != 'anonymized';
 
+      // Rutas anteriores conservadas tal como están en la versión compartida.
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
         allow create, update: if isSignedIn() && request.auth.uid == uid
@@ -487,7 +540,72 @@ service cloud.firestore {
               'paymentMethod', 'reference', 'status', 'updatedAt']);
           allow delete: if false;
         }
+
+        // Nombre canónico de pagos de suscripción; mantiene la ruta anterior.
+        match /subscriptionPayments/{paymentId} {
+          allow read: if isActiveAdmin() || subscriptionWriteAllowed(uid);
+          allow create: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data);
+          allow update: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data)
+            && request.resource.data.localId == resource.data.localId
+            && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
+          allow delete: if false;
+        }
       }
+
+      match /notificationReads/{notificationId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
+        allow delete: if false;
+      }
+      match /devices/{deviceId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    match /notifications/{notificationId} {
+      function canReadNotification() {
+        return isActiveAdmin()
+          || ((isActiveClient() || isActiveOwner())
+            && (resource.data.target == 'all'
+              || (resource.data.target == 'clients' && isActiveClient())
+              || (resource.data.target == 'owners' && isActiveOwner())
+              || (resource.data.target == 'specificUser'
+                && resource.data.recipientUid == request.auth.uid)));
+      }
+      allow read: if canReadNotification();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'sourceId', 'actorUid', 'recipientUid',
+          'recipientName', 'recipientEmail', 'target',
+          'title', 'message', 'createdAt', 'clientName', 'motelName', 'roomName'])
+        && request.resource.data.keys().hasAll([
+          'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
+        && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.target in ['all', 'clients', 'owners', 'specificUser']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.target != 'specificUser'
+          || (request.resource.data.recipientUid is string
+            && request.resource.data.recipientUid.size() > 0
+            && request.resource.data.recipientName is string
+            && request.resource.data.recipientName.size() <= 160
+            && request.resource.data.recipientEmail is string
+            && request.resource.data.recipientEmail.size() > 0
+            && request.resource.data.recipientEmail.size() <= 254));
+      allow update, delete: if false;
     }
 
     // Contador de administradores activos ("siempre debe existir uno"). Solo
@@ -507,6 +625,52 @@ service cloud.firestore {
         && request.resource.data.activeAdminCount >= 1
         && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
           || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1);
+      allow delete: if false;
+    }
+
+    // Suscripciones de propietarios: colección raíz; el ID es el UID.
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAdmin()
+        || (isActiveOwner()
+          && subscriptionId == request.auth.uid
+          && (resource == null || resource.data.ownerId == request.auth.uid));
+      allow create: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data);
+      allow update: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data)
+        && request.resource.data.localId == resource.data.localId;
+      allow delete: if false;
+    }
+
+    function subscriptionPaymentMatchesTopLevel(data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/subscriptions/$(data.ownerId)
+      ).data;
+      return data.ownerId == request.auth.uid
+        && subscription.ownerId == data.ownerId
+        && subscription.localId == data.subscriptionLocalId;
+    }
+
+    // Pagos de suscripción separados de los pagos de reservas.
+    match /subscriptionPayments/{paymentId} {
+      allow read: if isAdmin()
+        || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
+      allow create: if isActiveOwner()
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data);
+      allow update: if isActiveOwner()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data)
+        && request.resource.data.localId == resource.data.localId
+        && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
       allow delete: if false;
     }
 
@@ -759,27 +923,19 @@ service cloud.firestore {
         && (isAdmin() || resource.data.ownerId == request.auth.uid);
     }
 
-    // Registro de autoridad. Crear desde la consola con un usuario administrador.
-    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    // Registro anterior de autorización, conservado por compatibilidad.
     match /room_motels/{motelId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
-    // sin crear manualmente el registro; si existe, el registro prevalece.
-    // Al transferir el motel, actualizar este permiso o crear el registro.
+    // El propietario activo debe coincidir con el dueño del motel en Firestore.
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
-        && (
-          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && data.motelId == 'motel_1793753270427'
-            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
-        );
+        && exists(/databases/$(database)/documents/motels/$(data.motelId))
+        && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+          == request.auth.uid;
     }
 
     function validRoomBase(data, id) {
@@ -844,8 +1000,12 @@ service cloud.firestore {
     // solo a su propio nombre). No se borran: se inhabilitan.
     match /motels/{motelId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
         || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isActiveOwner()
+          && resource.data.ownerId == request.auth.uid
+          && request.resource.data.ownerId == request.auth.uid);
       allow delete: if false;
     }
 
@@ -909,6 +1069,34 @@ service cloud.firestore {
         );
 
       allow update, delete: if false;
+    }
+
+    // Reseñas: creación por el cliente activo a su nombre.
+    function hasValidReviewCreate(reviewId, data) {
+      return data.keys().hasAll([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'type', 'status'])
+        && data.keys().hasOnly([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'roomId', 'type', 'status'])
+        && data.authorId == request.auth.uid
+        && reviewId.matches('review-client-' + request.auth.uid + '-[0-9]+')
+        && data.authorName is string && data.authorName.size() > 0
+        && data.title is string && data.title.trim().size() > 0
+        && data.body is string && data.body.trim().size() > 0
+        && data.rating is int && data.rating >= 1 && data.rating <= 5
+        && data.date is timestamp
+        && data.motelId is string && data.motelId.size() > 0
+        && (!('roomId' in data)
+          || (data.type == 'room' && data.roomId is string && data.roomId.size() > 0))
+        && data.type in ['room', 'motel', 'attention']
+        && data.status == 'visible';
+    }
+
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+      allow create: if isActiveClient()
+        && hasValidReviewCreate(reviewId, request.resource.data);
     }
 
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
