@@ -1,4 +1,5 @@
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/auth/phone_verification.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 
 /// Datos de "Completar perfil" tras ingresar con Google o GitHub.
@@ -18,6 +19,7 @@ final class SocialProfileData {
     this.nit,
     this.companyName,
     this.planId,
+    this.phoneProof,
   });
 
   factory SocialProfileData.client({
@@ -26,6 +28,7 @@ final class SocialProfileData {
     required int phoneCountryCodeId,
     required String phoneNumber,
     required DateTime birthDate,
+    PhoneVerificationProof? phoneProof,
   }) => SocialProfileData._(
     role: RegisteredUserRole.client,
     firstNames: firstNames,
@@ -33,6 +36,7 @@ final class SocialProfileData {
     phoneCountryCodeId: phoneCountryCodeId,
     phoneNumber: phoneNumber,
     birthDate: birthDate,
+    phoneProof: phoneProof,
   );
 
   factory SocialProfileData.owner({
@@ -44,6 +48,7 @@ final class SocialProfileData {
     required String nit,
     String? companyName,
     required int planId,
+    PhoneVerificationProof? phoneProof,
   }) => SocialProfileData._(
     role: RegisteredUserRole.owner,
     firstNames: firstNames,
@@ -54,6 +59,7 @@ final class SocialProfileData {
     nit: nit,
     companyName: personType == PersonType.juridica ? companyName : null,
     planId: planId,
+    phoneProof: phoneProof,
   );
 
   /// Solo [RegisteredUserRole.client] u [RegisteredUserRole.owner].
@@ -67,6 +73,26 @@ final class SocialProfileData {
   final String? nit;
   final String? companyName;
   final int? planId;
+
+  /// SMS verification of [phoneNumber]; `completeProfile` refuses to create the
+  /// profile without it (unless that number is already linked to the user).
+  final PhoneVerificationProof? phoneProof;
+
+  /// Same data with the proof of the verified phone attached.
+  SocialProfileData withPhoneProof(PhoneVerificationProof proof) =>
+      SocialProfileData._(
+        role: role,
+        firstNames: firstNames,
+        lastNames: lastNames,
+        phoneCountryCodeId: phoneCountryCodeId,
+        phoneNumber: phoneNumber,
+        birthDate: birthDate,
+        personType: personType,
+        nit: nit,
+        companyName: companyName,
+        planId: planId,
+        phoneProof: proof,
+      );
 
   // Sin toString: contiene datos personales (NIT, fecha de nacimiento).
 }

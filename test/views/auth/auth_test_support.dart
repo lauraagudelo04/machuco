@@ -3,11 +3,13 @@ import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/phone_verification.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/phone_verification_service.dart';
 
 const testColombia = CountryPhoneCode(
   id: 1,
@@ -56,6 +58,7 @@ final class FakeAuthService implements AuthService {
   AuthFailure? loginFailure;
   AuthFailure? resetFailure;
   AuthFailure? deleteFailure;
+  AuthFailure? registerFailure;
   AuthSession? loginResult;
   RegistrationData? registered;
   final List<String> resetEmails = [];
@@ -98,6 +101,8 @@ final class FakeAuthService implements AuthService {
 
   @override
   Future<void> registerAccount(RegistrationData data) async {
+    final failure = registerFailure;
+    if (failure != null) throw failure;
     registered = data;
   }
 
@@ -121,11 +126,51 @@ final class FakeAuthService implements AuthService {
   }
 }
 
+/// Prueba de verificación sin Firebase.
+final class FakePhoneProof implements PhoneVerificationProof {
+  const FakePhoneProof(this.phoneNumber, this.smsCode);
+
+  @override
+  final String phoneNumber;
+  final String smsCode;
+}
+
+/// Servicio de verificación por SMS falso con registro de llamadas.
+final class FakePhoneVerificationService implements PhoneVerificationService {
+  AuthFailure? sendFailure;
+  PhoneVerificationProof? autoVerifiedProof;
+  final List<({String phone, bool isResend})> sent = [];
+
+  @override
+  Future<PhoneCodeRequest> sendCode({
+    required String phoneNumber,
+    PhoneCodeRequest? resendFrom,
+  }) async {
+    final failure = sendFailure;
+    if (failure != null) throw failure;
+    sent.add((phone: phoneNumber, isResend: resendFrom != null));
+    return PhoneCodeRequest(
+      phoneNumber: phoneNumber,
+      verificationId: 'verification-${sent.length}',
+      resendToken: sent.length,
+      autoVerifiedProof: autoVerifiedProof,
+    );
+  }
+
+  @override
+  PhoneVerificationProof buildProof({
+    required PhoneCodeRequest request,
+    required String smsCode,
+  }) => FakePhoneProof(request.phoneNumber, smsCode.trim());
+}
+
 LoginController buildTestController(
   FakeAuthService auth, {
   FakeCatalogRepository? catalog,
+  PhoneVerificationService? phoneVerification,
 }) => LoginController(
   authService: auth,
+  phoneVerificationService: phoneVerification,
   catalogRepository: catalog ?? FakeCatalogRepository(),
 );
 

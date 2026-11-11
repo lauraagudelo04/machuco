@@ -10,6 +10,7 @@ abstract final class AppBottomSheet {
     required String title,
     required WidgetBuilder builder,
     bool isDismissible = true,
+    bool enableDrag = true,
   }) {
     return showModalBottomSheet<T>(
       context: context,
@@ -17,6 +18,7 @@ abstract final class AppBottomSheet {
       showDragHandle: true,
       useSafeArea: true,
       isDismissible: isDismissible,
+      enableDrag: enableDrag,
       builder: (sheetContext) {
         return Padding(
           padding: EdgeInsets.only(

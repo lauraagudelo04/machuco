@@ -18,6 +18,7 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/phone_verification_service.dart';
 import 'package:machuco/service/auth/registered_user_directory.dart';
 
 /// Crea el temporizador periódico del enfriamiento (inyectable en pruebas).
@@ -34,9 +35,12 @@ typedef PeriodicTimerFactory =
 class LoginController extends ChangeNotifier {
   /// `preferences`, `catalogRepository` y `profileCache` son opcionales: sin
   /// ellos el correo no se persiste, el indicativo usa la semilla de
-  /// desarrollo y el perfil no se guarda en SQLite.
+  /// desarrollo y el perfil no se guarda en SQLite. Sin
+  /// `phoneVerificationService` las pantallas no piden el código SMS (solo
+  /// pruebas): el servicio real igual exige la prueba del celular.
   LoginController({
     this._authService,
+    this.phoneVerificationService,
     RegisteredUserDirectory? userDirectory,
     this._preferences,
     this._catalogRepository,
@@ -56,6 +60,9 @@ class LoginController extends ChangeNotifier {
   static const passwordResetCooldown = 60;
 
   final AuthService? _authService;
+
+  /// Envía el código SMS que verifica el celular al registrarse.
+  final PhoneVerificationService? phoneVerificationService;
   final AnalyticsService? _injectedAnalytics;
 
   AnalyticsService get _analytics =>
@@ -289,6 +296,9 @@ class LoginController extends ChangeNotifier {
   /// El cliente queda `active`; el propietario `pending_approval`. No abre
   /// sesión: el usuario inicia sesión de forma explícita después.
   /// Validación simulada en el cliente; la real son las reglas de Firestore.
+  ///
+  /// Con [phoneVerificationService] configurado, [data] debe llevar la prueba
+  /// del celular ([RegistrationData.phoneProof]); ver [phoneNumberToVerify].
   Future<void> registerAccount(RegistrationData data) async {
     final authService = _requireAuthService();
     final code = _resolveCountryCodeFor(data.phoneCountryCodeId);
@@ -305,6 +315,15 @@ class LoginController extends ChangeNotifier {
     } finally {
       _setSubmitting(false);
     }
+  }
+
+  /// Valida los datos del formulario de registro y devuelve el celular en
+  /// formato E.164 (con indicativo) al que se debe enviar el código SMS.
+  /// Lanza [AuthFailure] de tipo [AuthFailureType.invalidInput] si algún dato
+  /// no cumple el formato, antes de gastar un SMS.
+  String phoneNumberToVerify(RegistrationData data) {
+    final code = _resolveCountryCodeFor(data.phoneCountryCodeId);
+    return _prepareRegistration(data, code).phoneNumber;
   }
 
   Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {

@@ -59,6 +59,19 @@ enum AuthFailureType {
   /// Quien elimina su cuenta es el único administrador activo; primero debe
   /// existir otro (la regla real está en `firestore.rules`).
   lastAdministrator,
+
+  /// El código SMS escrito no corresponde al enviado.
+  invalidVerificationCode,
+
+  /// El código SMS venció o su sesión de verificación ya no es válida.
+  verificationExpired,
+
+  /// El celular ya está asociado a otra cuenta de Firebase.
+  phoneAlreadyInUse,
+
+  /// Falta la verificación del celular (o no corresponde al número del
+  /// formulario).
+  phoneNotVerified,
 }
 
 /// An error thrown by any [AuthService] implementation.

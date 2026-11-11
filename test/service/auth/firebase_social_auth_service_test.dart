@@ -24,6 +24,7 @@ import 'package:machuco/service/auth/firebase_social_auth_service.dart';
 import 'package:machuco/service/auth/github_email_verifier.dart';
 
 import '../analytics/recording_analytics_service.dart';
+import 'phone_proof_support.dart';
 
 final _now = DateTime.utc(2026, 11, 4, 12);
 
@@ -47,6 +48,7 @@ SocialProfileData _client({DateTime? birthDate}) => SocialProfileData.client(
   phoneCountryCodeId: 1,
   phoneNumber: '+573001234567',
   birthDate: birthDate ?? DateTime.utc(1995, 5, 10),
+  phoneProof: phoneProof('+573001234567'),
 );
 
 SocialProfileData _owner() => SocialProfileData.owner(
@@ -58,6 +60,7 @@ SocialProfileData _owner() => SocialProfileData.owner(
   nit: '900123456-8',
   companyName: 'Inversiones Ejemplo S.A.S.',
   planId: 2,
+  phoneProof: phoneProof('+573001112233'),
 );
 
 void main() {
@@ -256,7 +259,10 @@ void main() {
       );
     }
 
-    for (final code in ['unsupported-platform', 'unsupported-platform-operation']) {
+    for (final code in [
+      'unsupported-platform',
+      'unsupported-platform-operation',
+    ]) {
       test('$code explica la limitación de la plataforma', () async {
         auth.signInError = FirebaseAuthException(code: code);
         final result = expectType<SocialAuthError>(
@@ -588,6 +594,101 @@ void main() {
       );
       expect(result.failure.type, AuthFailureType.invalidInput);
       expect(profiles.created, isEmpty);
+    });
+
+    group('verificación del celular por SMS', () {
+      Future<void> signInNew({String? phone}) async {
+        auth.nextUser = _FakeUser(
+          auth,
+          emailValue: 'ana@example.com',
+          emailVerifiedValue: true,
+          providers: ['google.com'],
+          phoneValue: phone,
+        );
+        await service.signInWithGoogle();
+      }
+
+      SocialProfileData clientWithoutProof() => SocialProfileData.client(
+        firstNames: 'Ana',
+        lastNames: 'Pérez',
+        phoneCountryCodeId: 1,
+        phoneNumber: '+573001234567',
+        birthDate: DateTime.utc(1995, 5, 10),
+      );
+
+      test(
+        'vincula el celular al usuario antes de guardar el perfil',
+        () async {
+          await signInNew();
+
+          expectType<SocialAuthActive>(
+            await service.completeProfile(_client()),
+          );
+
+          expect(auth.currentUser, isA<_FakeUser>());
+          expect(
+            (auth.currentUser! as _FakeUser).linkedCredentials,
+            hasLength(1),
+          );
+          expect(profiles.created, hasLength(1));
+        },
+      );
+
+      test('sin prueba del celular no crea el perfil', () async {
+        await signInNew();
+
+        final result = expectType<SocialAuthError>(
+          await service.completeProfile(clientWithoutProof()),
+        );
+
+        expect(result.failure.type, AuthFailureType.phoneNotVerified);
+        expect(profiles.created, isEmpty);
+      });
+
+      test('la prueba de otro número no sirve', () async {
+        await signInNew();
+
+        final result = expectType<SocialAuthError>(
+          await service.completeProfile(
+            clientWithoutProof().withPhoneProof(phoneProof('+573009998877')),
+          ),
+        );
+
+        expect(result.failure.type, AuthFailureType.phoneNotVerified);
+        expect(profiles.created, isEmpty);
+      });
+
+      test(
+        'código incorrecto: no crea el perfil y conserva al usuario',
+        () async {
+          await signInNew();
+          (auth.currentUser! as _FakeUser).linkError = FirebaseAuthException(
+            code: 'invalid-verification-code',
+          );
+
+          final result = expectType<SocialAuthError>(
+            await service.completeProfile(_client()),
+          );
+
+          expect(result.failure.type, AuthFailureType.invalidVerificationCode);
+          expect(profiles.created, isEmpty);
+          expect((auth.currentUser! as _FakeUser).deleteCalls, 0);
+        },
+      );
+
+      test(
+        'celular ya vinculado a este usuario: no pide otra prueba',
+        () async {
+          await signInNew(phone: '+573001234567');
+
+          expectType<SocialAuthActive>(
+            await service.completeProfile(clientWithoutProof()),
+          );
+
+          expect(profiles.created, hasLength(1));
+          expect((auth.currentUser! as _FakeUser).linkedCredentials, isEmpty);
+        },
+      );
     });
 
     test(

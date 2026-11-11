@@ -20,6 +20,7 @@ import 'package:machuco/views/login/login_page.dart';
 import 'package:machuco/views/register/complete_profile_page.dart';
 import 'package:machuco/widgets/auth/delete_account_sheet.dart';
 import 'package:machuco/widgets/auth/forgot_password_sheet.dart';
+import 'package:machuco/widgets/auth/phone_verification_sheet.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_test_support.dart';
@@ -406,6 +407,93 @@ void main() {
       expect(data.phoneNumber, '+573001234567');
       expect(data.firstNames, 'Ana');
       expect(find.text('ruta:${AppRoutes.clientMotels}'), findsOneWidget);
+    });
+
+    group('verificación del celular por SMS', () {
+      late FakePhoneVerificationService phone;
+
+      // Con la hoja abierta el botón del formulario sigue cargando (spinner
+      // animado), así que `pumpAndSettle` nunca termina: se avanza el reloj.
+      Future<void> settle(WidgetTester tester) async {
+        await tester.pump();
+        await tester.pump(const Duration(seconds: 1));
+      }
+
+      Future<void> submitClient(WidgetTester tester) async {
+        phone = FakePhoneVerificationService();
+        controller = buildTestController(auth, phoneVerification: phone);
+        await pumpComplete(tester);
+        await tester.enterText(field('Celular'), '3001234567');
+        await tester.enterText(field('Fecha de nacimiento'), '10/05/1995');
+        await tester.tap(find.byKey(const ValueKey('complete-profile-submit')));
+        await settle(tester);
+      }
+
+      Future<void> typeCodeAndConfirm(WidgetTester tester) async {
+        await tester.enterText(field('Código de verificación'), '123456');
+        await tester.tap(find.text('Verificar y guardar'));
+        await settle(tester);
+      }
+
+      testWidgets('[PH-UI-01] pide el código y guarda el perfil con la prueba '
+          'del celular', (tester) async {
+        social.completeResult = SocialAuthActive(_session());
+        await submitClient(tester);
+
+        expect(find.text('Verifica tu celular'), findsOneWidget);
+        expect(phone.sent, [(phone: '+573001234567', isResend: false)]);
+        expect(social.completed, isEmpty);
+
+        await typeCodeAndConfirm(tester);
+
+        final data = social.completed.single;
+        expect(data.phoneNumber, '+573001234567');
+        expect((data.phoneProof as FakePhoneProof?)?.smsCode, '123456');
+        expect(find.text('ruta:${AppRoutes.clientMotels}'), findsOneWidget);
+      });
+
+      testWidgets('[PH-UI-02] código incorrecto: se muestra en la hoja y se '
+          'puede reintentar', (tester) async {
+        social.completeResult = const SocialAuthError(
+          AuthFailure(
+            AuthFailureType.invalidVerificationCode,
+            'El código no es correcto. Revísalo e intenta de nuevo.',
+          ),
+        );
+        await submitClient(tester);
+
+        await typeCodeAndConfirm(tester);
+
+        expect(find.textContaining('El código no es correcto'), findsOneWidget);
+        expect(find.text('Verifica tu celular'), findsOneWidget);
+        expect(find.text('ruta:${AppRoutes.clientMotels}'), findsNothing);
+
+        social.completeResult = SocialAuthActive(_session());
+        await typeCodeAndConfirm(tester);
+
+        expect(social.completed, hasLength(2));
+        expect(find.text('ruta:${AppRoutes.clientMotels}'), findsOneWidget);
+      });
+
+      testWidgets('[PH-UI-03] cancelar la verificación no crea el perfil y '
+          'deja volver a intentar', (tester) async {
+        await submitClient(tester);
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(PhoneVerificationSheet),
+            matching: find.text('Cancelar'),
+          ),
+        );
+        await settle(tester);
+
+        expect(social.completed, isEmpty);
+        final submit = tester.widget<AppButton>(
+          find.byKey(const ValueKey('complete-profile-submit')),
+        );
+        expect(submit.loading, isFalse);
+        expect(submit.onPressed, isNotNull);
+      });
     });
 
     testWidgets('[SOC-UI-15] propietario: pide tipo de persona, NIT y plan, '

@@ -19,6 +19,7 @@ import 'package:machuco/service/auth/account_profile_removal.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_auth_service.dart';
 import 'package:machuco/service/auth/github_email_verifier.dart';
+import 'package:machuco/service/auth/phone_verification_service.dart';
 
 /// Ingreso, registro y gestión de proveedores con Google y GitHub
 /// (`docs/auth/plan-auth-social.md`, etapas 1, 3 y 4).
@@ -39,7 +40,10 @@ abstract interface class SocialAuthService {
   /// `null` si no hay sesión o no se puede reanudar.
   Future<SocialAuthResult?> resumeSession();
 
-  /// Crea `users/{uid}` con [data] si aún no existe (idempotente).
+  /// Crea `users/{uid}` con [data] si aún no existe (idempotente). El celular
+  /// debe venir verificado por SMS ([SocialProfileData.phoneProof]) y se vincula
+  /// al usuario antes de guardar el perfil; sin esa prueba falla con
+  /// [AuthFailureType.phoneNotVerified].
   Future<SocialAuthResult> completeProfile(SocialProfileData data);
 
   /// Abandono de "Completar perfil" (D10): borra el usuario de Firebase si solo
@@ -504,6 +508,9 @@ final class FirebaseSocialAuthService implements SocialAuthService {
       return SocialAuthError(_profileFailure(e));
     }
 
+    final phoneFailure = await _linkVerifiedPhone(user, data);
+    if (phoneFailure != null) return SocialAuthError(phoneFailure);
+
     final profile = _profileFrom(user.uid, email, data);
     try {
       await _profiles.createProfile(profile);
@@ -526,6 +533,26 @@ final class FirebaseSocialAuthService implements SocialAuthService {
       unawaited(_analyticsService.logSignUp(provider.first.name));
     }
     return result;
+  }
+
+  /// `null` si el celular ya quedó vinculado al usuario (ahora o en un intento
+  /// anterior que se cortó antes de guardar el perfil); si no, el motivo. El
+  /// usuario no se borra: puede reintentar con otro código.
+  Future<AuthFailure?> _linkVerifiedPhone(
+    User user,
+    SocialProfileData data,
+  ) async {
+    if (user.phoneNumber == data.phoneNumber) return null;
+    try {
+      final proof = requireVerifiedPhoneProof(
+        data.phoneProof,
+        phoneNumber: data.phoneNumber,
+      );
+      await linkVerifiedPhone(user, proof);
+      return null;
+    } on AuthFailure catch (failure) {
+      return failure;
+    }
   }
 
   String? _validate(SocialProfileData data) {

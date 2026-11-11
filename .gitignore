@@ -54,5 +54,6 @@ macos/Runner/Release.entitlements
 
 # Pruebas de reglas de Firestore (Node)
 test_rules/node_modules/
+backend/auth0-users-api/node_modules/
 firebase-debug.log
 firestore-debug.log

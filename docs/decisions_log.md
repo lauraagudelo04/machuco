@@ -852,3 +852,24 @@ personales, como ya se hace con los administradores.
 - La cuenta de Firebase Auth no se puede borrar desde el cliente (sin Admin
   SDK), igual que con los administradores; se elimina desde la consola cuando
   haga falta.
+
+## 2026-11-10 — Verificación del celular por SMS al registrarse
+
+**Contexto:** el registro guardaba el celular sin comprobar que fuera del
+usuario.
+
+**Decisión:** al crear una cuenta (correo y contraseña, o "Completar perfil"
+tras Google/GitHub) se verifica el celular con **Firebase Authentication
+(Phone Auth)**:
+
+- Se envía un SMS con `verifyPhoneNumber` y la cuenta o el perfil solo se crean
+  si `linkWithCredential` acepta el código; si falla, se revierte la cuenta.
+- La verificación queda en Firebase Auth (proveedor `phone` del usuario), no en
+  un campo de Firestore: **no cambia `firestore.rules` ni el esquema**.
+- Sin dependencias nuevas.
+- Detalle, configuración pendiente en la consola y límites en
+  `docs/auth/phone-verification.md`.
+
+**Pendiente de confirmar con el equipo:** exigir el celular verificado también
+en `firestore.rules` (hoy la exigencia está solo en la app), y qué hacer en web
+e iOS, donde Phone Auth no está disponible o configurado.

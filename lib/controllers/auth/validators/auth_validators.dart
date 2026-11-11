@@ -23,6 +23,7 @@ abstract final class AuthValidators {
   static const companyNameMaxLength = 120;
   static const passwordMinLength = 8;
   static const minimumAge = 18;
+  static const smsCodeLength = 6;
   static const rejectionReasonMinLength = 10;
   static const rejectionReasonMaxLength = 300;
 
@@ -296,6 +297,18 @@ abstract final class AuthValidators {
       if (text != original()) return 'Las contraseñas no coinciden.';
       return null;
     };
+  }
+
+  // ------------------------------------------------ verificación SMS
+
+  /// Código SMS de verificación del celular: solo [smsCodeLength] dígitos.
+  static String? smsCode(String? value) {
+    final text = (value ?? '').trim();
+    if (text.isEmpty) return 'Escribe el código que recibiste por SMS.';
+    if (!RegExp('^[0-9]{$smsCodeLength}\$').hasMatch(text)) {
+      return 'El código tiene $smsCodeLength dígitos.';
+    }
+    return null;
   }
 
   // --------------------------------------------------- motivo de rechazo

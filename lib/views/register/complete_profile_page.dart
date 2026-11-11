@@ -12,6 +12,7 @@ import 'package:machuco/views/login/auth_controller_factory.dart';
 import 'package:machuco/views/login/logout_navigation.dart';
 import 'package:machuco/views/login/social_auth_flow.dart';
 import 'package:machuco/views/register/profile_fields.dart';
+import 'package:machuco/widgets/auth/phone_verification_sheet.dart';
 import 'package:machuco/widgets/auth/auth_header.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
 import 'package:machuco/widgets/auth/terms_sheet.dart';
@@ -191,8 +192,12 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
       _submitting = true;
       _failure = null;
     });
-    final result = await widget.args.social.completeProfile(data);
+    final result = await _completeVerifyingPhone(data);
     if (!mounted) return;
+    if (result == null) {
+      setState(() => _submitting = false);
+      return;
+    }
     final failure = await routeSocialResult(
       context,
       result: result,
@@ -204,6 +209,32 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
       _submitting = false;
       _failure = failure;
     });
+  }
+
+  /// Verifica el celular por SMS y, con el código, crea el perfil. `null` si el
+  /// usuario cerró la hoja sin terminar. Sin servicio de verificación (solo
+  /// pruebas) completa directo; el servicio real exige la prueba igual.
+  Future<SocialAuthResult?> _completeVerifyingPhone(
+    SocialProfileData data,
+  ) async {
+    final social = widget.args.social;
+    final verification = _controller.phoneVerificationService;
+    if (verification == null) return social.completeProfile(data);
+    SocialAuthResult? result;
+    await showPhoneVerificationSheet(
+      context,
+      service: verification,
+      phoneNumber: data.phoneNumber,
+      confirmLabel: 'Verificar y guardar',
+      onVerified: (proof) async {
+        final next = await social.completeProfile(data.withPhoneProof(proof));
+        // Un error del perfil (código, celular repetido, red) se muestra en la
+        // hoja; cualquier otro resultado la cierra y lo atiende la pantalla.
+        if (next case SocialAuthError(:final failure)) throw failure;
+        result = next;
+      },
+    );
+    return result;
   }
 
   Future<void> _cancel() async {

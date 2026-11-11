@@ -10,6 +10,7 @@ import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/service/auth/account_profile_removal.dart';
 import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/service/auth/phone_verification_service.dart';
 
 /// [AuthService] implementation backed by Firebase Authentication
 /// (email/password).
@@ -133,10 +134,18 @@ final class FirebaseAuthService implements AuthService {
   /// tipo de persona, NIT, razón social y plan para el propietario). Esos
   /// datos sensibles solo viven en Firestore.
   ///
+  /// El celular debe venir verificado por SMS ([RegistrationData.phoneProof]):
+  /// sin esa prueba, o con la de otro número, falla con
+  /// [AuthFailureType.phoneNotVerified] antes de crear nada.
+  ///
   /// Simulado en el cliente: el formato ya fue validado por el controller; la
   /// autoridad real son las reglas de `firestore.rules`.
   @override
-  Future<void> registerAccount(RegistrationData data) {
+  Future<void> registerAccount(RegistrationData data) async {
+    final phoneProof = requireVerifiedPhoneProof(
+      data.phoneProof,
+      phoneNumber: data.phoneNumber,
+    );
     final normalizedEmail = AuthInputNormalizer.email(data.email);
     final firstNames = AuthInputNormalizer.text(data.firstNames);
     final lastNames = AuthInputNormalizer.text(data.lastNames);
@@ -157,6 +166,7 @@ final class FirebaseAuthService implements AuthService {
       email: normalizedEmail,
       password: data.password,
       displayName: '$firstNames $lastNames'.trim(),
+      phoneProof: phoneProof,
       profile: (uid) => UserProfile(
         uid: uid,
         fullName: '$firstNames $lastNames'.trim(),
@@ -188,12 +198,17 @@ final class FirebaseAuthService implements AuthService {
   /// mensaje claro: la regla real está en `firestore.rules`. Si el perfil no
   /// se puede guardar, se elimina la cuenta recién creada para no dejarla
   /// huérfana.
+  ///
+  /// Con [phoneProof], el celular verificado se vincula al usuario antes de
+  /// guardar el perfil (Firebase comprueba el código SMS en ese momento); si
+  /// falla, también se revierte la cuenta.
   Future<void> _createAccount({
     required RegisteredUserRole role,
     required String email,
     required String password,
     required String displayName,
     required UserProfile Function(String uid) profile,
+    FirebasePhoneVerificationProof? phoneProof,
   }) async {
     if (!isPublicRegistrationRole(role)) {
       throw const AuthFailure(
@@ -212,6 +227,14 @@ final class FirebaseAuthService implements AuthService {
           AuthFailureType.unknown,
           'No fue posible crear la cuenta. Intenta nuevamente.',
         );
+      }
+      if (phoneProof != null) {
+        try {
+          await linkVerifiedPhone(user, phoneProof);
+        } on AuthFailure {
+          await _rollbackAccount(user);
+          rethrow;
+        }
       }
       try {
         await user.updateDisplayName(displayName);

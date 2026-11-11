@@ -15,6 +15,7 @@ import 'package:machuco/views/login/auth_controller_factory.dart';
 import 'package:machuco/views/login/logout_navigation.dart';
 import 'package:machuco/views/login/social_auth_flow.dart';
 import 'package:machuco/views/register/register_form.dart';
+import 'package:machuco/widgets/auth/phone_verification_sheet.dart';
 import 'package:machuco/widgets/auth/active_session_card.dart';
 import 'package:machuco/widgets/auth/auth_header.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
@@ -290,8 +291,8 @@ class _LoginPageState extends State<LoginPage> {
       return;
     }
     try {
-      await _controller.registerAccount(data);
-      if (!mounted) return;
+      final created = await _registerVerifyingPhone(data);
+      if (!created || !mounted) return;
       final session = _session;
       if (data.role == RegisteredUserRole.owner && session != null) {
         _goToRoleHome(session);
@@ -310,6 +311,25 @@ class _LoginPageState extends State<LoginPage> {
       if (!mounted) return;
       _showSnack(message: failure.message, isError: true);
     }
+  }
+
+  /// Verifica el celular por SMS y, con el código, crea la cuenta. `false` si
+  /// el usuario cerró la hoja sin terminar. Sin servicio de verificación
+  /// (solo pruebas) registra directo; el servicio real exige la prueba igual.
+  Future<bool> _registerVerifyingPhone(RegistrationData data) async {
+    final verification = _controller.phoneVerificationService;
+    if (verification == null) {
+      await _controller.registerAccount(data);
+      return true;
+    }
+    return showPhoneVerificationSheet(
+      context,
+      service: verification,
+      phoneNumber: _controller.phoneNumberToVerify(data),
+      confirmLabel: 'Verificar y crear cuenta',
+      onVerified: (proof) =>
+          _controller.registerAccount(data.copyWith(phoneProof: proof)),
+    );
   }
 
   Future<void> _openForgotPassword() async {

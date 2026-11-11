@@ -4,11 +4,14 @@ import 'package:machuco/database/repository/auth/administrators_repository.dart'
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/auth/phone_verification.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_auth_service.dart';
+
+import 'phone_proof_support.dart';
 
 UserProfile _stored({
   required RegisteredUserRole role,
@@ -210,6 +213,7 @@ void main() {
           email: ' Ana@Example.com ',
           password: 'secreto123',
           birthDate: DateTime(1990, 5, 20),
+          phoneProof: phoneProof('+573001234567'),
         ),
       );
 
@@ -241,6 +245,7 @@ void main() {
             nit: '9001234568',
             companyName: ' Moteles SAS ',
             planId: 2,
+            phoneProof: phoneProof('+573001234567'),
           ),
         );
 
@@ -270,6 +275,7 @@ void main() {
             email: 'ana@example.com',
             password: 'secreto123',
             birthDate: DateTime(1990, 5, 20),
+            phoneProof: phoneProof('+573001234567'),
           ),
         ),
         failureOf(AuthFailureType.network),
@@ -287,6 +293,83 @@ void main() {
       );
       expect(profiles.created.single.fullName, 'Ana Pérez');
       expect(profiles.created.single.email, 'ana@example.com');
+    });
+
+    group('verificación del celular por SMS', () {
+      RegistrationData client({PhoneVerificationProof? proof}) =>
+          RegistrationData.client(
+            firstNames: 'Ana',
+            lastNames: 'Pérez',
+            phoneCountryCodeId: 1,
+            phoneNumber: '+573001234567',
+            email: 'ana@example.com',
+            password: 'secreto123',
+            birthDate: DateTime(1990, 5, 20),
+            phoneProof: proof,
+          );
+
+      test('sin prueba del celular no crea nada', () async {
+        await expectLater(
+          service.registerAccount(client()),
+          failureOf(AuthFailureType.phoneNotVerified),
+        );
+        expect(firebase.createdUser, isNull);
+        expect(profiles.created, isEmpty);
+      });
+
+      test('la prueba de otro número no sirve', () async {
+        await expectLater(
+          service.registerAccount(client(proof: phoneProof('+573009998877'))),
+          failureOf(AuthFailureType.phoneNotVerified),
+        );
+        expect(firebase.createdUser, isNull);
+      });
+
+      test('vincula el celular antes de guardar el perfil', () async {
+        await service.registerAccount(
+          client(proof: phoneProof('+573001234567')),
+        );
+
+        expect(firebase.createdUser?.linkedCredentials, hasLength(1));
+        expect(profiles.created, hasLength(1));
+        expect(firebase.events.indexOf('linkPhone'), 0);
+      });
+
+      test(
+        'código incorrecto: revierte la cuenta y no guarda el perfil',
+        () async {
+          firebase.linkError = FirebaseAuthException(
+            code: 'invalid-verification-code',
+          );
+          await expectLater(
+            service.registerAccount(client(proof: phoneProof('+573001234567'))),
+            failureOf(AuthFailureType.invalidVerificationCode),
+          );
+          expect(firebase.createdUser?.deleteCalls, 1);
+          expect(profiles.created, isEmpty);
+        },
+      );
+
+      test('celular de otra cuenta: revierte y lo informa', () async {
+        firebase.linkError = FirebaseAuthException(
+          code: 'credential-already-in-use',
+        );
+        await expectLater(
+          service.registerAccount(client(proof: phoneProof('+573001234567'))),
+          failureOf(AuthFailureType.phoneAlreadyInUse),
+        );
+        expect(firebase.createdUser?.deleteCalls, 1);
+        expect(profiles.created, isEmpty);
+      });
+
+      test('código vencido: revierte y pide uno nuevo', () async {
+        firebase.linkError = FirebaseAuthException(code: 'session-expired');
+        await expectLater(
+          service.registerAccount(client(proof: phoneProof('+573001234567'))),
+          failureOf(AuthFailureType.verificationExpired),
+        );
+        expect(firebase.createdUser?.deleteCalls, 1);
+      });
     });
 
     test('nunca crea administradores', () async {
@@ -626,6 +709,7 @@ final class _FakeFirebaseAuth implements FirebaseAuth {
   int signOutCalls = 0;
   FirebaseAuthException? signInError;
   FirebaseAuthException? resetError;
+  FirebaseAuthException? linkError;
 
   List<String> get events => FirebaseAuthEvents.log;
 
@@ -646,7 +730,7 @@ final class _FakeFirebaseAuth implements FirebaseAuth {
     required String email,
     required String password,
   }) async {
-    final user = _FakeUser(this);
+    final user = _FakeUser(this)..linkError = linkError;
     createdUser = user;
     currentUser = user;
     return _FakeCredential(user);
@@ -687,6 +771,8 @@ final class _FakeUser implements User {
   final _FakeFirebaseAuth _auth;
   FirebaseAuthException? reauthError;
   FirebaseAuthException? deleteError;
+  FirebaseAuthException? linkError;
+  final linkedCredentials = <AuthCredential>[];
   int deleteCalls = 0;
 
   @override
@@ -694,6 +780,18 @@ final class _FakeUser implements User {
 
   @override
   String? get email => 'luz@example.com';
+
+  @override
+  String? get phoneNumber => null;
+
+  @override
+  Future<UserCredential> linkWithCredential(AuthCredential credential) async {
+    final error = linkError;
+    if (error != null) throw error;
+    linkedCredentials.add(credential);
+    _auth.events.add('linkPhone');
+    return _FakeCredential(this);
+  }
 
   @override
   String? get displayName => 'Luz';

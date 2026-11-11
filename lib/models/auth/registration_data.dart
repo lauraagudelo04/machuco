@@ -1,4 +1,5 @@
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/auth/phone_verification.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 
 /// Datos del formulario de registro por rol.
@@ -22,6 +23,7 @@ final class RegistrationData {
     this.nit,
     this.companyName,
     this.planId,
+    this.phoneProof,
   });
 
   factory RegistrationData.client({
@@ -32,6 +34,7 @@ final class RegistrationData {
     required String email,
     required String password,
     required DateTime birthDate,
+    PhoneVerificationProof? phoneProof,
   }) => RegistrationData._(
     role: RegisteredUserRole.client,
     firstNames: firstNames,
@@ -41,6 +44,7 @@ final class RegistrationData {
     email: email,
     password: password,
     birthDate: birthDate,
+    phoneProof: phoneProof,
   );
 
   /// [companyName] solo aplica a persona jurídica; se ignora en natural.
@@ -55,6 +59,7 @@ final class RegistrationData {
     required String nit,
     String? companyName,
     required int planId,
+    PhoneVerificationProof? phoneProof,
   }) => RegistrationData._(
     role: RegisteredUserRole.owner,
     firstNames: firstNames,
@@ -67,6 +72,7 @@ final class RegistrationData {
     nit: nit,
     companyName: personType == PersonType.juridica ? companyName : null,
     planId: planId,
+    phoneProof: phoneProof,
   );
 
   final RegisteredUserRole role;
@@ -88,6 +94,10 @@ final class RegistrationData {
   final String? companyName;
   final int? planId;
 
+  /// SMS verification of [phoneNumber]; the account service refuses to create
+  /// the account without it.
+  final PhoneVerificationProof? phoneProof;
+
   String get fullName => '${firstNames.trim()} ${lastNames.trim()}'.trim();
 
   RegistrationData copyWith({
@@ -98,6 +108,7 @@ final class RegistrationData {
     String? email,
     String? nit,
     String? companyName,
+    PhoneVerificationProof? phoneProof,
   }) => RegistrationData._(
     role: role,
     firstNames: firstNames ?? this.firstNames,
@@ -111,6 +122,7 @@ final class RegistrationData {
     nit: nit ?? this.nit,
     companyName: companyName ?? this.companyName,
     planId: planId,
+    phoneProof: phoneProof ?? this.phoneProof,
   );
 
   // Sin toString: contiene la contraseña y datos personales.
