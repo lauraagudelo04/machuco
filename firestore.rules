@@ -136,6 +136,73 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
+    // Suscripciones del propietario. Se almacenan bajo el perfil del usuario
+    // porque no son un catálogo público: cada propietario solo puede escribir
+    // su propia suscripción y sus pagos. El administrador únicamente consulta
+    // para soporte/auditoría.
+    function hasValidSubscriptionFields(data) {
+      return data.keys().hasAll([
+          'localId', 'planId', 'planName', 'motelName', 'amount',
+          'billingPeriod', 'nextBillingDate', 'status', 'features',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'userEmail', 'planId', 'planName', 'motelName',
+          'amount', 'billingPeriod', 'nextBillingDate', 'status',
+          'features', 'updatedAt'
+        ])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && (!('userEmail' in data) || data.userEmail == null
+          || (data.userEmail is string
+            && data.userEmail.size() > 0 && data.userEmail.size() <= 254))
+        && data.planId is int && data.planId > 0
+        && data.planName is string
+        && data.planName.size() > 0 && data.planName.size() <= 100
+        && data.motelName is string
+        && data.motelName.size() > 0 && data.motelName.size() <= 150
+        && data.amount is int && data.amount > 0
+        && data.billingPeriod is string
+        && data.billingPeriod.size() > 0 && data.billingPeriod.size() <= 40
+        && data.nextBillingDate is timestamp
+        && data.status in ['active', 'pending', 'cancelled']
+        && data.features is list && data.features.size() <= 50
+        && data.updatedAt == request.time;
+    }
+
+    function hasValidSubscriptionPaymentFields(data) {
+      return data.keys().hasAll([
+          'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && data.subscriptionLocalId is int && data.subscriptionLocalId > 0
+        && data.date is timestamp
+        && data.amount is int && data.amount > 0
+        && data.paymentMethod is string
+        && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 100
+        && data.reference is string
+        && data.reference.size() > 0 && data.reference.size() <= 200
+        && data.status in ['pending', 'completed', 'cancelled']
+        && data.updatedAt == request.time;
+    }
+
+    function subscriptionWriteAllowed(uid) {
+      return isActiveOwner() && request.auth.uid == uid;
+    }
+
+    function subscriptionPaymentMatchesParent(uid, subscriptionId, data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/users/$(uid)/subscriptions/$(subscriptionId)
+      ).data;
+      return subscription.localId == data.subscriptionLocalId;
+    }
+
     function isValidPaymentTransition(previous, next) {
       return previous == next
         || (previous == 'pending' && next in ['paid', 'cancelled'])
@@ -507,6 +574,59 @@ service cloud.firestore {
         && request.resource.data.activeAdminCount >= 1
         && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
           || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1);
+      allow delete: if false;
+    }
+
+    // Suscripciones de propietarios: colecciÃ³n raÃ­z independiente de users.
+    // El documento usa el UID del propietario como identificador.
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAdmin()
+        || (isActiveOwner()
+          && subscriptionId == request.auth.uid
+          && (resource == null || resource.data.ownerId == request.auth.uid));
+
+      allow create: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data);
+
+      allow update: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data)
+        && request.resource.data.localId == resource.data.localId;
+      allow delete: if false;
+    }
+
+    function subscriptionPaymentMatchesTopLevel(data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/subscriptions/$(data.ownerId)
+      ).data;
+      return data.ownerId == request.auth.uid
+        && subscription.ownerId == data.ownerId
+        && subscription.localId == data.subscriptionLocalId;
+    }
+
+    // Pagos de suscripciÃ³n: colecciÃ³n raÃ­z propia. No es la colecciÃ³n
+    // `payments` de reservas que aparece inmediatamente debajo.
+    match /subscriptionPayments/{paymentId} {
+      allow read: if isAdmin()
+        || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
+
+      allow create: if isActiveOwner()
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data);
+
+      allow update: if isActiveOwner()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data)
+        && request.resource.data.localId == resource.data.localId
+        && request.resource.data.subscriptionLocalId
+            == resource.data.subscriptionLocalId;
       allow delete: if false;
     }
 
@@ -911,6 +1031,12 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // Reseñas: el cliente activo solo publica a su nombre. Responder,
+    // moderar y eliminar corresponden a las funcionalidades de propietario y
+    // administrador; esas reglas se agregan en sus bloques específicos.
+    // La app oculta al cliente las reseñas con status 'hidden'.
+    // El id del documento y authorId llevan el uid del cliente; la reseña
+    // nace visible y sin respuestas ni reporte.
     // ------------------------------------------------------------------
     // Resenas (rama feature-andres: ingresar resenas).
     //
@@ -936,7 +1062,8 @@ service cloud.firestore {
         && data.date is timestamp
         && data.motelId is string && data.motelId.size() > 0
         && (!('roomId' in data)
-          || (data.type == 'room' && data.roomId is string && data.roomId.size() > 0))
+          || (data.type == 'room'
+            && data.roomId is string && data.roomId.size() > 0))
         && data.type in ['room', 'motel', 'attention']
         && data.status == 'visible';
     }
