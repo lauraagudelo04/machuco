@@ -8,4 +8,4 @@ schema:
       database: "machuco-database"
       cloudSql:
         instanceId: "machuco-instance"
-connectorDirs: ["./motel"]
+connectorDirs: ["./motel", "./review"]
