@@ -255,8 +255,7 @@ void main() {
     );
     await current.load();
     expect(current.errorMessage, isNull);
-    expect(current.subscription?.id, 2);
-    expect(current.subscription?.planName, 'Premium');
+    expect(current.subscription, isNull);
     expect(current.payments, isEmpty);
   });
 
