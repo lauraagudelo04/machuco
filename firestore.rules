@@ -537,6 +537,7 @@ service cloud.firestore {
         && resource.data.role != 'admin'
         && resource.data.get('accountStatus', '') != 'anonymized';
 
+      // Rutas anteriores conservadas tal como están en la versión compartida.
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
         allow create, update: if isSignedIn() && request.auth.uid == uid
@@ -552,6 +553,20 @@ service cloud.firestore {
             && request.resource.data.keys().hasOnly([
               'localId', 'subscriptionLocalId', 'date', 'amount',
               'paymentMethod', 'reference', 'status', 'updatedAt']);
+          allow delete: if false;
+        }
+
+        // Nombre canónico de pagos de suscripción; mantiene la ruta anterior.
+        match /subscriptionPayments/{paymentId} {
+          allow read: if isActiveAdmin() || subscriptionWriteAllowed(uid);
+          allow create: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data);
+          allow update: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data)
+            && request.resource.data.localId == resource.data.localId
+            && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
           allow delete: if false;
         }
       }
@@ -633,8 +648,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Suscripciones de propietarios: colecciÃ³n raÃ­z independiente de users.
-    // El documento usa el UID del propietario como identificador.
+    // Suscripciones de propietarios: colección raíz; el ID es el UID.
     match /subscriptions/{subscriptionId} {
       allow read: if isAdmin()
         || (isActiveOwner()
@@ -664,12 +678,10 @@ service cloud.firestore {
         && subscription.localId == data.subscriptionLocalId;
     }
 
-    // Pagos de suscripciÃ³n: colecciÃ³n raÃ­z propia. No es la colecciÃ³n
-    // `payments` de reservas que aparece inmediatamente debajo.
+    // Pagos de suscripción separados de los pagos de reservas.
     match /subscriptionPayments/{paymentId} {
       allow read: if isAdmin()
         || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
-
       allow create: if isActiveOwner()
         && request.resource.data.ownerId == request.auth.uid
         && hasValidSubscriptionPaymentFields(request.resource.data)
@@ -935,34 +947,19 @@ service cloud.firestore {
         && (isAdmin() || resource.data.ownerId == request.auth.uid);
     }
 
-    // Registro de autoridad. Crear desde la consola con un usuario administrador.
-    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    // Registro anterior de autorización, conservado por compatibilidad.
     match /room_motels/{motelId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
-    // sin crear manualmente el registro; si existe, el registro prevalece.
-    // Al transferir el motel, actualizar este permiso o crear el registro.
-    // También vale la copia de moteles de SQL Connect (motels/{motelId}), que
-    // la app escribe al crear el motel: así el propietario crea tipos de
-    // habitación y habitaciones sin esperar a un administrador (autorizado
-    // por la rama de habitaciones, 2026-11-10).
+    // El propietario activo debe coincidir con el dueño del motel en Firestore.
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
-        && (
-          (exists(/databases/$(database)/documents/motels/$(data.motelId))
-            && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && data.motelId == 'motel_1793753270427'
-            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
-        );
+        && exists(/databases/$(database)/documents/motels/$(data.motelId))
+        && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+          == request.auth.uid;
     }
 
     function validRoomBase(data, id) {

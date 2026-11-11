@@ -142,11 +142,11 @@ describe('habitaciones con el motel registrado en motels', () => {
     await assertFails(setDoc(doc(as('owner'), 'room_types/t1'), roomType()));
   });
 
-  test('room_motels sigue funcionando para los registros existentes', async () => {
+  test('room_motels sin copia en motels no autoriza habitaciones', async () => {
     await env.withSecurityRulesDisabled(async (ctx) => {
       await setDoc(doc(ctx.firestore(), 'room_motels/m2'), { ownerId: 'owner' });
     });
-    await assertSucceeds(setDoc(
+    await assertFails(setDoc(
       doc(as('owner'), 'room_types/t2'),
       roomType({ id: 't2', motelId: 'm2' }),
     ));
