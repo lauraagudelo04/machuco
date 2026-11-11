@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:machuco/models/notification/notification_model.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
@@ -10,6 +13,7 @@ class NotificationCloudRepository {
     : _firestore = firestore ?? FirebaseFirestore.instance;
 
   final FirebaseFirestore _firestore;
+  static const _requestTimeout = Duration(seconds: 10);
 
   CollectionReference<Map<String, dynamic>> get _notifications =>
       _firestore.collection(FirestoreCollections.notifications);
@@ -33,24 +37,55 @@ class NotificationCloudRepository {
       _ => 'system',
     };
     final document = _notifications.doc(remoteId);
-    await _firestore.runTransaction((transaction) async {
-      if ((await transaction.get(document)).exists) return;
-      transaction.set(document, {
-        'eventType': eventType,
-        'actorUid': actorUid,
-        'target': target.name,
-        if (target == NotificationTarget.specificUser)
-          'recipientUid': recipientUid,
-        if (target == NotificationTarget.specificUser)
-          'recipientName': recipientName,
-        if (target == NotificationTarget.specificUser)
-          'recipientEmail': recipientEmail,
-        'title': title.trim(),
-        'message': message.trim(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    });
+    try {
+      await _firestore
+          .runTransaction((transaction) async {
+            if ((await transaction.get(document)).exists) return;
+            transaction.set(document, {
+              'eventType': eventType,
+              'actorUid': actorUid,
+              'target': target.name,
+              if (target == NotificationTarget.specificUser)
+                'recipientUid': recipientUid,
+              if (target == NotificationTarget.specificUser)
+                'recipientName': recipientName,
+              if (target == NotificationTarget.specificUser)
+                'recipientEmail': recipientEmail,
+              'title': title.trim(),
+              'message': message.trim(),
+              'createdAt': FieldValue.serverTimestamp(),
+            });
+          })
+          .timeout(_requestTimeout);
+    } on FirebaseException catch (error) {
+      throw _map(error);
+    } on TimeoutException {
+      throw const NotificationCloudRepositoryException(
+        NotificationCloudFailureType.network,
+        'Sin conexión: la notificación quedó pendiente de publicación.',
+      );
+    }
     return document.id;
+  }
+
+  NotificationCloudRepositoryException _map(FirebaseException error) {
+    debugPrint('Firestore notifications error: ${error.code}');
+    return switch (error.code) {
+      'permission-denied' ||
+      'unauthenticated' => const NotificationCloudRepositoryException(
+        NotificationCloudFailureType.permissionDenied,
+        'No tienes permisos para publicar esta notificación.',
+      ),
+      'unavailable' ||
+      'deadline-exceeded' => const NotificationCloudRepositoryException(
+        NotificationCloudFailureType.network,
+        'Sin conexión: la notificación quedó pendiente de publicación.',
+      ),
+      _ => const NotificationCloudRepositoryException(
+        NotificationCloudFailureType.unknown,
+        'No se pudo publicar la notificación. Inténtalo de nuevo.',
+      ),
+    };
   }
 
   /// Retrieves all documents visible to a role. Separate queries avoid an
@@ -104,6 +139,18 @@ class NotificationCloudRepository {
       .collection('notificationReads')
       .doc(notificationId)
       .set({'readAt': FieldValue.serverTimestamp()});
+}
+
+enum NotificationCloudFailureType { permissionDenied, network, unknown }
+
+class NotificationCloudRepositoryException implements Exception {
+  const NotificationCloudRepositoryException(this.type, this.message);
+
+  final NotificationCloudFailureType type;
+  final String message;
+
+  @override
+  String toString() => message;
 }
 
 class CloudNotification {

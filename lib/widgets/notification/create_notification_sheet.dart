@@ -88,6 +88,8 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
           backgroundColor: AppColors.available,
         ),
       );
+    } on NotificationDeliveryException catch (error) {
+      _showError(error.message);
     } on ArgumentError catch (error) {
       _showError(error.message?.toString() ?? 'Datos inválidos.');
     } catch (_) {
@@ -215,21 +217,24 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
                   child: Column(
                     children: _recipientResults
                         .map(
-                          (candidate) => ListTile(
-                            dense: true,
-                            title: Text(
-                              candidate.fullName.isEmpty
-                                  ? candidate.email
-                                  : candidate.fullName,
+                          (candidate) => Material(
+                            type: MaterialType.transparency,
+                            child: ListTile(
+                              dense: true,
+                              title: Text(
+                                candidate.fullName.isEmpty
+                                    ? candidate.email
+                                    : candidate.fullName,
+                              ),
+                              subtitle: Text(
+                                '${candidate.email} · ${candidate.role == 'client' ? 'Cliente' : 'Propietario'}',
+                              ),
+                              onTap: () => setState(() {
+                                _selectedRecipient = candidate;
+                                _recipientController.text = candidate.email;
+                                _recipientResults = const [];
+                              }),
                             ),
-                            subtitle: Text(
-                              '${candidate.email} · ${candidate.role == 'client' ? 'Cliente' : 'Propietario'}',
-                            ),
-                            onTap: () => setState(() {
-                              _selectedRecipient = candidate;
-                              _recipientController.text = candidate.email;
-                              _recipientResults = const [];
-                            }),
                           ),
                         )
                         .toList(growable: false),

@@ -589,9 +589,9 @@ service cloud.firestore {
       allow read: if canReadNotification();
       allow create: if isActiveAdmin()
         && request.resource.data.keys().hasOnly([
-          'eventType', 'sourceId', 'actorUid', 'recipientUid', 'target',
-          'title', 'message', 'createdAt', 'clientName', 'motelName',
-          'roomName'])
+          'eventType', 'sourceId', 'actorUid', 'recipientUid',
+          'recipientName', 'recipientEmail', 'target', 'title', 'message',
+          'createdAt', 'clientName', 'motelName', 'roomName'])
         && request.resource.data.keys().hasAll([
           'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
         && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
@@ -604,7 +604,12 @@ service cloud.firestore {
         && request.resource.data.createdAt == request.time
         && (request.resource.data.target != 'specificUser'
           || (request.resource.data.recipientUid is string
-            && request.resource.data.recipientUid.size() > 0));
+            && request.resource.data.recipientUid.size() > 0
+            && request.resource.data.recipientName is string
+            && request.resource.data.recipientName.size() <= 160
+            && request.resource.data.recipientEmail is string
+            && request.resource.data.recipientEmail.size() > 0
+            && request.resource.data.recipientEmail.size() <= 254));
       allow update, delete: if false;
     }
 

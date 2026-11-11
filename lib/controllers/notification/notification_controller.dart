@@ -7,6 +7,15 @@ import 'package:machuco/repositories/notification/notification_cloud_repository.
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
+class NotificationDeliveryException implements Exception {
+  const NotificationDeliveryException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 class NotificationController extends ChangeNotifier {
   NotificationController({
     this.recipientUid,
@@ -177,6 +186,8 @@ class NotificationController extends ChangeNotifier {
         );
       }
       await _loadLocalNotifications();
+    } on NotificationCloudRepositoryException catch (error) {
+      throw NotificationDeliveryException(error.message);
     } finally {
       _isSaving = false;
       _notify();
