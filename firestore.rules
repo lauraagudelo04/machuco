@@ -1034,6 +1034,9 @@ service cloud.firestore {
     // Reseñas: el cliente activo solo publica a su nombre. Responder,
     // moderar y eliminar corresponden a las funcionalidades de propietario y
     // administrador; esas reglas se agregan en sus bloques específicos.
+    // La app oculta al cliente las reseñas con status 'hidden'.
+    // El id del documento y authorId llevan el uid del cliente; la reseña
+    // nace visible y sin respuestas ni reporte.
     function hasValidReviewCreate(reviewId, data) {
       return data.keys().hasAll([
           'authorId', 'authorName', 'title', 'body', 'rating', 'date',
