@@ -911,6 +911,43 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // ------------------------------------------------------------------
+    // Resenas (rama feature-andres: ingresar resenas).
+    //
+    // El cliente activo solo publica a su nombre: el id del documento y
+    // authorId llevan su uid, la resena nace visible y sin respuestas ni
+    // reporte. Responder, moderar y eliminar no se habilitan aqui: les
+    // corresponde a las ramas de propietario y administrador.
+    function hasValidReviewCreate(reviewId, data) {
+      return data.keys().hasAll([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'type', 'status'
+        ])
+        && data.keys().hasOnly([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'roomId', 'type', 'status'
+        ])
+        && data.authorId == request.auth.uid
+        && reviewId.matches('review-client-' + request.auth.uid + '-[0-9]+')
+        && data.authorName is string && data.authorName.size() > 0
+        && data.title is string && data.title.trim().size() > 0
+        && data.body is string && data.body.trim().size() > 0
+        && data.rating is int && data.rating >= 1 && data.rating <= 5
+        && data.date is timestamp
+        && data.motelId is string && data.motelId.size() > 0
+        && (!('roomId' in data)
+          || (data.type == 'room' && data.roomId is string && data.roomId.size() > 0))
+        && data.type in ['room', 'motel', 'attention']
+        && data.status == 'visible';
+    }
+
+    match /reviews/{reviewId} {
+      // La app oculta al cliente las resenas con status 'hidden'.
+      allow read: if isSignedIn();
+      allow create: if isActiveClient()
+        && hasValidReviewCreate(reviewId, request.resource.data);
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {
