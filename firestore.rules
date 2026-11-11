@@ -1037,6 +1037,13 @@ service cloud.firestore {
     // La app oculta al cliente las reseñas con status 'hidden'.
     // El id del documento y authorId llevan el uid del cliente; la reseña
     // nace visible y sin respuestas ni reporte.
+    // ------------------------------------------------------------------
+    // Resenas (rama feature-andres: ingresar resenas).
+    //
+    // El cliente activo solo publica a su nombre: el id del documento y
+    // authorId llevan su uid, la resena nace visible y sin respuestas ni
+    // reporte. Responder, moderar y eliminar no se habilitan aqui: les
+    // corresponde a las ramas de propietario y administrador.
     function hasValidReviewCreate(reviewId, data) {
       return data.keys().hasAll([
           'authorId', 'authorName', 'title', 'body', 'rating', 'date',
@@ -1062,6 +1069,7 @@ service cloud.firestore {
     }
 
     match /reviews/{reviewId} {
+      // La app oculta al cliente las resenas con status 'hidden'.
       allow read: if isSignedIn();
       allow create: if isActiveClient()
         && hasValidReviewCreate(reviewId, request.resource.data);

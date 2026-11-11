@@ -35,4 +35,7 @@ abstract final class FirestoreCollections {
   /// Reservations shared by client, motel owner and admin
   /// (`reservations/{reservationId}`), cached locally in SQLite.
   static const reservations = 'reservations';
+
+  /// Client reviews of motels and rooms, one document per review id.
+  static const reviews = 'reviews';
 }
