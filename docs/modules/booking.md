@@ -172,14 +172,6 @@ administrador.
   sobre métricas adicionales del dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación confirmada.
 
-## Historial de reservas por cliente
-
-Desde el directorio de Clientes del propietario, `ClientDetailPage` ofrece
-"Ver historial de reservas" cuando el cliente tiene `uid`, y abre
-`OwnerReservationsPage(clientId: uid, clientName: nombre)`: solo las
-reservas de ese cliente en los moteles del propietario (reutiliza
-`filteredReservations(clientId:)`).
-
 ## Cobro en efectivo y factura
 
 `OwnerCashPaymentPage` registra el cobro con
@@ -209,11 +201,10 @@ llama a `ReservationCancellationNotifier`
   pantalla dice "No se pudo notificar al cliente." en vez de afirmar el
   aviso.
 - Limitación: el módulo de notificaciones guarda en SQLite del dispositivo,
-  así que el aviso no viaja al teléfono del cliente. La vista de
-  notificaciones del cliente (`client_motels_page.dart`) lee las del uid de
-  la sesión; sin sesión usa el usuario de demostración
-  (`NotificationController.demoClientUser`), que no coincide con el
-  `guestId` de la semilla, así que en modo demo el aviso no se ve.
+  así que el aviso no viaja al teléfono del cliente. Además, la vista de
+  notificaciones del cliente (`client_motels_page.dart`, de otro módulo)
+  lee un usuario de demostración fijo y no el uid de la sesión, por lo que
+  hoy no muestra estos avisos; queda pendiente de coordinar con su dueño.
 
 ## Persistencia local de reservas (Floor)
 
