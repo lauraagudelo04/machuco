@@ -1,10 +1,10 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/notification/notification_controller.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/tokens/app_colors.dart';
+import 'package:machuco/service/firebase/current_user.dart';
 
 /// Access button that keeps the inbox count in sync with the same UID used by
 /// the inbox itself. It is deliberately independent from the destination page
@@ -25,13 +25,16 @@ class UnreadNotificationButton extends StatefulWidget {
 }
 
 class _UnreadNotificationButtonState extends State<UnreadNotificationButton> {
-  late final NotificationController _controller;
+  NotificationController? _controller;
 
   @override
   void initState() {
     super.initState();
+    final recipientUid = CurrentUser.uidOrNull;
+    if (recipientUid == null) return;
+
     _controller = NotificationController(
-      recipientUid: FirebaseAuth.instance.currentUser?.uid,
+      recipientUid: recipientUid,
       recipientRole: widget.recipientRole,
     )..addListener(_refresh);
   }
@@ -43,14 +46,14 @@ class _UnreadNotificationButtonState extends State<UnreadNotificationButton> {
   @override
   void dispose() {
     _controller
-      ..removeListener(_refresh)
+      ?..removeListener(_refresh)
       ..dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final count = _controller.unreadCount;
+    final count = _controller?.unreadCount ?? 0;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -59,7 +62,7 @@ class _UnreadNotificationButtonState extends State<UnreadNotificationButton> {
           tooltip: count == 0 ? 'Notificaciones' : '$count sin leer',
           onPressed: () async {
             await widget.onPressed();
-            await _controller.load();
+            await _controller?.load();
           },
         ),
         if (count > 0)

@@ -352,7 +352,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 20);
+        expect(await raw.getVersion(), 21);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
@@ -422,6 +422,7 @@ void main() {
       'message': 'Mensaje',
       'sentAt': 1,
       'target': 'all',
+      'syncState': 'synced',
     });
     await raw.insert('notification_reads', {
       'id': 1,
@@ -462,7 +463,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 20);
+    expect(await raw.getVersion(), 21);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
@@ -522,7 +523,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 20);
+    expect(await raw.getVersion(), 21);
     expect(await _columnNames(raw, 'motels'), motelsColumns);
     expect(await raw.query('country_phone_codes'), hasLength(1));
   });

@@ -277,6 +277,12 @@ final migration3To4 = Migration(3, 4, (database) async {
 /// colisión histórica de la versión 5 entre ambos módulos.
 final migration5To6 = Migration(5, 6, (database) async {
   await _createRoomSchema(database, 6);
+  await _createNotificationSchema(database);
+});
+
+Future<void> _createNotificationSchema(
+  sqflite.DatabaseExecutor database,
+) async {
   await database.execute(
     'CREATE TABLE IF NOT EXISTS notifications ('
     'id INTEGER PRIMARY KEY AUTOINCREMENT, typeId INTEGER NOT NULL, '
@@ -293,7 +299,7 @@ final migration5To6 = Migration(5, 6, (database) async {
     'CREATE UNIQUE INDEX IF NOT EXISTS index_notification_reads_notificationId_userId '
     'ON notification_reads (notificationId, userId)',
   );
-});
+}
 
 /// Agrega los esquemas de Payment y clientes sin modificar tablas existentes.
 final migration6To7 = Migration(6, 7, (database) async {
@@ -517,6 +523,7 @@ Future<void> _completeMergedSchemas(sqflite.DatabaseExecutor database) async {
 
 final migration14To15 = Migration(14, 15, (database) async {
   await _completeMergedSchemas(database);
+  await _createNotificationSchema(database);
   final columns = await database.rawQuery('PRAGMA table_info(notifications)');
   if (!columns.any((column) => column['name'] == 'recipientUid')) {
     await database.execute(
@@ -598,6 +605,7 @@ final migration19To20 = Migration(19, 20, _completeDevelopSchemas);
 /// Identidad remota y snapshot de presentación para notificaciones. Los
 /// campos son opcionales para conservar los avisos ya existentes.
 final migration20To21 = Migration(20, 21, (database) async {
+  await _createNotificationSchema(database);
   final columns = await database.rawQuery('PRAGMA table_info(notifications)');
   final names = columns.map((column) => column['name']).toSet();
   if (!names.contains('remoteId')) {
