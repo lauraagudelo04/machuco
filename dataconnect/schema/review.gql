@@ -1,0 +1,28 @@
+# Esquema de Firebase SQL Connect (PostgreSQL) de MACHUCO.
+#
+# Tabla `reviews`: reseñas de los clientes (rama feature-andres).
+# Los campos replican `Review` (lib/models/review/review.dart).
+# `motelId` y `roomId` son texto, sin llave foránea a `motels`, para no
+# depender del esquema de otra rama (ver docs/decisions_log.md).
+type Review @table(name: "reviews") {
+  id: UUID! @default(expr: "uuidV4()")
+  "Uid de Firebase Authentication del autor. Lo fija el backend con auth.uid."
+  authorId: String!
+  "Nombre visible del autor."
+  authorName: String!
+  title: String!
+  body: String!
+  "Calificación de 1 a 5 (ReviewRules)."
+  rating: Int!
+  motelId: String!
+  "null = reseña del motel, no de una habitación."
+  roomId: String
+  "Id del tipo de reseña (ReviewType, maestro de Supabase)."
+  typeId: Int!
+  "Estado de moderación: visible, hidden o reported."
+  status: String! @default(value: "visible")
+  reportReason: String
+  adminReply: String
+  ownerReply: String
+  createdAt: Timestamp! @default(expr: "request.time")
+}

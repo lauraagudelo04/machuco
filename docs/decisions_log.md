@@ -870,3 +870,35 @@ app `Machuco Dev` (`co.machuco.app.dev`) en el selector.
 
 Los reportes salen con el mensaje del error: no pongas datos personales en el
 texto de una excepción.
+
+## 2026-11-10 — Reseñas en Firebase SQL Connect (rama `feature-andres`)
+
+**Contexto:** el profesor pidió implementar Firebase SQL Connect en la
+funcionalidad de ingresar reseñas y presentarlo con explicación y
+demostración práctica. El servicio compartido ya existe (entrada
+"2026-11-09 — Moteles pasan a Firebase SQL Connect" y `docs/sql_connect.md`).
+
+**Decisión:** se sigue la convención del equipo, sin tocar lo de moteles:
+
+- Tabla `reviews` en `dataconnect/schema/review.gql` y conector `review` en
+  `dataconnect/review/`, agregado a `connectorDirs`. Código generado en
+  `lib/service/sql_connect/review_connector/` (versionado, nunca a mano).
+- `motelId` y `roomId` se guardan como texto, sin llave foránea a `motels`,
+  para no depender del esquema de otra rama mientras los ids de moteles se
+  unifican.
+- `SqlConnectReviewRepository` + `ReviewSqlConnectGateway` implementan el
+  contrato existente `ReviewRepository`. `FirestoreReviewRepository` se
+  conserva y no se escribe en las dos bases a la vez.
+- Toda operación lleva `@auth`. El autor se fija en el backend con
+  `auth.uid`; un cliente solo puede crear reseñas a su nombre y con estado
+  `visible`.
+- Desarrollo y demostración con el emulador (`--project demo-machuco`) y la
+  CLI 15.34.1, como indica la guía. El despliegue a la nube se hace desde
+  `develop` y avisando al equipo.
+
+**Limitación conocida:** SQL Connect no lee Firestore, así que la regla
+"solo un cliente activo puede reseñar" (`isActiveClient()` en
+`firestore.rules`) no se replica: hoy basta con tener sesión. Requiere el
+custom claim de rol pendiente de la rama de autenticación.
+
+**Estado:** en implementación.

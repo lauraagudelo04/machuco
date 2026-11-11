@@ -8,6 +8,7 @@ import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/repositories/booking/reservation_category_repository.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/analytics/analytics_service.dart';
+import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
 import 'package:machuco/service/crashlytics/crash_reporting_service.dart';
 import 'package:machuco/views/login/login_page.dart';
 
@@ -21,6 +22,7 @@ Future<void> main() async {
   await AppDatabaseProvider.database;
   ReservationCategoryRepositoryProvider.useDatabase();
   BookingRepositoryProvider.useDatabase();
+  ReservationCancellationNotifierProvider.useNotificationRepository();
   runApp(const MachucoApp());
   await NotificationMessagingService(
     navigatorKey: appNavigatorKey,

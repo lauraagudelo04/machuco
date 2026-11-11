@@ -76,8 +76,12 @@ class _OwnerReservationDetailPageState
         await _load();
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Reserva cancelada. Se notificó al cliente.'),
+          SnackBar(
+            content: Text(
+              _controller.lastCancellationNotified
+                  ? 'Reserva cancelada. Se notificó al cliente.'
+                  : 'Reserva cancelada. No se pudo notificar al cliente.',
+            ),
           ),
         );
       }
