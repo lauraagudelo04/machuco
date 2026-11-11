@@ -70,34 +70,99 @@ void main() {
         title: 'Pago aprobado',
         message: 'Tu pago fue aprobado.',
         target: NotificationTarget.specificUser,
-        recipientUser: ' Laura@Machuco.com ',
+        recipientUid: 'laura-firebase-uid',
       );
 
       final lauraNotifications = await repository.findNotificationsForRecipient(
-        'laura@machuco.com',
+        'laura-firebase-uid',
+        role: 'client',
       );
       final camiloNotifications = await repository
-          .findNotificationsForRecipient('camilo@machuco.com');
+          .findNotificationsForRecipient('camilo-firebase-uid', role: 'client');
 
       expect(lauraNotifications.map((item) => item.id), [specificId, allId]);
       expect(camiloNotifications.map((item) => item.id), [allId]);
 
       await repository.markAsRead(
         notificationId: allId,
-        userId: 'laura@machuco.com',
+        userId: 'laura-firebase-uid',
       );
       await repository.markAsRead(
         notificationId: allId,
-        userId: 'laura@machuco.com',
+        userId: 'laura-firebase-uid',
       );
 
-      expect(await repository.findReadNotificationIds('laura@machuco.com'), {
+      expect(await repository.findReadNotificationIds('laura-firebase-uid'), {
         allId,
       });
       expect(
-        await repository.findReadNotificationIds('camilo@machuco.com'),
+        await repository.findReadNotificationIds('camilo-firebase-uid'),
         isEmpty,
       );
+    },
+  );
+
+  test('filtra los avisos masivos por rol', () async {
+    await repository.saveNotification(
+      typeId: 1,
+      title: 'Clientes',
+      message: 'Solo clientes',
+      target: NotificationTarget.clients,
+    );
+    await repository.saveNotification(
+      typeId: 1,
+      title: 'Propietarios',
+      message: 'Solo propietarios',
+      target: NotificationTarget.owners,
+    );
+
+    expect(
+      (await repository.findNotificationsForRecipient(
+        'client-1',
+        role: 'client',
+      )).map((notification) => notification.title),
+      ['Clientes'],
+    );
+    expect(
+      (await repository.findNotificationsForRecipient(
+        'owner-1',
+        role: 'owner',
+      )).map((notification) => notification.title),
+      ['Propietarios'],
+    );
+  });
+
+  test(
+    'actualiza la misma fila cuando se reintenta con el mismo remoteId',
+    () async {
+      final firstId = await repository.saveNotification(
+        typeId: 1,
+        title: 'Mantenimiento',
+        message: 'El sistema tendrá mantenimiento.',
+        target: NotificationTarget.specificUser,
+        recipientUid: 'client-1',
+        recipientName: 'Laura Gómez',
+        recipientEmail: 'laura@example.com',
+        remoteId: 'manual-stable-id',
+        syncState: 'pending',
+      );
+      final retryId = await repository.saveNotification(
+        typeId: 1,
+        title: 'Mantenimiento',
+        message: 'El sistema tendrá mantenimiento.',
+        target: NotificationTarget.specificUser,
+        recipientUid: 'client-1',
+        recipientName: 'Laura Gómez',
+        recipientEmail: 'laura@example.com',
+        remoteId: 'manual-stable-id',
+      );
+
+      final notifications = await repository.findAllNotifications();
+      expect(retryId, firstId);
+      expect(notifications, hasLength(1));
+      expect(notifications.single.remoteId, 'manual-stable-id');
+      expect(notifications.single.syncState, 'synced');
+      expect(notifications.single.recipientName, 'Laura Gómez');
     },
   );
 }

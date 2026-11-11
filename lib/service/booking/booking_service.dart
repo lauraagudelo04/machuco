@@ -683,8 +683,9 @@ class BookingService {
 
   /// Registers a cash payment. A `pending` reservation is paid like in
   /// [confirmPayment]; an `upcoming` or `active` one (already paid by other
-  /// means) only gets its invoice access marked as pending. Invoice
-  /// generation itself is out of scope of this module.
+  /// means) keeps its status. The invoice access status is left untouched,
+  /// so the invoice module can issue the invoice right away (it refuses to
+  /// issue while the access is `pending`).
   ///
   /// Throws [ReservationCancellationException] (`notFound`) for an unknown
   /// id and [ReservationTransitionException] for a cancelled or completed
@@ -701,7 +702,6 @@ class BookingService {
             ? ReservationStatus.upcoming
             : reservation.status,
         paymentMethod: reservation.paymentMethod ?? cashPaymentMethod,
-        invoiceAccessStatus: InvoiceAccessStatus.pending,
       ),
     );
     await _repository.update(paid);

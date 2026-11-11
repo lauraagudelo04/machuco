@@ -63,9 +63,9 @@ class AdminNotificationCard extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                 ),
                 child: Text(
-                  isAll
-                      ? '📢 Todos'
-                      : '👤 Para: ${notification.recipientUser ?? "Usuario"}',
+                  notification.target == NotificationTarget.specificUser
+                      ? '👤 Usuario específico'
+                      : '📢 ${notification.target.label}',
                   style: Theme.of(context).textTheme.labelSmall?.copyWith(
                     color: isAll ? AppColors.violet : AppColors.fuchsia,
                     fontWeight: FontWeight.w600,
@@ -89,6 +89,17 @@ class AdminNotificationCard extends StatelessWidget {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
+          if (notification.target == NotificationTarget.specificUser &&
+              notification.recipientLabel != null) ...[
+            Text(
+              notification.recipientLabel!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
           Text(
             notification.message,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(

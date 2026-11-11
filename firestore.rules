@@ -136,23 +136,34 @@ service cloud.firestore {
         && data.updatedAt == request.time;
     }
 
-    // Suscripciones privadas del propietario y sus pagos.
+    // Suscripciones del propietario. Se almacenan bajo el perfil del usuario
+    // porque no son un catálogo público: cada propietario solo puede escribir
+    // su propia suscripción y sus pagos. El administrador únicamente consulta
+    // para soporte/auditoría.
     function hasValidSubscriptionFields(data) {
       return data.keys().hasAll([
           'localId', 'planId', 'planName', 'motelName', 'amount',
-          'billingPeriod', 'nextBillingDate', 'status', 'features', 'updatedAt'])
+          'billingPeriod', 'nextBillingDate', 'status', 'features',
+          'updatedAt'
+        ])
         && data.keys().hasOnly([
           'ownerId', 'localId', 'userEmail', 'planId', 'planName', 'motelName',
-          'amount', 'billingPeriod', 'nextBillingDate', 'status', 'features', 'updatedAt'])
+          'amount', 'billingPeriod', 'nextBillingDate', 'status',
+          'features', 'updatedAt'
+        ])
         && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
         && data.localId is int && data.localId > 0
         && (!('userEmail' in data) || data.userEmail == null
-          || (data.userEmail is string && data.userEmail.size() > 0 && data.userEmail.size() <= 254))
+          || (data.userEmail is string
+            && data.userEmail.size() > 0 && data.userEmail.size() <= 254))
         && data.planId is int && data.planId > 0
-        && data.planName is string && data.planName.size() > 0 && data.planName.size() <= 100
-        && data.motelName is string && data.motelName.size() > 0 && data.motelName.size() <= 150
+        && data.planName is string
+        && data.planName.size() > 0 && data.planName.size() <= 100
+        && data.motelName is string
+        && data.motelName.size() > 0 && data.motelName.size() <= 150
         && data.amount is int && data.amount > 0
-        && data.billingPeriod is string && data.billingPeriod.size() > 0 && data.billingPeriod.size() <= 40
+        && data.billingPeriod is string
+        && data.billingPeriod.size() > 0 && data.billingPeriod.size() <= 40
         && data.nextBillingDate is timestamp
         && data.status in ['active', 'pending', 'cancelled']
         && data.features is list && data.features.size() <= 50
@@ -162,17 +173,21 @@ service cloud.firestore {
     function hasValidSubscriptionPaymentFields(data) {
       return data.keys().hasAll([
           'localId', 'subscriptionLocalId', 'date', 'amount',
-          'paymentMethod', 'reference', 'status', 'updatedAt'])
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
         && data.keys().hasOnly([
           'ownerId', 'localId', 'subscriptionLocalId', 'date', 'amount',
-          'paymentMethod', 'reference', 'status', 'updatedAt'])
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
         && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
         && data.localId is int && data.localId > 0
         && data.subscriptionLocalId is int && data.subscriptionLocalId > 0
         && data.date is timestamp
         && data.amount is int && data.amount > 0
-        && data.paymentMethod is string && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 100
-        && data.reference is string && data.reference.size() > 0 && data.reference.size() <= 200
+        && data.paymentMethod is string
+        && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 100
+        && data.reference is string
+        && data.reference.size() > 0 && data.reference.size() <= 200
         && data.status in ['pending', 'completed', 'cancelled']
         && data.updatedAt == request.time;
     }
@@ -562,6 +577,7 @@ service cloud.firestore {
           && request.resource.data.readAt == request.time;
         allow delete: if false;
       }
+
       match /devices/{deviceId} {
         allow read, create, update: if isSignedIn() && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
@@ -571,6 +587,9 @@ service cloud.firestore {
       }
     }
 
+    // Announcements are authored only by active administrators. A client or
+    // owner may read a global announcement, one aimed at their role, or one
+    // addressed to their Firebase UID. Email is never used as an identifier.
     match /notifications/{notificationId} {
       function canReadNotification() {
         return isActiveAdmin()
@@ -581,12 +600,13 @@ service cloud.firestore {
               || (resource.data.target == 'specificUser'
                 && resource.data.recipientUid == request.auth.uid)));
       }
+
       allow read: if canReadNotification();
       allow create: if isActiveAdmin()
         && request.resource.data.keys().hasOnly([
           'eventType', 'sourceId', 'actorUid', 'recipientUid',
-          'recipientName', 'recipientEmail', 'target',
-          'title', 'message', 'createdAt', 'clientName', 'motelName', 'roomName'])
+          'recipientName', 'recipientEmail', 'target', 'title', 'message',
+          'createdAt', 'clientName', 'motelName', 'roomName'])
         && request.resource.data.keys().hasAll([
           'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
         && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
@@ -634,10 +654,12 @@ service cloud.firestore {
         || (isActiveOwner()
           && subscriptionId == request.auth.uid
           && (resource == null || resource.data.ownerId == request.auth.uid));
+
       allow create: if isActiveOwner()
         && subscriptionId == request.auth.uid
         && request.resource.data.ownerId == request.auth.uid
         && hasValidSubscriptionFields(request.resource.data);
+
       allow update: if isActiveOwner()
         && subscriptionId == request.auth.uid
         && resource.data.ownerId == request.auth.uid
@@ -664,13 +686,15 @@ service cloud.firestore {
         && request.resource.data.ownerId == request.auth.uid
         && hasValidSubscriptionPaymentFields(request.resource.data)
         && subscriptionPaymentMatchesTopLevel(request.resource.data);
+
       allow update: if isActiveOwner()
         && resource.data.ownerId == request.auth.uid
         && request.resource.data.ownerId == request.auth.uid
         && hasValidSubscriptionPaymentFields(request.resource.data)
         && subscriptionPaymentMatchesTopLevel(request.resource.data)
         && request.resource.data.localId == resource.data.localId
-        && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
+        && request.resource.data.subscriptionLocalId
+            == resource.data.subscriptionLocalId;
       allow delete: if false;
     }
 
@@ -998,14 +1022,17 @@ service cloud.firestore {
     // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
     // mismo id. La escriben el administrador y el propietario activo (este
     // solo a su propio nombre). No se borran: se inhabilitan.
+    // Las reglas de habitaciones pueden confiar en ownerId: un propietario
+    // solo crea moteles a su nombre y solo edita los que ya son suyos, sin
+    // poder cambiarles el dueño.
     match /motels/{motelId} {
       allow read: if isSignedIn();
       allow create: if isAdmin()
         || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
       allow update: if isAdmin()
         || (isActiveOwner()
-          && resource.data.ownerId == request.auth.uid
-          && request.resource.data.ownerId == request.auth.uid);
+            && resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == request.auth.uid);
       allow delete: if false;
     }
 
@@ -1071,14 +1098,28 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    // Reseñas: creación por el cliente activo a su nombre.
+    // Reseñas: el cliente activo solo publica a su nombre. Responder,
+    // moderar y eliminar corresponden a las funcionalidades de propietario y
+    // administrador; esas reglas se agregan en sus bloques específicos.
+    // La app oculta al cliente las reseñas con status 'hidden'.
+    // El id del documento y authorId llevan el uid del cliente; la reseña
+    // nace visible y sin respuestas ni reporte.
+    // ------------------------------------------------------------------
+    // Resenas (rama feature-andres: ingresar resenas).
+    //
+    // El cliente activo solo publica a su nombre: el id del documento y
+    // authorId llevan su uid, la resena nace visible y sin respuestas ni
+    // reporte. Responder, moderar y eliminar no se habilitan aqui: les
+    // corresponde a las ramas de propietario y administrador.
     function hasValidReviewCreate(reviewId, data) {
       return data.keys().hasAll([
           'authorId', 'authorName', 'title', 'body', 'rating', 'date',
-          'motelId', 'type', 'status'])
+          'motelId', 'type', 'status'
+        ])
         && data.keys().hasOnly([
           'authorId', 'authorName', 'title', 'body', 'rating', 'date',
-          'motelId', 'roomId', 'type', 'status'])
+          'motelId', 'roomId', 'type', 'status'
+        ])
         && data.authorId == request.auth.uid
         && reviewId.matches('review-client-' + request.auth.uid + '-[0-9]+')
         && data.authorName is string && data.authorName.size() > 0
@@ -1088,12 +1129,14 @@ service cloud.firestore {
         && data.date is timestamp
         && data.motelId is string && data.motelId.size() > 0
         && (!('roomId' in data)
-          || (data.type == 'room' && data.roomId is string && data.roomId.size() > 0))
+          || (data.type == 'room'
+            && data.roomId is string && data.roomId.size() > 0))
         && data.type in ['room', 'motel', 'attention']
         && data.status == 'visible';
     }
 
     match /reviews/{reviewId} {
+      // La app oculta al cliente las resenas con status 'hidden'.
       allow read: if isSignedIn();
       allow create: if isActiveClient()
         && hasValidReviewCreate(reviewId, request.resource.data);
