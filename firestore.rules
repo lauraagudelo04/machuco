@@ -945,11 +945,18 @@ service cloud.firestore {
     // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
     // sin crear manualmente el registro; si existe, el registro prevalece.
     // Al transferir el motel, actualizar este permiso o crear el registro.
+    // También vale la copia de moteles de SQL Connect (motels/{motelId}), que
+    // la app escribe al crear el motel: así el propietario crea tipos de
+    // habitación y habitaciones sin esperar a un administrador (autorizado
+    // por la rama de habitaciones, 2026-11-10).
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
         && (
-          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
+          (exists(/databases/$(database)/documents/motels/$(data.motelId))
+            && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+              == request.auth.uid)
+          || (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
             && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
               == request.auth.uid)
           || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
@@ -1018,10 +1025,17 @@ service cloud.firestore {
     // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
     // mismo id. La escriben el administrador y el propietario activo (este
     // solo a su propio nombre). No se borran: se inhabilitan.
+    // Las reglas de habitaciones pueden confiar en ownerId: un propietario
+    // solo crea moteles a su nombre y solo edita los que ya son suyos, sin
+    // poder cambiarles el dueño.
     match /motels/{motelId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
         || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isActiveOwner()
+            && resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == request.auth.uid);
       allow delete: if false;
     }
 
