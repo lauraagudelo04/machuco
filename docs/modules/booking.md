@@ -74,7 +74,7 @@ No se agregan estados, tablas ni una pasarela.
 - `controllers/booking/owner_view/owner_booking_controller.dart`
   (`OwnerBookingController`): reservas generales del propietario, filtros
   por motel, habitación, cliente, estado y categoría, y flujo de cancelación
-  con notificación simulada al cliente.
+  con notificación al cliente (ver "Notificación de cancelación").
 - `controllers/booking/system_admin_view/system_admin_booking_controller.dart`
   (`SystemAdminBookingController`): estadísticas y dashboard por motel para
   el administrador del sistema, con filtro por estado y categoría.
@@ -171,6 +171,40 @@ administrador.
 - La nota final de `docs/booking_context.md` ("Nota para el LLM (Claude)")
   sobre métricas adicionales del dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación confirmada.
+
+## Cobro en efectivo y factura
+
+`OwnerCashPaymentPage` registra el cobro con
+`OwnerBookingController.registerCashPayment`, que devuelve la reserva
+pagada (`pending` pasa a `upcoming`/`active`, método `Efectivo`), y abre
+`AppRoutes.invoice` con esa reserva. `InvoicePage` (módulo de facturas) la
+emite en Firestore si aún no existe y la muestra. El cobro ya no marca
+`invoiceAccessStatus` como `pending`, porque `InvoiceController` no emite
+facturas con el acceso pendiente. Sin sesión de Firebase la factura no se
+puede emitir (el módulo de facturas trabaja sobre Firestore).
+
+## Notificación de cancelación
+
+Cuando el propietario cancela, `OwnerBookingController.cancelReservation`
+llama a `ReservationCancellationNotifier`
+(`lib/service/booking/reservation_cancellation_notifier.dart`):
+
+- `NotificationRepositoryCancellationNotifier` guarda una notificación de
+  tipo `reservation` (catálogo `notification_types` de Supabase) para
+  `guestId`, con el motel, la habitación, la fecha de entrada y el motivo,
+  usando el `NotificationRepository` del módulo de notificaciones tal como
+  está. `main.dart` lo activa con
+  `ReservationCancellationNotifierProvider.useNotificationRepository()`; sin
+  eso (pruebas) se usa `NoopReservationCancellationNotifier`.
+- Si no hay huésped, falta el tipo `reservation` o falla el guardado, la
+  cancelación se mantiene y `lastCancellationNotified` queda en `false`; la
+  pantalla dice "No se pudo notificar al cliente." en vez de afirmar el
+  aviso.
+- Limitación: el módulo de notificaciones guarda en SQLite del dispositivo,
+  así que el aviso no viaja al teléfono del cliente. Además, la vista de
+  notificaciones del cliente (`client_motels_page.dart`, de otro módulo)
+  lee un usuario de demostración fijo y no el uid de la sesión, por lo que
+  hoy no muestra estos avisos; queda pendiente de coordinar con su dueño.
 
 ## Persistencia local de reservas (Floor)
 
