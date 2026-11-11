@@ -83,8 +83,9 @@
 - Si Firestore falla, el motel queda guardado en SQL Connect y se muestra
   "El motel se guardó, pero no se pudo registrar para las habitaciones.
   Vuelve a guardarlo para reintentar."
-- La regla `room_motels` de habitaciones no se modificó; si esa rama quiere
-  usar esta copia, el cambio es suyo.
+- Habitaciones: `ownsRoomMotel` (rama de habitaciones) acepta como dueño el
+  `ownerId` de `motels/{motelId}`, además de `room_motels`. Cambio autorizado
+  por Juan José el 2026-11-10. Pruebas en `test_rules/motels.rules.test.mjs`.
 
 ## Pruebas
 - `test/repositories/motel/sql_connect_motel_repository_test.dart` (gateway

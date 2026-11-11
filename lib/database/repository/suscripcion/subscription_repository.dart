@@ -69,7 +69,7 @@ class SubscriptionRepository {
   final String _supabaseUrl;
   final String _publishableKey;
 
-  Future<List<SubscriptionPlan>> findPlans() async {
+  Future<List<SubscriptionPlan>> findPlans({bool includeDetails = false}) async {
     final base = Uri.tryParse(_supabaseUrl);
     if (base == null ||
         base.scheme != 'https' ||
@@ -81,7 +81,12 @@ class SubscriptionRepository {
     }
     final uri = base.replace(
       path: '/rest/v1/subscription_plans',
-      queryParameters: {'select': 'id,name', 'order': 'id.asc'},
+      queryParameters: {
+        'select': includeDetails
+            ? 'id,name,description,price,currency,billing_period,features,max_motels'
+            : 'id,name',
+        'order': 'id.asc',
+      },
     );
     late final http.Response response;
     try {
@@ -242,6 +247,18 @@ class SubscriptionRepository {
     }
   }
 
+  /// Guarda en SQLite la copia que ya fue validada y leída desde Firestore.
+  /// No consulta planes ni cambia sus datos.
+  Future<void> cacheSubscription(SubscriptionDetails subscription) async {
+    final dao = (await _database).subscriptionDao;
+    final id = subscription.id;
+    if (id != null && await dao.findById(id) != null) {
+      await dao.updateSubscription(subscription);
+    } else {
+      await dao.insertSubscription(subscription);
+    }
+  }
+
   SubscriptionDetails _withOwnerAndPlan(
     SubscriptionDetails subscription, {
     required String? email,
@@ -261,6 +278,17 @@ class SubscriptionRepository {
 
   Future<List<SubscriptionPayment>> findPayments(int subscriptionId) async =>
       (await _database).subscriptionDao.findPayments(subscriptionId);
+
+  /// Replica un pago remoto sin duplicarlo cuando ya existe en SQLite.
+  Future<void> cachePayment(SubscriptionPayment payment) async {
+    final dao = (await _database).subscriptionDao;
+    final localPayments = await dao.findPayments(payment.subscriptionId);
+    if (payment.id != null &&
+        localPayments.any((localPayment) => localPayment.id == payment.id)) {
+      return;
+    }
+    await dao.insertPayment(payment);
+  }
 
   Future<SubscriptionPayment> savePayment(SubscriptionPayment payment) async {
     final id = await (await _database).subscriptionDao.insertPayment(payment);

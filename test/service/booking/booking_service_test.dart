@@ -567,22 +567,25 @@ void main() {
   });
 
   group('registerCashPayment', () {
-    test('pays a pending reservation and marks the invoice pending', () async {
-      seed([
-        reservation(
-          status: ReservationStatus.pending,
-          createdAt: at(10, 11, 55),
-          checkIn: at(11, 14),
-          checkOut: at(11, 18),
-        ),
-      ]);
+    test(
+      'pays a pending reservation and leaves the invoice issuable',
+      () async {
+        seed([
+          reservation(
+            status: ReservationStatus.pending,
+            createdAt: at(10, 11, 55),
+            checkIn: at(11, 14),
+            checkOut: at(11, 18),
+          ),
+        ]);
 
-      final paid = await service.registerCashPayment('r1');
+        final paid = await service.registerCashPayment('r1');
 
-      expect(paid.status, ReservationStatus.upcoming);
-      expect(paid.paymentMethod, BookingService.cashPaymentMethod);
-      expect(paid.invoiceAccessStatus, InvoiceAccessStatus.pending);
-    });
+        expect(paid.status, ReservationStatus.upcoming);
+        expect(paid.paymentMethod, BookingService.cashPaymentMethod);
+        expect(paid.invoiceAccessStatus, InvoiceAccessStatus.notApplicable);
+      },
+    );
 
     test(
       'keeps the status and method of an already paid reservation',
@@ -600,7 +603,7 @@ void main() {
 
         expect(paid.status, ReservationStatus.active);
         expect(paid.paymentMethod, 'Tarjeta');
-        expect(paid.invoiceAccessStatus, InvoiceAccessStatus.pending);
+        expect(paid.invoiceAccessStatus, InvoiceAccessStatus.notApplicable);
       },
     );
 

@@ -115,6 +115,7 @@ class _ReviewsSectionState extends State<ReviewsSection> {
                       loadDraft: () => _controller.loadDraft(widget.motel.id),
                       onDraftChanged: (draft) =>
                           _controller.saveDraft(widget.motel.id, draft),
+                      loadReviewTypes: _controller.loadReviewTypes,
                     )
                   : null,
             ),
