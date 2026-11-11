@@ -7,6 +7,7 @@ import 'package:machuco/models/booking/reservation_category.dart';
 import 'package:machuco/repositories/booking/reservation_category_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/service/booking/booking_service.dart';
+import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
@@ -33,6 +34,7 @@ class OwnerBookingController extends ChangeNotifier {
     MotelController? motelController,
     ReservationCategoryRepository? categoryRepository,
     BookingService? bookingService,
+    ReservationCancellationNotifier? cancellationNotifier,
   }) : ownerId = ownerId ?? CurrentUser.uidOrNull ?? demoOwnerId,
        _motelController =
            motelController ??
@@ -41,7 +43,10 @@ class OwnerBookingController extends ChangeNotifier {
                : MotelController.persistent()),
        _categoryRepository =
            categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
-       _service = bookingService ?? BookingService();
+       _service = bookingService ?? BookingService(),
+       _cancellationNotifier =
+           cancellationNotifier ??
+           ReservationCancellationNotifierProvider.instance;
 
   /// Propietario de demostración: coincide con el `ownerId` que ya trae
   /// mockeado `MotelController` (dueño de "Motel Paraíso Élite" y "Motel El
@@ -54,6 +59,14 @@ class OwnerBookingController extends ChangeNotifier {
   final MotelController _motelController;
   final ReservationCategoryRepository _categoryRepository;
   final BookingService _service;
+  final ReservationCancellationNotifier _cancellationNotifier;
+
+  bool _lastCancellationNotified = false;
+
+  /// Whether the guest was notified of the last successful
+  /// [cancelReservation]. The UI uses it so it only claims a notification
+  /// that was really stored.
+  bool get lastCancellationNotified => _lastCancellationNotified;
 
   List<ReservationCategory> _categories = const [];
 
@@ -272,23 +285,27 @@ class OwnerBookingController extends ChangeNotifier {
 
   Future<Reservation?> getById(String id) => _service.getReservation(id);
 
-  /// Cancela una reserva y simula la notificación al cliente. Solo permitido
+  /// Cancela una reserva y notifica al cliente con
+  /// [ReservationCancellationNotifier]. Solo permitido
   /// si el estado actual es `pending` o `upcoming`; en cualquier otro caso
   /// (o si el motivo viene vacío, o si el id no existe) lanza
   /// [ReservationCancellationException] con un motivo específico, en vez de
   /// devolver silenciosamente `false`, para que la UI pueda mostrar un
-  /// mensaje preciso.
+  /// mensaje preciso. Un fallo al notificar no revierte la cancelación:
+  /// queda reflejado en [lastCancellationNotified].
   Future<void> cancelReservation(String id, String reason) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     final cancelled = await _service.cancelReservation(id, reason);
     await _reloadOwnedReservations();
 
-    // Notificación real fuera de alcance de esta rama: se simula solo de
-    // forma visual/registrada, sin backend ni notificación real.
-    debugPrint(
-      'Notificación simulada: se avisó a "${cancelled.guestName}" sobre '
-      'la cancelación de la reserva $id.',
-    );
+    try {
+      _lastCancellationNotified = await _cancellationNotifier.notifyCancelled(
+        cancelled,
+      );
+    } catch (error) {
+      debugPrint('No se pudo notificar la cancelación $id: $error');
+      _lastCancellationNotified = false;
+    }
 
     notifyListeners();
   }

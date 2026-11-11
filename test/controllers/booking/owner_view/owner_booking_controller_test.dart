@@ -4,9 +4,11 @@ import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/service/booking/booking_service.dart';
+import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
 
 void main() {
   _failureTests();
+  _cancellationNotificationTests();
 
   group('OwnerBookingController.reservationsForOwner', () {
     test('devuelve solo reservas de los moteles del propietario, ordenadas '
@@ -422,6 +424,86 @@ void _failureTests() {
       final scoped = controller.clientOptionsFor(motelId: '1');
       final scopedIds = scoped.map((o) => o.clientId).toList();
       expect(scopedIds.toSet().length, scopedIds.length);
+    });
+  });
+}
+
+class _RecordingNotifier implements ReservationCancellationNotifier {
+  _RecordingNotifier({this.result = true, this.error});
+
+  final bool result;
+  final Object? error;
+  final List<Reservation> notified = [];
+
+  @override
+  Future<bool> notifyCancelled(Reservation reservation) async {
+    notified.add(reservation);
+    if (error != null) throw error!;
+    return result;
+  }
+}
+
+void _cancellationNotificationTests() {
+  group('OwnerBookingController.cancelReservation notifica al cliente', () {
+    OwnerBookingController controllerWith(_RecordingNotifier notifier) =>
+        OwnerBookingController(
+          bookingService: BookingService(
+            repository: InMemoryBookingRepository(),
+          ),
+          cancellationNotifier: notifier,
+        );
+
+    test('envía la reserva cancelada, con su motivo, al notificador', () async {
+      final notifier = _RecordingNotifier();
+      final controller = controllerWith(notifier);
+
+      await controller.cancelReservation(
+        'owner-reservation-006',
+        'Mantenimiento de la habitación',
+      );
+
+      expect(notifier.notified, hasLength(1));
+      final sent = notifier.notified.single;
+      expect(sent.id, 'owner-reservation-006');
+      expect(sent.status, ReservationStatus.cancelled);
+      expect(sent.cancellationReason, 'Mantenimiento de la habitación');
+      expect(controller.lastCancellationNotified, isTrue);
+    });
+
+    test(
+      'si la notificación falla, la reserva igual queda cancelada',
+      () async {
+        final notifier = _RecordingNotifier(
+          error: StateError('sin base local'),
+        );
+        final controller = controllerWith(notifier);
+
+        await controller.cancelReservation('owner-reservation-006', 'Motivo');
+
+        final after = await controller.getById('owner-reservation-006');
+        expect(after!.status, ReservationStatus.cancelled);
+        expect(controller.lastCancellationNotified, isFalse);
+      },
+    );
+
+    test('si el notificador no pudo avisar, lo informa', () async {
+      final controller = controllerWith(_RecordingNotifier(result: false));
+
+      await controller.cancelReservation('owner-reservation-006', 'Motivo');
+
+      expect(controller.lastCancellationNotified, isFalse);
+    });
+
+    test('una cancelación rechazada no notifica a nadie', () async {
+      final notifier = _RecordingNotifier();
+      final controller = controllerWith(notifier);
+
+      await expectLater(
+        controller.cancelReservation('owner-reservation-001', 'Motivo'),
+        throwsA(isA<ReservationCancellationException>()),
+      );
+
+      expect(notifier.notified, isEmpty);
     });
   });
 }

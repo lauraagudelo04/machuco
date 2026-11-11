@@ -2,9 +2,26 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservation_detail_page.dart';
 
 Widget _wrap(Widget child) => MaterialApp(theme: AppTheme.light, home: child);
+
+class _AlwaysNotifies implements ReservationCancellationNotifier {
+  @override
+  Future<bool> notifyCancelled(Reservation reservation) async => true;
+}
+
+Future<void> _cancelWithReason(WidgetTester tester, String reason) async {
+  await tester.tap(find.text('Cancelar reserva'));
+  await tester.pumpAndSettle();
+  await tester.tap(find.text('Sí, cancelar'));
+  await tester.pumpAndSettle();
+  await tester.enterText(find.byType(TextFormField), reason);
+  await tester.tap(find.text('Confirmar cancelación'));
+  await tester.pumpAndSettle();
+}
 
 void main() {
   group('OwnerReservationDetailPage — visibilidad condicional de acciones', () {
@@ -126,8 +143,13 @@ void main() {
 
     testWidgets(
       'cancelar con motivo cambia el estado, oculta las acciones y avisa '
-      'de la notificación simulada',
+      'que se notificó al cliente',
       (tester) async {
+        ReservationCancellationNotifierProvider.instance = _AlwaysNotifies();
+        addTearDown(
+          () => ReservationCancellationNotifierProvider.instance =
+              const NoopReservationCancellationNotifier(),
+        );
         await tester.pumpWidget(
           _wrap(
             const OwnerReservationDetailPage(
@@ -139,16 +161,10 @@ void main() {
 
         expect(find.text('Cancelar reserva'), findsOneWidget);
 
-        await tester.tap(find.text('Cancelar reserva'));
-        await tester.pumpAndSettle();
-        await tester.tap(find.text('Sí, cancelar'));
-        await tester.pumpAndSettle();
-        await tester.enterText(
-          find.byType(TextFormField),
+        await _cancelWithReason(
+          tester,
           'El motel tuvo un imprevisto operativo.',
         );
-        await tester.tap(find.text('Confirmar cancelación'));
-        await tester.pumpAndSettle();
 
         expect(
           find.text('Reserva cancelada. Se notificó al cliente.'),
@@ -163,5 +179,29 @@ void main() {
         );
       },
     );
+
+    testWidgets('si no se pudo notificar, lo dice en vez de afirmar el aviso', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        _wrap(
+          const OwnerReservationDetailPage(
+            reservationId: 'owner-reservation-002',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await _cancelWithReason(tester, 'Reprogramación del motel.');
+
+      expect(
+        find.text('Reserva cancelada. No se pudo notificar al cliente.'),
+        findsOneWidget,
+      );
+      expect(
+        find.text('Reserva cancelada. Se notificó al cliente.'),
+        findsNothing,
+      );
+    });
   });
 }

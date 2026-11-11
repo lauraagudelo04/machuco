@@ -74,7 +74,7 @@ No se agregan estados, tablas ni una pasarela.
 - `controllers/booking/owner_view/owner_booking_controller.dart`
   (`OwnerBookingController`): reservas generales del propietario, filtros
   por motel, habitación, cliente, estado y categoría, y flujo de cancelación
-  con notificación simulada al cliente.
+  con notificación al cliente (ver "Notificación de cancelación").
 - `controllers/booking/system_admin_view/system_admin_booking_controller.dart`
   (`SystemAdminBookingController`): estadísticas y dashboard por motel para
   el administrador del sistema, con filtro por estado y categoría.
@@ -171,6 +171,30 @@ administrador.
 - La nota final de `docs/booking_context.md` ("Nota para el LLM (Claude)")
   sobre métricas adicionales del dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación confirmada.
+
+## Notificación de cancelación
+
+Cuando el propietario cancela, `OwnerBookingController.cancelReservation`
+llama a `ReservationCancellationNotifier`
+(`lib/service/booking/reservation_cancellation_notifier.dart`):
+
+- `NotificationRepositoryCancellationNotifier` guarda una notificación de
+  tipo `reservation` (catálogo `notification_types` de Supabase) para
+  `guestId`, con el motel, la habitación, la fecha de entrada y el motivo,
+  usando el `NotificationRepository` del módulo de notificaciones tal como
+  está. `main.dart` lo activa con
+  `ReservationCancellationNotifierProvider.useNotificationRepository()`; sin
+  eso (pruebas) se usa `NoopReservationCancellationNotifier`.
+- Si no hay huésped, falta el tipo `reservation` o falla el guardado, la
+  cancelación se mantiene y `lastCancellationNotified` queda en `false`; la
+  pantalla dice "No se pudo notificar al cliente." en vez de afirmar el
+  aviso.
+- Limitación: el módulo de notificaciones guarda en SQLite del dispositivo,
+  así que el aviso no viaja al teléfono del cliente. La vista de
+  notificaciones del cliente (`client_motels_page.dart`) lee las del uid de
+  la sesión; sin sesión usa el usuario de demostración
+  (`NotificationController.demoClientUser`), que no coincide con el
+  `guestId` de la semilla, así que en modo demo el aviso no se ve.
 
 ## Persistencia local de reservas (Floor)
 

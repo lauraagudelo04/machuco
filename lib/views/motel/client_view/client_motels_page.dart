@@ -9,6 +9,8 @@ import '../../booking/client_view/client_reservations_page.dart';
 import '../../pqrs/client_view/pqrs_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
 import '../../../controllers/client/client_controller.dart';
+import '../../../controllers/notification/notification_controller.dart';
+import '../../../service/firebase/current_user.dart';
 
 class ClientMotelsPage extends StatefulWidget {
   const ClientMotelsPage({super.key, this.controller});
@@ -122,7 +124,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const ClientNotificationView(),
+                  // Signed-in uid, the same id reservations use as guestId,
+                  // so the guest sees notifications addressed to them
+                  // (e.g. an owner cancellation). Demo user without session.
+                  builder: (context) => ClientNotificationView(
+                    recipientUser:
+                        CurrentUser.uidOrNull ??
+                        NotificationController.demoClientUser,
+                  ),
                 ),
               );
             },
