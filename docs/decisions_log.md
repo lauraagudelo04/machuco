@@ -853,6 +853,24 @@ personales, como ya se hace con los administradores.
   SDK), igual que con los administradores; se elimina desde la consola cuando
   haga falta.
 
+## 2026-11-10 — Crashlytics para reportar errores
+
+**Decisión:** se integra Firebase Crashlytics con instalación manual del
+plugin de Gradle (sin `flutterfire configure`, que reescribe archivos que el
+equipo ya modificó) y sin agregar `firebase_analytics`.
+
+**Verificado:** un error de prueba en el sabor `dev` (emulador Android)
+apareció como problema FATAL en la consola de Firebase.
+
+**Cómo probarlo:** corre el sabor `dev` en un emulador Android (Crashlytics no
+funciona en web ni escritorio), provoca un error de prueba con
+`FirebaseCrashlytics.instance.crash()` en un botón temporal y vuelve a abrir
+la app: el reporte se envía en el siguiente arranque. En la consola, elige la
+app `Machuco Dev` (`co.machuco.app.dev`) en el selector.
+
+Los reportes salen con el mensaje del error: no pongas datos personales en el
+texto de una excepción.
+
 ## 2026-11-10 — Reseñas en Firebase SQL Connect (rama `feature-andres`)
 
 **Contexto:** el profesor pidió implementar Firebase SQL Connect en la

@@ -5,18 +5,18 @@ import 'package:shared_preferences/shared_preferences.dart';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('sin correo devuelve el dummy sin escribir preferencias', () async {
+  test('sin correo devuelve null sin escribir preferencias', () async {
     SharedPreferences.setMockInitialValues({});
     expect(
       await SubscriptionPreferencesService().getUserEmail(),
-      'propietario.test@machuco.com',
+      isNull,
     );
     expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
   });
 
   test('lee y normaliza el correo guardado en preferencias', () async {
     SharedPreferences.setMockInitialValues({
-      'subscription.userEmail': ' OTRO@MACHUCO.COM ',
+      'auth.currentUserEmail': ' OTRO@MACHUCO.COM ',
     });
     expect(
       await SubscriptionPreferencesService().getUserEmail(),
@@ -24,11 +24,11 @@ void main() {
     );
   });
 
-  test('un correo vacío devuelve el dummy', () async {
-    SharedPreferences.setMockInitialValues({'subscription.userEmail': '  '});
+  test('un correo vacío devuelve null', () async {
+    SharedPreferences.setMockInitialValues({'auth.currentUserEmail': '  '});
     expect(
       await SubscriptionPreferencesService().getUserEmail(),
-      'propietario.test@machuco.com',
+      isNull,
     );
   });
 }
