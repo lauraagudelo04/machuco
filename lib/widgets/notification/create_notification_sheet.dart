@@ -28,6 +28,8 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
   NotificationRecipient? _selectedRecipient;
   List<NotificationRecipient> _recipientResults = const [];
   bool _isSearchingRecipients = false;
+  final String _deliveryId =
+      'manual-${DateTime.now().microsecondsSinceEpoch}-${identityHashCode(Object())}';
 
   @override
   void dispose() {
@@ -66,6 +68,13 @@ class _CreateNotificationSheetState extends State<CreateNotificationSheet> {
         recipientUid: _selectedTarget == NotificationTarget.specificUser
             ? recipient?.uid
             : null,
+        recipientName: _selectedTarget == NotificationTarget.specificUser
+            ? recipient?.fullName
+            : null,
+        recipientEmail: _selectedTarget == NotificationTarget.specificUser
+            ? recipient?.email
+            : null,
+        remoteId: _deliveryId,
       );
       if (!mounted) return;
       Navigator.of(context).pop();

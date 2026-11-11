@@ -12,6 +12,7 @@ import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
 import '../../../service/auth/auth_preferences.dart';
 import '../../../database/repository/auth/user_profile_repository.dart';
+import '../../../widgets/notification/unread_notification_button.dart';
 import 'owner_profile_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
@@ -200,20 +201,17 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: AppIconButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: 'Notificaciones',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ClientNotificationView(
-                    recipientRole: 'owner',
-                    title: 'Notificaciones Propietario',
-                  ),
+          child: UnreadNotificationButton(
+            recipientRole: 'owner',
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ClientNotificationView(
+                  recipientRole: 'owner',
+                  title: 'Notificaciones Propietario',
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ),
         actions: [

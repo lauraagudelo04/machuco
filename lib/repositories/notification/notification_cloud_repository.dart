@@ -20,7 +20,10 @@ class NotificationCloudRepository {
     required String message,
     required NotificationTarget target,
     required String actorUid,
+    required String remoteId,
     String? recipientUid,
+    String? recipientName,
+    String? recipientEmail,
   }) async {
     // Firestore stores the stable event contract. The notification-type catalog
     // may contain extra admin labels (for example, "prueba222"), which are
@@ -29,15 +32,23 @@ class NotificationCloudRepository {
       'reservation' || 'payment' || 'review' || 'system' => type.code,
       _ => 'system',
     };
-    final document = await _notifications.add({
-      'eventType': eventType,
-      'actorUid': actorUid,
-      'target': target.name,
-      if (target == NotificationTarget.specificUser)
-        'recipientUid': recipientUid,
-      'title': title.trim(),
-      'message': message.trim(),
-      'createdAt': FieldValue.serverTimestamp(),
+    final document = _notifications.doc(remoteId);
+    await _firestore.runTransaction((transaction) async {
+      if ((await transaction.get(document)).exists) return;
+      transaction.set(document, {
+        'eventType': eventType,
+        'actorUid': actorUid,
+        'target': target.name,
+        if (target == NotificationTarget.specificUser)
+          'recipientUid': recipientUid,
+        if (target == NotificationTarget.specificUser)
+          'recipientName': recipientName,
+        if (target == NotificationTarget.specificUser)
+          'recipientEmail': recipientEmail,
+        'title': title.trim(),
+        'message': message.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     });
     return document.id;
   }
@@ -104,6 +115,8 @@ class CloudNotification {
     required this.target,
     required this.createdAt,
     this.recipientUid,
+    this.recipientName,
+    this.recipientEmail,
   });
 
   final String id;
@@ -113,6 +126,8 @@ class CloudNotification {
   final NotificationTarget target;
   final DateTime createdAt;
   final String? recipientUid;
+  final String? recipientName;
+  final String? recipientEmail;
 
   factory CloudNotification.fromDocument(
     QueryDocumentSnapshot<Map<String, dynamic>> document,
@@ -128,6 +143,8 @@ class CloudNotification {
       ),
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
       recipientUid: data['recipientUid']?.toString(),
+      recipientName: data['recipientName']?.toString(),
+      recipientEmail: data['recipientEmail']?.toString(),
     );
   }
 }

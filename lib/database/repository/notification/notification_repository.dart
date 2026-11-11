@@ -24,6 +24,12 @@ abstract class NotificationDao {
   @insert
   Future<int> insertNotification(NotificationEntry notification);
 
+  @Query('SELECT * FROM notifications WHERE remoteId = :remoteId LIMIT 1')
+  Future<NotificationEntry?> findByRemoteId(String remoteId);
+
+  @update
+  Future<int> updateNotification(NotificationEntry notification);
+
   @Query('SELECT notificationId FROM notification_reads WHERE userId = :userId')
   Future<List<int>> findReadNotificationIds(String userId);
 
@@ -169,20 +175,38 @@ class NotificationRepository {
     required String message,
     required NotificationTarget target,
     String? recipientUid,
+    String? recipientName,
+    String? recipientEmail,
+    String? remoteId,
+    String syncState = 'synced',
+    DateTime? sentAt,
   }) async {
     final normalizedRecipient = recipientUid?.trim();
-    return (await _database).notificationDao.insertNotification(
-      NotificationEntry(
-        typeId: typeId,
-        title: title.trim(),
-        message: message.trim(),
-        sentAt: DateTime.now(),
-        target: target.name,
-        recipientUid: normalizedRecipient?.isEmpty ?? true
-            ? null
-            : normalizedRecipient,
-      ),
+    final normalizedRemoteId = remoteId?.trim();
+    final dao = (await _database).notificationDao;
+    final existing = normalizedRemoteId == null || normalizedRemoteId.isEmpty
+        ? null
+        : await dao.findByRemoteId(normalizedRemoteId);
+    final entry = NotificationEntry(
+      id: existing?.id,
+      typeId: typeId,
+      title: title.trim(),
+      message: message.trim(),
+      sentAt: sentAt ?? existing?.sentAt ?? DateTime.now(),
+      target: target.name,
+      recipientUid: normalizedRecipient?.isEmpty ?? true
+          ? null
+          : normalizedRecipient,
+      recipientName: recipientName?.trim(),
+      recipientEmail: recipientEmail?.trim(),
+      remoteId: normalizedRemoteId?.isEmpty ?? true ? null : normalizedRemoteId,
+      syncState: syncState,
     );
+    if (existing != null) {
+      await dao.updateNotification(entry);
+      return existing.id!;
+    }
+    return dao.insertNotification(entry);
   }
 
   Future<void> markAsRead({

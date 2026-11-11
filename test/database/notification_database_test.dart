@@ -131,4 +131,38 @@ void main() {
       ['Propietarios'],
     );
   });
+
+  test(
+    'actualiza la misma fila cuando se reintenta con el mismo remoteId',
+    () async {
+      final firstId = await repository.saveNotification(
+        typeId: 1,
+        title: 'Mantenimiento',
+        message: 'El sistema tendrá mantenimiento.',
+        target: NotificationTarget.specificUser,
+        recipientUid: 'client-1',
+        recipientName: 'Laura Gómez',
+        recipientEmail: 'laura@example.com',
+        remoteId: 'manual-stable-id',
+        syncState: 'pending',
+      );
+      final retryId = await repository.saveNotification(
+        typeId: 1,
+        title: 'Mantenimiento',
+        message: 'El sistema tendrá mantenimiento.',
+        target: NotificationTarget.specificUser,
+        recipientUid: 'client-1',
+        recipientName: 'Laura Gómez',
+        recipientEmail: 'laura@example.com',
+        remoteId: 'manual-stable-id',
+      );
+
+      final notifications = await repository.findAllNotifications();
+      expect(retryId, firstId);
+      expect(notifications, hasLength(1));
+      expect(notifications.single.remoteId, 'manual-stable-id');
+      expect(notifications.single.syncState, 'synced');
+      expect(notifications.single.recipientName, 'Laura Gómez');
+    },
+  );
 }

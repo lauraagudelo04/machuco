@@ -10,6 +10,10 @@ class NotificationEntry {
     required this.sentAt,
     required this.target,
     this.recipientUid,
+    this.recipientName,
+    this.recipientEmail,
+    this.remoteId,
+    this.syncState = 'synced',
   });
 
   @PrimaryKey(autoGenerate: true)
@@ -20,6 +24,10 @@ class NotificationEntry {
   final DateTime sentAt;
   final String target;
   final String? recipientUid;
+  final String? recipientName;
+  final String? recipientEmail;
+  final String? remoteId;
+  final String syncState;
 }
 
 @Entity(

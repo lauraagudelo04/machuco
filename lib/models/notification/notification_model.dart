@@ -99,6 +99,8 @@ class AppNotification {
     required this.target,
     this.type,
     this.recipientUid,
+    this.recipientName,
+    this.recipientEmail,
     this.remoteId,
   });
 
@@ -111,5 +113,18 @@ class AppNotification {
   final bool isUnread;
   final NotificationTarget target;
   final String? recipientUid;
+  final String? recipientName;
+  final String? recipientEmail;
   final String? remoteId;
+
+  String? get recipientLabel {
+    final name = recipientName?.trim() ?? '';
+    final email = recipientEmail?.trim() ?? '';
+    if (name.isEmpty && email.isEmpty) return null;
+    return name.isEmpty
+        ? email
+        : email.isEmpty
+        ? name
+        : '$name · $email';
+  }
 }

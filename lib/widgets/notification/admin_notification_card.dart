@@ -89,6 +89,17 @@ class AdminNotificationCard extends StatelessWidget {
             ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 4),
+          if (notification.target == NotificationTarget.specificUser &&
+              notification.recipientLabel != null) ...[
+            Text(
+              notification.recipientLabel!,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: context.appColors.textSecondary,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
           Text(
             notification.message,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
