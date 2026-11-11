@@ -366,6 +366,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                         return _OwnerMotelCard(
                           motel: motel,
                           activeReservations: 3,
+                          onSaved: () async {
+                            if (mounted) await _loadMotels();
+                          },
                           onToggleStatus: () => _toggleMotelStatus(motel.id),
                         );
                       },
@@ -399,11 +402,13 @@ class _OwnerMotelCard extends StatelessWidget {
     required this.motel,
     required this.activeReservations,
     required this.onToggleStatus,
+    required this.onSaved,
   });
 
   final Motel motel;
   final int activeReservations;
   final VoidCallback onToggleStatus;
+  final Future<void> Function() onSaved;
 
   void _showConfirmDialog(BuildContext context) {
     final isActive = motel.isAvailable;
@@ -490,8 +495,8 @@ class _OwnerMotelCard extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Editar Motel',
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  final saved = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
                       builder: (context) => OwnerMotelFormPage(
@@ -501,6 +506,7 @@ class _OwnerMotelCard extends StatelessWidget {
                       ),
                     ),
                   );
+                  if (saved == true) await onSaved();
                 },
               ),
               IconButton(
