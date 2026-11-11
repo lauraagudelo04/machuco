@@ -5,6 +5,7 @@ import 'package:machuco/database/repository/review/review_type_repository.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:machuco/service/room/supabase_room_config.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
@@ -13,7 +14,7 @@ import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 /// Controlador de reseñas para el cliente.
 ///
 /// Lee y guarda las reseñas a través de [ReviewRepository] (por defecto en
-/// Firestore, [FirestoreReviewRepository]); al enviar una
+/// Firebase SQL Connect, [SqlConnectReviewRepository]); al enviar una
 /// reseña nueva desde [AddReviewSheet] se refleja en la UI mediante
 /// [ListenableBuilder].
 class ReviewsController extends ChangeNotifier {
@@ -24,7 +25,7 @@ class ReviewsController extends ChangeNotifier {
     ReviewTypeRepository? typeRepository,
   }) : _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
-       _repository = repository ?? FirestoreReviewRepository(),
+       _repository = repository ?? SqlConnectReviewRepository(),
        _authorProvider = authorProvider ?? FirebaseReviewAuthorProvider(),
        _typeRepository =
            typeRepository ??
