@@ -172,6 +172,14 @@ administrador.
   sobre métricas adicionales del dashboard de administrador sigue sin
   resolver: es una petición abierta, no una implementación confirmada.
 
+## Historial de reservas por cliente
+
+Desde el directorio de Clientes del propietario, `ClientDetailPage` ofrece
+"Ver historial de reservas" cuando el cliente tiene `uid`, y abre
+`OwnerReservationsPage(clientId: uid, clientName: nombre)`: solo las
+reservas de ese cliente en los moteles del propietario (reutiliza
+`filteredReservations(clientId:)`).
+
 ## Cobro en efectivo y factura
 
 `OwnerCashPaymentPage` registra el cobro con

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/client/client_model.dart';
+import '../../booking/owner_view/owner_reservations_page.dart';
 
 class ClientDetailPage extends StatelessWidget {
   const ClientDetailPage({
@@ -90,6 +91,23 @@ class ClientDetailPage extends StatelessWidget {
                 ],
               ),
             ),
+            // Reservations are linked to the client by their Firebase uid
+            // (`guestId`), so the history needs it.
+            if (client.uid != null) ...[
+              const SizedBox(height: AppSpacing.s5),
+              AppButton(
+                label: 'Ver historial de reservas',
+                icon: Icons.history,
+                onPressed: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => OwnerReservationsPage(
+                      clientId: client.uid,
+                      clientName: client.name,
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),
