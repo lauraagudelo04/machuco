@@ -536,11 +536,12 @@ class OwnerController extends ChangeNotifier {
     );
   }
 
-  /// Anonimiza a un propietario y devuelve el registro que había en memoria.
+  /// Elimina a un propietario y devuelve el registro que había en memoria.
   ///
-  /// No se borra el documento: se conserva para auditoría con
+  /// La acción se presenta como «Eliminar», pero por dentro **anonimiza**: no
+  /// se borra el documento, que se conserva para auditoría con
   /// `accountStatus = anonymized`, sin datos personales y sin acceso. Un
-  /// propietario con moteles vinculados no se anonimiza hasta reasignarlos:
+  /// propietario con moteles vinculados no se elimina hasta reasignarlos:
   /// quedarían a nombre de una cuenta sin datos. Con conexión se anonimiza
   /// primero en Firestore; sin conexión la fila se oculta con
   /// `pendingDelete = 1` y la sincronización la anonimiza cuando vuelva la red.
@@ -600,7 +601,7 @@ class OwnerController extends ChangeNotifier {
       } catch (_) {
         _lastError =
             'No se pudieron reasignar los moteles de ${owner.fullName}, así '
-            'que no se anonimizó la cuenta. Revisa tu conexión e inténtalo de '
+            'que no se eliminó la cuenta. Revisa tu conexión e inténtalo de '
             'nuevo.';
         notifyListeners();
         return null;
@@ -617,7 +618,7 @@ class OwnerController extends ChangeNotifier {
     if (!hasSession) {
       await _markPendingAnonymization(
         owner,
-        '${owner.fullName} se anonimizó en este dispositivo. Inicia sesión '
+        '${owner.fullName} se eliminó en este dispositivo. Inicia sesión '
         'para aplicarlo en Firebase.',
         scheduleRetry: false,
       );
@@ -630,17 +631,17 @@ class OwnerController extends ChangeNotifier {
       if (error.type == OwnerCloudFailureType.network) {
         await _markPendingAnonymization(
           owner,
-          '${error.message} Se anonimizará en Firebase cuando vuelva la '
+          '${error.message} Se eliminará de Firebase cuando vuelva la '
           'conexión.',
         );
         return owner;
       }
-      _lastError = '${error.message} No se anonimizó en este dispositivo.';
+      _lastError = '${error.message} No se eliminó en este dispositivo.';
       notifyListeners();
       return null;
     } catch (_) {
       _lastError =
-          'No se pudo anonimizar al propietario en la nube. Intenta de nuevo.';
+          'No se pudo eliminar al propietario en la nube. Intenta de nuevo.';
       notifyListeners();
       return null;
     }
@@ -855,7 +856,7 @@ class OwnerController extends ChangeNotifier {
     final plural = cantidad == 1 ? 'motel vinculado' : 'moteles vinculados';
     final shown = names.take(3).join(', ');
     final rest = cantidad > 3 ? ' y ${cantidad - 3} más' : '';
-    return 'No se puede anonimizar a ${owner.fullName}: tiene $cantidad '
+    return 'No se puede eliminar a ${owner.fullName}: tiene $cantidad '
         '$plural ($shown$rest). Reasígnalos primero.';
   }
 
