@@ -14,8 +14,6 @@ import 'package:machuco/database/repository/additional_service/additional_servic
 import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
-import 'package:machuco/database/model/client/client.dart';
-import 'package:machuco/database/repository/client/client_repository.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:machuco/models/additional_service/additional_service_category.dart';
@@ -46,7 +44,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 21,
+  version: 22,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -54,7 +52,6 @@ part 'app_database.g.dart';
     NotificationRead,
     PaymentCatalogEntry,
     PaymentRecord,
-    ClientEntry,
     PhoneCountryCode,
     MotelEntity,
     AuthUserProfileEntry,
@@ -81,7 +78,6 @@ abstract class AppDatabase extends FloorDatabase {
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
 
-  ClientDao get clientDao;
   PhoneCountryCodeDao get phoneCountryCodeDao;
   MotelDao get motelDao;
   AuthUserProfileDao get authUserProfileDao;
@@ -124,6 +120,7 @@ class AppDatabaseProvider {
         migration18To19,
         migration19To20,
         migration20To21,
+        migration21To22,
       ])
       .addCallback(
         Callback(
@@ -631,6 +628,10 @@ final migration20To21 = Migration(20, 21, (database) async {
   await database.execute(
     'CREATE UNIQUE INDEX IF NOT EXISTS index_notifications_remoteId ON notifications (remoteId)',
   );
+});
+
+final migration21To22 = Migration(21, 22, (database) async {
+  await database.execute('DROP TABLE IF EXISTS clients');
 });
 
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
