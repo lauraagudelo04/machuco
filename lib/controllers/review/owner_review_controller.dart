@@ -16,7 +16,7 @@ class OwnerReviewController extends ChangeNotifier with ReviewActions {
   OwnerReviewController({
     MotelController? motelController,
     ReviewRepository? repository,
-  }) : _motelController = motelController ?? MotelController(),
+  }) : _motelController = motelController ?? MotelController.persistent(),
        _repository = repository ?? SqlConnectReviewRepository();
 
   final MotelController _motelController;
