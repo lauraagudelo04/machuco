@@ -1,0 +1,29 @@
+# Mutaciones del conector `review` (ingresar reseñas).
+# Responder, moderar y eliminar son de las ramas de propietario y
+# administrador; no se exponen aquí.
+
+# Un cliente con sesión publica una reseña. El autor sale del token
+# (auth.uid), no de la app, y la reseña siempre nace visible.
+mutation CreateMyReview(
+  $authorName: String!
+  $title: String!
+  $body: String!
+  $rating: Int!
+  $motelId: String!
+  $roomId: String
+  $typeId: Int!
+) @auth(level: USER) {
+  review_insert(
+    data: {
+      authorId_expr: "auth.uid"
+      authorName: $authorName
+      title: $title
+      body: $body
+      rating: $rating
+      motelId: $motelId
+      roomId: $roomId
+      typeId: $typeId
+      status: "visible"
+    }
+  )
+}

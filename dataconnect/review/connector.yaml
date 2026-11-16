@@ -1,0 +1,5 @@
+connectorId: review
+generate:
+  dartSdk:
+    outputDir: ../../lib/service/sql_connect/review_connector
+    package: review_connector

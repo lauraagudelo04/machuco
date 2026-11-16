@@ -5,13 +5,14 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/booking/owner_view/owner_booking_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
 /// Pantalla de cobro en efectivo: muestra el concepto y el monto a cobrar
-/// de una reserva, con un único botón de confirmación que registra el pago.
-/// La generación de la factura queda fuera de alcance: tras confirmar, el
-/// acceso a "Ver factura" solo queda marcado como pendiente.
+/// de una reserva, con un único botón de confirmación que registra el pago
+/// y abre la factura de la reserva pagada (`AppRoutes.invoice`, que la
+/// emite si aún no existe).
 class OwnerCashPaymentPage extends StatefulWidget {
   const OwnerCashPaymentPage({super.key, required this.reservationId});
 
@@ -51,18 +52,28 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
   }
 
   Future<void> _confirmPayment() async {
+    final reservation = _reservation;
+    if (reservation != null && reservation.isPayAtProperty) {
+      await Navigator.of(context).pushNamed(
+        AppRoutes.ownerPayments,
+        arguments: {
+          'motelId': reservation.motelId,
+          'motelName': reservation.motelName,
+        },
+      );
+      if (mounted) await _load();
+      return;
+    }
     setState(() => _isSubmitting = true);
     try {
-      await _controller.registerCashPayment(widget.reservationId);
+      final paid = await _controller.registerCashPayment(widget.reservationId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cobro registrado. El acceso a la factura queda pendiente.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cobro registrado.')));
+      await Navigator.of(
+        context,
+      ).pushReplacementNamed(AppRoutes.invoice, arguments: paid);
     } on ReservationCancellationException catch (error) {
       _showPaymentError(error.message);
     } on ReservationTransitionException catch (error) {
@@ -158,7 +169,9 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
           ),
           const SizedBox(height: AppSpacing.s5),
           AppButton(
-            label: 'Confirmar pago en efectivo',
+            label: reservation.isPayAtProperty
+                ? 'Registrar pago en Finanzas'
+                : 'Confirmar pago en efectivo',
             icon: Icons.payments_outlined,
             loading: _isSubmitting,
             onPressed: _isSubmitting ? null : _confirmPayment,

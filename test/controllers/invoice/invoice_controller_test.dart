@@ -35,13 +35,11 @@ Reservation _reservation(
   invoiceAccessStatus: invoiceAccessStatus,
 );
 
-InvoiceModel _invoiceFor(Reservation reservation) => InvoiceModel.fromJson({
-  'id': 1,
-  'invoice_number': 'FAC-000001',
-  ...InvoiceModel.issuePayload(reservation, null),
-  'total': reservation.roomTotal,
-  'issued_at': '2026-10-19T23:00:00Z',
-});
+InvoiceModel _invoiceFor(Reservation reservation) =>
+    InvoiceModel.fromReservation(
+      reservation,
+      issuedAt: DateTime.utc(2026, 10, 19, 23),
+    );
 
 class _FakeInvoiceRepository implements InvoiceRepository {
   final Map<String, InvoiceModel> stored = {};
@@ -64,14 +62,10 @@ class _FakeInvoiceRepository implements InvoiceRepository {
   }
 
   @override
-  Future<InvoiceModel?> findById(int id) async => null;
-
-  @override
   Future<List<InvoiceModel>> findByClient(String clientId) async => const [];
 
   @override
-  Future<List<InvoiceModel>> findByMotels(List<String> motelIds) async =>
-      const [];
+  Future<List<InvoiceModel>> findByOwner(String ownerId) async => const [];
 }
 
 /// Genera el PDF real pero no lo entrega al dispositivo (no hay plugin
@@ -109,7 +103,7 @@ void main() {
       await controller.loadForReservation(reservation);
 
       expect(controller.status, InvoiceLoadStatus.available);
-      expect(controller.invoice?.invoiceNumber, 'FAC-000001');
+      expect(controller.invoice?.invoiceNumber, 'FAC-RES1');
       expect(repository.issueCalls, 0);
     });
 
@@ -222,7 +216,7 @@ void main() {
       await controller.loadForReservation(_reservation('res-1'));
 
       expect(await controller.downloadCurrent(), isTrue);
-      expect(pdfService.savedFileNames, ['factura_FAC-000001.pdf']);
+      expect(pdfService.savedFileNames, ['factura_FAC-RES1.pdf']);
     });
 
     test('si falla el guardado no la marca como descargada', () async {

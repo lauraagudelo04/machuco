@@ -1,0 +1,35 @@
+# Consultas del conector `review` (ingresar reseñas).
+
+fragment ReviewFields on Review {
+  id
+  authorId
+  authorName
+  title
+  body
+  rating
+  motelId
+  roomId
+  typeId
+  status
+  reportReason
+  adminReply
+  ownerReply
+  createdAt
+}
+
+# Todas las reseñas, de la más reciente a la más antigua.
+# La app oculta al cliente las reseñas con status 'hidden'.
+query ListReviews
+@auth(level: USER, insecureReason: "Las reseñas son públicas para cualquier usuario con sesión.") {
+  reviews(orderBy: [{ createdAt: DESC }]) {
+    ...ReviewFields
+  }
+}
+
+# Reseñas de un motel, de la más reciente a la más antigua.
+query ListReviewsByMotel($motelId: String!)
+@auth(level: USER, insecureReason: "Las reseñas son públicas para cualquier usuario con sesión.") {
+  reviews(where: { motelId: { eq: $motelId } }, orderBy: [{ createdAt: DESC }]) {
+    ...ReviewFields
+  }
+}

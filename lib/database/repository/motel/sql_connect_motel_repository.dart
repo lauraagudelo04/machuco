@@ -58,6 +58,7 @@ class SqlConnectMotelRepository implements MotelRepository {
       if (motel != null) await dao.upsert(MotelEntity.fromModel(motel));
       return motel;
     } catch (error) {
+      logSqlConnectMotelError(error);
       final cached = await dao.findById(id);
       if (cached != null) return cached.toModel();
       throw MotelRepositoryException(
@@ -154,6 +155,7 @@ class SqlConnectMotelRepository implements MotelRepository {
       }
       return motels;
     } catch (error) {
+      logSqlConnectMotelError(error);
       final cached = (await dao.findAll())
           .map((entity) => entity.toModel())
           .where(cacheFilter)
@@ -176,6 +178,7 @@ class SqlConnectMotelRepository implements MotelRepository {
     } on MotelRepositoryException {
       rethrow;
     } catch (error) {
+      logSqlConnectMotelError(error);
       throw MotelRepositoryException(
         sqlConnectErrorMessage(error, fallback: fallback),
       );

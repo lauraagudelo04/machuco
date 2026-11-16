@@ -8,8 +8,10 @@ import 'package:machuco/controllers/booking/client_view/client_booking_controlle
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/product/product_controller.dart';
 import 'package:machuco/controllers/room/room_mock_data.dart';
+import 'package:machuco/database/repository/motel/motel_repository.dart';
 import 'package:machuco/core/design_system/components/app_button.dart';
 import 'package:machuco/core/design_system/components/app_card.dart';
+import 'package:machuco/core/design_system/components/app_feedback.dart';
 import 'package:machuco/core/design_system/components/app_icon_button.dart';
 import 'package:machuco/core/design_system/components/app_skeleton.dart';
 import 'package:machuco/models/booking/reservation_category.dart';
@@ -32,9 +34,14 @@ import 'package:machuco/widgets/booking/quantity_stepper.dart';
 /// Formulario de reserva. Una sola pantalla con scroll (sin stepper),
 /// alcanzable desde el detalle de habitación pulsando "Reservar".
 class CreateBookingPage extends StatefulWidget {
-  const CreateBookingPage({super.key, required this.room});
+  const CreateBookingPage({
+    super.key,
+    required this.room,
+    this.motelController,
+  });
 
   final RoomVisualData room;
+  final MotelController? motelController;
 
   @override
   State<CreateBookingPage> createState() => _CreateBookingPageState();
@@ -44,11 +51,12 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   late final ClientBookingController _bookingController;
   late final AdditionalServiceSystemAdministratorController _servicesController;
   late final ProductController _productsController;
-  final MotelController _motelController = MotelController();
+  late final MotelController _motelController;
   late final String _requestId;
   late final String _roomTypeName;
 
   Motel? _motel;
+  String? _motelError;
   DateTime? _checkInDate;
   DateTime? _checkOutDate;
   TimeOfDay? _checkInTime;
@@ -65,7 +73,10 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   @override
   void initState() {
     super.initState();
-    _bookingController = ClientBookingController();
+    _motelController = widget.motelController ?? MotelController.persistent();
+    _bookingController = ClientBookingController(
+      motelController: _motelController,
+    );
     _servicesController = AdditionalServiceSystemAdministratorController(
       motelId: widget.room.motelId,
     );
@@ -104,8 +115,35 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
   }
 
   Future<void> _loadMotel() async {
-    final motel = await _motelController.getMotelById(widget.room.motelId);
-    if (mounted) setState(() => _motel = motel);
+    if (mounted) {
+      setState(() {
+        _motel = null;
+        _motelError = null;
+      });
+    }
+    try {
+      final motel = await _motelController.getMotelById(widget.room.motelId);
+      if (!mounted) return;
+      if (motel == null ||
+          motel.id != widget.room.motelId ||
+          !motel.isAvailable) {
+        setState(
+          () => _motelError =
+              'El motel de esta habitación ya no está disponible.',
+        );
+        return;
+      }
+      setState(() => _motel = motel);
+    } on MotelRepositoryException catch (error) {
+      if (mounted) setState(() => _motelError = error.message);
+    } catch (_) {
+      if (mounted) {
+        setState(
+          () => _motelError =
+              'No se pudo consultar el motel de esta habitación. Inténtalo nuevamente.',
+        );
+      }
+    }
   }
 
   DateTime? get _checkIn {
@@ -170,6 +208,8 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       _guestCount >= 1 && _guestCount <= widget.room.capacity;
 
   bool get _isFormValid =>
+      _motel != null &&
+      _motelError == null &&
       _hasCompleteSchedule &&
       _rangeError == null &&
       _isGuestCountValid &&
@@ -276,7 +316,7 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
     final result = await _bookingController.createReservationForType(
       requestId: _requestId,
       motelId: widget.room.motelId,
-      motelName: _motel?.name ?? 'Motel ${widget.room.motelId}',
+      motelName: _motel!.name,
       rooms: _typeRooms,
       checkIn: checkIn,
       checkOut: checkOut,
@@ -354,6 +394,8 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.screen),
           children: [
+            if (_motelError != null)
+              AppErrorState(message: _motelError!, onRetry: _loadMotel),
             _HeaderCard(
               motelName: _motel?.name ?? 'Cargando motel...',
               roomTypeName: _roomTypeName,

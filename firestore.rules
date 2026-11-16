@@ -24,24 +24,78 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active';
     }
 
-    // Pago que un cliente registra al finalizar su reserva: en el local queda
-    // pendiente y sin metodo (lo confirma el propietario); con tarjeta nace
-    // pagado, con su metodo y fecha de pago.
+    // El cliente solo solicita pagar en el establecimiento. Un sandbox de
+    // tarjeta nunca acredita dinero recibido.
     function isClientPaymentCreate(data) {
       return isActiveClient()
         && data.clientId == request.auth.uid
         && data.ownerId != request.auth.uid
-        && (
-          (data.status == 'pending'
+        && data.status == 'pending'
             && !('method' in data)
             && !('paymentMethodId' in data)
+            && !('paymentMethodName' in data)
             && !('paidAt' in data)
-            && !('receiptNumber' in data))
-          ||
-          (data.status == 'paid'
-            && 'paymentMethodId' in data
-            && 'paidAt' in data)
-        );
+            && !('receiptNumber' in data);
+    }
+
+    function paymentMatchesReservation(paymentId, data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return paymentId == 'pay-' + data.bookingId
+        && data.ownerId == reservation.ownerId
+        && data.clientId == reservation.guestId
+        && data.motelId == reservation.motelId
+        && data.roomId == reservation.roomId
+        && data.amount == reservation.total
+        && data.reservationDate == reservation.checkIn
+        && get(/databases/$(database)/documents/users/$(data.ownerId)).data.role == 'owner'
+        && get(/databases/$(database)/documents/users/$(data.ownerId)).data.accountStatus == 'active';
+    }
+
+    function hasLinkedPaymentState(data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return (data.status == 'pending'
+          && reservation.status == 'pending'
+          && reservation.get('paymentMethod', '') == 'En el Local')
+        || (data.status == 'paid'
+          && 'paymentMethodId' in data && 'paymentMethodName' in data
+          && 'paidAt' in data && data.get('receiptNumber', '') == 'LOCAL-pay-' + data.bookingId
+          && reservation.status in ['upcoming', 'active', 'completed', 'cancelled']
+          && reservation.get('paymentMethod', '') == data.paymentMethodName)
+        || (data.status == 'cancelled' && reservation.status == 'cancelled')
+        || data.status == 'refunded';
+    }
+
+    function hasBackedReservationPayment(reservationId, data) {
+      let payment = getAfter(/databases/$(database)/documents/payments/$('pay-' + reservationId)).data;
+      return payment.bookingId == reservationId
+        && payment.ownerId == data.ownerId
+        && payment.clientId == data.guestId
+        && payment.motelId == data.motelId
+        && payment.roomId == data.roomId
+        && payment.amount == data.total
+        && payment.reservationDate == data.checkIn
+        && ((data.status == 'pending'
+            && data.get('paymentMethod', '') == 'En el Local'
+            && data.invoiceAccessStatus == 'notApplicable'
+            && payment.status == 'pending')
+          || (data.status in ['upcoming', 'active', 'completed']
+            && payment.status == 'paid'
+            && data.get('paymentMethod', '') == payment.get('paymentMethodName', '')
+            && 'paymentMethodId' in payment && 'paidAt' in payment));
+    }
+
+    function isReservationPaymentUpdate(reservationId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let selection = before.status == 'pending' && after.status == 'pending'
+        && after.get('paymentMethod', '') == 'En el Local'
+        && (before.get('paymentMethod', '') == 'En el Local'
+          || request.time < before.createdAt + duration.value(15, 'm'));
+      let receipt = before.status == 'pending'
+        && after.status in ['upcoming', 'active', 'completed'];
+      return (!after.diff(before).affectedKeys().hasAny(['paymentMethod', 'invoiceAccessStatus'])
+          && !receipt)
+        || ((selection || receipt) && hasBackedReservationPayment(reservationId, after));
     }
 
     function hasValidPaymentFields(data) {
@@ -80,6 +134,73 @@ service cloud.firestore {
         && (!('receiptNumber' in data)
           || (data.receiptNumber is string && data.receiptNumber.size() > 0))
         && data.updatedAt == request.time;
+    }
+
+    // Suscripciones del propietario. Se almacenan bajo el perfil del usuario
+    // porque no son un catálogo público: cada propietario solo puede escribir
+    // su propia suscripción y sus pagos. El administrador únicamente consulta
+    // para soporte/auditoría.
+    function hasValidSubscriptionFields(data) {
+      return data.keys().hasAll([
+          'localId', 'planId', 'planName', 'motelName', 'amount',
+          'billingPeriod', 'nextBillingDate', 'status', 'features',
+          'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'userEmail', 'planId', 'planName', 'motelName',
+          'amount', 'billingPeriod', 'nextBillingDate', 'status',
+          'features', 'updatedAt'
+        ])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && (!('userEmail' in data) || data.userEmail == null
+          || (data.userEmail is string
+            && data.userEmail.size() > 0 && data.userEmail.size() <= 254))
+        && data.planId is int && data.planId > 0
+        && data.planName is string
+        && data.planName.size() > 0 && data.planName.size() <= 100
+        && data.motelName is string
+        && data.motelName.size() > 0 && data.motelName.size() <= 150
+        && data.amount is int && data.amount > 0
+        && data.billingPeriod is string
+        && data.billingPeriod.size() > 0 && data.billingPeriod.size() <= 40
+        && data.nextBillingDate is timestamp
+        && data.status in ['active', 'pending', 'cancelled']
+        && data.features is list && data.features.size() <= 50
+        && data.updatedAt == request.time;
+    }
+
+    function hasValidSubscriptionPaymentFields(data) {
+      return data.keys().hasAll([
+          'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'localId', 'subscriptionLocalId', 'date', 'amount',
+          'paymentMethod', 'reference', 'status', 'updatedAt'
+        ])
+        && (!('ownerId' in data) || (data.ownerId is string && data.ownerId.size() > 0))
+        && data.localId is int && data.localId > 0
+        && data.subscriptionLocalId is int && data.subscriptionLocalId > 0
+        && data.date is timestamp
+        && data.amount is int && data.amount > 0
+        && data.paymentMethod is string
+        && data.paymentMethod.size() > 0 && data.paymentMethod.size() <= 100
+        && data.reference is string
+        && data.reference.size() > 0 && data.reference.size() <= 200
+        && data.status in ['pending', 'completed', 'cancelled']
+        && data.updatedAt == request.time;
+    }
+
+    function subscriptionWriteAllowed(uid) {
+      return isActiveOwner() && request.auth.uid == uid;
+    }
+
+    function subscriptionPaymentMatchesParent(uid, subscriptionId, data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/users/$(uid)/subscriptions/$(subscriptionId)
+      ).data;
+      return subscription.localId == data.subscriptionLocalId;
     }
 
     function isValidPaymentTransition(previous, next) {
@@ -396,6 +517,7 @@ service cloud.firestore {
           && request.resource.data.accountStatus in ['active', 'disabled'])
         || isAdminContactEdit()
         || isAdminOwnerEdit()
+        || isAdminOwnerAnonymization()
         || isAdminAnonymization()
         || (isSignedIn()
           && request.auth.uid == uid
@@ -406,18 +528,16 @@ service cloud.firestore {
             || (resource.data.get('mustChangePassword', false) == true
               && request.resource.data.mustChangePassword == false))));
 
-      // Cada usuario puede borrar su propio perfil (eliminacion de cuenta,
-      // tras reautenticarse) y un admin activo puede borrar cuentas que no
-      // son de administrador (propietarios y clientes). Las subcolecciones no
-      // se borran en cascada. Un admin no se borra: se anonimiza (ver
-      // isAdminAnonymization) para conservar la auditoria y respetar
-      // "siempre hay un admin activo".
-      allow delete: if (isSignedIn()
-          && request.auth.uid == uid
-          && resource.data.role != 'admin'
-          && resource.data.get('accountStatus', '') != 'anonymized')
-        || (isActiveAdmin() && resource.data.role != 'admin');
+      // Solo cada usuario puede borrar su propio perfil (eliminacion de
+      // cuenta, tras reautenticarse). Un administrador no borra cuentas:
+      // anonimiza (isAdminOwnerAnonymization / isAdminAnonymization) para
+      // conservar la auditoria. Las subcolecciones no se borran en cascada.
+      allow delete: if isSignedIn()
+        && request.auth.uid == uid
+        && resource.data.role != 'admin'
+        && resource.data.get('accountStatus', '') != 'anonymized';
 
+      // Rutas anteriores conservadas tal como están en la versión compartida.
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
         allow create, update: if isSignedIn() && request.auth.uid == uid
@@ -435,7 +555,77 @@ service cloud.firestore {
               'paymentMethod', 'reference', 'status', 'updatedAt']);
           allow delete: if false;
         }
+
+        // Nombre canónico de pagos de suscripción; mantiene la ruta anterior.
+        match /subscriptionPayments/{paymentId} {
+          allow read: if isActiveAdmin() || subscriptionWriteAllowed(uid);
+          allow create: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data);
+          allow update: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data)
+            && request.resource.data.localId == resource.data.localId
+            && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
+          allow delete: if false;
+        }
       }
+
+      match /notificationReads/{notificationId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
+        allow delete: if false;
+      }
+
+      match /devices/{deviceId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Announcements are authored only by active administrators. A client or
+    // owner may read a global announcement, one aimed at their role, or one
+    // addressed to their Firebase UID. Email is never used as an identifier.
+    match /notifications/{notificationId} {
+      function canReadNotification() {
+        return isActiveAdmin()
+          || ((isActiveClient() || isActiveOwner())
+            && (resource.data.target == 'all'
+              || (resource.data.target == 'clients' && isActiveClient())
+              || (resource.data.target == 'owners' && isActiveOwner())
+              || (resource.data.target == 'specificUser'
+                && resource.data.recipientUid == request.auth.uid)));
+      }
+
+      allow read: if canReadNotification();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'sourceId', 'actorUid', 'recipientUid',
+          'recipientName', 'recipientEmail', 'target', 'title', 'message',
+          'createdAt', 'clientName', 'motelName', 'roomName'])
+        && request.resource.data.keys().hasAll([
+          'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
+        && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.target in ['all', 'clients', 'owners', 'specificUser']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.target != 'specificUser'
+          || (request.resource.data.recipientUid is string
+            && request.resource.data.recipientUid.size() > 0
+            && request.resource.data.recipientName is string
+            && request.resource.data.recipientName.size() <= 160
+            && request.resource.data.recipientEmail is string
+            && request.resource.data.recipientEmail.size() > 0
+            && request.resource.data.recipientEmail.size() <= 254));
+      allow update, delete: if false;
     }
 
     // Reseñas de cliente (colección `reviews`, ver FirestoreCollections).
@@ -508,6 +698,56 @@ service cloud.firestore {
       allow delete: if false;
     }
 
+    // Suscripciones de propietarios: colección raíz; el ID es el UID.
+    match /subscriptions/{subscriptionId} {
+      allow read: if isAdmin()
+        || (isActiveOwner()
+          && subscriptionId == request.auth.uid
+          && (resource == null || resource.data.ownerId == request.auth.uid));
+
+      allow create: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data);
+
+      allow update: if isActiveOwner()
+        && subscriptionId == request.auth.uid
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionFields(request.resource.data)
+        && request.resource.data.localId == resource.data.localId;
+      allow delete: if false;
+    }
+
+    function subscriptionPaymentMatchesTopLevel(data) {
+      let subscription = getAfter(
+        /databases/$(database)/documents/subscriptions/$(data.ownerId)
+      ).data;
+      return data.ownerId == request.auth.uid
+        && subscription.ownerId == data.ownerId
+        && subscription.localId == data.subscriptionLocalId;
+    }
+
+    // Pagos de suscripción separados de los pagos de reservas.
+    match /subscriptionPayments/{paymentId} {
+      allow read: if isAdmin()
+        || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
+      allow create: if isActiveOwner()
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data);
+
+      allow update: if isActiveOwner()
+        && resource.data.ownerId == request.auth.uid
+        && request.resource.data.ownerId == request.auth.uid
+        && hasValidSubscriptionPaymentFields(request.resource.data)
+        && subscriptionPaymentMatchesTopLevel(request.resource.data)
+        && request.resource.data.localId == resource.data.localId
+        && request.resource.data.subscriptionLocalId
+            == resource.data.subscriptionLocalId;
+      allow delete: if false;
+    }
+
     // Pagos sincronizados con Cloud Firestore. El propietario los lee y los
     // confirma; el cliente solo puede crear los suyos (ver
     // isClientPaymentCreate) y no tiene historial de Payment en la app final.
@@ -517,11 +757,25 @@ service cloud.firestore {
 
       allow create: if !isLegacyDemoPaymentId(paymentId)
         && hasValidPaymentFields(request.resource.data)
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && (request.resource.data.status != 'paid'
+          || (get(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status == 'pending'
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active']))
         && (
           (isActiveOwner()
             && request.resource.data.ownerId == request.auth.uid)
           || isClientPaymentCreate(request.resource.data)
         );
+
+      // A client can replay exactly the same pending request after a timeout,
+      // without gaining read access or the right to confirm/cancel a payment.
+      allow update: if isClientPaymentCreate(request.resource.data)
+        && resource.data.status == 'pending'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && hasValidPaymentFields(request.resource.data);
 
       allow update: if isActiveOwner()
         && !isLegacyDemoPaymentId(paymentId)
@@ -535,6 +789,17 @@ service cloud.firestore {
           resource.data.status,
           request.resource.data.status
         )
+        && (!(resource.data.status == 'pending' && request.resource.data.status == 'paid')
+          || paymentId != 'pay-' + request.resource.data.bookingId
+          || (get(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status == 'pending'
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active']))
+        && (paymentId != 'pay-' + request.resource.data.bookingId
+          || (paymentMatchesReservation(paymentId, request.resource.data)
+            && hasLinkedPaymentState(request.resource.data)))
+        && (resource.data.status != request.resource.data.status
+          || resource.data.status == 'pending'
+          || request.resource.data.diff(resource.data).affectedKeys()
+            .hasOnly(['paymentMethodName', 'updatedAt']))
         && hasValidPaymentFields(request.resource.data);
 
       allow delete: if false;
@@ -615,17 +880,59 @@ service cloud.firestore {
         && after.updatedAt == request.time;
     }
 
+    // Un admin activo anonimiza a un propietario: conserva rol, correo,
+    // createdAt/createdBy y la auditoría; reemplaza el nombre y limpia los
+    // datos personales. El documento nunca se borra (queda para auditoría).
+    function isAdminOwnerAnonymization() {
+      let before = resource.data;
+      let after = request.resource.data;
+      return isActiveAdmin()
+        && before.role == 'owner'
+        && after.role == 'owner'
+        && after.accountStatus == 'anonymized'
+        && after.fullName == 'Propietario eliminado'
+        && after.email == before.email
+        && after.get('createdAt', null) == before.get('createdAt', null)
+        && after.get('createdBy', null) == before.get('createdBy', null)
+        && after.anonymizedAt == request.time
+        && after.anonymizedBy == request.auth.uid
+        && after.keys().hasOnly([
+          'fullName', 'email', 'role', 'accountStatus', 'createdAt',
+          'createdBy', 'anonymizedAt', 'anonymizedBy', 'updatedBy',
+          'updatedAt', 'phone', 'phoneNumber', 'phoneCountryCodeId', 'nit',
+          'personType', 'documentType', 'documentNumber', 'address',
+          'countryCode', 'countryName', 'companyName', 'planId',
+          'firstNames', 'lastNames', 'mustChangePassword'])
+        && after.get('phone', null) == null
+        && after.get('phoneNumber', null) == null
+        && after.get('phoneCountryCodeId', null) == null
+        && after.get('nit', null) == null
+        && after.get('personType', null) == null
+        && after.get('documentType', null) == null
+        && after.get('documentNumber', null) == null
+        && after.get('address', null) == null
+        && after.get('countryCode', null) == null
+        && after.get('countryName', null) == null
+        && after.get('companyName', null) == null
+        && after.get('planId', null) == null
+        && after.get('firstNames', null) == null
+        && after.get('lastNames', null) == null;
+    }
+
     // Reservas compartidas por cliente, propietario y administrador
     // (ReservationCloudRepository). El cliente ve las suyas, el propietario
     // las de sus moteles (ownerId) y el admin todas. Solo el cliente las crea,
-    // a su nombre. El estado inicial puede no ser `pending` si la reserva se
-    // pago sin conexion antes de sincronizarse.
+    // a su nombre. Un estado pagado exige un comprobante del propietario;
+    // seleccionar el lugar de pago no acredita dinero recibido.
     match /reservations/{reservationId} {
       allow read: if isReservationParticipant(resource.data);
 
       allow create: if isActiveClient()
         && request.resource.data.guestId == request.auth.uid
         && request.resource.data.ownerId != request.auth.uid
+        && (request.resource.data.status == 'pending'
+          && !('paymentMethod' in request.resource.data)
+          || hasBackedReservationPayment(reservationId, request.resource.data))
         && hasValidReservationFields(request.resource.data);
 
       allow update: if isReservationParticipant(resource.data)
@@ -637,34 +944,10 @@ service cloud.firestore {
           resource.data.status,
           request.resource.data.status
         )
+        && isReservationPaymentUpdate(reservationId)
         && hasValidReservationFields(request.resource.data);
 
       allow delete: if false;
-    }
-
-    // Propietarios: dato de dominio administrado solo por el rol admin. El
-    // propietario no se autogestiona desde la app, por eso la coleccion no se
-    // expone a isActiveOwner().
-    function hasValidOwnerFields(data) {
-      return data.keys().hasOnly([
-          'fullName', 'documentType', 'documentNumber', 'email', 'phone',
-          'countryCode', 'countryName', 'address', 'isActive', 'updatedBy',
-          'updatedAt'
-        ])
-        && data.fullName is string && data.fullName.size() > 0
-        && data.documentType is string && data.documentType.size() > 0
-        && data.documentNumber is string && data.documentNumber.size() > 0
-        && data.email is string && data.email.size() > 0
-        && data.phone is string && data.phone.size() > 0
-        && data.updatedBy is string && data.updatedBy == request.auth.uid
-        && data.isActive is bool;
-    }
-
-    match /owners/{ownerId} {
-      allow read: if isAdmin();
-      allow create, update: if isAdmin()
-        && hasValidOwnerFields(request.resource.data);
-      allow delete: if isAdmin();
     }
 
     function isActiveOwnerOrAdmin() {
@@ -714,27 +997,19 @@ service cloud.firestore {
         && (isAdmin() || resource.data.ownerId == request.auth.uid);
     }
 
-    // Registro de autoridad. Crear desde la consola con un usuario administrador.
-    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    // Registro anterior de autorización, conservado por compatibilidad.
     match /room_motels/{motelId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
-    // sin crear manualmente el registro; si existe, el registro prevalece.
-    // Al transferir el motel, actualizar este permiso o crear el registro.
+    // El propietario activo debe coincidir con el dueño del motel en Firestore.
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
-        && (
-          (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && data.motelId == 'motel_1793753270427'
-            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
-        );
+        && exists(/databases/$(database)/documents/motels/$(data.motelId))
+        && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+          == request.auth.uid;
     }
 
     function validRoomBase(data, id) {
@@ -797,11 +1072,124 @@ service cloud.firestore {
     // Moteles (rama feature_marco). Copia de Firebase SQL Connect con el
     // mismo id. La escriben el administrador y el propietario activo (este
     // solo a su propio nombre). No se borran: se inhabilitan.
+    // Las reglas de habitaciones pueden confiar en ownerId: un propietario
+    // solo crea moteles a su nombre y solo edita los que ya son suyos, sin
+    // poder cambiarles el dueño.
     match /motels/{motelId} {
       allow read: if isSignedIn();
-      allow create, update: if isAdmin()
+      allow create: if isAdmin()
         || (isActiveOwner() && request.resource.data.ownerId == request.auth.uid);
+      allow update: if isAdmin()
+        || (isActiveOwner()
+            && resource.data.ownerId == request.auth.uid
+            && request.resource.data.ownerId == request.auth.uid);
       allow delete: if false;
+    }
+
+    // Facturas (FirestoreInvoiceRepository). Una por reserva: el id del
+    // documento es el id de la reserva. Se copian de la reserva ya guardada
+    // en Firestore y despues no se modifican ni se borran.
+    function isInvoiceReader(data) {
+      return isAdmin()
+        || (isActiveClient() && data.clientId == request.auth.uid)
+        || (isActiveOwner() && data.ownerId == request.auth.uid);
+    }
+
+    function invoiceReservation(reservationId) {
+      return get(/databases/$(database)/documents/reservations/$(reservationId)).data;
+    }
+
+    function matchesReservation(inv, res) {
+      return inv.ownerId == res.ownerId
+        && inv.clientId == res.guestId
+        && inv.motelId == res.motelId
+        && inv.motelName == res.motelName
+        && inv.roomName == res.roomName
+        && inv.roomNumber == res.roomNumber
+        && inv.checkIn == res.checkIn
+        && inv.checkOut == res.checkOut
+        && inv.guestCount == res.guestCount
+        && inv.roomTotal == res.roomTotal
+        && inv.total == res.total
+        && inv.items == res.services.concat(res.products);
+    }
+
+    function hasValidInvoiceFields(data, reservationId) {
+      return data.keys().hasOnly([
+          'ownerId', 'reservationId', 'invoiceNumber', 'clientId',
+          'clientName', 'motelId', 'motelName', 'roomName', 'roomNumber',
+          'checkIn', 'checkOut', 'guestCount', 'items', 'roomTotal', 'total',
+          'paymentConcept', 'paymentAmount', 'cardHolder', 'cardLast4',
+          'installments', 'issuedAt'
+        ])
+        && data.reservationId == reservationId
+        && data.invoiceNumber is string && data.invoiceNumber.size() > 0
+        && data.issuedAt == request.time
+        && (!('cardLast4' in data) || data.cardLast4.matches('^[0-9]{4}$'));
+    }
+
+    match /invoices/{reservationId} {
+      // `resource == null` permite consultar si la factura ya existe antes de
+      // emitirla (no expone datos: el documento no existe).
+      allow get: if isSignedIn()
+        && (resource == null || isInvoiceReader(resource.data));
+      allow list: if isInvoiceReader(resource.data);
+
+      allow create: if
+        exists(/databases/$(database)/documents/reservations/$(reservationId))
+        && isReservationParticipant(invoiceReservation(reservationId))
+        && invoiceReservation(reservationId).status != 'cancelled'
+        && hasValidInvoiceFields(request.resource.data, reservationId)
+        && matchesReservation(
+          request.resource.data,
+          invoiceReservation(reservationId)
+        );
+
+      allow update, delete: if false;
+    }
+
+    // Reseñas: el cliente activo solo publica a su nombre. Responder,
+    // moderar y eliminar corresponden a las funcionalidades de propietario y
+    // administrador; esas reglas se agregan en sus bloques específicos.
+    // La app oculta al cliente las reseñas con status 'hidden'.
+    // El id del documento y authorId llevan el uid del cliente; la reseña
+    // nace visible y sin respuestas ni reporte.
+    // ------------------------------------------------------------------
+    // Resenas (rama feature-andres: ingresar resenas).
+    //
+    // El cliente activo solo publica a su nombre: el id del documento y
+    // authorId llevan su uid, la resena nace visible y sin respuestas ni
+    // reporte. Responder, moderar y eliminar no se habilitan aqui: les
+    // corresponde a las ramas de propietario y administrador.
+    function hasValidReviewCreate(reviewId, data) {
+      return data.keys().hasAll([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'type', 'status'
+        ])
+        && data.keys().hasOnly([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'roomId', 'type', 'status'
+        ])
+        && data.authorId == request.auth.uid
+        && reviewId.matches('review-client-' + request.auth.uid + '-[0-9]+')
+        && data.authorName is string && data.authorName.size() > 0
+        && data.title is string && data.title.trim().size() > 0
+        && data.body is string && data.body.trim().size() > 0
+        && data.rating is int && data.rating >= 1 && data.rating <= 5
+        && data.date is timestamp
+        && data.motelId is string && data.motelId.size() > 0
+        && (!('roomId' in data)
+          || (data.type == 'room'
+            && data.roomId is string && data.roomId.size() > 0))
+        && data.type in ['room', 'motel', 'attention']
+        && data.status == 'visible';
+    }
+
+    match /reviews/{reviewId} {
+      // La app oculta al cliente las resenas con status 'hidden'.
+      allow read: if isSignedIn();
+      allow create: if isActiveClient()
+        && hasValidReviewCreate(reviewId, request.resource.data);
     }
 
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma

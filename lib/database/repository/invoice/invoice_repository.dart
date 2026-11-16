@@ -1,10 +1,13 @@
 import 'dart:async';
-import 'dart:convert';
 
-import 'package:http/http.dart' as http;
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_firestore_document.dart';
+import 'package:machuco/models/invoice/invoice_firestore_document.dart';
 import 'package:machuco/models/invoice/invoice_model.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/service/firebase/firestore_collections.dart';
 
 class InvoiceRepositoryException implements Exception {
   const InvoiceRepositoryException(this.message);
@@ -20,13 +23,12 @@ abstract interface class InvoiceRepository {
   /// Factura de una reserva, o `null` si todavía no se ha emitido.
   Future<InvoiceModel?> findByReservation(String reservationId);
 
-  Future<InvoiceModel?> findById(int id);
-
   /// Facturas de un cliente, de la más reciente a la más antigua.
   Future<List<InvoiceModel>> findByClient(String clientId);
 
-  /// Facturas de uno o varios moteles (consulta del Propietario).
-  Future<List<InvoiceModel>> findByMotels(List<String> motelIds);
+  /// Facturas de los moteles de un propietario, de la más reciente a la más
+  /// antigua.
+  Future<List<InvoiceModel>> findByOwner(String ownerId);
 
   /// Emite la factura de [reservation]. Si ya existía una para esa reserva,
   /// devuelve la existente sin duplicarla.
@@ -36,65 +38,66 @@ abstract interface class InvoiceRepository {
   );
 }
 
-/// [InvoiceRepository] sobre la API REST de Supabase (PostgREST):
+/// [InvoiceRepository] sobre Cloud Firestore (`invoices/{reservationId}`).
 ///
-/// - `GET  /rest/v1/invoices`            consultas filtradas.
-/// - `POST /rest/v1/rpc/issue_invoice`   emisión idempotente; el total lo
-///   calcula el backend.
-///
-/// La tabla y la función están descritas en `docs/invoice_supabase.sql`.
-class SupabaseInvoiceRepository implements InvoiceRepository {
-  SupabaseInvoiceRepository({
-    http.Client? client,
-    String? supabaseUrl,
-    String? publishableKey,
-  }) : _client = client ?? http.Client(),
-       _supabaseUrl =
-           supabaseUrl ??
-           const String.fromEnvironment(
-             'SUPABASE_URL',
-             defaultValue: 'https://ogrbbuwtsyezegkpwtsl.supabase.co',
-           ),
-       _publishableKey =
-           publishableKey ??
-           const String.fromEnvironment(
-             'SUPABASE_PUBLISHABLE_KEY',
-             defaultValue: 'sb_publishable_Wv16MVxsTzA89lBeocarLQ_YL33Ya_E',
-           );
+/// - Una factura por reserva: el id del documento es el id de la reserva, así
+///   la emisión es idempotente.
+/// - Los importes, el cliente y el propietario se copian de la reserva que ya
+///   está en Firestore (`reservations/{id}`), no de lo que tenga la app en
+///   memoria; las reglas de seguridad comprueban que coincidan.
+/// - `issuedAt` lo pone el servidor.
+class FirestoreInvoiceRepository implements InvoiceRepository {
+  FirestoreInvoiceRepository({
+    FirebaseFirestore? firestore,
+    this.requestTimeout = const Duration(seconds: 10),
+  }) : _firestore = firestore ?? FirebaseFirestore.instance;
 
-  final http.Client _client;
-  final String _supabaseUrl;
-  final String _publishableKey;
+  /// Nombre de la colección. Pendiente de mover a `FirestoreCollections`
+  /// (archivo compartido) cuando el equipo lo apruebe.
+  static const collection = 'invoices';
 
-  static const _timeout = Duration(seconds: 15);
+  final FirebaseFirestore _firestore;
+  final Duration requestTimeout;
+
+  CollectionReference<Map<String, dynamic>> get _invoices =>
+      _firestore.collection(collection);
+
+  CollectionReference<Map<String, dynamic>> get _reservations =>
+      _firestore.collection(FirestoreCollections.reservations);
 
   @override
   Future<InvoiceModel?> findByReservation(String reservationId) async {
-    final rows = await _select({
-      'reservation_id': 'eq.$reservationId',
-      'limit': '1',
-    });
-    return rows.isEmpty ? null : rows.first;
+    _validateId(reservationId);
+    try {
+      final snapshot = await _invoices
+          .doc(reservationId)
+          .get()
+          .timeout(requestTimeout);
+      final data = snapshot.data();
+      return data == null ? null : _parse(snapshot.id, data);
+    } on FirebaseException catch (error) {
+      throw _map(error);
+    } on TimeoutException {
+      throw _offline;
+    }
   }
 
   @override
-  Future<InvoiceModel?> findById(int id) async {
-    final rows = await _select({'id': 'eq.$id', 'limit': '1'});
-    return rows.isEmpty ? null : rows.first;
+  Future<List<InvoiceModel>> findByClient(String clientId) {
+    _validateId(clientId);
+    return _list(
+      _invoices.where('clientId', isEqualTo: clientId),
+      (document) => document.invoice.clientId == clientId,
+    );
   }
 
   @override
-  Future<List<InvoiceModel>> findByClient(String clientId) =>
-      _select({'client_id': 'eq.$clientId', 'order': 'issued_at.desc'});
-
-  @override
-  Future<List<InvoiceModel>> findByMotels(List<String> motelIds) async {
-    if (motelIds.isEmpty) return const [];
-    final quoted = motelIds.map((id) => '"${id.replaceAll('"', '')}"');
-    return _select({
-      'motel_id': 'in.(${quoted.join(',')})',
-      'order': 'issued_at.desc',
-    });
+  Future<List<InvoiceModel>> findByOwner(String ownerId) {
+    _validateId(ownerId);
+    return _list(
+      _invoices.where('ownerId', isEqualTo: ownerId),
+      (document) => document.ownerId == ownerId,
+    );
   }
 
   @override
@@ -102,87 +105,126 @@ class SupabaseInvoiceRepository implements InvoiceRepository {
     Reservation reservation,
     PaymentMethodModel? paymentMethod,
   ) async {
-    final response = await _send(
-      () => _client.post(
-        _uri('/rest/v1/rpc/issue_invoice'),
-        headers: {..._headers, 'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'p_invoice': InvoiceModel.issuePayload(reservation, paymentMethod),
-        }),
-      ),
-    );
-    if (response.statusCode != 200) {
-      throw const InvoiceRepositoryException(
-        'No se pudo emitir la factura en Supabase.',
-      );
-    }
-    return _decode(
-      (body) => InvoiceModel.fromJson(body as Map<String, dynamic>),
-      response,
-    );
-  }
-
-  Future<List<InvoiceModel>> _select(Map<String, String> filters) async {
-    final response = await _send(
-      () => _client.get(
-        _uri('/rest/v1/invoices', {'select': '*', ...filters}),
-        headers: _headers,
-      ),
-    );
-    if (response.statusCode != 200) {
-      throw const InvoiceRepositoryException(
-        'No se pudieron consultar las facturas en Supabase.',
-      );
-    }
-    return _decode((body) {
-      if (body is! List) throw const FormatException('Respuesta inválida');
-      return body
-          .map((row) => InvoiceModel.fromJson(row as Map<String, dynamic>))
-          .toList(growable: false);
-    }, response);
-  }
-
-  Map<String, String> get _headers => {
-    'apikey': _publishableKey,
-    'Accept': 'application/json',
-  };
-
-  Uri _uri(String path, [Map<String, String>? queryParameters]) {
-    final base = Uri.tryParse(_supabaseUrl);
-    if (base == null ||
-        base.scheme != 'https' ||
-        base.host.isEmpty ||
-        _publishableKey.isEmpty) {
-      throw const InvoiceRepositoryException(
-        'La consulta de facturas no está configurada.',
-      );
-    }
-    return base.replace(path: path, queryParameters: queryParameters);
-  }
-
-  Future<http.Response> _send(Future<http.Response> Function() request) async {
+    _validateId(reservation.id);
+    final invoiceRef = _invoices.doc(reservation.id);
+    final reservationRef = _reservations.doc(reservation.id);
     try {
-      return await request().timeout(_timeout);
+      await _firestore
+          .runTransaction((transaction) async {
+            final existing = await transaction.get(invoiceRef);
+            if (existing.exists) return;
+
+            final remote = await transaction.get(reservationRef);
+            final remoteData = remote.data();
+            if (remoteData == null) throw _notSynced;
+            final ReservationFirestoreDocument source;
+            try {
+              source = ReservationFirestoreDocument.fromFirestore(
+                remote.id,
+                remoteData,
+              );
+            } on FormatException {
+              throw _invalidData;
+            }
+            if (source.reservation.status == ReservationStatus.cancelled) {
+              throw const InvoiceRepositoryException(
+                'Una reserva cancelada no se puede facturar.',
+              );
+            }
+
+            transaction.set(
+              invoiceRef,
+              InvoiceFirestoreDocument(
+                ownerId: source.ownerId,
+                invoice: InvoiceModel.fromReservation(
+                  source.reservation,
+                  paymentMethod: paymentMethod,
+                ),
+              ).toFirestore(),
+            );
+          })
+          .timeout(requestTimeout);
+
+      final saved = await invoiceRef.get().timeout(requestTimeout);
+      final data = saved.data();
+      if (data == null) throw _invalidData;
+      return _parse(saved.id, data);
     } on InvoiceRepositoryException {
       rethrow;
-    } catch (_) {
+    } on FirebaseException catch (error) {
+      throw _map(error);
+    } on TimeoutException {
+      throw _offline;
+    }
+  }
+
+  Future<List<InvoiceModel>> _list(
+    Query<Map<String, dynamic>> query,
+    bool Function(InvoiceFirestoreDocument document) inScope,
+  ) async {
+    try {
+      final snapshot = await query.get().timeout(requestTimeout);
+      final invoices = snapshot.docs.map((snapshotDocument) {
+        final document = InvoiceFirestoreDocument.fromFirestore(
+          snapshotDocument.id,
+          snapshotDocument.data(),
+        );
+        if (!inScope(document)) {
+          throw const FormatException('Factura fuera del alcance solicitado.');
+        }
+        return document.invoice;
+      }).toList();
+      // Se ordena en el cliente para no requerir un índice compuesto.
+      invoices.sort((a, b) => b.issuedAt.compareTo(a.issuedAt));
+      return List.unmodifiable(invoices);
+    } on FirebaseException catch (error) {
+      throw _map(error);
+    } on TimeoutException {
+      throw _offline;
+    } on FormatException {
+      throw _invalidData;
+    }
+  }
+
+  InvoiceModel _parse(String documentId, Map<String, dynamic> data) {
+    try {
+      return InvoiceFirestoreDocument.fromFirestore(documentId, data).invoice;
+    } on FormatException {
+      throw _invalidData;
+    }
+  }
+
+  static const _offline = InvoiceRepositoryException(
+    'No se pudo conectar con el servicio de facturas.',
+  );
+
+  static const _invalidData = InvoiceRepositoryException(
+    'El servicio de facturas devolvió datos inválidos.',
+  );
+
+  static const _notSynced = InvoiceRepositoryException(
+    'La reserva aún no está sincronizada. Inténtalo de nuevo en unos minutos.',
+  );
+
+  void _validateId(String value) {
+    if (value.trim().isEmpty || value != value.trim() || value.contains('/')) {
       throw const InvoiceRepositoryException(
-        'No se pudo conectar con el servicio de facturas.',
+        'Se requiere un identificador válido para consultar facturas.',
       );
     }
   }
 
-  T _decode<T>(T Function(Object? body) parse, http.Response response) {
-    try {
-      return parse(jsonDecode(utf8.decode(response.bodyBytes)));
-    } on FormatException {
-      throw const InvoiceRepositoryException(
-        'El servicio de facturas devolvió datos inválidos.',
-      );
-    } on TypeError {
-      throw const InvoiceRepositoryException(
-        'El servicio de facturas devolvió datos inválidos.',
-      );
-    }
+  InvoiceRepositoryException _map(FirebaseException error) {
+    debugPrint('Firestore invoices error: ${error.code}');
+    return switch (error.code) {
+      'permission-denied' ||
+      'unauthenticated' => const InvoiceRepositoryException(
+        'No tienes permisos para ver o emitir esta factura.',
+      ),
+      'unavailable' || 'deadline-exceeded' => _offline,
+      _ => const InvoiceRepositoryException(
+        'No se pudo consultar la factura en Firebase.',
+      ),
+    };
   }
 }

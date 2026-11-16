@@ -5,6 +5,7 @@ import 'package:machuco/database/repository/motel/sql_connect_motel_repository.d
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/booking/reservation_entity.dart';
 import 'package:machuco/models/booking/reservation_line_item_entity.dart';
+import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/repositories/booking/booking_seed_data.dart';
 import 'package:machuco/repositories/booking/reservation_dao.dart';
 import 'package:machuco/repositories/booking/reservation_cloud_repository.dart';
@@ -217,6 +218,7 @@ class BookingRepositoryProvider {
       roleOf: (uid) async => (await profiles.getProfile(uid))?.role,
       ownerIdForMotel: (motelId) async =>
           (await motels.getMotelById(motelId))?.ownerId,
+      reconcilePayment: PaymentRepository().reconcileReservation,
     );
   }
 }

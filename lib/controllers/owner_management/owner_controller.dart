@@ -1,14 +1,48 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/controllers/motel/motel_controller.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
+import 'package:machuco/database/repository/document_type/document_type_repository.dart';
+import 'package:machuco/database/repository/owner/owner_repository.dart';
+import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/country_phone_code.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
+import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
+import 'package:machuco/service/firebase/current_user.dart';
+import 'package:machuco/service/owner/owner_preferences.dart';
+import 'package:machuco/service/owner/owner_service.dart';
+import 'package:machuco/service/owner/owner_sync_scheduler.dart';
+
+/// Motivos por los que no se puede eliminar a un propietario todavía.
+///
+/// La vista lo usa para pedir a quién reasignar los moteles antes de borrar
+/// la cuenta.
+class OwnerAnonymizationBlocker {
+  const OwnerAnonymizationBlocker({
+    required this.ownerId,
+    required this.ownerName,
+    required this.motelNames,
+    required this.candidates,
+  });
+
+  final String ownerId;
+  final String ownerName;
+
+  /// Moteles vinculados que deben reasignarse.
+  final List<String> motelNames;
+
+  /// Otros propietarios a los que se pueden transferir (sin el que se borra).
+  final List<Owner> candidates;
+}
 
 const _minimumFullNameLength = 3;
 
 final _emailPattern = RegExp(r'^[\w.+-]+@[\w-]+(\.[\w-]+)+$');
 final _phonePattern = RegExp(r'^\+?\d{7,15}$');
-final _phoneSeparatorsPattern = RegExp(r'[\s\-()]');
 
 // Se comparan las cadenas sin tildes para que "gomez" encuentre a "Gómez".
 const _accentedCharacters = 'áàäâãéèëêíìïîóòöôõúùüûñç';
@@ -26,47 +60,98 @@ String _normalize(String value) {
 
 /// Coordina la gestión de propietarios de moteles.
 ///
-/// Concentra el estado del módulo y las reglas de validación del registro,
-/// para que las vistas solo presenten información y deleguen las acciones.
-///
-/// Mientras no exista capa de datos, los propietarios viven en memoria y los
-/// cambios se pierden al reiniciar la aplicación.
+/// Mantiene el estado que consumen las vistas y delega todas las reglas de
+/// negocio en [OwnerService]; la persistencia vive en el repositorio (SQLite
+/// vía Floor). Cada operación de escritura recarga el listado desde la base
+/// para que la interfaz refleje exactamente lo que quedó guardado.
 class OwnerController extends ChangeNotifier {
-  final List<Owner> _owners = [
-    const Owner(
-      id: 'owner-1020304050',
-      fullName: 'Laura Gómez Restrepo',
-      documentType: DocumentType.citizenshipCard,
-      documentNumber: '1020304050',
-      email: 'laura.gomez@machuco.com',
-      phone: '+57 300 123 4567',
-      address: 'Calle 10 # 43-25, Medellín',
-    ),
-    const Owner(
-      id: 'owner-900123456',
-      fullName: 'Inversiones Machuco S.A.S.',
-      documentType: DocumentType.taxId,
-      documentNumber: '900123456-7',
-      email: 'contacto@inversionesmachuco.com',
-      phone: '+57 604 444 5566',
-      address: 'Carrera 50 # 12-80, Rionegro',
-    ),
-    const Owner(
-      id: 'owner-345678',
-      fullName: 'Simón Restrepo Vélez',
-      documentType: DocumentType.foreignerCard,
-      documentNumber: '345678',
-      email: 'simon.restrepo@machuco.com',
-      phone: '+57 311 987 6543',
-      isActive: false,
-    ),
-  ];
+  OwnerController({
+    OwnerService? service,
+    this._catalogRepository,
+    DocumentTypeRepository? documentTypeRepository,
+    this._preferences,
+    OwnerCloudRepository? cloudRepository,
+    String? Function()? currentUserId,
+    OwnerSyncRetryScheduler? syncRetryScheduler,
+    Future<List<String>> Function(String ownerId)? motelNamesLoader,
+    Future<void> Function(String fromOwnerId, String toOwnerId)? motelTransfer,
+  }) : _service = service ?? OwnerService(),
+       _documentTypeRepository =
+           documentTypeRepository ?? DocumentTypeRepository(),
+       _cloudRepository =
+           cloudRepository ??
+           (service == null ? FirestoreOwnerCloudRepository() : null),
+       _motelNamesLoader = motelNamesLoader ?? _loadMotelNames,
+       _motelTransfer = motelTransfer ?? _transferMotels,
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
+    _syncRetry =
+        syncRetryScheduler ??
+        OwnerSyncRetryScheduler(
+          attempt: _synchronizeWithCloud,
+          onStateChanged: _notifySyncRetryChanged,
+        );
+  }
 
+  /// Instancia compartida por las pantallas del módulo (listado, formulario y
+  /// moteles del propietario) para que todas vean el mismo estado.
+  static final OwnerController instance = OwnerController(
+    catalogRepository: AuthCatalogRepository.fromEnvironment(),
+    preferences: OwnerPreferences(),
+  );
+
+  final OwnerService _service;
+
+  /// Nube de propietarios. Es `null` cuando se inyecta un servicio local en
+  /// los tests, igual que en pagos, para no salir a la red sin querer.
+  final OwnerCloudRepository? _cloudRepository;
+
+  final String? Function() _currentUserId;
+
+  /// Devuelve los nombre de los moteles vinculados a un propietario.
+  ///
+  /// Se usa antes de eliminar: un propietario con moteles no se borra para no
+  /// dejarlos huérfanos. Es inyectable para probar el bloqueo sin Supabase.
+  final Future<List<String>> Function(String ownerId) _motelNamesLoader;
+
+  /// Reasigna los moteles de un propietario a otro antes de eliminarlo.
+  final Future<void> Function(String fromOwnerId, String toOwnerId)
+  _motelTransfer;
+
+  /// Preferencias locales del módulo. Es opcional para que los tests de
+  /// persistencia no dependan de `shared_preferences`.
+  final OwnerPreferences? _preferences;
+
+  /// Maestro de indicativos. Si es `null` se usa la semilla de desarrollo
+  /// (Colombia) para que el formulario funcione sin Supabase ni caché.
+  final AuthCatalogRepository? _catalogRepository;
+
+  final DocumentTypeRepository _documentTypeRepository;
+
+  final List<Owner> _owners = [];
   String _searchQuery = '';
   OwnerStatusFilter _statusFilter = OwnerStatusFilter.all;
+  bool _isLoading = false;
+  String? _lastError;
+  Future<void>? _load;
+  bool _isSyncing = false;
+  bool _disposed = false;
+  String? _syncWarningMessage;
+  late final OwnerSyncRetryScheduler _syncRetry;
+  bool _lastAnonymizationIsPending = false;
+  OwnerAnonymizationBlocker? _anonymizationBlocker;
+  Future<void>? _backgroundSync;
 
-  /// Propietarios registrados. La lista es de solo lectura: para modificarla
-  /// se usan las acciones del controlador.
+  List<CountryPhoneCode> _countryPhoneCodes = const [];
+  CountryPhoneCode? _selectedCountryCode;
+  bool _isLoadingCountryCodes = false;
+  String? _countryCodesError;
+
+  List<DocumentType> _documentTypes = DocumentType.values;
+  bool _isLoadingDocumentTypes = false;
+  String? _documentTypesError;
+
+  /// Propietarios cargados desde la base. Solo lectura: para modificarlos se
+  /// usan las acciones del controlador.
   List<Owner> get owners => List.unmodifiable(_owners);
 
   /// Propietarios que sobreviven a la búsqueda y al filtro por estado.
@@ -85,6 +170,42 @@ class OwnerController extends ChangeNotifier {
 
   OwnerStatusFilter get statusFilter => _statusFilter;
 
+  /// Indica si hay una operación en curso (carga o escritura).
+  bool get isLoading => _isLoading;
+
+  /// Último error de negocio, o `null` si la última operación salió bien.
+  String? get lastError => _lastError;
+
+  /// Indica si hay una sincronización con Firestore en curso.
+  bool get isSyncing => _isSyncing;
+
+  /// Aviso no bloqueante cuando la nube falló pero los datos locales siguen
+  /// disponibles. La pantalla lo muestra como banner, sin tapar el listado.
+  String? get syncWarningMessage => _syncWarningMessage;
+
+  /// `true` mientras hay un reintento automático programado.
+  bool get isAutoRetrying => _syncRetry.isScheduled;
+
+  /// Número del intento automático en curso (1..8).
+  int get autoRetryAttempt => _syncRetry.attempt;
+
+  /// Total de intentos automáticos antes de rendirse.
+  int get autoRetryMaxAttempts => _syncRetry.maxAttempts;
+
+  /// `true` si la última eliminación quedó pendiente de borrar en Firestore.
+  bool get lastAnonymizationIsPending => _lastAnonymizationIsPending;
+
+  /// Moteles y propietarios disponibles cuando la eliminación quedó bloqueada.
+  ///
+  /// La vista lo usa para pedir a quién reasignar los moteles y reintentar.
+  OwnerAnonymizationBlocker? get lastAnonymizationBlocker => _anonymizationBlocker;
+
+  /// Completa cuando termina el envío en segundo plano de la última escritura.
+  ///
+  /// La interfaz no lo espera (el guardado local ya terminó), pero los tests
+  /// lo usan para verificar el resultado sin depender de tiempos.
+  Future<void> get pendingSync => _backgroundSync ?? Future<void>.value();
+
   bool get hasOwners => _owners.isNotEmpty;
 
   /// Indica si queda algo por mostrar con los criterios actuales.
@@ -95,6 +216,52 @@ class OwnerController extends ChangeNotifier {
 
   bool get hasActiveFilters =>
       _searchQuery.trim().isNotEmpty || _statusFilter != OwnerStatusFilter.all;
+
+  /// Indicativos disponibles para el selector del formulario.
+  List<CountryPhoneCode> get countryCodes =>
+      List.unmodifiable(_countryPhoneCodes);
+
+  CountryPhoneCode? get selectedCountryCode => _selectedCountryCode;
+
+  bool get isLoadingCountryCodes => _isLoadingCountryCodes;
+
+  /// Error al traer el maestro de indicativos, o `null` si cargó bien.
+  String? get countryCodesError => _countryCodesError;
+
+  bool get hasCountryCodes => _countryPhoneCodes.isNotEmpty;
+
+  /// Tipos de documento activos del maestro local.
+  ///
+  /// Arranca con los valores del enum para que el formulario nunca quede sin
+  /// opciones si la tabla todavía no cargó.
+  List<DocumentType> get documentTypes => List.unmodifiable(_documentTypes);
+
+  bool get isLoadingDocumentTypes => _isLoadingDocumentTypes;
+
+  String? get documentTypesError => _documentTypesError;
+
+  /// Carga los propietarios guardados en la caché local.
+  ///
+  /// Varias pantallas comparten esta instancia, así que si ya hay una carga en
+  /// curso se reutiliza el mismo futuro en lugar de lanzar otra consulta.
+  Future<void> init() =>
+      _load ??= _loadOwners().whenComplete(() => _load = null);
+
+  Future<void> _loadOwners() async {
+    _isLoading = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await _reload();
+    } catch (error) {
+      _lastError = _messageFor(error);
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+    // La nube nunca bloquea el listado local: si falla, queda el aviso.
+    if (_lastError == null) await _synchronizeWithCloud();
+  }
 
   /// Filtra el listado por nombre, número de documento o correo.
   void search(String query) {
@@ -117,6 +284,397 @@ class OwnerController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Carga el maestro de indicativos (caché SQLite primero, Supabase después).
+  ///
+  /// Sin repositorio inyectado usa la semilla de desarrollo, igual que el
+  /// login, para que el formulario siga siendo usable sin conexión.
+  Future<void> loadCountryCodes({bool forceRefresh = false}) async {
+    if (_isLoadingCountryCodes) return;
+    _isLoadingCountryCodes = true;
+    _countryCodesError = null;
+    notifyListeners();
+    try {
+      final repository = _catalogRepository;
+      _countryPhoneCodes = repository == null
+          ? const [developmentCountryPhoneCodeSeed]
+          : await repository.getCountryPhoneCodes(forceRefresh: forceRefresh);
+      _selectedCountryCode = countryCodeForDialCode(
+        _selectedCountryCode?.dialCode,
+      );
+    } on AuthCatalogRepositoryException {
+      _countryPhoneCodes = const [];
+      _countryCodesError =
+          'No pudimos cargar los indicativos. Revisa tu conexión.';
+    } finally {
+      _isLoadingCountryCodes = false;
+      notifyListeners();
+    }
+  }
+
+  /// Elige el indicativo que se usará al guardar el teléfono.
+  void selectCountryCode(CountryPhoneCode code) {
+    if (_selectedCountryCode?.id == code.id &&
+        _selectedCountryCode?.dialCode == code.dialCode) {
+      return;
+    }
+    _selectedCountryCode = code;
+    notifyListeners();
+  }
+
+  /// Busca en el maestro el indicativo que corresponde a [dialCode].
+  ///
+  /// Si no lo encuentra (o el maestro está vacío) devuelve el predeterminado
+  /// —Colombia cuando existe— para que el formulario siempre tenga uno.
+  CountryPhoneCode? countryCodeForDialCode(String? dialCode) {
+    if (dialCode != null && dialCode.trim().isNotEmpty) {
+      for (final code in _countryPhoneCodes) {
+        if (code.dialCode == dialCode) return code;
+      }
+    }
+    for (final code in _countryPhoneCodes) {
+      if (code.isoCode == 'CO') return code;
+    }
+    return _countryPhoneCodes.isEmpty ? null : _countryPhoneCodes.first;
+  }
+
+  /// Indicativo elegido la última vez en este dispositivo.
+  ///
+  /// Devuelve `null` si no hay preferencia guardada, si el maestro todavía no
+  /// cargó o si el id guardado ya no existe en el catálogo. Cualquier fallo de
+  /// `shared_preferences` se trata como ausencia de preferencia: la
+  /// preselección es una comodidad, no un requisito para guardar.
+  Future<CountryPhoneCode?> lastUsedCountryCode() async {
+    final id = await _loadLastCountryCodeId();
+    if (id == null) return null;
+    for (final code in _countryPhoneCodes) {
+      if (code.id == id) return code;
+    }
+    return null;
+  }
+
+  /// Recuerda el indicativo elegido para preseleccionarlo la próxima vez.
+  Future<void> saveLastCountryCode(int id) async {
+    try {
+      await _preferences?.saveLastCountryCodeId(id);
+    } catch (_) {
+      // La preferencia es opcional: si falla, el formulario sigue funcionando.
+    }
+  }
+
+  Future<int?> _loadLastCountryCodeId() async {
+    try {
+      return await _preferences?.loadLastCountryCodeId();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Carga los tipos de documento activos.
+  ///
+  /// Con [forceRefresh] consulta Supabase y actualiza la caché local; sin él
+  /// responde con la tabla `document_types` de SQLite. Si todo falla se
+  /// conservan los valores del enum como respaldo.
+  Future<void> loadDocumentTypes({bool forceRefresh = false}) async {
+    if (_isLoadingDocumentTypes) return;
+    _isLoadingDocumentTypes = true;
+    _documentTypesError = null;
+    notifyListeners();
+    try {
+      final loaded = await _documentTypeRepository.getActiveDocumentTypes(
+        forceRefresh: forceRefresh,
+      );
+      if (loaded.isNotEmpty) _documentTypes = loaded;
+    } on DocumentTypeRepositoryException {
+      _documentTypesError =
+          'No pudimos cargar los tipos de documento desde Supabase. '
+          'Usamos los del sistema.';
+    } catch (_) {
+      _documentTypesError =
+          'No pudimos cargar los tipos de documento. Usamos los del sistema.';
+    } finally {
+      _isLoadingDocumentTypes = false;
+      notifyListeners();
+    }
+  }
+
+  /// Crea la cuenta del propietario en `users/{uid}` y devuelve el resultado
+  /// con su contraseña temporal.
+  ///
+  /// Crear un propietario implica crear una cuenta de Firebase Auth, así que
+  /// necesita conexión: no se puede completar sin red. Devuelve `null` si la
+  /// validación o la nube fallan; el motivo queda en [lastError].
+  Future<CreatedOwner?> createOwner({
+    required String fullName,
+    required DocumentType documentType,
+    required String documentNumber,
+    required String email,
+    required String phone,
+    String? countryCode,
+    String? countryName,
+    String? address,
+    bool pendingApproval = false,
+  }) async {
+    _isLoading = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      final duplicate = await _service.validarDuplicado(
+        documentType,
+        documentNumber,
+      );
+      if (duplicate != null) throw StateError(duplicate);
+
+      final cloud = _cloudRepository;
+      final adminId = _currentUserId();
+      if (cloud == null || adminId == null || adminId.trim().isEmpty) {
+        throw StateError(
+          'Inicia sesión con Firebase para crear la cuenta del propietario.',
+        );
+      }
+
+      final status = pendingApproval
+          ? AccountStatus.pendingApproval
+          : AccountStatus.active;
+      final draft = _service.prepararPropietario(
+        fullName: fullName,
+        documentType: documentType,
+        documentNumber: documentNumber,
+        email: email,
+        phone: phone,
+        countryCode: countryCode,
+        countryName: countryName,
+        address: address,
+        isActive: !pendingApproval,
+        accountStatus: status,
+      );
+
+      final created = await cloud.createOwner(
+        adminId: adminId,
+        owner: draft,
+        accountStatus: status,
+        phoneCountryCodeId: _selectedCountryCode?.id,
+      );
+      await _service.guardarCreado(created.owner);
+      await _reload();
+      return created;
+    } on OwnerCloudRepositoryException catch (error) {
+      _lastError = error.message;
+      return null;
+    } catch (error) {
+      _lastError = _messageFor(error);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  /// Actualiza los datos editables de un propietario.
+  Future<Owner?> updateOwner(
+    String ownerId, {
+    required String fullName,
+    required DocumentType documentType,
+    required String documentNumber,
+    required String phone,
+    String? countryCode,
+    String? countryName,
+    String? address,
+  }) => _runAction(
+    () => _service.actualizarPropietario(
+      ownerId: ownerId,
+      fullName: fullName,
+      documentType: documentType,
+      documentNumber: documentNumber,
+      phone: phone,
+      countryCode: countryCode,
+      countryName: countryName,
+      address: address,
+    ),
+  );
+
+  /// Actualiza el teléfono de un propietario existente y devuelve cómo quedó.
+  Future<Owner?> updateOwnerPhone(
+    String ownerId,
+    String phone, {
+    String? countryCode,
+    String? countryName,
+  }) async {
+    final owner = _findOwner(ownerId);
+    if (owner == null) {
+      _lastError = 'El propietario ya no existe.';
+      notifyListeners();
+      return null;
+    }
+    return updateOwner(
+      ownerId,
+      fullName: owner.fullName,
+      documentType: owner.documentType,
+      documentNumber: owner.documentNumber,
+      phone: phone,
+      countryCode: countryCode ?? owner.countryCode,
+      countryName: countryName ?? owner.countryName,
+      address: owner.address,
+    );
+  }
+
+  /// Activa o inactiva a un propietario y devuelve cómo quedó.
+  ///
+  /// Un propietario inactivo no administra sus moteles ni recibe reservas. Las
+  /// cuentas pendientes de aprobación se resuelven desde el módulo de
+  /// aprobación, no desde este interruptor.
+  Future<Owner?> setActiveState(String ownerId, {required bool isActive}) {
+    final owner = _findOwner(ownerId);
+    if (owner != null && owner.isPendingApproval && isActive) {
+      _lastError =
+          'La cuenta está pendiente de aprobación. Apruébala desde el módulo '
+          'de propietarios pendientes.';
+      notifyListeners();
+      return Future.value();
+    }
+    return _runAction(
+      () => _service.cambiarEstado(ownerId, isActive: isActive),
+    );
+  }
+
+  /// Anonimiza a un propietario y devuelve el registro que había en memoria.
+  ///
+  /// No se borra el documento: se conserva para auditoría con
+  /// `accountStatus = anonymized`, sin datos personales y sin acceso. Un
+  /// propietario con moteles vinculados no se anonimiza hasta reasignarlos:
+  /// quedarían a nombre de una cuenta sin datos. Con conexión se anonimiza
+  /// primero en Firestore; sin conexión la fila se oculta con
+  /// `pendingDelete = 1` y la sincronización la anonimiza cuando vuelva la red.
+  Future<Owner?> anonymizeOwner(
+    String ownerId, {
+    String? transferToOwnerId,
+  }) async {
+    final owner = _findOwner(ownerId);
+    if (owner == null) {
+      _lastError = 'El propietario ya no existe.';
+      notifyListeners();
+      return null;
+    }
+
+    final List<String> motelNames;
+    try {
+      motelNames = await _motelNamesLoader(ownerId);
+    } catch (_) {
+      _lastError =
+          'No se pudo verificar si ${owner.fullName} tiene moteles vinculados. '
+          'Revisa tu conexión e inténtalo de nuevo.';
+      notifyListeners();
+      return null;
+    }
+
+    _anonymizationBlocker = null;
+    if (motelNames.isNotEmpty) {
+      final blocker = OwnerAnonymizationBlocker(
+        ownerId: ownerId,
+        ownerName: owner.fullName,
+        motelNames: List.unmodifiable(motelNames),
+        candidates: List.unmodifiable(
+          _owners.where((candidate) => candidate.id != ownerId),
+        ),
+      );
+      _anonymizationBlocker = blocker;
+
+      final target = transferToOwnerId?.trim() ?? '';
+      if (target.isEmpty) {
+        _lastError = _motelsBlockMessage(owner, motelNames);
+        notifyListeners();
+        return null;
+      }
+      final validTarget =
+          target != ownerId &&
+          blocker.candidates.any((candidate) => candidate.id == target);
+      if (!validTarget) {
+        _lastError =
+            'Elige un propietario distinto para reasignar los moteles de '
+            '${owner.fullName}.';
+        notifyListeners();
+        return null;
+      }
+
+      try {
+        await _motelTransfer(ownerId, target);
+      } catch (_) {
+        _lastError =
+            'No se pudieron reasignar los moteles de ${owner.fullName}, así '
+            'que no se anonimizó la cuenta. Revisa tu conexión e inténtalo de '
+            'nuevo.';
+        notifyListeners();
+        return null;
+      }
+      _anonymizationBlocker = null;
+    }
+
+    _lastAnonymizationIsPending = false;
+    final cloud = _cloudRepository;
+    final adminId = _currentUserId();
+    final hasSession =
+        cloud != null && adminId != null && adminId.trim().isNotEmpty;
+
+    if (!hasSession) {
+      await _markPendingAnonymization(
+        owner,
+        '${owner.fullName} se anonimizó en este dispositivo. Inicia sesión '
+        'para aplicarlo en Firebase.',
+        scheduleRetry: false,
+      );
+      return owner;
+    }
+
+    try {
+      await cloud.anonymizeOwner(ownerId: ownerId, adminId: adminId);
+    } on OwnerCloudRepositoryException catch (error) {
+      if (error.type == OwnerCloudFailureType.network) {
+        await _markPendingAnonymization(
+          owner,
+          '${error.message} Se anonimizará en Firebase cuando vuelva la '
+          'conexión.',
+        );
+        return owner;
+      }
+      _lastError = '${error.message} No se anonimizó en este dispositivo.';
+      notifyListeners();
+      return null;
+    } catch (_) {
+      _lastError =
+          'No se pudo anonimizar al propietario en la nube. Intenta de nuevo.';
+      notifyListeners();
+      return null;
+    }
+
+    return _runAction(() async {
+      await _service.eliminarPropietario(ownerId);
+      return owner;
+    }, sync: false);
+  }
+
+  /// Oculta el propietario y deja su anonimización pendiente de Firestore.
+  Future<void> _markPendingAnonymization(
+    Owner owner,
+    String message, {
+    bool scheduleRetry = true,
+  }) async {
+    try {
+      await _service.marcarPendienteDeEliminar(owner.id);
+      await _reload();
+      _lastAnonymizationIsPending = true;
+      _syncWarningMessage = message;
+      if (scheduleRetry) _syncRetry.notifyNetworkFailure();
+    } catch (error) {
+      _lastError = _messageFor(error);
+    }
+    notifyListeners();
+  }
+
+  /// Fuerza un intento de sincronización (banner y vuelta del segundo plano).
+  Future<void> retrySynchronization() {
+    _syncRetry.cancel();
+    return _synchronizeWithCloud();
+  }
+
   bool _matchesQuery(Owner owner, String normalizedQuery) {
     if (normalizedQuery.isEmpty) return true;
     return _normalize(owner.fullName).contains(normalizedQuery) ||
@@ -124,73 +682,195 @@ class OwnerController extends ChangeNotifier {
         _normalize(owner.email).contains(normalizedQuery);
   }
 
-  /// Registra un propietario y devuelve el resultado ya identificado.
-  Owner createOwner({
-    required String fullName,
-    required DocumentType documentType,
-    required String documentNumber,
-    required String email,
-    required String phone,
-    String? address,
-    bool isActive = true,
-  }) {
-    final owner = Owner(
-      id: _generateOwnerId(),
-      fullName: fullName,
-      documentType: documentType,
-      documentNumber: documentNumber,
-      email: email,
-      phone: phone,
-      address: address,
-      isActive: isActive,
-    );
-    _owners.add(owner);
+  Future<void> _reload() async {
+    final loaded = await _service.cargarPropietarios();
+    _owners
+      ..clear()
+      ..addAll(loaded);
+  }
+
+  /// Ejecuta una escritura, recarga el listado y centraliza el manejo de
+  /// errores: las vistas solo leen [lastError] para informar al usuario.
+  ///
+  /// Tras una escritura exitosa, [sync] lanza el envío a Firestore en segundo
+  /// plano para que la interfaz no espere a la red.
+  Future<T?> _runAction<T>(
+    Future<T> Function() action, {
+    bool sync = true,
+  }) async {
+    _isLoading = true;
+    _lastError = null;
     notifyListeners();
-    return owner;
+    try {
+      final result = await action();
+      await _reload();
+      if (sync && result != null) {
+        final pending = _synchronizePending();
+        _backgroundSync = pending;
+        unawaited(pending);
+      }
+      return result;
+    } catch (error) {
+      _lastError = _messageFor(error);
+      return null;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
   }
 
-  /// Actualiza el teléfono de un propietario y devuelve cómo quedó.
-  ///
-  /// Es el único dato editable después del registro: los demás identifican
-  /// legalmente al propietario. Devuelve `null` si el propietario ya no existe.
-  Owner? updateOwnerPhone(String ownerId, String phone) {
-    return _replaceOwner(ownerId, (owner) => owner.copyWith(phone: phone));
+  /// Sube los pendientes y luego trae lo que otros administradores hayan
+  /// guardado. La base local manda mientras haya cambios sin sincronizar.
+  Future<void> _synchronizeWithCloud() async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed || _isSyncing) return;
+    final adminId = _currentUserId();
+    if (adminId == null || adminId.trim().isEmpty) {
+      _syncRetry.cancel();
+      _syncWarningMessage =
+          'Inicia sesión con Firebase para sincronizar los propietarios.';
+      notifyListeners();
+      return;
+    }
+
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    notifyListeners();
+    try {
+      await _pushPending(cloud, adminId);
+      final remote = await cloud.listOwners();
+      await _service.incorporarRemotos(remote);
+      await _reload();
+      _syncRetry.notifySuccess();
+    } on OwnerCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+      if (error.type == OwnerCloudFailureType.network) {
+        _syncRetry.notifyNetworkFailure();
+      }
+    } on OwnerRepositoryException catch (error) {
+      _syncWarningMessage =
+          'Los propietarios están en Firebase, pero no se pudieron '
+          'actualizar en este dispositivo: ${error.message}';
+    } catch (_) {
+      _syncWarningMessage =
+          'Los propietarios locales están disponibles, pero no se pudieron '
+          'sincronizar con Firebase.';
+      _syncRetry.notifyNetworkFailure();
+    } finally {
+      _isSyncing = false;
+      if (!_disposed) notifyListeners();
+    }
   }
 
-  /// Activa o inactiva a un propietario y devuelve cómo quedó.
-  ///
-  /// Un propietario inactivo no administra sus moteles ni recibe reservas.
-  /// Devuelve `null` si el propietario ya no existe.
-  Owner? setActiveState(String ownerId, {required bool isActive}) {
-    return _replaceOwner(
+  /// Envía solo los registros nuevos o modificados (`synchronized = 0`).
+  Future<void> _synchronizePending() async {
+    final cloud = _cloudRepository;
+    if (cloud == null || _disposed || _isSyncing) return;
+    final adminId = _currentUserId();
+    if (adminId == null || adminId.trim().isEmpty) {
+      _syncRetry.cancel();
+      _syncWarningMessage =
+          'El propietario quedó guardado localmente. Inicia sesión para '
+          'sincronizarlo.';
+      notifyListeners();
+      return;
+    }
+
+    _isSyncing = true;
+    _syncWarningMessage = null;
+    notifyListeners();
+    try {
+      await _pushPending(cloud, adminId);
+      await _reload();
+      _syncRetry.notifySuccess();
+    } on OwnerCloudRepositoryException catch (error) {
+      _syncWarningMessage = error.message;
+      if (error.type == OwnerCloudFailureType.network) {
+        _syncRetry.notifyNetworkFailure();
+      }
+    } catch (_) {
+      _syncWarningMessage =
+          'El propietario quedó guardado localmente y se sincronizará al '
+          'reintentar.';
+      _syncRetry.notifyNetworkFailure();
+    } finally {
+      _isSyncing = false;
+      if (!_disposed) notifyListeners();
+    }
+  }
+
+  /// Anonimiza primero lo que quedó pendiente sin conexión y después sube los
+  /// cambios. El orden importa: un pendiente de anonimización no debe
+  /// reenviarse como alta.
+  Future<void> _pushPending(OwnerCloudRepository cloud, String adminId) async {
+    final pendingDeletes = await _service.propietariosPendientesDeEliminar();
+    for (final owner in pendingDeletes) {
+      await cloud.anonymizeOwner(ownerId: owner.id, adminId: adminId);
+      await _service.eliminarPropietario(owner.id);
+    }
+
+    final pending = await _service.propietariosSinSincronizar();
+    for (final owner in pending) {
+      await cloud.updateOwner(
+        adminId: adminId,
+        owner: owner,
+        phoneCountryCodeId: _countryCodeIdFor(owner),
+      );
+      // Una cuenta pendiente de aprobación no se deshabilita desde el
+      // interruptor: su estado lo decide el módulo de aprobación.
+      if (!owner.isPendingApproval) {
+        await cloud.setOwnerStatus(ownerId: owner.id, isActive: owner.isActive);
+      }
+      await _service.marcarSincronizado(owner.id);
+    }
+  }
+
+  /// Id del maestro de indicativos que corresponde al país del propietario.
+  int? _countryCodeIdFor(Owner owner) {
+    final dial = owner.countryCode;
+    if (dial == null) return null;
+    for (final code in _countryPhoneCodes) {
+      if (code.dialCode == dial) return code.id;
+    }
+    return null;
+  }
+
+  /// Reasigna los moteles antes de anonimizar la cuenta.
+  static Future<void> _transferMotels(String fromOwnerId, String toOwnerId) =>
+      MotelController.persistent().reassignMoteles(
+        fromOwnerId: fromOwnerId,
+        toOwnerId: toOwnerId,
+      );
+
+  /// Moteles vinculados según Supabase (con la caché local como respaldo).
+  static Future<List<String>> _loadMotelNames(String ownerId) async {
+    final motels = await MotelController.persistent().getMotelsByOwnerId(
       ownerId,
-      (owner) => owner.copyWith(isActive: isActive),
     );
+    return [for (final motel in motels) motel.name];
   }
 
-  /// Elimina un propietario de forma permanente y devuelve el que se quitó.
-  ///
-  /// A diferencia de [setActiveState], la operación no se puede deshacer.
-  /// Devuelve `null` si el propietario ya no existe.
-  Owner? deleteOwner(String ownerId) {
-    final index = _owners.indexWhere((owner) => owner.id == ownerId);
-    if (index == -1) return null;
-    final removedOwner = _owners.removeAt(index);
-    notifyListeners();
-    return removedOwner;
+  String _motelsBlockMessage(Owner owner, List<String> names) {
+    final cantidad = names.length;
+    final plural = cantidad == 1 ? 'motel vinculado' : 'moteles vinculados';
+    final shown = names.take(3).join(', ');
+    final rest = cantidad > 3 ? ' y ${cantidad - 3} más' : '';
+    return 'No se puede anonimizar a ${owner.fullName}: tiene $cantidad '
+        '$plural ($shown$rest). Reasígnalos primero.';
   }
 
-  Owner? _replaceOwner(String ownerId, Owner Function(Owner owner) update) {
-    final index = _owners.indexWhere((owner) => owner.id == ownerId);
-    if (index == -1) return null;
-    final updatedOwner = update(_owners[index]);
-    _owners[index] = updatedOwner;
-    notifyListeners();
-    return updatedOwner;
+  Owner? _findOwner(String id) {
+    for (final owner in _owners) {
+      if (owner.id == id) return owner;
+    }
+    return null;
   }
 
-  /// Identificador provisional. El definitivo lo asignará el backend.
-  String _generateOwnerId() => 'owner-${DateTime.now().microsecondsSinceEpoch}';
+  String _messageFor(Object error) {
+    if (error is StateError) return error.message;
+    if (error is OwnerRepositoryException) return error.message;
+    return 'No se pudo completar la operación. Intenta de nuevo.';
+  }
 
   static String? validateFullName(String value) {
     final fullName = value.trim();
@@ -223,12 +903,40 @@ class OwnerController extends ChangeNotifier {
     return null;
   }
 
-  static String? validatePhone(String value) {
-    if (value.trim().isEmpty) return 'Ingresa el teléfono.';
-    final phone = value.replaceAll(_phoneSeparatorsPattern, '');
-    if (!_phonePattern.hasMatch(phone)) {
-      return 'Ingresa un teléfono válido, por ejemplo +57 300 123 4567.';
+  /// Valida el número nacional con la longitud del país seleccionado.
+  ///
+  /// Si el maestro aún no cargó, cae a la validación genérica para no bloquear
+  /// el formulario por un problema de red.
+  String? validatePhone(String? value) {
+    final digits = value?.replaceAll(RegExp(r'\D'), '') ?? '';
+    if (digits.isEmpty) return 'Ingresa el teléfono.';
+
+    final code = _selectedCountryCode;
+    if (code == null) {
+      if (!_phonePattern.hasMatch('+$digits')) {
+        return 'Ingresa un teléfono válido, por ejemplo 300 123 4567.';
+      }
+      return null;
+    }
+
+    if (digits.length < code.phoneMinLength ||
+        digits.length > code.phoneMaxLength) {
+      final range = code.phoneMinLength == code.phoneMaxLength
+          ? '${code.phoneMinLength}'
+          : '${code.phoneMinLength} a ${code.phoneMaxLength}';
+      return 'Ingresa un número de $range dígitos para ${code.countryName}.';
     }
     return null;
+  }
+
+  void _notifySyncRetryChanged() {
+    if (!_disposed) notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _syncRetry.dispose();
+    super.dispose();
   }
 }

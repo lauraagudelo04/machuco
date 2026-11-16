@@ -26,6 +26,7 @@ class SyncedBookingRepository implements BookingRepository {
     required String? Function() currentUid,
     required Future<RegisteredUserRole?> Function(String uid) roleOf,
     required Future<String?> Function(String motelId) ownerIdForMotel,
+    this.reconcilePayment,
   }) : _local = local,
        _cloud = cloud,
        _currentUid = currentUid,
@@ -37,6 +38,7 @@ class SyncedBookingRepository implements BookingRepository {
   final String? Function() _currentUid;
   final Future<RegisteredUserRole?> Function(String uid) _roleOf;
   final Future<String?> Function(String motelId) _ownerIdForMotel;
+  final Future<Reservation> Function(Reservation reservation)? reconcilePayment;
 
   final Map<String, RegisteredUserRole> _roles = {};
   final Set<Future<void>> _pendingPushes = {};
@@ -91,10 +93,16 @@ class SyncedBookingRepository implements BookingRepository {
       for (final reservation in remote) {
         // A local change that is still unsynced wins over the server copy.
         if (_unsynced.contains(reservation.id)) continue;
+        final reconciled =
+            await reconcilePayment?.call(reservation) ?? reservation;
         if (await _local.getById(reservation.id) == null) {
-          await _local.add(reservation);
+          await _local.add(reconciled);
         } else {
-          await _local.update(reservation);
+          await _local.update(reconciled);
+        }
+        if (reconciled.paymentMethod != reservation.paymentMethod ||
+            reconciled.status != reservation.status) {
+          _push(reconciled);
         }
       }
     } catch (error) {
