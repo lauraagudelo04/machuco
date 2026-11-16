@@ -61,7 +61,7 @@ class _OwnerReviewReportSheetState extends State<OwnerReviewReportSheet> {
             ),
             const SizedBox(height: AppSpacing.s2),
             Text(
-              'El administrador revisará la reseña y decidirá si la oculta.',
+              'El administrador revisará la reseña de ${widget.review.authorName} y decidirá si la oculta.',
               style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                 color: context.appColors.textSecondary,
               ),

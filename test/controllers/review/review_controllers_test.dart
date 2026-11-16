@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
@@ -481,6 +483,25 @@ void main() {
     expect(client.getAverageByMotelId('3'), 3.0);
   });
 
+  test('si la lista se recarga mientras se guarda, el cambio igual se ve', () async {
+    final repository = _SlowReplyRepository();
+    final controller = OwnerReviewController(
+      motelController: _FakeMotelController([_motel('1', 'Sol')]),
+      repository: repository,
+    );
+    await controller.loadReviews();
+
+    final saving = controller.reply('review-owner-1', 'Gracias');
+    await controller.loadReviews();
+    repository.finishSave();
+    await saving;
+
+    expect(
+      controller.reviews.firstWhere((r) => r.id == 'review-owner-1').ownerReply,
+      'Gracias',
+    );
+  });
+
   group('carga con error del repositorio', () {
     const reason = 'No hay conexión con el servidor de reseñas';
 
@@ -576,5 +597,25 @@ class _FailingLoadRepository extends InMemoryReviewRepository {
   Future<List<Review>> getAll() async {
     if (reason case final message?) throw ReviewRepositoryException(message);
     throw StateError('falla');
+  }
+}
+
+/// Repositorio cuya respuesta del propietario queda pendiente hasta
+/// [finishSave], para simular una recarga de la lista durante el guardado.
+class _SlowReplyRepository extends InMemoryReviewRepository {
+  final _gate = Completer<void>();
+
+  void finishSave() => _gate.complete();
+
+  /// Como SQL Connect, cada carga crea objetos nuevos.
+  @override
+  Future<List<Review>> getAll() async => [
+    for (final review in await super.getAll()) review.copyWith(),
+  ];
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async {
+    await _gate.future;
+    await super.replyAsOwner(reviewId, reply);
   }
 }

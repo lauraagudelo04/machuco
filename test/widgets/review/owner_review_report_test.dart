@@ -51,6 +51,7 @@ void main() {
     await tester.tap(reportButton);
     await tester.pumpAndSettle();
     expect(find.text('Reportar reseña'), findsOneWidget);
+    expect(find.textContaining('revisará la reseña de Diana'), findsOneWidget);
 
     await tester.enterText(
       find.descendant(

@@ -21,17 +21,16 @@ mixin ReviewActions on ChangeNotifier {
     required Future<void> Function() save,
     required Review? Function(Review review) change,
   }) async {
-    final review = findShownReview(reviewId);
-    if (review == null) return null;
+    if (findShownReview(reviewId) == null) return null;
     try {
       await save();
     } on ReviewRepositoryException catch (error) {
       return error.message;
     }
-    final index = shownReviews.indexOf(review);
-    // La lista pudo recargarse mientras se guardaba: ya trae el cambio.
+    // Se busca de nuevo: la lista pudo recargarse mientras se guardaba.
+    final index = shownReviews.indexWhere((review) => review.id == reviewId);
     if (index == -1) return null;
-    final updated = change(review);
+    final updated = change(shownReviews[index]);
     if (updated == null) {
       shownReviews.removeAt(index);
     } else {

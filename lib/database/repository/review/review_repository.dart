@@ -27,7 +27,7 @@ abstract class ReviewRepository {
   Future<void> update(Review review);
 
   /// Elimina la reseña con [id]. Las implementaciones remotas solo lo
-  /// permiten al administrador y fallan si la reseña no existe.
+  /// permiten al administrador.
   Future<void> delete(String id);
 
   /// Guarda [reply] como respuesta del propietario a la reseña [reviewId].
