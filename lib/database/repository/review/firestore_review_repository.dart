@@ -63,6 +63,13 @@ class FirestoreReviewRepository implements ReviewRepository {
   @override
   Future<void> delete(String id) => _write(() => _collection.doc(id).delete());
 
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) => _write(() async {
+    final doc = _collection.doc(reviewId);
+    if (!(await doc.get()).exists) return;
+    await doc.update({'ownerReply': reply});
+  });
+
   Future<void> _write(Future<void> Function() operation) async {
     try {
       await operation();

@@ -16,6 +16,13 @@ abstract class ReviewRepository {
 
   /// Elimina la reseña con [id]. No hace nada si no existe.
   Future<void> delete(String id);
+
+  /// Guarda [reply] como respuesta del propietario a la reseña [reviewId].
+  ///
+  /// Las implementaciones remotas validan en el servidor que la reseña sea
+  /// de un motel del usuario con sesión; si no, lanzan
+  /// `ReviewRepositoryException`.
+  Future<void> replyAsOwner(String reviewId, String reply);
 }
 
 /// Implementación en memoria, sembrada con [reviewSeedData].
@@ -46,4 +53,12 @@ class InMemoryReviewRepository implements ReviewRepository {
   @override
   Future<void> delete(String id) async =>
       _reviews.removeWhere((r) => r.id == id);
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async {
+    final index = _reviews.indexWhere((r) => r.id == reviewId);
+    if (index != -1) {
+      _reviews[index] = _reviews[index].copyWith(ownerReply: reply);
+    }
+  }
 }

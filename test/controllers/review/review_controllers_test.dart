@@ -5,6 +5,7 @@ import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -90,10 +91,7 @@ void main() {
 
       await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
-      expect(
-        controller.getReviewsByMotelId('3').first.id,
-        'review-new',
-      );
+      expect(controller.getReviewsByMotelId('3').first.id, 'review-new');
       expect(controller.getReviewsByRoomId('room-1').single.id, 'review-new');
       expect(controller.getAverageByRoomId('room-1'), 2.0);
       expect(notified, 1);
@@ -163,6 +161,29 @@ void main() {
       final byId = {for (final r in controller.reviews) r.id: r};
       expect(byId['review-owner-1']!.ownerReply, 'Gracias');
       expect(byId['review-owner-2']!.ownerReply, isNull);
+    });
+
+    test('reply devuelve null cuando se guarda', () async {
+      expect(await controller.reply('review-owner-1', 'Gracias'), isNull);
+    });
+
+    test('si el servidor rechaza la respuesta, devuelve el motivo y no la '
+        'muestra como guardada', () async {
+      final rejecting = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _RejectingReplyRepository(repository),
+      );
+      await rejecting.loadReviews();
+
+      final error = await rejecting.reply('review-owner-1', 'Gracias');
+
+      expect(error, 'Solo puedes responder reseñas de tus moteles');
+      expect(
+        rejecting.reviews
+            .firstWhere((r) => r.id == 'review-owner-1')
+            .ownerReply,
+        isNull,
+      );
     });
   });
 
@@ -381,4 +402,30 @@ void main() {
     ]);
     expect(client.getAverageByMotelId('3'), 3.0);
   });
+}
+
+/// Repositorio que lee de [_inner] pero rechaza las respuestas del propietario,
+/// como hace SQL Connect cuando la reseña no es de un motel del usuario.
+class _RejectingReplyRepository implements ReviewRepository {
+  _RejectingReplyRepository(this._inner);
+
+  final ReviewRepository _inner;
+
+  @override
+  Future<List<Review>> getAll() => _inner.getAll();
+
+  @override
+  Future<void> add(Review review) => _inner.add(review);
+
+  @override
+  Future<void> update(Review review) => _inner.update(review);
+
+  @override
+  Future<void> delete(String id) => _inner.delete(id);
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async =>
+      throw const ReviewRepositoryException(
+        'Solo puedes responder reseñas de tus moteles',
+      );
 }

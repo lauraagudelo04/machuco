@@ -40,6 +40,12 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
     super.dispose();
   }
 
+  Future<void> _reply(String reviewId, String message) async {
+    final error = await _controller.reply(reviewId, message);
+    if (error == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
   void _openReplySheet(Review review) {
     showModalBottomSheet(
       context: context,
@@ -48,7 +54,7 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
       showDragHandle: true,
       builder: (context) => OwnerReviewReplySheet(
         review: review,
-        onSubmit: (message) => _controller.reply(review.id, message),
+        onSubmit: (message) => _reply(review.id, message),
       ),
     );
   }

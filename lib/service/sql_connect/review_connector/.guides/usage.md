@@ -2,6 +2,7 @@
 
 ```dart
 ReviewConnector.instance.CreateMyReview(createMyReviewVariables).execute();
+ReviewConnector.instance.ReplyToReviewAsOwner(replyToReviewAsOwnerVariables).execute();
 ReviewConnector.instance.ListReviews().execute();
 ReviewConnector.instance.ListReviewsByMotel(listReviewsByMotelVariables).execute();
 

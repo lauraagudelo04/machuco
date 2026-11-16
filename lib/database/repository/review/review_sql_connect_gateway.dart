@@ -35,6 +35,10 @@ abstract interface class ReviewSqlConnectGateway {
   /// asignó la base. El autor y el estado los fija el backend: se ignoran
   /// `review.id`, `review.authorId` y `review.status`.
   Future<String> createMine(Review review);
+
+  /// Guarda la respuesta del propietario. El servidor la rechaza si la
+  /// reseña no es de un motel del usuario con sesión.
+  Future<void> replyAsOwner(String id, String reply);
 }
 
 /// Implementación con el SDK generado del conector `review`.
@@ -97,5 +101,10 @@ class GeneratedReviewSqlConnectGateway implements ReviewSqlConnectGateway {
         .roomId(review.roomId)
         .execute();
     return result.data.review_insert.id;
+  }
+
+  @override
+  Future<void> replyAsOwner(String id, String reply) async {
+    await _connector.replyToReviewAsOwner(id: id, reply: reply).execute();
   }
 }

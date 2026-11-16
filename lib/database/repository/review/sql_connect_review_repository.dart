@@ -8,10 +8,9 @@ import 'package:machuco/models/review/review.dart';
 /// [ReviewRepository] respaldado por la tabla `reviews` de Firebase SQL
 /// Connect (PostgreSQL), conector `review`.
 ///
-/// Solo cubre la funcionalidad de ingresar reseñas: listar ([getAll]) y
-/// publicar ([add]). Responder, moderar y eliminar son de las ramas de
-/// propietario y administrador, así que [update] y [delete] lanzan
-/// [ReviewRepositoryException].
+/// Cubre listar ([getAll]), publicar ([add]) y la respuesta del propietario
+/// ([replyAsOwner]). La moderación del administrador todavía no está en SQL
+/// Connect, así que [update] y [delete] lanzan [ReviewRepositoryException].
 ///
 /// La autorización (que haya sesión y que el autor sea el usuario del token)
 /// la impone `@auth` en `dataconnect/review/`, no esta clase.
@@ -49,6 +48,23 @@ class SqlConnectReviewRepository implements ReviewRepository {
     } catch (error) {
       throw ReviewRepositoryException(
         _messageFor(error, fallback: 'No fue posible publicar la reseña'),
+      );
+    }
+  }
+
+  /// Guarda la respuesta del propietario. Si la reseña no es de uno de sus
+  /// moteles, el servidor la rechaza (`@check` en `ReplyToReviewAsOwner`).
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async {
+    try {
+      await _remote.replyAsOwner(reviewId, reply);
+    } on DataConnectOperationError {
+      throw const ReviewRepositoryException(
+        'Solo puedes responder reseñas de tus moteles',
+      );
+    } catch (error) {
+      throw ReviewRepositoryException(
+        _messageFor(error, fallback: 'No fue posible guardar la respuesta'),
       );
     }
   }

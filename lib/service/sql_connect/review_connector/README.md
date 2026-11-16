@@ -201,3 +201,50 @@ final ref = ReviewConnector.instance.createMyReview(
 ref.execute();
 ```
 
+
+### ReplyToReviewAsOwner
+#### Required Arguments
+```dart
+String id = ...;
+String reply = ...;
+ReviewConnector.instance.replyToReviewAsOwner(
+  id: id,
+  reply: reply,
+).execute();
+```
+
+
+
+#### Return Type
+`execute()` returns a `OperationResult<ReplyToReviewAsOwnerData, ReplyToReviewAsOwnerVariables>`
+```dart
+/// Result of an Operation Request (query/mutation).
+class OperationResult<Data, Variables> {
+  OperationResult(this.dataConnect, this.data, this.ref);
+  Data data;
+  OperationRef<Data, Variables> ref;
+  FirebaseDataConnect dataConnect;
+}
+
+final result = await ReviewConnector.instance.replyToReviewAsOwner(
+  id: id,
+  reply: reply,
+);
+ReplyToReviewAsOwnerData data = result.data;
+final ref = result.ref;
+```
+
+#### Getting the Ref
+Each builder returns an `execute` function, which is a helper function that creates a `Ref` object, and executes the underlying operation.
+An example of how to use the `Ref` object is shown below:
+```dart
+String id = ...;
+String reply = ...;
+
+final ref = ReviewConnector.instance.replyToReviewAsOwner(
+  id: id,
+  reply: reply,
+).ref();
+ref.execute();
+```
+

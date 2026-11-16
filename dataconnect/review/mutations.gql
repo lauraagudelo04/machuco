@@ -1,6 +1,5 @@
 # Mutaciones del conector `review` (ingresar reseñas).
-# Responder, moderar y eliminar son de las ramas de propietario y
-# administrador; no se exponen aquí.
+# Moderar y eliminar son de la rama de administrador; no se exponen aquí.
 
 # Un cliente con sesión publica una reseña. El autor sale del token
 # (auth.uid), no de la app, y la reseña siempre nace visible.
@@ -26,4 +25,27 @@ mutation CreateMyReview(
       status: "visible"
     }
   )
+}
+
+# El propietario responde una reseña de uno de sus moteles.
+# El servidor busca la reseña y los moteles del usuario del token, y solo
+# escribe `ownerReply` si el motel de la reseña es suyo. La app no puede
+# saltarse esta validación.
+mutation ReplyToReviewAsOwner($id: UUID!, $reply: String!)
+@auth(level: USER)
+@transaction {
+  query
+  @redact
+  @check(
+    expr: "response.query.motels.exists(m, m.id == response.query.review.motelId)"
+    message: "Solo el propietario del motel puede responder esta reseña"
+  ) {
+    review(id: $id) @check(expr: "this != null", message: "La reseña no existe") {
+      motelId
+    }
+    motels(where: { ownerId: { eq_expr: "auth.uid" } }) {
+      id
+    }
+  }
+  review_update(id: $id, data: { ownerReply: $reply })
 }

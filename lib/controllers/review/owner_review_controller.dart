@@ -4,7 +4,9 @@ import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
 // Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
 // dominio del mismo nombre dentro de la clase.
+import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 
 /// Controlador de reseñas desde la perspectiva del propietario.
 ///
@@ -15,7 +17,7 @@ class OwnerReviewController extends ChangeNotifier {
     MotelController? motelController,
     ReviewRepository? repository,
   }) : _motelController = motelController ?? MotelController(),
-       _repository = repository ?? InMemoryReviewRepository.shared;
+       _repository = repository ?? SqlConnectReviewRepository();
 
   final MotelController _motelController;
   final ReviewRepository _repository;
@@ -80,14 +82,23 @@ class OwnerReviewController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> reply(String reviewId, String message) async {
+  /// Guarda la respuesta del propietario a [reviewId].
+  ///
+  /// Devuelve `null` si se guardó (o si no había nada que guardar) y el
+  /// motivo en texto si el servidor la rechazó; en ese caso la reseña no
+  /// cambia en pantalla.
+  Future<String?> reply(String reviewId, String message) async {
     final trimmed = message.trim();
     final index = _reviews.indexWhere((r) => r.id == reviewId);
-    if (trimmed.isEmpty || index == -1) return;
-    final updated = _reviews[index].copyWith(ownerReply: trimmed);
-    await _repository.update(updated);
-    _reviews[index] = updated;
+    if (trimmed.isEmpty || index == -1) return null;
+    try {
+      await _repository.replyAsOwner(reviewId, trimmed);
+    } on ReviewRepositoryException catch (error) {
+      return error.message;
+    }
+    _reviews[index] = _reviews[index].copyWith(ownerReply: trimmed);
     notifyListeners();
+    return null;
   }
 
   /// Nombre del motel, o su [motelId] si no está entre los del propietario.

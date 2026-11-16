@@ -27,6 +27,15 @@ class _FakeGateway implements ReviewSqlConnectGateway {
     created.add(review);
     return 'uuid-nuevo';
   }
+
+  final List<({String id, String reply})> ownerReplies = [];
+
+  @override
+  Future<void> replyAsOwner(String id, String reply) async {
+    calls++;
+    if (error case final e?) throw e;
+    ownerReplies.add((id: id, reply: reply));
+  }
 }
 
 SqlConnectReviewRow _row({
@@ -149,6 +158,55 @@ void main() {
         throwsA(isA<ReviewRepositoryException>()),
       );
     });
+
+    test('replyAsOwner envía el id y la respuesta al gateway', () async {
+      await repository.replyAsOwner('uuid-1', 'Gracias, Ana');
+
+      expect(gateway.ownerReplies.single, (
+        id: 'uuid-1',
+        reply: 'Gracias, Ana',
+      ));
+    });
+
+    test(
+      'replyAsOwner rechazado por el servidor explica que no es su motel',
+      () async {
+        gateway.error = DataConnectOperationError(
+          DataConnectErrorCode.other,
+          'Solo el propietario del motel puede responder esta reseña',
+          DataConnectOperationFailureResponse([], null, null),
+        );
+
+        await expectLater(
+          repository.replyAsOwner('uuid-1', 'x'),
+          throwsA(
+            isA<ReviewRepositoryException>().having(
+              (e) => e.message,
+              'message',
+              'Solo puedes responder reseñas de tus moteles',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'replyAsOwner con un error inesperado usa el mensaje genérico',
+      () async {
+        gateway.error = StateError('falla');
+
+        await expectLater(
+          repository.replyAsOwner('uuid-1', 'x'),
+          throwsA(
+            isA<ReviewRepositoryException>().having(
+              (e) => e.message,
+              'message',
+              'No fue posible guardar la respuesta',
+            ),
+          ),
+        );
+      },
+    );
 
     test('un error inesperado usa el mensaje genérico', () async {
       gateway.error = StateError('falla');
