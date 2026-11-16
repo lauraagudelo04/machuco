@@ -6,6 +6,8 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/widgets/review/owner_review_card.dart';
 import 'package:machuco/widgets/review/owner_review_reply_sheet.dart';
+import 'package:machuco/widgets/review/owner_review_report_sheet.dart';
+import 'package:machuco/widgets/review/review_action_error.dart';
 import 'package:machuco/widgets/review/review_stat_card.dart';
 
 class OwnerReviewPage extends StatefulWidget {
@@ -40,25 +42,18 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
     super.dispose();
   }
 
-  Future<void> _reply(String reviewId, String message) =>
-      _showError(_controller.reply(reviewId, message));
-
-  /// Muestra el motivo si el servidor rechazó la acción.
-  Future<void> _showError(Future<String?> action) async {
-    final error = await action;
-    if (error == null || !mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
-  }
-
   void _openReportSheet(Review review) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => OwnerReviewReplySheet.report(
+      builder: (_) => OwnerReviewReportSheet(
         review: review,
-        onSubmit: (reason) => _showError(_controller.report(review.id, reason)),
+        onSubmit: (reason) => showReviewActionError(
+          context,
+          _controller.report(review.id, reason),
+        ),
       ),
     );
   }
@@ -69,9 +64,12 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => OwnerReviewReplySheet(
+      builder: (_) => OwnerReviewReplySheet(
         review: review,
-        onSubmit: (message) => _reply(review.id, message),
+        onSubmit: (message) => showReviewActionError(
+          context,
+          _controller.reply(review.id, message),
+        ),
       ),
     );
   }

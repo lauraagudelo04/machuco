@@ -3,16 +3,6 @@ import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
-/// Error al leer o escribir reseñas en Cloud Firestore.
-class ReviewRepositoryException implements Exception {
-  const ReviewRepositoryException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
 /// [ReviewRepository] respaldado por la colección `reviews` de Cloud Firestore.
 ///
 /// Cada reseña es un documento cuyo id es [Review.id]. La autorización (que un

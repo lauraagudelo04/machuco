@@ -8,16 +8,13 @@ class OwnerReviewCard extends StatelessWidget {
     required this.review,
     required this.motelName,
     required this.onReply,
-    this.onReport,
+    required this.onReport,
   });
 
   final Review review;
   final String motelName;
   final VoidCallback onReply;
-
-  /// Abre el reporte al administrador. Solo se ofrece si la reseña está
-  /// visible: una oculta ya fue moderada y una reportada está en revisión.
-  final VoidCallback? onReport;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -93,8 +90,9 @@ class OwnerReviewCard extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.end,
             children: [
-              if (onReport != null &&
-                  review.status == ReviewModerationStatus.visible)
+              // Como en el servidor: una oculta ya fue moderada y una
+              // reportada ya está en revisión.
+              if (review.status == ReviewModerationStatus.visible)
                 TextButton.icon(
                   onPressed: onReport,
                   icon: const Icon(Icons.flag_outlined, size: 18),

@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:machuco/database/repository/review/review_type_repository.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';

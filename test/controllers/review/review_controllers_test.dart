@@ -5,7 +5,6 @@ import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -91,7 +90,10 @@ void main() {
 
       await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
-      expect(controller.getReviewsByMotelId('3').first.id, 'review-new');
+      expect(
+        controller.getReviewsByMotelId('3').first.id,
+        'review-new',
+      );
       expect(controller.getReviewsByRoomId('room-1').single.id, 'review-new');
       expect(controller.getAverageByRoomId('room-1'), 2.0);
       expect(notified, 1);
@@ -478,6 +480,42 @@ void main() {
     ]);
     expect(client.getAverageByMotelId('3'), 3.0);
   });
+
+  group('carga con error del repositorio', () {
+    const reason = 'No hay conexión con el servidor de reseñas';
+
+    test('el propietario ve el motivo del repositorio', () async {
+      final controller = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _FailingLoadRepository(reason),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, reason);
+    });
+
+    test('el administrador ve el motivo del repositorio', () async {
+      final controller = ReviewAdministrationController(
+        repository: _FailingLoadRepository(reason),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, reason);
+    });
+
+    test('un error inesperado mantiene el mensaje genérico', () async {
+      final controller = ReviewAdministrationController(
+        repository: _FailingLoadRepository(null),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, 'No fue posible cargar las reseñas.');
+    });
+  });
+
 }
 
 /// Repositorio que lee de [_inner] pero rechaza las respuestas y la
@@ -525,4 +563,18 @@ class _RejectingRepository implements ReviewRepository {
       throw const ReviewRepositoryException(_adminReason);
 
   static const _adminReason = 'Solo un administrador puede moderar reseñas';
+}
+
+/// Repositorio cuya carga falla: con [reason] lanza
+/// [ReviewRepositoryException]; con `null`, un error inesperado.
+class _FailingLoadRepository extends InMemoryReviewRepository {
+  _FailingLoadRepository(this.reason);
+
+  final String? reason;
+
+  @override
+  Future<List<Review>> getAll() async {
+    if (reason case final message?) throw ReviewRepositoryException(message);
+    throw StateError('falla');
+  }
 }

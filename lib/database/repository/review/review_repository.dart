@@ -1,6 +1,18 @@
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/database/repository/review/review_seed_data.dart';
 
+/// Error al leer o escribir reseñas, sin importar el origen de datos.
+///
+/// [message] ya está listo para mostrarse al usuario.
+class ReviewRepositoryException implements Exception {
+  const ReviewRepositoryException(this.message);
+
+  final String message;
+
+  @override
+  String toString() => message;
+}
+
 /// Contrato de acceso a las reseñas, independiente del origen de datos.
 ///
 /// Los controladores de cliente, propietario y administrador dependen de
@@ -14,7 +26,8 @@ abstract class ReviewRepository {
   /// Reemplaza la reseña con el mismo [Review.id]. No hace nada si no existe.
   Future<void> update(Review review);
 
-  /// Elimina la reseña con [id]. No hace nada si no existe.
+  /// Elimina la reseña con [id]. Las implementaciones remotas solo lo
+  /// permiten al administrador y fallan si la reseña no existe.
   Future<void> delete(String id);
 
   /// Guarda [reply] como respuesta del propietario a la reseña [reviewId].
@@ -36,20 +49,15 @@ abstract class ReviewRepository {
   /// Descarta el reporte: la reseña vuelve a `visible` y sin motivo.
   Future<void> dismissReportAsAdmin(String reviewId);
 
-  /// Guarda [reply] como respuesta del administrador.
   Future<void> replyAsAdmin(String reviewId, String reply);
 }
 
 /// Implementación en memoria, sembrada con [reviewSeedData].
 ///
-/// [shared] es la instancia que usan las pantallas por defecto: así una
-/// respuesta del propietario la ve el administrador y una reseña nueva del
-/// cliente la ven los demás roles. Las pruebas crean instancias propias.
+/// Solo para pruebas: las pantallas usan SQL Connect por defecto.
 class InMemoryReviewRepository implements ReviewRepository {
   InMemoryReviewRepository({List<Review>? seed})
     : _reviews = [...seed ?? reviewSeedData()];
-
-  static final InMemoryReviewRepository shared = InMemoryReviewRepository();
 
   final List<Review> _reviews;
 

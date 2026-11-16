@@ -44,15 +44,15 @@ abstract interface class ReviewSqlConnectGateway {
   /// un motel del usuario o si no está visible.
   Future<void> reportAsOwner(String id, String reason);
 
-  /// Moderación del administrador. El servidor exige el custom claim
-  /// `role: 'admin'`; [status] solo puede ser `visible` o `hidden`.
-  Future<void> setStatusAsAdmin(String id, String status);
+  // Moderación: el servidor exige el custom claim `role: 'admin'`.
+
+  Future<void> setHiddenAsAdmin(String id, {required bool hidden});
 
   Future<void> dismissReportAsAdmin(String id);
 
   Future<void> replyAsAdmin(String id, String reply);
 
-  Future<void> deleteAsAdmin(String id);
+  Future<void> delete(String id);
 }
 
 /// Implementación con el SDK generado del conector `review`.
@@ -128,8 +128,13 @@ class GeneratedReviewSqlConnectGateway implements ReviewSqlConnectGateway {
   }
 
   @override
-  Future<void> setStatusAsAdmin(String id, String status) async {
-    await _connector.adminSetReviewStatus(id: id, status: status).execute();
+  Future<void> setHiddenAsAdmin(String id, {required bool hidden}) async {
+    final status = hidden
+        ? ReviewModerationStatus.hidden
+        : ReviewModerationStatus.visible;
+    await _connector
+        .adminSetReviewStatus(id: id, status: status.name)
+        .execute();
   }
 
   @override
@@ -143,7 +148,7 @@ class GeneratedReviewSqlConnectGateway implements ReviewSqlConnectGateway {
   }
 
   @override
-  Future<void> deleteAsAdmin(String id) async {
+  Future<void> delete(String id) async {
     await _connector.adminDeleteReview(id: id).execute();
   }
 }

@@ -1,6 +1,6 @@
 import 'package:firebase_data_connect/firebase_data_connect.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:machuco/database/repository/review/firestore_review_repository.dart';
+import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/database/repository/review/review_sql_connect_gateway.dart';
 import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/models/review/review.dart';
@@ -28,52 +28,72 @@ class _FakeGateway implements ReviewSqlConnectGateway {
     return 'uuid-nuevo';
   }
 
-  final List<({String id, String reply})> ownerReplies = [];
+  /// Escrituras que llegaron al servidor, en orden: la operación, el id de
+  /// la reseña y el texto enviado (respuesta, motivo o estado), si hay.
+  final List<({String operation, String id, String? text})> sent = [];
 
-  @override
-  Future<void> replyAsOwner(String id, String reply) async {
+  Future<void> _send(String operation, String id, [String? text]) async {
     calls++;
     if (error case final e?) throw e;
-    ownerReplies.add((id: id, reply: reply));
-  }
-
-  final List<String> adminActions = [];
-
-  @override
-  Future<void> reportAsOwner(String id, String reason) async {
-    calls++;
-    if (error case final e?) throw e;
-    adminActions.add('report $id $reason');
+    sent.add((operation: operation, id: id, text: text));
   }
 
   @override
-  Future<void> setStatusAsAdmin(String id, String status) async {
-    calls++;
-    if (error case final e?) throw e;
-    adminActions.add('status $id $status');
-  }
+  Future<void> replyAsOwner(String id, String reply) =>
+      _send('replyAsOwner', id, reply);
 
   @override
-  Future<void> dismissReportAsAdmin(String id) async {
-    calls++;
-    if (error case final e?) throw e;
-    adminActions.add('dismiss $id');
-  }
+  Future<void> reportAsOwner(String id, String reason) =>
+      _send('reportAsOwner', id, reason);
 
   @override
-  Future<void> replyAsAdmin(String id, String reply) async {
-    calls++;
-    if (error case final e?) throw e;
-    adminActions.add('reply $id $reply');
-  }
+  Future<void> setHiddenAsAdmin(String id, {required bool hidden}) =>
+      _send('setHiddenAsAdmin', id, '$hidden');
 
   @override
-  Future<void> deleteAsAdmin(String id) async {
-    calls++;
-    if (error case final e?) throw e;
-    adminActions.add('delete $id');
-  }
+  Future<void> dismissReportAsAdmin(String id) =>
+      _send('dismissReportAsAdmin', id);
+
+  @override
+  Future<void> replyAsAdmin(String id, String reply) =>
+      _send('replyAsAdmin', id, reply);
+
+  @override
+  Future<void> delete(String id) => _send('delete', id);
 }
+
+/// Rechazo de un `@check`, armado como lo hace el SDK 0.4.1 cuando el
+/// servidor responde 200 con `errors` (ver `core/ref.dart`).
+DataConnectOperationError<Object?> _checkFailed(String serverMessage) =>
+    DataConnectOperationError(
+      DataConnectErrorCode.other,
+      'Failed to invoke operation: ',
+      DataConnectOperationFailureResponse(
+        [DataConnectOperationFailureResponseErrorInfo([], serverMessage)],
+        null,
+        null,
+      ),
+    );
+
+/// Error HTTP armado como lo hace el transporte REST del SDK 0.4.1: solo el
+/// 401 es `unauthorized`; cualquier otro estado llega como `other`.
+DataConnectError _httpError(int status, String body) => DataConnectError(
+  status == 401
+      ? DataConnectErrorCode.unauthorized
+      : DataConnectErrorCode.other,
+  "Received a status code of $status with a message '$body'",
+);
+
+/// Sin red, el transporte REST envuelve la excepción en un error `other`.
+final _networkError = DataConnectError(
+  DataConnectErrorCode.other,
+  'Failed to invoke operation: ClientException with SocketException: '
+  'Connection refused',
+);
+
+Matcher _failsWith(String message) => throwsA(
+  isA<ReviewRepositoryException>().having((e) => e.message, 'message', message),
+);
 
 SqlConnectReviewRow _row({
   String status = 'visible',
@@ -199,33 +219,10 @@ void main() {
     test('replyAsOwner envía el id y la respuesta al gateway', () async {
       await repository.replyAsOwner('uuid-1', 'Gracias, Ana');
 
-      expect(gateway.ownerReplies.single, (
-        id: 'uuid-1',
-        reply: 'Gracias, Ana',
-      ));
+      expect(gateway.sent, [
+        (operation: 'replyAsOwner', id: 'uuid-1', text: 'Gracias, Ana'),
+      ]);
     });
-
-    test(
-      'replyAsOwner rechazado por el servidor explica que no es su motel',
-      () async {
-        gateway.error = DataConnectOperationError(
-          DataConnectErrorCode.other,
-          'Solo el propietario del motel puede responder esta reseña',
-          DataConnectOperationFailureResponse([], null, null),
-        );
-
-        await expectLater(
-          repository.replyAsOwner('uuid-1', 'x'),
-          throwsA(
-            isA<ReviewRepositoryException>().having(
-              (e) => e.message,
-              'message',
-              'Solo puedes responder reseñas de tus moteles',
-            ),
-          ),
-        );
-      },
-    );
 
     test(
       'replyAsOwner con un error inesperado usa el mensaje genérico',
@@ -271,31 +268,10 @@ void main() {
     test('reportAsOwner envía el id y el motivo al gateway', () async {
       await repository.reportAsOwner('uuid-1', 'Spam');
 
-      expect(gateway.adminActions, ['report uuid-1 Spam']);
+      expect(gateway.sent, [
+        (operation: 'reportAsOwner', id: 'uuid-1', text: 'Spam'),
+      ]);
     });
-
-    test(
-      'reportAsOwner rechazado por el servidor da un mensaje claro',
-      () async {
-        gateway.error = DataConnectOperationError(
-          DataConnectErrorCode.other,
-          'Solo se pueden reportar reseñas visibles',
-          DataConnectOperationFailureResponse([], null, null),
-        );
-
-        await expectLater(
-          repository.reportAsOwner('uuid-1', 'Spam'),
-          throwsA(
-            isA<ReviewRepositoryException>().having(
-              (e) => e.message,
-              'message',
-              'No puedes reportar esta reseña: no es de tus moteles o ya fue '
-                  'reportada u ocultada',
-            ),
-          ),
-        );
-      },
-    );
 
     test(
       'reportAsOwner con un error inesperado usa el mensaje genérico',
@@ -322,57 +298,141 @@ void main() {
       await repository.replyAsAdmin('uuid-1', 'Revisado');
       await repository.delete('uuid-1');
 
-      expect(gateway.adminActions, [
-        'status uuid-1 hidden',
-        'status uuid-1 visible',
-        'dismiss uuid-1',
-        'reply uuid-1 Revisado',
-        'delete uuid-1',
+      expect(gateway.sent, [
+        (operation: 'setHiddenAsAdmin', id: 'uuid-1', text: 'true'),
+        (operation: 'setHiddenAsAdmin', id: 'uuid-1', text: 'false'),
+        (operation: 'dismissReportAsAdmin', id: 'uuid-1', text: null),
+        (operation: 'replyAsAdmin', id: 'uuid-1', text: 'Revisado'),
+        (operation: 'delete', id: 'uuid-1', text: null),
       ]);
     });
 
-    test(
-      'sin rol de administrador, el servidor rechaza la moderación',
-      () async {
-        gateway.error = DataConnectError(
-          DataConnectErrorCode.unauthorized,
-          'unauthorized',
-        );
-        final reason = isA<ReviewRepositoryException>().having(
-          (e) => e.message,
-          'message',
-          'Solo un administrador puede moderar reseñas',
-        );
-
-        await expectLater(
-          repository.setHiddenAsAdmin('uuid-1', hidden: true),
-          throwsA(reason),
-        );
-        await expectLater(
-          repository.dismissReportAsAdmin('uuid-1'),
-          throwsA(reason),
-        );
-        await expectLater(
-          repository.replyAsAdmin('uuid-1', 'x'),
-          throwsA(reason),
-        );
-        await expectLater(repository.delete('uuid-1'), throwsA(reason));
-      },
-    );
-
-    test('un error inesperado al moderar usa un mensaje genérico', () async {
+    test('un error inesperado al moderar dice qué acción falló', () async {
       gateway.error = StateError('falla');
 
       await expectLater(
-        repository.delete('uuid-1'),
-        throwsA(
-          isA<ReviewRepositoryException>().having(
-            (e) => e.message,
-            'message',
-            'No fue posible actualizar la reseña',
-          ),
-        ),
+        repository.setHiddenAsAdmin('uuid-1', hidden: true),
+        _failsWith('No fue posible actualizar la reseña'),
       );
+      await expectLater(
+        repository.dismissReportAsAdmin('uuid-1'),
+        _failsWith('No fue posible descartar el reporte'),
+      );
+      await expectLater(
+        repository.replyAsAdmin('uuid-1', 'x'),
+        _failsWith('No fue posible guardar la respuesta'),
+      );
+      await expectLater(
+        repository.delete('uuid-1'),
+        _failsWith('No fue posible eliminar la reseña'),
+      );
+    });
+
+    group('mensajes de error reales del servidor', () {
+      test('un @check rechazado muestra el mensaje del servidor', () async {
+        gateway.error = _checkFailed(
+          'Solo el propietario del motel puede responder esta reseña '
+          '(aborted)\n(rolled back)',
+        );
+
+        await expectLater(
+          repository.replyAsOwner('uuid-1', 'x'),
+          _failsWith(
+            'Solo el propietario del motel puede responder esta reseña',
+          ),
+        );
+      });
+
+      test('con varios @check rechazados muestra el primero', () async {
+        gateway.error = _checkFailed(
+          'La reseña no existe (aborted)\n'
+          'Solo el propietario del motel puede reportar esta reseña (aborted)\n'
+          '(rolled back)',
+        );
+
+        await expectLater(
+          repository.reportAsOwner('uuid-1', 'Spam'),
+          _failsWith('La reseña no existe'),
+        );
+      });
+
+      test('el @check de existencia del administrador llega a la UI', () async {
+        gateway.error = _checkFailed(
+          'La reseña no existe (aborted)\n(rolled back)',
+        );
+
+        await expectLater(
+          repository.delete('uuid-1'),
+          _failsWith('La reseña no existe'),
+        );
+        await expectLater(
+          repository.replyAsAdmin('uuid-1', 'x'),
+          _failsWith('La reseña no existe'),
+        );
+      });
+
+      test(
+        'un error de operación que no es un @check usa el genérico',
+        () async {
+          gateway.error = _checkFailed('internal: database error');
+
+          await expectLater(
+            repository.reportAsOwner('uuid-1', 'Spam'),
+            _failsWith('No fue posible reportar la reseña'),
+          );
+        },
+      );
+
+      test('sin rol de administrador (HTTP 403) lo dice claramente', () async {
+        gateway.error = _httpError(
+          403,
+          'unauthorized: you are not authorized to perform this operation',
+        );
+        const reason = 'Solo un administrador puede moderar reseñas';
+
+        await expectLater(
+          repository.setHiddenAsAdmin('uuid-1', hidden: true),
+          _failsWith(reason),
+        );
+        await expectLater(
+          repository.dismissReportAsAdmin('uuid-1'),
+          _failsWith(reason),
+        );
+        await expectLater(
+          repository.replyAsAdmin('uuid-1', 'x'),
+          _failsWith(reason),
+        );
+        await expectLater(repository.delete('uuid-1'), _failsWith(reason));
+      });
+
+      test('sin sesión (HTTP 401) pide iniciar sesión', () async {
+        gateway.error = _httpError(
+          401,
+          'unauthenticated: this operation requires a signed-in user',
+        );
+
+        await expectLater(
+          repository.replyAsOwner('uuid-1', 'x'),
+          _failsWith('Debes iniciar sesión para publicar o ver reseñas'),
+        );
+        await expectLater(
+          repository.delete('uuid-1'),
+          _failsWith('Debes iniciar sesión para publicar o ver reseñas'),
+        );
+      });
+
+      test('sin red avisa que no hay conexión', () async {
+        gateway.error = _networkError;
+
+        await expectLater(
+          repository.getAll(),
+          _failsWith('No hay conexión con el servidor de reseñas'),
+        );
+        await expectLater(
+          repository.replyAsOwner('uuid-1', 'x'),
+          _failsWith('No hay conexión con el servidor de reseñas'),
+        );
+      });
     });
   });
 }
