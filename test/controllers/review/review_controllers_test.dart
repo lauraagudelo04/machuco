@@ -404,7 +404,7 @@ void main() {
         body: ' Limpio ',
       ));
 
-      expect(saved, isTrue);
+      expect(saved, isNull);
       final review = (await repository.getAll()).first;
       expect(review.id, startsWith('review-client-'));
       expect(review.authorId, 'user-7');
@@ -436,8 +436,26 @@ void main() {
         body: 'Limpio',
       ));
 
-      expect(saved, isFalse);
+      expect(saved, 'Debes iniciar sesión para publicar una reseña');
       expect(notified, 0);
+      expect(await repository.getAll(), hasLength(6));
+    });
+
+    test('una reseña de habitación sin habitación no se guarda', () async {
+      final controller = ReviewsController(
+        repository: repository,
+        authorProvider: _FakeAuthorProvider((id: 'user-7', name: 'Ana')),
+      );
+
+      final saved = await controller.submitReview('1', (
+        type: ReviewType.room,
+        roomId: null,
+        rating: 4,
+        title: 'Bien',
+        body: 'Limpio',
+      ));
+
+      expect(saved, 'Elige la habitación que quieres reseñar');
       expect(await repository.getAll(), hasLength(6));
     });
 
@@ -460,7 +478,7 @@ void main() {
           body: body,
         ));
 
-        expect(saved, isFalse);
+        expect(saved, 'Revisa la calificación, el título y la reseña');
         expect(notified, 0);
         expect(await repository.getAll(), hasLength(6));
       });
