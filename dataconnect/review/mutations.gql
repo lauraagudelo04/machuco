@@ -1,6 +1,6 @@
-# Mutaciones del conector `review` (ingresar reseñas).
+# Mutaciones del conector `review`: publicar, responder, reportar y moderar.
 # Las operaciones de administrador exigen el custom claim role: 'admin',
-# igual que las de moteles (ver docs/sql_connect.md, pendientes).
+# igual que las de moteles (ver docs/sql_connect.md, "Pendientes conocidos").
 
 # Un cliente con sesión publica una reseña. El autor sale del token
 # (auth.uid), no de la app, y la reseña siempre nace visible.
@@ -28,6 +28,13 @@ mutation CreateMyReview(
   )
 }
 
+# Los textos (respuestas y motivos) deben tener entre 1 y 1000 caracteres,
+# el mismo límite que firestore.rules. Los `_update` y `_delete` por id no
+# fallan si la reseña no existe, así que cada operación lo valida con
+# `@check(expr: "this != null")` (ver la guía de mutaciones de SQL Connect).
+# Las del propietario validan en un `query` previo porque necesitan buscar
+# sus moteles; las del administrador validan sobre el resultado del cambio.
+
 # El propietario responde una reseña de uno de sus moteles.
 # El servidor busca la reseña y los moteles del usuario del token, y solo
 # escribe `ownerReply` si el motel de la reseña es suyo. La app no puede
@@ -37,6 +44,10 @@ mutation ReplyToReviewAsOwner($id: UUID!, $reply: String!)
 @transaction {
   query
   @redact
+  @check(
+    expr: "vars.reply.size() > 0 && vars.reply.size() <= 1000"
+    message: "La respuesta debe tener entre 1 y 1000 caracteres"
+  )
   @check(
     expr: "response.query.motels.exists(m, m.id == response.query.review.motelId)"
     message: "Solo el propietario del motel puede responder esta reseña"
@@ -51,43 +62,19 @@ mutation ReplyToReviewAsOwner($id: UUID!, $reply: String!)
   review_update(id: $id, data: { ownerReply: $reply })
 }
 
-# El administrador muestra u oculta una reseña. Solo acepta `visible` o
-# `hidden`; marcarla como `reported` es cosa de los usuarios.
-mutation AdminSetReviewStatus($id: UUID!, $status: String!)
-@auth(
-  expr: "auth.token.role == 'admin' && vars.status in ['visible', 'hidden']"
-) {
-  review_update(id: $id, data: { status: $status })
-}
-
-# El administrador descarta un reporte: la reseña vuelve a estar visible y
-# se borra el motivo del reporte.
-mutation AdminDismissReviewReport($id: UUID!)
-@auth(expr: "auth.token.role == 'admin'") {
-  review_update(id: $id, data: { status: "visible", reportReason: null })
-}
-
-# El administrador responde una reseña.
-mutation AdminReplyToReview($id: UUID!, $reply: String!)
-@auth(expr: "auth.token.role == 'admin'") {
-  review_update(id: $id, data: { adminReply: $reply })
-}
-
-# El administrador elimina una reseña.
-mutation AdminDeleteReview($id: UUID!)
-@auth(expr: "auth.token.role == 'admin'") {
-  review_delete(id: $id)
-}
-
 # El propietario reporta al administrador una reseña de uno de sus moteles.
 # Igual que ReplyToReviewAsOwner, el servidor valida que el motel sea suyo.
 # Solo se reportan reseñas visibles: una oculta ya la moderó el
 # administrador y una reportada ya está en revisión.
 mutation ReportReviewAsOwner($id: UUID!, $reason: String!)
-@auth(expr: "auth != null && vars.reason.size() > 0")
+@auth(level: USER)
 @transaction {
   query
   @redact
+  @check(
+    expr: "vars.reason.size() > 0 && vars.reason.size() <= 1000"
+    message: "El motivo debe tener entre 1 y 1000 caracteres"
+  )
   @check(
     expr: "response.query.motels.exists(m, m.id == response.query.review.motelId)"
     message: "Solo el propietario del motel puede reportar esta reseña"
@@ -105,4 +92,44 @@ mutation ReportReviewAsOwner($id: UUID!, $reason: String!)
     }
   }
   review_update(id: $id, data: { status: "reported", reportReason: $reason })
+}
+
+# El administrador muestra u oculta una reseña. Solo acepta `visible` o
+# `hidden`; marcarla como `reported` es cosa del propietario.
+mutation AdminSetReviewStatus($id: UUID!, $status: String!)
+@auth(expr: "auth.token.role == 'admin'")
+@transaction {
+  review_update(id: $id, data: { status: $status })
+  @check(
+    expr: "vars.status in ['visible', 'hidden']"
+    message: "El estado debe ser visible u oculta"
+  )
+  @check(expr: "this != null", message: "La reseña no existe")
+}
+
+# El administrador descarta un reporte: la reseña vuelve a estar visible y
+# se borra el motivo del reporte.
+mutation AdminDismissReviewReport($id: UUID!)
+@auth(expr: "auth.token.role == 'admin'")
+@transaction {
+  review_update(id: $id, data: { status: "visible", reportReason: null })
+  @check(expr: "this != null", message: "La reseña no existe")
+}
+
+mutation AdminReplyToReview($id: UUID!, $reply: String!)
+@auth(expr: "auth.token.role == 'admin'")
+@transaction {
+  review_update(id: $id, data: { adminReply: $reply })
+  @check(
+    expr: "vars.reply.size() > 0 && vars.reply.size() <= 1000"
+    message: "La respuesta debe tener entre 1 y 1000 caracteres"
+  )
+  @check(expr: "this != null", message: "La reseña no existe")
+}
+
+mutation AdminDeleteReview($id: UUID!)
+@auth(expr: "auth.token.role == 'admin'")
+@transaction {
+  review_delete(id: $id)
+  @check(expr: "this != null", message: "La reseña no existe")
 }

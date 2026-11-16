@@ -7,6 +7,8 @@ part 'create_my_review.dart';
 
 part 'reply_to_review_as_owner.dart';
 
+part 'report_review_as_owner.dart';
+
 part 'admin_set_review_status.dart';
 
 part 'admin_dismiss_review_report.dart';
@@ -14,8 +16,6 @@ part 'admin_dismiss_review_report.dart';
 part 'admin_reply_to_review.dart';
 
 part 'admin_delete_review.dart';
-
-part 'report_review_as_owner.dart';
 
 part 'list_reviews.dart';
 
@@ -40,6 +40,11 @@ class ReviewConnector {
   }
   
   
+  ReportReviewAsOwnerVariablesBuilder reportReviewAsOwner ({required String id, required String reason, }) {
+    return ReportReviewAsOwnerVariablesBuilder(dataConnect, id: id,reason: reason,);
+  }
+  
+  
   AdminSetReviewStatusVariablesBuilder adminSetReviewStatus ({required String id, required String status, }) {
     return AdminSetReviewStatusVariablesBuilder(dataConnect, id: id,status: status,);
   }
@@ -57,11 +62,6 @@ class ReviewConnector {
   
   AdminDeleteReviewVariablesBuilder adminDeleteReview ({required String id, }) {
     return AdminDeleteReviewVariablesBuilder(dataConnect, id: id,);
-  }
-  
-  
-  ReportReviewAsOwnerVariablesBuilder reportReviewAsOwner ({required String id, required String reason, }) {
-    return ReportReviewAsOwnerVariablesBuilder(dataConnect, id: id,reason: reason,);
   }
   
   
