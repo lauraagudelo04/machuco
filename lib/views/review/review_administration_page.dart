@@ -57,7 +57,14 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
         ],
       ),
     );
-    if (confirmed == true) _controller.delete(review.id);
+    if (confirmed == true) await _report(_controller.delete(review.id));
+  }
+
+  /// Muestra el motivo si el servidor rechazó la acción.
+  Future<void> _report(Future<String?> action) async {
+    final error = await action;
+    if (error == null || !mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
   }
 
   void _openReplySheet(Review review) {
@@ -68,7 +75,7 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
       showDragHandle: true,
       builder: (context) => ReviewReplySheet(
         review: review,
-        onSubmit: (message) => _controller.reply(review.id, message),
+        onSubmit: (message) => _report(_controller.reply(review.id, message)),
       ),
     );
   }
@@ -146,8 +153,9 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
               child: AdminReviewCard(
                 review: review,
                 onToggleVisibility: () =>
-                    _controller.toggleVisibility(review.id),
-                onDismissReport: () => _controller.dismissReport(review.id),
+                    _report(_controller.toggleVisibility(review.id)),
+                onDismissReport: () =>
+                    _report(_controller.dismissReport(review.id)),
                 onReply: () => _openReplySheet(review),
                 onDelete: () => _confirmDelete(review),
               ),

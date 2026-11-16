@@ -8,9 +8,11 @@ import 'package:machuco/models/review/review.dart';
 /// [ReviewRepository] respaldado por la tabla `reviews` de Firebase SQL
 /// Connect (PostgreSQL), conector `review`.
 ///
-/// Cubre listar ([getAll]), publicar ([add]) y la respuesta del propietario
-/// ([replyAsOwner]). La moderación del administrador todavía no está en SQL
-/// Connect, así que [update] y [delete] lanzan [ReviewRepositoryException].
+/// Cubre listar ([getAll]), publicar ([add]), la respuesta del propietario
+/// ([replyAsOwner]) y la moderación del administrador ([setHiddenAsAdmin],
+/// [dismissReportAsAdmin], [replyAsAdmin] y [delete]). Un [update] genérico
+/// no existe: cada rol solo puede cambiar sus campos, así que lanza
+/// [ReviewRepositoryException].
 ///
 /// La autorización (que haya sesión y que el autor sea el usuario del token)
 /// la impone `@auth` en `dataconnect/review/`, no esta clase.
@@ -76,9 +78,48 @@ class SqlConnectReviewRepository implements ReviewRepository {
       );
 
   @override
-  Future<void> delete(String id) async => throw const ReviewRepositoryException(
-    'Eliminar reseñas no está disponible en SQL Connect',
-  );
+  Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden}) =>
+      _asAdmin(
+        () => _remote.setStatusAsAdmin(
+          reviewId,
+          hidden
+              ? ReviewModerationStatus.hidden.name
+              : ReviewModerationStatus.visible.name,
+        ),
+      );
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) =>
+      _asAdmin(() => _remote.dismissReportAsAdmin(reviewId));
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) =>
+      _asAdmin(() => _remote.replyAsAdmin(reviewId, reply));
+
+  /// Elimina la reseña. Solo lo permite el servidor a un administrador.
+  @override
+  Future<void> delete(String id) => _asAdmin(() => _remote.deleteAsAdmin(id));
+
+  /// Ejecuta una operación de administrador y traduce el rechazo del
+  /// servidor (`@auth(expr: "auth.token.role == 'admin'")`) a un mensaje.
+  Future<void> _asAdmin(Future<void> Function() operation) async {
+    try {
+      await operation();
+    } on DataConnectError catch (error) {
+      if (error.dataConnectErrorCode == DataConnectErrorCode.unauthorized) {
+        throw const ReviewRepositoryException(
+          'Solo un administrador puede moderar reseñas',
+        );
+      }
+      throw ReviewRepositoryException(
+        _messageFor(error, fallback: 'No fue posible actualizar la reseña'),
+      );
+    } catch (error) {
+      throw ReviewRepositoryException(
+        _messageFor(error, fallback: 'No fue posible actualizar la reseña'),
+      );
+    }
+  }
 
   static String _messageFor(Object error, {required String fallback}) {
     if (kDebugMode) {

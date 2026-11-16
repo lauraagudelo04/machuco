@@ -83,6 +83,7 @@ Verificado contra el código de `develop` (`33743ec`):
    `AppRoutes.ownerReviews` (`owner_motels_page.dart:255`). El administrador
    entra con `MaterialPageRoute` directo (`admin_motels_page.dart:254`),
    aunque existe `AppRoutes.adminReviews`.
+8. **Etiqueta `role: 'admin'` en la sesión (en curso, Cristian, 2026-11-16).** La moderación de reseñas en SQL Connect exige `auth.token.role == 'admin'`, igual que moteles; hoy el rol solo vive en Firestore (`users/{uid}`), así que en la nube no funciona hasta copiarlo a la sesión.
 
 ## Feature: Escribir una reseña (Cliente)
 

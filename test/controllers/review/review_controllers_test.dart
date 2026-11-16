@@ -171,7 +171,7 @@ void main() {
         'muestra como guardada', () async {
       final rejecting = OwnerReviewController(
         motelController: _FakeMotelController([_motel('1', 'Sol')]),
-        repository: _RejectingReplyRepository(repository),
+        repository: _RejectingRepository(repository),
       );
       await rejecting.loadReviews();
 
@@ -236,6 +236,50 @@ void main() {
       await controller.delete('review-1');
       expect(controller.reviews.any((r) => r.id == 'review-1'), isFalse);
       expect(controller.totalCount, 5);
+    });
+
+    test(
+      'las acciones del administrador quedan guardadas en el repositorio',
+      () async {
+        await controller.toggleVisibility('review-1');
+        await controller.dismissReport('review-2');
+        await controller.reply('review-owner-1', 'Revisado');
+        await controller.delete('review-owner-2');
+
+        final stored = {for (final r in await repository.getAll()) r.id: r};
+        expect(stored['review-1']!.status, ReviewModerationStatus.hidden);
+        expect(stored['review-2']!.status, ReviewModerationStatus.visible);
+        expect(stored['review-2']!.reportReason, isNull);
+        expect(stored['review-owner-1']!.adminReply, 'Revisado');
+        expect(stored.containsKey('review-owner-2'), isFalse);
+      },
+    );
+
+    test('si el servidor rechaza una acción, devuelve el motivo y no cambia '
+        'la reseña en pantalla', () async {
+      final rejecting = ReviewAdministrationController(
+        repository: _RejectingRepository(repository),
+      );
+      await rejecting.loadReviews();
+      Review find(String id) => rejecting.reviews.firstWhere((r) => r.id == id);
+      const reason = 'Solo un administrador puede moderar reseñas';
+
+      expect(await rejecting.toggleVisibility('review-1'), reason);
+      expect(await rejecting.dismissReport('review-2'), reason);
+      expect(await rejecting.reply('review-1', 'Hola'), reason);
+      expect(await rejecting.delete('review-1'), reason);
+
+      expect(find('review-1').status, ReviewModerationStatus.visible);
+      expect(find('review-1').adminReply, isNull);
+      expect(find('review-2').status, ReviewModerationStatus.reported);
+      expect(rejecting.totalCount, 6);
+    });
+
+    test('las acciones exitosas devuelven null', () async {
+      expect(await controller.toggleVisibility('review-1'), isNull);
+      expect(await controller.dismissReport('review-2'), isNull);
+      expect(await controller.reply('review-1', 'Hola'), isNull);
+      expect(await controller.delete('review-1'), isNull);
     });
   });
 
@@ -404,10 +448,10 @@ void main() {
   });
 }
 
-/// Repositorio que lee de [_inner] pero rechaza las respuestas del propietario,
-/// como hace SQL Connect cuando la reseña no es de un motel del usuario.
-class _RejectingReplyRepository implements ReviewRepository {
-  _RejectingReplyRepository(this._inner);
+/// Repositorio que lee de [_inner] pero rechaza las respuestas y la
+/// moderación, como hace SQL Connect cuando el usuario no tiene permiso.
+class _RejectingRepository implements ReviewRepository {
+  _RejectingRepository(this._inner);
 
   final ReviewRepository _inner;
 
@@ -421,11 +465,28 @@ class _RejectingReplyRepository implements ReviewRepository {
   Future<void> update(Review review) => _inner.update(review);
 
   @override
-  Future<void> delete(String id) => _inner.delete(id);
+  Future<void> delete(String id) async =>
+      throw const ReviewRepositoryException(_adminReason);
 
   @override
   Future<void> replyAsOwner(String reviewId, String reply) async =>
       throw const ReviewRepositoryException(
         'Solo puedes responder reseñas de tus moteles',
       );
+
+  @override
+  Future<void> setHiddenAsAdmin(
+    String reviewId, {
+    required bool hidden,
+  }) async => throw const ReviewRepositoryException(_adminReason);
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) async =>
+      throw const ReviewRepositoryException(_adminReason);
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) async =>
+      throw const ReviewRepositoryException(_adminReason);
+
+  static const _adminReason = 'Solo un administrador puede moderar reseñas';
 }

@@ -23,6 +23,16 @@ abstract class ReviewRepository {
   /// de un motel del usuario con sesión; si no, lanzan
   /// `ReviewRepositoryException`.
   Future<void> replyAsOwner(String reviewId, String reply);
+
+  /// Moderación del administrador: oculta ([hidden] = true) o muestra la
+  /// reseña. Las implementaciones remotas exigen el rol de administrador.
+  Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden});
+
+  /// Descarta el reporte: la reseña vuelve a `visible` y sin motivo.
+  Future<void> dismissReportAsAdmin(String reviewId);
+
+  /// Guarda [reply] como respuesta del administrador.
+  Future<void> replyAsAdmin(String reviewId, String reply);
 }
 
 /// Implementación en memoria, sembrada con [reviewSeedData].
@@ -55,10 +65,37 @@ class InMemoryReviewRepository implements ReviewRepository {
       _reviews.removeWhere((r) => r.id == id);
 
   @override
-  Future<void> replyAsOwner(String reviewId, String reply) async {
+  Future<void> replyAsOwner(String reviewId, String reply) async =>
+      _change(reviewId, (r) => r.copyWith(ownerReply: reply));
+
+  @override
+  Future<void> setHiddenAsAdmin(
+    String reviewId, {
+    required bool hidden,
+  }) async => _change(
+    reviewId,
+    (r) => r.copyWith(
+      status: hidden
+          ? ReviewModerationStatus.hidden
+          : ReviewModerationStatus.visible,
+    ),
+  );
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) async => _change(
+    reviewId,
+    (r) => r.copyWith(
+      status: ReviewModerationStatus.visible,
+      clearReportReason: true,
+    ),
+  );
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) async =>
+      _change(reviewId, (r) => r.copyWith(adminReply: reply));
+
+  void _change(String reviewId, Review Function(Review review) change) {
     final index = _reviews.indexWhere((r) => r.id == reviewId);
-    if (index != -1) {
-      _reviews[index] = _reviews[index].copyWith(ownerReply: reply);
-    }
+    if (index != -1) _reviews[index] = change(_reviews[index]);
   }
 }

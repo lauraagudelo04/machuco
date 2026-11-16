@@ -36,6 +36,36 @@ class _FakeGateway implements ReviewSqlConnectGateway {
     if (error case final e?) throw e;
     ownerReplies.add((id: id, reply: reply));
   }
+
+  final List<String> adminActions = [];
+
+  @override
+  Future<void> setStatusAsAdmin(String id, String status) async {
+    calls++;
+    if (error case final e?) throw e;
+    adminActions.add('status $id $status');
+  }
+
+  @override
+  Future<void> dismissReportAsAdmin(String id) async {
+    calls++;
+    if (error case final e?) throw e;
+    adminActions.add('dismiss $id');
+  }
+
+  @override
+  Future<void> replyAsAdmin(String id, String reply) async {
+    calls++;
+    if (error case final e?) throw e;
+    adminActions.add('reply $id $reply');
+  }
+
+  @override
+  Future<void> deleteAsAdmin(String id) async {
+    calls++;
+    if (error case final e?) throw e;
+    adminActions.add('delete $id');
+  }
 }
 
 SqlConnectReviewRow _row({
@@ -223,16 +253,72 @@ void main() {
       );
     });
 
-    test('update y delete no están disponibles y no tocan la base', () async {
+    test('update no está disponible y no toca la base', () async {
       await expectLater(
         repository.update(_review),
         throwsA(isA<ReviewRepositoryException>()),
       );
+      expect(gateway.calls, 0);
+    });
+
+    test('las acciones del administrador llegan al gateway', () async {
+      await repository.setHiddenAsAdmin('uuid-1', hidden: true);
+      await repository.setHiddenAsAdmin('uuid-1', hidden: false);
+      await repository.dismissReportAsAdmin('uuid-1');
+      await repository.replyAsAdmin('uuid-1', 'Revisado');
+      await repository.delete('uuid-1');
+
+      expect(gateway.adminActions, [
+        'status uuid-1 hidden',
+        'status uuid-1 visible',
+        'dismiss uuid-1',
+        'reply uuid-1 Revisado',
+        'delete uuid-1',
+      ]);
+    });
+
+    test(
+      'sin rol de administrador, el servidor rechaza la moderación',
+      () async {
+        gateway.error = DataConnectError(
+          DataConnectErrorCode.unauthorized,
+          'unauthorized',
+        );
+        final reason = isA<ReviewRepositoryException>().having(
+          (e) => e.message,
+          'message',
+          'Solo un administrador puede moderar reseñas',
+        );
+
+        await expectLater(
+          repository.setHiddenAsAdmin('uuid-1', hidden: true),
+          throwsA(reason),
+        );
+        await expectLater(
+          repository.dismissReportAsAdmin('uuid-1'),
+          throwsA(reason),
+        );
+        await expectLater(
+          repository.replyAsAdmin('uuid-1', 'x'),
+          throwsA(reason),
+        );
+        await expectLater(repository.delete('uuid-1'), throwsA(reason));
+      },
+    );
+
+    test('un error inesperado al moderar usa un mensaje genérico', () async {
+      gateway.error = StateError('falla');
+
       await expectLater(
         repository.delete('uuid-1'),
-        throwsA(isA<ReviewRepositoryException>()),
+        throwsA(
+          isA<ReviewRepositoryException>().having(
+            (e) => e.message,
+            'message',
+            'No fue posible actualizar la reseña',
+          ),
+        ),
       );
-      expect(gateway.calls, 0);
     });
   });
 }

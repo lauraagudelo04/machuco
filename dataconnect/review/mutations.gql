@@ -1,5 +1,6 @@
 # Mutaciones del conector `review` (ingresar reseñas).
-# Moderar y eliminar son de la rama de administrador; no se exponen aquí.
+# Las operaciones de administrador exigen el custom claim role: 'admin',
+# igual que las de moteles (ver docs/sql_connect.md, pendientes).
 
 # Un cliente con sesión publica una reseña. El autor sale del token
 # (auth.uid), no de la app, y la reseña siempre nace visible.
@@ -48,4 +49,32 @@ mutation ReplyToReviewAsOwner($id: UUID!, $reply: String!)
     }
   }
   review_update(id: $id, data: { ownerReply: $reply })
+}
+
+# El administrador muestra u oculta una reseña. Solo acepta `visible` o
+# `hidden`; marcarla como `reported` es cosa de los usuarios.
+mutation AdminSetReviewStatus($id: UUID!, $status: String!)
+@auth(
+  expr: "auth.token.role == 'admin' && vars.status in ['visible', 'hidden']"
+) {
+  review_update(id: $id, data: { status: $status })
+}
+
+# El administrador descarta un reporte: la reseña vuelve a estar visible y
+# se borra el motivo del reporte.
+mutation AdminDismissReviewReport($id: UUID!)
+@auth(expr: "auth.token.role == 'admin'") {
+  review_update(id: $id, data: { status: "visible", reportReason: null })
+}
+
+# El administrador responde una reseña.
+mutation AdminReplyToReview($id: UUID!, $reply: String!)
+@auth(expr: "auth.token.role == 'admin'") {
+  review_update(id: $id, data: { adminReply: $reply })
+}
+
+# El administrador elimina una reseña.
+mutation AdminDeleteReview($id: UUID!)
+@auth(expr: "auth.token.role == 'admin'") {
+  review_delete(id: $id)
 }

@@ -64,11 +64,35 @@ class FirestoreReviewRepository implements ReviewRepository {
   Future<void> delete(String id) => _write(() => _collection.doc(id).delete());
 
   @override
-  Future<void> replyAsOwner(String reviewId, String reply) => _write(() async {
-    final doc = _collection.doc(reviewId);
-    if (!(await doc.get()).exists) return;
-    await doc.update({'ownerReply': reply});
-  });
+  Future<void> replyAsOwner(String reviewId, String reply) =>
+      _updateFields(reviewId, {'ownerReply': reply});
+
+  @override
+  Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden}) =>
+      _updateFields(reviewId, {
+        'status': hidden
+            ? ReviewModerationStatus.hidden.name
+            : ReviewModerationStatus.visible.name,
+      });
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) =>
+      _updateFields(reviewId, {
+        'status': ReviewModerationStatus.visible.name,
+        'reportReason': FieldValue.delete(),
+      });
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) =>
+      _updateFields(reviewId, {'adminReply': reply});
+
+  /// Actualiza solo [fields]; no hace nada si la reseña no existe.
+  Future<void> _updateFields(String reviewId, Map<String, Object> fields) =>
+      _write(() async {
+        final doc = _collection.doc(reviewId);
+        if (!(await doc.get()).exists) return;
+        await doc.update(fields);
+      });
 
   Future<void> _write(Future<void> Function() operation) async {
     try {

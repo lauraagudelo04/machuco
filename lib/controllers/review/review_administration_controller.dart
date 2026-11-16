@@ -2,7 +2,9 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/models/review/review.dart';
 // Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
 // dominio del mismo nombre dentro de la clase.
+import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
 enum ReviewFilter { all, visible, hidden, reported }
@@ -23,7 +25,7 @@ extension ReviewFilterData on ReviewFilter {
 /// en el modelo mismo.
 class ReviewAdministrationController extends ChangeNotifier {
   ReviewAdministrationController({ReviewRepository? repository})
-    : _repository = repository ?? InMemoryReviewRepository.shared;
+    : _repository = repository ?? SqlConnectReviewRepository();
 
   final ReviewRepository _repository;
   final List<Review> _reviews = [];
@@ -93,48 +95,78 @@ class ReviewAdministrationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleVisibility(String reviewId) => _updateWhere(
-    reviewId,
-    (review) => review.copyWith(
-      status: review.status == ReviewModerationStatus.hidden
-          ? ReviewModerationStatus.visible
-          : ReviewModerationStatus.hidden,
-    ),
-  );
+  // Cada acción devuelve null si se guardó (o si no había nada que hacer) y
+  // el motivo en texto si el servidor la rechazó; en ese caso la reseña no
+  // cambia en pantalla.
 
-  Future<void> dismissReport(String reviewId) => _updateWhere(
+  Future<String?> toggleVisibility(String reviewId) {
+    final review = _find(reviewId);
+    if (review == null) return Future.value();
+    final hide = review.status != ReviewModerationStatus.hidden;
+    return _apply(
+      reviewId,
+      () => _repository.setHiddenAsAdmin(reviewId, hidden: hide),
+      (r) => r.copyWith(
+        status: hide
+            ? ReviewModerationStatus.hidden
+            : ReviewModerationStatus.visible,
+      ),
+    );
+  }
+
+  Future<String?> dismissReport(String reviewId) => _apply(
     reviewId,
-    (review) => review.copyWith(
+    () => _repository.dismissReportAsAdmin(reviewId),
+    (r) => r.copyWith(
       status: ReviewModerationStatus.visible,
       clearReportReason: true,
     ),
   );
 
-  Future<void> reply(String reviewId, String message) async {
+  Future<String?> reply(String reviewId, String message) {
     final trimmed = message.trim();
-    if (trimmed.isEmpty) return;
-    await _updateWhere(
+    if (trimmed.isEmpty) return Future.value();
+    return _apply(
       reviewId,
-      (review) => review.copyWith(adminReply: trimmed),
+      () => _repository.replyAsAdmin(reviewId, trimmed),
+      (r) => r.copyWith(adminReply: trimmed),
     );
   }
 
-  Future<void> delete(String reviewId) async {
-    await _repository.delete(reviewId);
+  Future<String?> delete(String reviewId) async {
+    try {
+      await _repository.delete(reviewId);
+    } on ReviewRepositoryException catch (error) {
+      return error.message;
+    }
     _reviews.removeWhere((r) => r.id == reviewId);
     notifyListeners();
+    return null;
   }
 
-  /// Aplica [change] a la reseña [reviewId]; ignora ids desconocidos.
-  Future<void> _updateWhere(
+  Review? _find(String reviewId) {
+    for (final review in _reviews) {
+      if (review.id == reviewId) return review;
+    }
+    return null;
+  }
+
+  /// Guarda con [save] y, si el servidor lo acepta, aplica [change] a la
+  /// reseña en pantalla. Ignora ids desconocidos.
+  Future<String?> _apply(
     String reviewId,
+    Future<void> Function() save,
     Review Function(Review review) change,
   ) async {
+    if (_find(reviewId) == null) return null;
+    try {
+      await save();
+    } on ReviewRepositoryException catch (error) {
+      return error.message;
+    }
     final index = _reviews.indexWhere((r) => r.id == reviewId);
-    if (index == -1) return;
-    final updated = change(_reviews[index]);
-    await _repository.update(updated);
-    _reviews[index] = updated;
+    if (index != -1) _reviews[index] = change(_reviews[index]);
     notifyListeners();
+    return null;
   }
 }
