@@ -250,7 +250,83 @@ Verificado contra el código de `develop` (`33743ec`); cada punto indica si ya s
   Andrés del 2026-11-10 en `docs/decisions_log.md`). `FirestoreReviewRepository`
   se conserva, pero los controladores no lo usan.
 
-## Cómo está hecha (para la sustentación)
+## Cómo está hecha
+
+**Flujo a través de las capas y los servicios:**
+
+```mermaid
+flowchart TD
+  subgraph VISTA["Vista · lib/views/review y lib/widgets/review"]
+    V1["Cliente<br/>ReviewsSection + AddReviewSheet"]
+    V2["Propietario<br/>OwnerReviewPage"]
+    V3["Administrador<br/>ReviewAdministrationPage"]
+  end
+  subgraph CTRL["Controlador · lib/controllers/review"]
+    C1["ReviewsController"]
+    C2["OwnerReviewController"]
+    C3["ReviewAdministrationController"]
+    ACC["ReviewActions<br/>guarda en el servidor y luego cambia la pantalla"]
+  end
+  subgraph DATOS["Datos · lib/database/repository/review"]
+    REPO["SqlConnectReviewRepository<br/>contrato ReviewRepository"]
+    GW["ReviewSqlConnectGateway"]
+    DAO["ReviewDao"]
+    TIPOS["ReviewTypeRepository"]
+  end
+  SP[("SharedPreferences<br/>borrador")]
+  SQLITE[("SQLite<br/>tabla review_cache")]
+  REST[["Supabase REST<br/>review_types"]]
+  FDC[["Firebase SQL Connect<br/>tabla reviews + reglas @auth / @check"]]
+  AUTH[["Firebase Auth<br/>uid y role del token"]]
+  MOT["MotelController.persistent()<br/>moteles del propietario"]
+
+  V1 --> C1
+  V2 --> C2
+  V3 --> C3
+  C2 -. usa .-> ACC
+  C3 -. usa .-> ACC
+  C1 -- borrador --> SP
+  C1 -- categorías --> TIPOS
+  TIPOS --> REST
+  C2 -- mis moteles --> MOT
+  C1 --> REPO
+  C2 --> REPO
+  C3 --> REPO
+  REPO -- con red --> GW
+  GW --> FDC
+  REPO -- guarda copia / sin red la lee --> DAO
+  DAO --> SQLITE
+  FDC -. valida el token .-> AUTH
+```
+
+Ejemplo de una acción de principio a fin (el propietario responde):
+
+```mermaid
+sequenceDiagram
+  actor P as Propietario
+  participant V as OwnerReviewPage
+  participant C as OwnerReviewController
+  participant R as SqlConnectReviewRepository
+  participant G as ReviewSqlConnectGateway
+  participant S as SQL Connect
+  P->>V: Responder y Publicar
+  V->>C: reply(reviewId, texto)
+  C->>R: replyAsOwner(reviewId, texto)
+  R->>G: replyAsOwner(id, texto)
+  G->>S: ReplyToReviewAsOwner
+  S->>S: @check: el motel de la reseña es del uid del token
+  alt Es su motel
+    S-->>G: reseña actualizada
+    G-->>R: ok
+    R-->>C: ok
+    C-->>V: null, la tarjeta muestra "Tu respuesta"
+  else No es su motel o no hay red
+    S-->>G: error
+    G-->>R: DataConnectError
+    R-->>C: ReviewRepositoryException(motivo)
+    C-->>V: motivo, se muestra en un SnackBar
+  end
+```
 
 **Capas** (cada una solo conoce a la de abajo):
 
