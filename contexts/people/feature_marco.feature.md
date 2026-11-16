@@ -204,6 +204,7 @@ Verificado contra el código de `develop` (`33743ec`):
   - Controladores inyectables, sin singletons.
   - Borrador local con `shared_preferences`.
   - Las respuestas del propietario y del administrador son públicas: las ve el cliente en la tarjeta de la reseña (decisión del 2026-11-02).
+  - Copia local en SQLite con tabla propia `review_cache`, creada por `ReviewDao` si no existe (como `RoomDao`), y no con una migración de Floor: así no se sube la versión compartida de `AppDatabase` (21), no se tocan pruebas de otros módulos que la verifican y no hay choques si otro compañero también agrega una migración (decisión del 2026-11-16).
 - **Almacenamiento (decidido por el equipo):** las reseñas van en **Cloud Firestore**, como indica la guía "Firebase para el equipo MACHUCO" (28 oct 2026: los datos propios de una funcionalidad, como las reseñas, van a Firestore). Ya implementado (2026-11-02): `Review.fromFirestore`/`toFirestore`, `FirestoreCollections.reviews` y `FirestoreReviewRepository` (`lib/database/repository/review/`). Pendiente de coordinar con el equipo:
   - **Publicar la regla** `match /reviews/{reviewId}` de `firestore.rules` (reemplaza todas las reglas: avisar en el grupo y traer `develop` antes).
   - **Activar el repositorio por defecto:** los controladores siguen usando `InMemoryReviewRepository.shared`; cuando la regla esté publicada, se reemplaza por `FirestoreReviewRepository()`.

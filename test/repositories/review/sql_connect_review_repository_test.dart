@@ -1,9 +1,11 @@
 import 'package:firebase_data_connect/firebase_data_connect.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:machuco/database/repository/review/review_dao.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/database/repository/review/review_sql_connect_gateway.dart';
 import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 /// Doble del gateway: guarda lo que se le pide y, con [error], falla como lo
 /// haría SQL Connect sin sesión o sin conexión.
@@ -133,10 +135,20 @@ void main() {
   late _FakeGateway gateway;
   late SqlConnectReviewRepository repository;
 
-  setUp(() {
+  late Database database;
+
+  setUpAll(sqfliteFfiInit);
+
+  setUp(() async {
     gateway = _FakeGateway();
-    repository = SqlConnectReviewRepository(gateway: gateway);
+    database = await databaseFactoryFfi.openDatabase(inMemoryDatabasePath);
+    repository = SqlConnectReviewRepository(
+      gateway: gateway,
+      cache: ReviewDao(() async => database),
+    );
   });
+
+  tearDown(() => database.close());
 
   group('reviewFromSqlConnect', () {
     test('convierte una fila en una Review del dominio', () {
@@ -432,6 +444,43 @@ void main() {
           repository.replyAsOwner('uuid-1', 'x'),
           _failsWith('No hay conexión con el servidor de reseñas'),
         );
+      });
+    });
+
+    group('copia local en SQLite', () {
+      test('con red guarda una copia y sin red la muestra', () async {
+        gateway.rows = [_row()];
+        await repository.getAll();
+
+        gateway.error = _networkError;
+        final offline = await repository.getAll();
+
+        expect(offline.single.id, 'uuid-1');
+        expect(offline.single.ownerReply, 'Gracias, Ana');
+        expect(offline.single.roomId, 'room-3');
+      });
+
+      test('cada lectura con red reemplaza la copia', () async {
+        gateway.rows = [_row()];
+        await repository.getAll();
+        gateway.rows = [];
+        await repository.getAll();
+
+        gateway.error = _networkError;
+
+        await expectLater(
+          repository.getAll(),
+          _failsWith('No hay conexión con el servidor de reseñas'),
+        );
+      });
+
+      test('si la copia falla, igual muestra las reseñas de la red', () async {
+        final broken = SqlConnectReviewRepository(
+          gateway: gateway..rows = [_row()],
+          cache: ReviewDao(() async => throw StateError('sin disco')),
+        );
+
+        expect((await broken.getAll()).single.id, 'uuid-1');
       });
     });
   });

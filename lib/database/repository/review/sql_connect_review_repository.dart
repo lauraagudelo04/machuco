@@ -1,8 +1,11 @@
 import 'package:firebase_data_connect/firebase_data_connect.dart';
 import 'package:flutter/foundation.dart';
+import 'package:machuco/database/app_database.dart';
+import 'package:machuco/database/repository/review/review_dao.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/database/repository/review/review_sql_connect_gateway.dart';
 import 'package:machuco/models/review/review.dart';
+import 'package:sqflite/sqflite.dart' show Database;
 
 /// [ReviewRepository] respaldado por la tabla `reviews` de Firebase SQL
 /// Connect (PostgreSQL), conector `review`.
@@ -17,24 +20,68 @@ import 'package:machuco/models/review/review.dart';
 /// La autorización (que haya sesión y que el autor sea el usuario del token)
 /// la impone `@auth` en `dataconnect/review/`, no esta clase.
 ///
+/// Cada lectura con red guarda una copia en SQLite ([ReviewDao]); sin red,
+/// [getAll] devuelve esa copia. Las escrituras siempre necesitan red y la
+/// copia se actualiza en la siguiente lectura.
+///
 /// No toca Firebase hasta la primera operación, así crear el controlador no
 /// requiere Firebase inicializado (por ejemplo, en pruebas).
 class SqlConnectReviewRepository implements ReviewRepository {
-  SqlConnectReviewRepository({ReviewSqlConnectGateway? gateway})
-    : _gatewayOverride = gateway;
+  SqlConnectReviewRepository({
+    ReviewSqlConnectGateway? gateway,
+    ReviewDao? cache,
+  }) : _gatewayOverride = gateway,
+       _cache = cache ?? ReviewDao(_appDatabase);
 
   final ReviewSqlConnectGateway? _gatewayOverride;
   ReviewSqlConnectGateway? _gateway;
+  final ReviewDao _cache;
+
+  static Future<Database> _appDatabase() async =>
+      (await AppDatabaseProvider.database).database as Database;
 
   ReviewSqlConnectGateway get _remote =>
       _gateway ??= _gatewayOverride ?? GeneratedReviewSqlConnectGateway();
 
   /// Devuelve todas las reseñas, de la más reciente a la más antigua.
+  ///
+  /// Sin red devuelve la copia local; si tampoco hay copia, lanza el motivo.
   @override
-  Future<List<Review>> getAll() => _run(() async {
-    final rows = await _remote.listAll();
-    return rows.map(reviewFromSqlConnect).toList();
-  }, fallback: 'No fue posible consultar las reseñas');
+  Future<List<Review>> getAll() async {
+    final List<Review> reviews;
+    try {
+      reviews = await _run(() async {
+        final rows = await _remote.listAll();
+        return rows.map(reviewFromSqlConnect).toList();
+      }, fallback: 'No fue posible consultar las reseñas');
+    } on ReviewRepositoryException {
+      final copy = await _readCopy();
+      if (copy.isNotEmpty) return copy;
+      rethrow;
+    }
+    await _saveCopy(reviews);
+    return reviews;
+  }
+
+  // La copia local es un respaldo: si SQLite falla, no se oculta lo que
+  // llegó de la red ni se cambia el motivo del error.
+
+  Future<void> _saveCopy(List<Review> reviews) async {
+    try {
+      await _cache.replaceAll(reviews);
+    } catch (error) {
+      debugPrint('SqlConnectReviewRepository: copia no guardada ($error)');
+    }
+  }
+
+  Future<List<Review>> _readCopy() async {
+    try {
+      return await _cache.findAll();
+    } catch (error) {
+      debugPrint('SqlConnectReviewRepository: copia no leída ($error)');
+      return const [];
+    }
+  }
 
   /// Publica [review]. El id, el autor y el estado los asigna el backend.
   @override
