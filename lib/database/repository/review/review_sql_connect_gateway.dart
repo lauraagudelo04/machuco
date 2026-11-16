@@ -40,6 +40,10 @@ abstract interface class ReviewSqlConnectGateway {
   /// reseña no es de un motel del usuario con sesión.
   Future<void> replyAsOwner(String id, String reply);
 
+  /// Reporta la reseña al administrador. El servidor la rechaza si no es de
+  /// un motel del usuario o si no está visible.
+  Future<void> reportAsOwner(String id, String reason);
+
   /// Moderación del administrador. El servidor exige el custom claim
   /// `role: 'admin'`; [status] solo puede ser `visible` o `hidden`.
   Future<void> setStatusAsAdmin(String id, String status);
@@ -116,6 +120,11 @@ class GeneratedReviewSqlConnectGateway implements ReviewSqlConnectGateway {
   @override
   Future<void> replyAsOwner(String id, String reply) async {
     await _connector.replyToReviewAsOwner(id: id, reply: reply).execute();
+  }
+
+  @override
+  Future<void> reportAsOwner(String id, String reason) async {
+    await _connector.reportReviewAsOwner(id: id, reason: reason).execute();
   }
 
   @override

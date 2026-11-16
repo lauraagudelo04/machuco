@@ -101,6 +101,28 @@ class OwnerReviewController extends ChangeNotifier {
     return null;
   }
 
+  /// Reporta la reseña [reviewId] al administrador con [reason].
+  ///
+  /// Devuelve `null` si se guardó (o si el motivo está vacío) y el motivo
+  /// del rechazo si el servidor no lo aceptó; en ese caso la reseña no
+  /// cambia en pantalla.
+  Future<String?> report(String reviewId, String reason) async {
+    final trimmed = reason.trim();
+    final index = _reviews.indexWhere((r) => r.id == reviewId);
+    if (trimmed.isEmpty || index == -1) return null;
+    try {
+      await _repository.reportAsOwner(reviewId, trimmed);
+    } on ReviewRepositoryException catch (error) {
+      return error.message;
+    }
+    _reviews[index] = _reviews[index].copyWith(
+      status: ReviewModerationStatus.reported,
+      reportReason: trimmed,
+    );
+    notifyListeners();
+    return null;
+  }
+
   /// Nombre del motel, o su [motelId] si no está entre los del propietario.
   String getMotelName(String motelId) {
     for (final motel in _myMotels) {

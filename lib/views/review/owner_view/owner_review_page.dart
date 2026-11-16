@@ -40,10 +40,27 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
     super.dispose();
   }
 
-  Future<void> _reply(String reviewId, String message) async {
-    final error = await _controller.reply(reviewId, message);
+  Future<void> _reply(String reviewId, String message) =>
+      _showError(_controller.reply(reviewId, message));
+
+  /// Muestra el motivo si el servidor rechazó la acción.
+  Future<void> _showError(Future<String?> action) async {
+    final error = await action;
     if (error == null || !mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+  }
+
+  void _openReportSheet(Review review) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      useSafeArea: true,
+      showDragHandle: true,
+      builder: (context) => OwnerReviewReplySheet.report(
+        review: review,
+        onSubmit: (reason) => _showError(_controller.report(review.id, reason)),
+      ),
+    );
   }
 
   void _openReplySheet(Review review) {
@@ -126,6 +143,7 @@ class _OwnerReviewPageState extends State<OwnerReviewPage> {
                 review: review,
                 motelName: _controller.getMotelName(review.motelId),
                 onReply: () => _openReplySheet(review),
+                onReport: () => _openReportSheet(review),
               ),
             ),
           ),

@@ -8,8 +8,8 @@ import 'package:machuco/models/review/review.dart';
 /// [ReviewRepository] respaldado por la tabla `reviews` de Firebase SQL
 /// Connect (PostgreSQL), conector `review`.
 ///
-/// Cubre listar ([getAll]), publicar ([add]), la respuesta del propietario
-/// ([replyAsOwner]) y la moderación del administrador ([setHiddenAsAdmin],
+/// Cubre listar ([getAll]), publicar ([add]), la respuesta y el reporte del
+/// propietario ([replyAsOwner], [reportAsOwner]) y la moderación del administrador ([setHiddenAsAdmin],
 /// [dismissReportAsAdmin], [replyAsAdmin] y [delete]). Un [update] genérico
 /// no existe: cada rol solo puede cambiar sus campos, así que lanza
 /// [ReviewRepositoryException].
@@ -76,6 +76,24 @@ class SqlConnectReviewRepository implements ReviewRepository {
       throw const ReviewRepositoryException(
         'Editar reseñas no está disponible en SQL Connect',
       );
+
+  /// Reporta la reseña al administrador. El servidor exige que sea de un
+  /// motel del usuario y que esté visible (`ReportReviewAsOwner`).
+  @override
+  Future<void> reportAsOwner(String reviewId, String reason) async {
+    try {
+      await _remote.reportAsOwner(reviewId, reason);
+    } on DataConnectOperationError {
+      throw const ReviewRepositoryException(
+        'No puedes reportar esta reseña: no es de tus moteles o ya fue '
+        'reportada u ocultada',
+      );
+    } catch (error) {
+      throw ReviewRepositoryException(
+        _messageFor(error, fallback: 'No fue posible reportar la reseña'),
+      );
+    }
+  }
 
   @override
   Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden}) =>

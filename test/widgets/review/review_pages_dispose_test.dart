@@ -5,6 +5,7 @@ import 'package:machuco/controllers/review/owner_review_controller.dart';
 import 'package:machuco/controllers/review/review_administration_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/motel/motel_model.dart';
+import 'package:machuco/models/review/review.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/views/review/owner_view/owner_review_page.dart';
 import 'package:machuco/views/review/review_administration_page.dart';
@@ -100,5 +101,44 @@ void main() {
       findsOneWidget,
     );
     expect(find.textContaining('1 · 10/7/2026'), findsNothing);
+  });
+
+  testWidgets('el propietario reporta una reseña con un motivo', (
+    tester,
+  ) async {
+    final repository = InMemoryReviewRepository();
+    final controller = OwnerReviewController(
+      motelController: _FakeMotelController([_motel('1', 'Sol')]),
+      repository: repository,
+    );
+    addTearDown(controller.dispose);
+
+    await tester.pumpWidget(_wrap(OwnerReviewPage(controller: controller)));
+    await tester.pumpAndSettle();
+
+    final reportButton = find.widgetWithText(TextButton, 'Reportar');
+    await tester.ensureVisible(reportButton);
+    await tester.pumpAndSettle();
+    await tester.tap(reportButton);
+    await tester.pumpAndSettle();
+    expect(find.text('Reportar reseña'), findsOneWidget);
+
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(BottomSheet),
+        matching: find.byType(TextField),
+      ),
+      '  Lenguaje ofensivo  ',
+    );
+    await tester.tap(find.text('Enviar reporte'));
+    await tester.pumpAndSettle();
+
+    final stored = (await repository.getAll()).firstWhere(
+      (r) => r.id == 'review-owner-1',
+    );
+    expect(stored.status, ReviewModerationStatus.reported);
+    expect(stored.reportReason, 'Lenguaje ofensivo');
+    expect(find.text('Reportada al administrador'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Reportar'), findsNothing);
   });
 }

@@ -163,6 +163,38 @@ void main() {
       expect(byId['review-owner-2']!.ownerReply, isNull);
     });
 
+    test('reporta con el motivo recortado e ignora motivos vacíos', () async {
+      expect(await controller.report('review-owner-1', '  Spam  '), isNull);
+      expect(await controller.report('review-owner-2', '   '), isNull);
+
+      final stored = {for (final r in await repository.getAll()) r.id: r};
+      expect(stored['review-owner-1']!.status, ReviewModerationStatus.reported);
+      expect(stored['review-owner-1']!.reportReason, 'Spam');
+      expect(stored['review-owner-2']!.status, ReviewModerationStatus.visible);
+      final shown = {for (final r in controller.reviews) r.id: r};
+      expect(shown['review-owner-1']!.status, ReviewModerationStatus.reported);
+      expect(shown['review-owner-1']!.reportReason, 'Spam');
+    });
+
+    test('si el servidor rechaza el reporte, devuelve el motivo y no cambia '
+        'la reseña', () async {
+      final rejecting = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _RejectingRepository(repository),
+      );
+      await rejecting.loadReviews();
+
+      expect(
+        await rejecting.report('review-owner-1', 'Spam'),
+        'No puedes reportar esta reseña',
+      );
+      final shown = rejecting.reviews.firstWhere(
+        (r) => r.id == 'review-owner-1',
+      );
+      expect(shown.status, ReviewModerationStatus.visible);
+      expect(shown.reportReason, isNull);
+    });
+
     test('reply devuelve null cuando se guarda', () async {
       expect(await controller.reply('review-owner-1', 'Gracias'), isNull);
     });
@@ -473,6 +505,10 @@ class _RejectingRepository implements ReviewRepository {
       throw const ReviewRepositoryException(
         'Solo puedes responder reseñas de tus moteles',
       );
+
+  @override
+  Future<void> reportAsOwner(String reviewId, String reason) async =>
+      throw const ReviewRepositoryException('No puedes reportar esta reseña');
 
   @override
   Future<void> setHiddenAsAdmin(

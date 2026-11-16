@@ -7,6 +7,7 @@ ReviewConnector.instance.AdminSetReviewStatus(adminSetReviewStatusVariables).exe
 ReviewConnector.instance.AdminDismissReviewReport(adminDismissReviewReportVariables).execute();
 ReviewConnector.instance.AdminReplyToReview(adminReplyToReviewVariables).execute();
 ReviewConnector.instance.AdminDeleteReview(adminDeleteReviewVariables).execute();
+ReviewConnector.instance.ReportReviewAsOwner(reportReviewAsOwnerVariables).execute();
 ReviewConnector.instance.ListReviews().execute();
 ReviewConnector.instance.ListReviewsByMotel(listReviewsByMotelVariables).execute();
 

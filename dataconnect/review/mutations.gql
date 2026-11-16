@@ -78,3 +78,31 @@ mutation AdminDeleteReview($id: UUID!)
 @auth(expr: "auth.token.role == 'admin'") {
   review_delete(id: $id)
 }
+
+# El propietario reporta al administrador una reseña de uno de sus moteles.
+# Igual que ReplyToReviewAsOwner, el servidor valida que el motel sea suyo.
+# Solo se reportan reseñas visibles: una oculta ya la moderó el
+# administrador y una reportada ya está en revisión.
+mutation ReportReviewAsOwner($id: UUID!, $reason: String!)
+@auth(expr: "auth != null && vars.reason.size() > 0")
+@transaction {
+  query
+  @redact
+  @check(
+    expr: "response.query.motels.exists(m, m.id == response.query.review.motelId)"
+    message: "Solo el propietario del motel puede reportar esta reseña"
+  ) {
+    review(id: $id) @check(expr: "this != null", message: "La reseña no existe") {
+      motelId
+      status
+      @check(
+        expr: "this == 'visible'"
+        message: "Solo se pueden reportar reseñas visibles"
+      )
+    }
+    motels(where: { ownerId: { eq_expr: "auth.uid" } }) {
+      id
+    }
+  }
+  review_update(id: $id, data: { status: "reported", reportReason: $reason })
+}

@@ -24,6 +24,11 @@ abstract class ReviewRepository {
   /// `ReviewRepositoryException`.
   Future<void> replyAsOwner(String reviewId, String reply);
 
+  /// El propietario reporta la reseña al administrador con [reason]: pasa a
+  /// `reported`. Las implementaciones remotas validan que el motel sea suyo y
+  /// que la reseña esté visible.
+  Future<void> reportAsOwner(String reviewId, String reason);
+
   /// Moderación del administrador: oculta ([hidden] = true) o muestra la
   /// reseña. Las implementaciones remotas exigen el rol de administrador.
   Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden});
@@ -67,6 +72,15 @@ class InMemoryReviewRepository implements ReviewRepository {
   @override
   Future<void> replyAsOwner(String reviewId, String reply) async =>
       _change(reviewId, (r) => r.copyWith(ownerReply: reply));
+
+  @override
+  Future<void> reportAsOwner(String reviewId, String reason) async => _change(
+    reviewId,
+    (r) => r.copyWith(
+      status: ReviewModerationStatus.reported,
+      reportReason: reason,
+    ),
+  );
 
   @override
   Future<void> setHiddenAsAdmin(

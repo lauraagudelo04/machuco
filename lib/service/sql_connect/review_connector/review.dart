@@ -15,6 +15,8 @@ part 'admin_reply_to_review.dart';
 
 part 'admin_delete_review.dart';
 
+part 'report_review_as_owner.dart';
+
 part 'list_reviews.dart';
 
 part 'list_reviews_by_motel.dart';
@@ -55,6 +57,11 @@ class ReviewConnector {
   
   AdminDeleteReviewVariablesBuilder adminDeleteReview ({required String id, }) {
     return AdminDeleteReviewVariablesBuilder(dataConnect, id: id,);
+  }
+  
+  
+  ReportReviewAsOwnerVariablesBuilder reportReviewAsOwner ({required String id, required String reason, }) {
+    return ReportReviewAsOwnerVariablesBuilder(dataConnect, id: id,reason: reason,);
   }
   
   

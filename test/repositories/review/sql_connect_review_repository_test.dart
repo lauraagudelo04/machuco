@@ -40,6 +40,13 @@ class _FakeGateway implements ReviewSqlConnectGateway {
   final List<String> adminActions = [];
 
   @override
+  Future<void> reportAsOwner(String id, String reason) async {
+    calls++;
+    if (error case final e?) throw e;
+    adminActions.add('report $id $reason');
+  }
+
+  @override
   Future<void> setStatusAsAdmin(String id, String status) async {
     calls++;
     if (error case final e?) throw e;
@@ -260,6 +267,53 @@ void main() {
       );
       expect(gateway.calls, 0);
     });
+
+    test('reportAsOwner envía el id y el motivo al gateway', () async {
+      await repository.reportAsOwner('uuid-1', 'Spam');
+
+      expect(gateway.adminActions, ['report uuid-1 Spam']);
+    });
+
+    test(
+      'reportAsOwner rechazado por el servidor da un mensaje claro',
+      () async {
+        gateway.error = DataConnectOperationError(
+          DataConnectErrorCode.other,
+          'Solo se pueden reportar reseñas visibles',
+          DataConnectOperationFailureResponse([], null, null),
+        );
+
+        await expectLater(
+          repository.reportAsOwner('uuid-1', 'Spam'),
+          throwsA(
+            isA<ReviewRepositoryException>().having(
+              (e) => e.message,
+              'message',
+              'No puedes reportar esta reseña: no es de tus moteles o ya fue '
+                  'reportada u ocultada',
+            ),
+          ),
+        );
+      },
+    );
+
+    test(
+      'reportAsOwner con un error inesperado usa el mensaje genérico',
+      () async {
+        gateway.error = StateError('falla');
+
+        await expectLater(
+          repository.reportAsOwner('uuid-1', 'Spam'),
+          throwsA(
+            isA<ReviewRepositoryException>().having(
+              (e) => e.message,
+              'message',
+              'No fue posible reportar la reseña',
+            ),
+          ),
+        );
+      },
+    );
 
     test('las acciones del administrador llegan al gateway', () async {
       await repository.setHiddenAsAdmin('uuid-1', hidden: true);

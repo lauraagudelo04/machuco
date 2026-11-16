@@ -68,6 +68,12 @@ class FirestoreReviewRepository implements ReviewRepository {
       _updateFields(reviewId, {'ownerReply': reply});
 
   @override
+  Future<void> reportAsOwner(String reviewId, String reason) => _updateFields(
+    reviewId,
+    {'status': ReviewModerationStatus.reported.name, 'reportReason': reason},
+  );
+
+  @override
   Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden}) =>
       _updateFields(reviewId, {
         'status': hidden
