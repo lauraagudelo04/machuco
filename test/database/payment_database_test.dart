@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/database/app_database.dart';
-import 'package:machuco/database/model/client/client.dart';
 import 'package:machuco/database/model/phone_country_code/phone_country_code.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
@@ -313,18 +312,21 @@ void main() {
           await database.paymentDao.insertPayment(
             payment(status: PaymentStatus.paid, methodId: 1),
           );
-          await raw.execute('DROP TABLE clients');
           await raw.execute('DROP TABLE phone_country_codes');
         } else {
-          await database.clientDao.insertClient(
-            ClientEntry(
-              id: 1,
-              name: 'Cliente existente',
-              phone: '3001234567',
-              email: 'client@example.com',
-              countryCode: 'CO',
-            ),
+          await raw.execute(
+            'CREATE TABLE clients ('
+            'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+            'name TEXT NOT NULL, phone TEXT NOT NULL, '
+            'email TEXT NOT NULL, country_code TEXT NOT NULL)',
           );
+          await raw.insert('clients', {
+            'id': 1,
+            'name': 'Cliente existente',
+            'phone': '3001234567',
+            'email': 'client@example.com',
+            'country_code': 'CO',
+          });
           await database.phoneCountryCodeDao.insertCountryCodes([
             const PhoneCountryCode(
               id: 1,
@@ -352,19 +354,21 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 21);
+        expect(await raw.getVersion(), 22);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
+          if (entry.key == 'clients') continue;
           expect(await raw.query(entry.key), entry.value, reason: entry.key);
         }
+        final remainingClientsTable = await raw.rawQuery(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'clients'",
+        );
+        expect(remainingClientsTable, isEmpty);
+
         expect(await raw.rawQuery('PRAGMA foreign_key_check'), isEmpty);
         expect(
           await database.paymentDao.findAll(),
           hasLength(hasPayments ? 1 : 0),
-        );
-        expect(
-          await database.clientDao.findAll(),
-          hasLength(hasPayments ? 0 : 1),
         );
         expect(
           await database.phoneCountryCodeDao.findActive(),
@@ -382,7 +386,6 @@ void main() {
     // Ninguna base de la aplicación se borra ni se degrada durante la migración.
     await raw.execute('DROP TABLE payments');
     await raw.execute('DROP TABLE payment_method_catalog');
-    await raw.execute('DROP TABLE clients');
     await raw.execute('DROP TABLE phone_country_codes');
     await raw.setVersion(6);
     // La base nueva trae la suscripciÃ³n de prueba; se limpia para construir
@@ -463,7 +466,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 21);
+    expect(await raw.getVersion(), 22);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
@@ -523,7 +526,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 21);
+    expect(await raw.getVersion(), 22);
     expect(await _columnNames(raw, 'motels'), motelsColumns);
     expect(await raw.query('country_phone_codes'), hasLength(1));
   });
@@ -536,7 +539,6 @@ Future<Map<String, List<Map<String, Object?>>>> _moduleSchema(
   for (final table in [
     'payment_method_catalog',
     'payments',
-    'clients',
     'phone_country_codes',
   ]) {
     for (final pragma in ['table_info', 'foreign_key_list', 'index_list']) {

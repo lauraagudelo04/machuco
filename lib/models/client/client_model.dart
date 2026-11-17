@@ -24,6 +24,24 @@ class ClientModel {
     return nameParts.first[0].toUpperCase();
   }
 
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'uid': uid,
+    'name': name,
+    'phone': phone,
+    'email': email,
+    'countryCode': countryCode,
+  };
+
+  factory ClientModel.fromJson(Map<String, dynamic> json) => ClientModel(
+    id: json['id'] as int?,
+    uid: json['uid'] as String?,
+    name: (json['name'] ?? '') as String,
+    phone: (json['phone'] ?? '') as String,
+    email: (json['email'] ?? '') as String,
+    countryCode: (json['countryCode'] ?? '+57') as String,
+  );
+
   ClientModel copyWith({
     int? id,
     String? uid,

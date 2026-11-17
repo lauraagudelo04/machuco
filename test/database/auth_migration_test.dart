@@ -1,5 +1,5 @@
 // Migraciones SQLite del módulo de autenticación (`auth_user_profile`), que
-// llegaron en la versión 14 y hoy viajan hasta la 17. Complementa la prueba
+// llegaron en la versión 14 y hoy viajan hasta la 22. Complementa la prueba
 // 13 -> 14 de test/repositories/auth/auth_user_profile_repository_test.dart.
 import 'dart:io';
 
@@ -32,6 +32,16 @@ Future<bool> _tableExists(sqflite.Database db, String table) async =>
       [table],
     )).isNotEmpty;
 
+Future<void> _seedCountryCode(sqflite.Database db) async {
+  await db.insert('phone_country_codes', {
+    'id': 1,
+    'country_code': 'CO',
+    'country_name': 'Colombia',
+    'calling_code': '+57',
+    'active': 1,
+  });
+}
+
 void main() {
   late Directory directory;
   late String path;
@@ -60,9 +70,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 16 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 22 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 21);
+    expect(await raw().getVersion(), 22);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -70,15 +80,21 @@ void main() {
       isFalse,
     );
     expect(await _tableExists(raw(), 'phone_country_codes'), isTrue);
-    // Tabla obsoleta que se conserva hasta una migración acordada.
     expect(await _tableExists(raw(), 'country_phone_codes'), isTrue);
+    expect(await _tableExists(raw(), 'clients'), isFalse);
   });
 
   test(
-    '[MIG-02] de v11 a v21 aplica todas las migraciones sin perder datos',
+    '[MIG-02] de v11 a v22 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
+      await db.execute(
+        'CREATE TABLE clients ('
+        'id INTEGER PRIMARY KEY AUTOINCREMENT, '
+        'name TEXT NOT NULL, phone TEXT NOT NULL, '
+        'email TEXT NOT NULL, country_code TEXT NOT NULL)',
+      );
       await db.execute('ALTER TABLE clients ADD COLUMN password TEXT');
       await db.insert('clients', {
         'name': 'Ana',
@@ -87,22 +103,14 @@ void main() {
         'country_code': '+57',
         'password': 'no-debe-quedar',
       });
-      await db.insert('phone_country_codes', {
-        'id': 1,
-        'country_code': 'CO',
-        'country_name': 'Colombia',
-        'calling_code': '+57',
-        'active': 1,
-      });
+      await _seedCountryCode(db);
       await db.setVersion(11);
 
       await reopen();
 
-      expect(await raw().getVersion(), 21);
+      expect(await raw().getVersion(), 22);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
-      expect(await _columns(raw(), 'clients'), isNot(contains('password')));
-      final clients = await raw().query('clients');
-      expect(clients.single['email'], 'ana@example.com');
+      expect(await _tableExists(raw(), 'clients'), isFalse);
       expect((await raw().query('phone_country_codes')).single['id'], 1);
     },
   );
@@ -111,20 +119,14 @@ void main() {
       'conserva sus datos', () async {
     final db = raw();
     await db.execute('DROP TABLE auth_user_profile');
-    await db.insert('clients', {
-      'name': 'Ana',
-      'phone': '3001234567',
-      'email': 'ana@example.com',
-      'country_code': '+57',
-    });
+    await _seedCountryCode(db);
     await db.setVersion(13);
 
     await reopen();
 
-    expect(await raw().getVersion(), 21);
+    expect(await raw().getVersion(), 22);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
-    final clients = await raw().query('clients');
-    expect(clients.single['email'], 'ana@example.com');
+    expect((await raw().query('phone_country_codes')).single['id'], 1);
   });
 
   for (final missingTable in ['auth_user_profile', 'room_sync_queue']) {
@@ -132,23 +134,15 @@ void main() {
       'v14 completa $missingTable y conserva los datos existentes',
       () async {
         await raw().execute('DROP TABLE $missingTable');
-        await raw().insert('clients', {
-          'name': 'Ana',
-          'phone': '3001234567',
-          'email': 'ana@example.com',
-          'country_code': '+57',
-        });
+        await _seedCountryCode(raw());
         await raw().setVersion(14);
 
         await reopen();
 
-        expect(await raw().getVersion(), 21);
+        expect(await raw().getVersion(), 22);
         expect(await _tableExists(raw(), 'auth_user_profile'), isTrue);
         expect(await _tableExists(raw(), 'room_sync_queue'), isTrue);
-        expect(
-          (await raw().query('clients')).single['email'],
-          'ana@example.com',
-        );
+        expect((await raw().query('phone_country_codes')).single['id'], 1);
       },
     );
   }
@@ -160,21 +154,16 @@ void main() {
     'reservations',
     'reservation_line_items',
   ]) {
-    test('v15 completa $missingTable sin perder clientes', () async {
+    test('v15 completa $missingTable sin perder datos existentes', () async {
       await raw().execute('DROP TABLE $missingTable');
-      await raw().insert('clients', {
-        'name': 'Ana',
-        'phone': '3001234567',
-        'email': 'ana@example.com',
-        'country_code': '+57',
-      });
+      await _seedCountryCode(raw());
       await raw().setVersion(15);
 
       await reopen();
 
-      expect(await raw().getVersion(), 21);
+      expect(await raw().getVersion(), 22);
       expect(await _tableExists(raw(), missingTable), isTrue);
-      expect((await raw().query('clients')).single['email'], 'ana@example.com');
+      expect((await raw().query('phone_country_codes')).single['id'], 1);
     });
   }
 
@@ -193,7 +182,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 21);
+    expect(await raw().getVersion(), 22);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 
