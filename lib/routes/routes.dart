@@ -7,7 +7,6 @@ import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
-import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_cash_payment_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservation_detail_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
@@ -204,7 +203,7 @@ abstract final class AppRoutes {
             ? RoomAdminPage(motel: settings.arguments! as Motel)
             : const AdminMotelsPage(),
 
-      clientReservations => const ClientReservationsPage(),
+      clientReservations => const ClientMotelsPage(initialIndex: 1),
       clientCreateBooking => CreateBookingPage(
         room: settings.arguments is RoomVisualData
             ? settings.arguments! as RoomVisualData
