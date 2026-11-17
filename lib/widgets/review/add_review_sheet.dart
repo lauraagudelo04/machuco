@@ -12,9 +12,9 @@ class AddReviewSheet extends StatefulWidget {
   final String motelId;
   final String motelName;
 
-  /// Recibe el borrador y devuelve `true` si la reseña se guardó; solo en ese
-  /// caso el formulario se cierra.
-  final Future<bool> Function(ReviewDraft draft) onSave;
+  /// Recibe el borrador y devuelve `null` si la reseña se guardó (el
+  /// formulario se cierra) o el motivo, que se muestra en el formulario.
+  final Future<String?> Function(ReviewDraft draft) onSave;
   final List<RoomVisualData>? rooms;
 
   /// Recupera el borrador guardado, si lo hay, al abrir el formulario.
@@ -42,7 +42,7 @@ class AddReviewSheet extends StatefulWidget {
     BuildContext context, {
     required String motelId,
     required String motelName,
-    required Future<bool> Function(ReviewDraft draft) onSave,
+    required Future<String?> Function(ReviewDraft draft) onSave,
     required List<RoomVisualData>? rooms,
     Future<ReviewDraft?> Function()? loadDraft,
     void Function(ReviewDraft draft)? onDraftChanged,
@@ -78,6 +78,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   int _rating = 0;
   bool _submitted = false;
   bool _draftRestored = false;
+  String? _saveError;
 
   List<ReviewTypeOption> _typeOptions = [
     for (final type in ReviewType.values) (type: type, name: type.label),
@@ -111,10 +112,18 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
     }
   }
 
+  bool get _hasRooms => (widget.rooms ?? []).isNotEmpty;
+
+  /// "Habitación" solo se ofrece si el motel tiene habitaciones para elegir.
+  List<ReviewTypeOption> get _selectableTypes => [
+    for (final option in _typeOptions)
+      if (option.type != ReviewType.room || _hasRooms) option,
+  ];
+
   /// Si el tipo elegido no está entre las opciones, toma la primera.
   void _ensureSelectableType() {
-    if (_typeOptions.any((option) => option.type == _reviewType)) return;
-    _reviewType = _typeOptions.first.type;
+    if (_selectableTypes.any((option) => option.type == _reviewType)) return;
+    _reviewType = _selectableTypes.first.type;
     _typeFieldVersion++;
   }
 
@@ -164,16 +173,20 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   }
 
   Future<void> _save() async {
-    setState(() => _submitted = true);
+    setState(() {
+      _submitted = true;
+      _saveError = null;
+    });
     final title = _titleController.text.trim();
     final body = _bodyController.text.trim();
     if (!ReviewRules.isValidRating(_rating) ||
         !ReviewRules.isValidText(title) ||
-        !ReviewRules.isValidText(body)) {
+        !ReviewRules.isValidText(body) ||
+        _roomError != null) {
       return;
     }
 
-    final saved = await widget.onSave((
+    final error = await widget.onSave((
       type: _reviewType,
       // La habitación solo aplica a reseñas de tipo habitación.
       roomId: _reviewType == ReviewType.room ? _selectedRoomId : null,
@@ -182,7 +195,11 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
       body: body,
     ));
 
-    if (!saved || !mounted) return;
+    if (!mounted) return;
+    if (error != null) {
+      setState(() => _saveError = error);
+      return;
+    }
     Navigator.of(context).pop();
   }
 
@@ -192,6 +209,10 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
   String? get _titleError =>
       _submitted && !ReviewRules.isValidText(_titleController.text)
       ? 'Campo requerido'
+      : null;
+  String? get _roomError =>
+      _submitted && _reviewType == ReviewType.room && _selectedRoomId == null
+      ? 'Elige la habitación que quieres reseñar'
       : null;
   String? get _bodyError =>
       _submitted && !ReviewRules.isValidText(_bodyController.text)
@@ -258,7 +279,7 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                       ? 'No se pudieron cargar los tipos; se muestran los predeterminados.'
                       : null,
                 ),
-                items: _typeOptions.map((option) {
+                items: _selectableTypes.map((option) {
                   return DropdownMenuItem<ReviewType>(
                     value: option.type,
                     child: Text(option.name),
@@ -274,13 +295,13 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
               const SizedBox(height: AppSpacing.s4),
 
               // Selector de habitación (solo visible si se reseña la habitación)
-              if (_reviewType == ReviewType.room &&
-                  (widget.rooms ?? []).isNotEmpty) ...[
+              if (_reviewType == ReviewType.room && _hasRooms) ...[
                 DropdownButtonFormField<String>(
                   initialValue: _selectedRoomId,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Seleccionar habitación',
-                    prefixIcon: Icon(Icons.kitchen_outlined),
+                    prefixIcon: const Icon(Icons.kitchen_outlined),
+                    errorText: _roomError,
                   ),
                   items: (widget.rooms ?? [])
                       .map(
@@ -345,6 +366,16 @@ class _AddReviewSheetState extends State<AddReviewSheet> {
                   _notifyDraftChanged();
                 },
               ),
+              if (_saveError != null) ...[
+                const SizedBox(height: AppSpacing.s4),
+                Text(
+                  _saveError!,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    color: theme.colorScheme.error,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
               const SizedBox(height: AppSpacing.s6),
               Row(
                 children: [

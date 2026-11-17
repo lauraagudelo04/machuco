@@ -999,3 +999,17 @@ demostración práctica. El servicio compartido ya existe (entrada
 custom claim de rol pendiente de la rama de autenticación.
 
 **Estado:** en implementación.
+
+## 2026-11-14 — La acción se muestra como «Eliminar» aunque internamente anonimiza
+
+**Contexto:** tras acordar con el equipo que no se borran cuentas, la acción del
+panel se etiquetó «Anonimizar», pero el resto de la app y el lenguaje del
+producto hablan de «Eliminar» (y el propietario deja de existir para el
+usuario).
+
+**Decisión:** la interfaz vuelve a decir **Eliminar** en el diálogo, el botón,
+los tooltips y los avisos. Por dentro se mantiene la anonimización: el
+documento `users/{uid}` no se borra, se marca `accountStatus = anonymized`, se
+vacían los datos personales y se conserva la auditoría. Los identificadores
+del código (`anonymizeOwner`, `OwnerAnonymizationBlocker`) y las reglas
+(`isAdminOwnerAnonymization`) no cambian.

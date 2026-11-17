@@ -133,14 +133,18 @@ class MotelController {
     }
   }
 
-  /// Moteles de un propietario concreto (vista del administrador).
+  /// Moteles de un propietario: consulta propia o vista del administrador.
   Future<List<Motel>> getMotelsByOwnerId(String ownerId) async {
     final repository = _repository;
     if (repository == null) {
       await Future.delayed(const Duration(milliseconds: 800));
       return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
     }
-    final motels = await repository.getMotels();
+    // La consulta global exige el claim de administrador en SQL Connect.
+    // El propietario consulta los suyos con el filtro del token en el servidor.
+    final motels = ownerId == _currentUserId()
+        ? await repository.getMyMotels()
+        : await repository.getMotels();
     return motels.where((motel) => motel.ownerId == ownerId).toList();
   }
 

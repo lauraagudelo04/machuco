@@ -14,6 +14,8 @@
 | 2026-09-29 | Cristian (`cquiroz6211`) | Refactor sobre un modelo `Review` único (commit `7c1a28f`). |
 | 2026-10-13 | Andrés Cardona | Guarda localmente el borrador de una reseña con `shared_preferences` (commit `ba846e8`). |
 | 2026-11-02 | Cristian | Actualiza `feature_quiroz` con `develop` y crea este documento. |
+| 2026-10-26 y 11-10 | Andrés Cardona | Tipos de reseña desde Supabase (`794e5cd`) y reseñas del cliente en Firebase SQL Connect (`461c1b3`). |
+| 2026-11-16 | Cristian | Propietario responde y reporta, administrador modera, copia en SQLite y arreglos de QA (ver "Registro de implementación"). |
 | Fin de semestre | Marco | Recibe la funcionalidad de vuelta. |
 
 ## Rol de usuario que atiende esta funcionalidad
@@ -58,15 +60,17 @@ Después, Andrés agregó el borrador local de la reseña (commit `ba846e8`):
 `ReviewsController.loadDraft`, `saveDraft` y `clearDraft` con la clave
 `addReviewDraft` en `shared_preferences`.
 
-## Deuda pendiente (estado al 2026-11-02)
+## Deuda pendiente (auditoría del 2026-11-02, actualizada el 2026-11-16)
 
-Verificado contra el código de `develop` (`33743ec`):
+Verificado contra el código de `develop` (`33743ec`); cada punto indica si ya se resolvió:
 
 1. **Las islas siguen en la práctica.** `ReviewData.all()` devuelve una
    lista **nueva** en cada llamada. Cada controlador copia esa lista y la
    modifica por su cuenta. Si el propietario responde, el administrador no ve
-   la respuesta. Falta un repositorio compartido.
+   la respuesta. Falta un repositorio compartido. **Resuelto:** los tres
+   roles usan `SqlConnectReviewRepository` sobre la misma tabla `reviews`.
 2. **No hay persistencia.** Todo vive en memoria; se pierde al cerrar la app.
+   **Resuelto:** Firebase SQL Connect, con copia local en SQLite.
 3. **El autor estaba fijo.** `add_review_sheet.dart` usaba
    `authorId: 'user-current'` y `authorName: 'Tú'` (ese valor viene de la
    primera versión del formulario, escrita por Juan José el 18 de agosto de
@@ -74,15 +78,19 @@ Verificado contra el código de `develop` (`33743ec`):
    (`CurrentUser.uid` + perfil en Firestore), ver `ReviewAuthorProvider`.
 4. **`ReviewType` duplicado.** Existe en `lib/models/review/review.dart` (el
    que se usa) y en `lib/models/review/review_type.dart` (nadie lo importa).
-   Borrar el segundo.
+   Borrar el segundo. **Resuelto** (`014ef47`).
 5. **Sin pruebas.** No hay ningún archivo de prueba del módulo de reseñas.
+   **Resuelto:** pruebas en `test/controllers/review/`,
+   `test/repositories/review/` y `test/widgets/review/`.
 6. **Tokens de diseño.** `admin_review_card.dart:299` y
    `owner_review_card.dart:188` usan `Colors.white` y `FontWeight.w700`
-   directo en lugar de tokens del design system.
+   directo en lugar de tokens del design system. **Parcial:** ya no queda
+   `Colors.white`; sigue `FontWeight.w700` directo en las tarjetas.
 7. **Navegación inconsistente.** El propietario entra con la ruta con nombre
    `AppRoutes.ownerReviews` (`owner_motels_page.dart:255`). El administrador
    entra con `MaterialPageRoute` directo (`admin_motels_page.dart:254`),
    aunque existe `AppRoutes.adminReviews`.
+8. **Etiqueta `role: 'admin'` en la sesión (pendiente del equipo).** La moderación de reseñas en SQL Connect exige `auth.token.role == 'admin'`, igual que moteles; hoy el rol solo vive en Firestore (`users/{uid}`), así que en la nube no funciona hasta copiarlo a la sesión.
 
 ## Feature: Escribir una reseña (Cliente)
 
@@ -94,7 +102,7 @@ Verificado contra el código de `develop` (`33743ec`):
 
   Scenario: Cliente guarda una reseña válida
     Given un cliente en el formulario "Añadir reseña"
-    When elige qué reseñar ("Motel" o "Habitación"), selecciona una calificación de 1 a 5, escribe "Título" y "Tu reseña", y presiona "Guardar"
+    When elige qué reseñar ("Habitación", "Motel" o "Atención"), selecciona una calificación de 1 a 5, escribe "Título" y "Tu reseña", y presiona "Guardar"
     Then la reseña se agrega a la lista del motel
     And si eligió "Habitación", la reseña queda asociada a la habitación seleccionada
     And el borrador local se borra
@@ -105,6 +113,23 @@ Verificado contra el código de `develop` (`33743ec`):
     Then ve "Selecciona una calificación" si falta la calificación
     And ve "Campo requerido" bajo cada campo de texto vacío
     And la reseña no se guarda
+
+  Scenario: Cliente elige "Habitación"
+    Given un cliente en el formulario "Añadir reseña"
+    When el motel no tiene habitaciones
+    Then el selector no ofrece "Habitación"
+    When el motel tiene habitaciones, elige "Habitación" y guarda sin escoger cuál
+    Then ve "Elige la habitación que quieres reseñar" y la reseña no se guarda
+
+  Scenario: Cliente publica sin conexión
+    Given un cliente sin internet en el formulario "Añadir reseña"
+    When presiona "Guardar" con datos válidos
+    Then ve "No hay conexión con el servidor de reseñas" y el formulario sigue abierto con lo escrito
+
+  Scenario: Cliente ve reseñas sin conexión
+    Given un cliente que ya abrió las reseñas del motel con internet
+    When las vuelve a abrir sin internet
+    Then ve la copia guardada en el teléfono (SQLite), con sus respuestas
 
   Scenario: Cliente sale sin guardar y vuelve después
     Given un cliente que escribió parte de una reseña
@@ -140,7 +165,23 @@ Verificado contra el código de `develop` (`33743ec`):
     When confirma un mensaje vacío o solo con espacios
     Then la respuesta no se guarda
 
+  Scenario: Propietario reporta una reseña al administrador
+    Given un propietario viendo una reseña visible de uno de sus moteles
+    When presiona "Reportar", escribe el motivo y elige "Enviar reporte"
+    Then la tarjeta muestra "Reportada al administrador" con el motivo
+    And desaparece el botón "Reportar"
+
+  Scenario: El servidor rechaza a quien no es el dueño
+    Given un usuario que responde o reporta una reseña de un motel que no es suyo
+    When el servidor valida la operación
+    Then la rechaza con "Solo el propietario del motel puede responder esta reseña" (o "... reportar ...")
+    And la reseña no cambia
+
 ## Feature: Moderar reseñas (Administrador del sistema)
+
+  > Requiere la etiqueta `role: 'admin'` en la sesión (deuda 8). Sin ella el
+  > servidor rechaza cada acción y la pantalla muestra "Solo un administrador
+  > puede moderar reseñas".
 
   Scenario: Administrador filtra reseñas por estado
     Given un administrador en el panel de reseñas
@@ -203,7 +244,129 @@ Verificado contra el código de `develop` (`33743ec`):
   - Controladores inyectables, sin singletons.
   - Borrador local con `shared_preferences`.
   - Las respuestas del propietario y del administrador son públicas: las ve el cliente en la tarjeta de la reseña (decisión del 2026-11-02).
-- **Almacenamiento (decidido por el equipo):** las reseñas van en **Cloud Firestore**, como indica la guía "Firebase para el equipo MACHUCO" (28 oct 2026: los datos propios de una funcionalidad, como las reseñas, van a Firestore). Pendiente: implementar el repositorio de Firestore siguiendo `docs/firebase.md` (nombre de la colección en `FirestoreCollections`, `fromFirestore`/`toFirestore` y regla en `firestore.rules`). El contrato `ReviewRepository` ya permite cambiar solo la implementación.
+  - Copia local en SQLite con tabla propia `review_cache`, creada por `ReviewDao` si no existe (como `RoomDao`), y no con una migración de Floor: así no se sube la versión compartida de `AppDatabase` (21), no se tocan pruebas de otros módulos que la verifican y no hay choques si otro compañero también agrega una migración (decisión del 2026-11-16).
+  - Formulario del cliente (arreglos del 2026-11-16 sobre código previo, encontrados en QA): si el motel no tiene habitaciones no se ofrece "Habitación" y, si se elige, hay que escoger cuál; si no se puede publicar (por ejemplo, sin internet), el formulario muestra el motivo en vez de quedarse quieto, porque `submitReview` ahora devuelve `null` o el motivo. Se permiten varias reseñas del mismo cliente en un motel: cada visita puede tener la suya.
+- **Almacenamiento:** Firebase SQL Connect (tabla `reviews`, decisión de
+  Andrés del 2026-11-10 en `docs/decisions_log.md`). `FirestoreReviewRepository`
+  se conserva, pero los controladores no lo usan.
+
+## Cómo está hecha
+
+**Flujo a través de las capas y los servicios:**
+
+```mermaid
+flowchart TD
+  subgraph VISTA["Vista · lib/views/review y lib/widgets/review"]
+    V1["Cliente<br/>ReviewsSection + AddReviewSheet"]
+    V2["Propietario<br/>OwnerReviewPage"]
+    V3["Administrador<br/>ReviewAdministrationPage"]
+  end
+  subgraph CTRL["Controlador · lib/controllers/review"]
+    C1["ReviewsController"]
+    C2["OwnerReviewController"]
+    C3["ReviewAdministrationController"]
+    ACC["ReviewActions<br/>guarda en el servidor y luego cambia la pantalla"]
+  end
+  subgraph DATOS["Datos · lib/database/repository/review"]
+    REPO["SqlConnectReviewRepository<br/>contrato ReviewRepository"]
+    GW["ReviewSqlConnectGateway"]
+    DAO["ReviewDao"]
+    TIPOS["ReviewTypeRepository"]
+  end
+  SP[("SharedPreferences<br/>borrador")]
+  SQLITE[("SQLite<br/>tabla review_cache")]
+  REST[["Supabase REST<br/>review_types"]]
+  FDC[["Firebase SQL Connect<br/>tabla reviews + reglas @auth / @check"]]
+  AUTH[["Firebase Auth<br/>uid y role del token"]]
+  MOT["MotelController.persistent()<br/>moteles del propietario"]
+
+  V1 --> C1
+  V2 --> C2
+  V3 --> C3
+  C2 -. usa .-> ACC
+  C3 -. usa .-> ACC
+  C1 -- borrador --> SP
+  C1 -- categorías --> TIPOS
+  TIPOS --> REST
+  C2 -- mis moteles --> MOT
+  C1 --> REPO
+  C2 --> REPO
+  C3 --> REPO
+  REPO -- con red --> GW
+  GW --> FDC
+  REPO -- guarda copia / sin red la lee --> DAO
+  DAO --> SQLITE
+  FDC -. valida el token .-> AUTH
+```
+
+Ejemplo de una acción de principio a fin (el propietario responde):
+
+```mermaid
+sequenceDiagram
+  actor P as Propietario
+  participant V as OwnerReviewPage
+  participant C as OwnerReviewController
+  participant R as SqlConnectReviewRepository
+  participant G as ReviewSqlConnectGateway
+  participant S as SQL Connect
+  P->>V: Responder y Publicar
+  V->>C: reply(reviewId, texto)
+  C->>R: replyAsOwner(reviewId, texto)
+  R->>G: replyAsOwner(id, texto)
+  G->>S: ReplyToReviewAsOwner
+  S->>S: @check: el motel de la reseña es del uid del token
+  alt Es su motel
+    S-->>G: reseña actualizada
+    G-->>R: ok
+    R-->>C: ok
+    C-->>V: null, la tarjeta muestra "Tu respuesta"
+  else No es su motel o no hay red
+    S-->>G: error
+    G-->>R: DataConnectError
+    R-->>C: ReviewRepositoryException(motivo)
+    C-->>V: motivo, se muestra en un SnackBar
+  end
+```
+
+**Capas** (cada una solo conoce a la de abajo):
+
+| Capa | Archivos | Qué hace |
+|---|---|---|
+| Vista | `lib/views/review/`, `lib/widgets/review/` | Pinta y llama al controlador; muestra el motivo si algo falla (`showReviewActionError`). |
+| Controlador | `lib/controllers/review/` + `review_actions.dart` | Estado de la pantalla. Cada acción guarda primero en el servidor y solo si sale bien cambia la pantalla; devuelve `null` o el motivo. |
+| Repositorio | `review_repository.dart` (contrato), `sql_connect_review_repository.dart` | Traduce errores a mensajes y decide entre red y copia local. |
+| Gateway | `review_sql_connect_gateway.dart` | Único archivo que usa el SDK generado de SQL Connect. |
+| Servidor | `dataconnect/review/*.gql` | Reglas de seguridad: `@auth`, `@check` y `@transaction`. |
+
+**Las 4 tecnologías obligatorias:**
+
+| Tecnología | Dónde | Para qué |
+|---|---|---|
+| SharedPreferences | `add_review_controller.dart` (`saveDraft`, `loadDraft`) | Borrador del formulario. |
+| SQLite | `review_dao.dart` (tabla `review_cache`) | Copia local para leer sin conexión. |
+| REST | `review_type_repository.dart` (Supabase `review_types`) | Categorías del formulario; sin red usa la lista local. |
+| Firebase | SQL Connect (`dataconnect/review/`) y Auth | Guardar, responder, reportar y moderar; el autor sale del token. |
+
+**Reglas del servidor** (`dataconnect/review/mutations.gql`): el propietario
+solo responde o reporta reseñas de sus moteles (`@check` contra
+`motels.ownerId == auth.uid`); solo se reportan reseñas visibles; el
+administrador necesita `role: 'admin'`; los textos van de 1 a 1000
+caracteres; y una operación sobre una reseña inexistente falla en vez de no
+hacer nada.
+
+**Levantar el entorno para la demo:**
+
+1. `npx -y firebase-tools@15.34.1 emulators:start --only dataconnect --project demo-machuco`
+2. Android (emulador): `flutter run --flavor dev --dart-define=USE_SQL_CONNECT_EMULATOR=true --dart-define=SQL_CONNECT_EMULATOR_HOST=10.0.2.2`
+3. Iniciar sesión con un cliente y con un propietario **aprobado** (`accountStatus: active`).
+
+**Pendiente:**
+
+- Etiqueta `role: 'admin'` (deuda 8): bloquea la moderación en la nube.
+- Desplegar `dataconnect/` desde `develop`, avisando al equipo (`docs/sql_connect.md`).
+- `ListReviews` entrega también reseñas ocultas y el motivo del reporte a
+  cualquier usuario con sesión; el filtro se hace en la app.
+- El cliente no puede reportar (se decidió que reporte solo el propietario).
 
 ## Registro de implementación (rama `feature_quiroz`)
 
@@ -221,6 +384,14 @@ resuelve.
 | 2026-11-02 | (ver git log) | El repositorio pasa a `lib/database/repository/review/`, donde el equipo guarda los repositorios (guía de Firebase, punto 10). | — |
 | 2026-11-02 | (ver git log) | QA en emulador: las reseñas de ejemplo apuntaban a moteles inexistentes (`5db2ebf`); la tarjeta del propietario muestra el nombre del motel y no su id. | — (bugs del QA) |
 | 2026-11-02 | (ver git log) | Las respuestas se muestran al cliente y al administrador (`ReviewNote` compartido); el cliente ya no ve reseñas ocultas. | — (hallazgos del QA) |
+| 2026-11-02 | (ver git log) | Almacenamiento en Firestore listo: conversión del modelo, repositorio y regla de seguridad (sin publicar). | 2 |
+| 2026-11-16 | `e933ce6` | El propietario responde reseñas de sus moteles (`ReplyToReviewAsOwner`). | 1 |
+| 2026-11-16 | `4708082` | El administrador oculta, responde, descarta reportes y elimina (requiere `role: 'admin'`). | 1 |
+| 2026-11-16 | `350990b` | El propietario reporta reseñas al administrador. | — (nuevo) |
+| 2026-11-16 | `f8953b4`, `c959c6d`, `9a27bb8` | Revisión con GLM 5.3 y DeepSeek: reglas más estrictas, errores reales en pantalla, `ReviewActions` y código más legible. | — |
+| 2026-11-16 | `70c8688` | QA: la pantalla del propietario cargaba moteles de ejemplo y siempre mostraba "Total 0". | — (bug del QA) |
+| 2026-11-16 | `abb5cdf` | Copia local en SQLite (`ReviewDao`) para leer sin conexión. | 2 |
+| 2026-11-16 | `734b771` | Formulario: "Habitación" exige escogerla y el motivo de un fallo se muestra. | — (bugs del QA) |
 
 ---
 

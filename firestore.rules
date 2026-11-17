@@ -537,6 +537,7 @@ service cloud.firestore {
         && resource.data.role != 'admin'
         && resource.data.get('accountStatus', '') != 'anonymized';
 
+      // Rutas anteriores conservadas tal como están en la versión compartida.
       match /subscriptions/{subscriptionId} {
         allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
         allow create, update: if isSignedIn() && request.auth.uid == uid
@@ -554,7 +555,127 @@ service cloud.firestore {
               'paymentMethod', 'reference', 'status', 'updatedAt']);
           allow delete: if false;
         }
+
+        // Nombre canónico de pagos de suscripción; mantiene la ruta anterior.
+        match /subscriptionPayments/{paymentId} {
+          allow read: if isActiveAdmin() || subscriptionWriteAllowed(uid);
+          allow create: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data);
+          allow update: if subscriptionWriteAllowed(uid)
+            && hasValidSubscriptionPaymentFields(request.resource.data)
+            && subscriptionPaymentMatchesParent(uid, subscriptionId, request.resource.data)
+            && request.resource.data.localId == resource.data.localId
+            && request.resource.data.subscriptionLocalId == resource.data.subscriptionLocalId;
+          allow delete: if false;
+        }
       }
+
+      match /notificationReads/{notificationId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['readAt'])
+          && request.resource.data.readAt == request.time;
+        allow delete: if false;
+      }
+
+      match /devices/{deviceId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+          && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
+          && request.resource.data.token is string
+          && request.resource.data.updatedAt == request.time;
+        allow delete: if isSignedIn() && request.auth.uid == uid;
+      }
+    }
+
+    // Announcements are authored only by active administrators. A client or
+    // owner may read a global announcement, one aimed at their role, or one
+    // addressed to their Firebase UID. Email is never used as an identifier.
+    match /notifications/{notificationId} {
+      function canReadNotification() {
+        return isActiveAdmin()
+          || ((isActiveClient() || isActiveOwner())
+            && (resource.data.target == 'all'
+              || (resource.data.target == 'clients' && isActiveClient())
+              || (resource.data.target == 'owners' && isActiveOwner())
+              || (resource.data.target == 'specificUser'
+                && resource.data.recipientUid == request.auth.uid)));
+      }
+
+      allow read: if canReadNotification();
+      allow create: if isActiveAdmin()
+        && request.resource.data.keys().hasOnly([
+          'eventType', 'sourceId', 'actorUid', 'recipientUid',
+          'recipientName', 'recipientEmail', 'target', 'title', 'message',
+          'createdAt', 'clientName', 'motelName', 'roomName'])
+        && request.resource.data.keys().hasAll([
+          'eventType', 'actorUid', 'target', 'title', 'message', 'createdAt'])
+        && request.resource.data.eventType in ['reservation', 'payment', 'review', 'system']
+        && request.resource.data.actorUid == request.auth.uid
+        && request.resource.data.target in ['all', 'clients', 'owners', 'specificUser']
+        && request.resource.data.title is string
+        && request.resource.data.title.size() > 0 && request.resource.data.title.size() <= 140
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000
+        && request.resource.data.createdAt == request.time
+        && (request.resource.data.target != 'specificUser'
+          || (request.resource.data.recipientUid is string
+            && request.resource.data.recipientUid.size() > 0
+            && request.resource.data.recipientName is string
+            && request.resource.data.recipientName.size() <= 160
+            && request.resource.data.recipientEmail is string
+            && request.resource.data.recipientEmail.size() > 0
+            && request.resource.data.recipientEmail.size() <= 254));
+      allow update, delete: if false;
+    }
+
+    // Reseñas de cliente (colección `reviews`, ver FirestoreCollections).
+    //
+    // Las reseñas ocultas siguen siendo legibles para cualquier usuario
+    // autenticado: "oculta" es una regla de presentación (no aparece ni
+    // cuenta en el promedio), no un control de acceso. Filtrar por estado
+    // aquí rompería la lista completa del administrador, porque una consulta
+    // no se puede filtrar documento por documento: la consulta fallaría
+    // entera si un solo documento no cumple la regla.
+    //
+    // El autor no se puede comprobar contra el motel: los moteles y su
+    // propietario viven en Supabase, no en Firestore, así que `isAdmin()` es
+    // el único rol verificable aquí. La relación reseña-propietario se valida
+    // en la capa de Supabase.
+    match /reviews/{reviewId} {
+      allow read: if isSignedIn();
+
+      // Solo el propio autor crea, siempre como visible y con los campos
+      // acotados: nace visible y sin respuesta, y se modera después.
+      allow create: if isSignedIn()
+        && request.resource.data.authorId == request.auth.uid
+        && request.resource.data.status == 'visible'
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 1
+        && request.resource.data.rating <= 5
+        && request.resource.data.title is string
+        && request.resource.data.title.size() >= 1
+        && request.resource.data.title.size() <= 1000
+        && request.resource.data.body is string
+        && request.resource.data.body.size() >= 1
+        && request.resource.data.body.size() <= 1000
+        && request.resource.data.motelId is string
+        && request.resource.data.keys().hasOnly([
+          'authorId', 'authorName', 'title', 'body', 'rating', 'date',
+          'motelId', 'roomId', 'type', 'status', 'reportReason',
+          'adminReply', 'ownerReply']);
+
+      // El administrador modera y responde todo; el autor solo puede
+      // escribir la respuesta del propietario (y nunca cambiar autoría,
+      // calificación ni estado). Un propietario no se puede distinguir de
+      // otro usuario autenticado sin los moteles de Supabase.
+      allow update: if isAdmin()
+        || (isSignedIn()
+          && request.resource.data.diff(resource.data).affectedKeys()
+              .hasOnly(['ownerReply'])
+          && request.resource.data.ownerReply is string
+          && request.resource.data.ownerReply.size() <= 1000);
+
+      allow delete: if isAdmin();
     }
 
     // Contador de administradores activos ("siempre debe existir uno"). Solo
@@ -577,8 +698,7 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // Suscripciones de propietarios: colecciÃ³n raÃ­z independiente de users.
-    // El documento usa el UID del propietario como identificador.
+    // Suscripciones de propietarios: colección raíz; el ID es el UID.
     match /subscriptions/{subscriptionId} {
       allow read: if isAdmin()
         || (isActiveOwner()
@@ -608,12 +728,10 @@ service cloud.firestore {
         && subscription.localId == data.subscriptionLocalId;
     }
 
-    // Pagos de suscripciÃ³n: colecciÃ³n raÃ­z propia. No es la colecciÃ³n
-    // `payments` de reservas que aparece inmediatamente debajo.
+    // Pagos de suscripción separados de los pagos de reservas.
     match /subscriptionPayments/{paymentId} {
       allow read: if isAdmin()
         || (isActiveOwner() && resource.data.ownerId == request.auth.uid);
-
       allow create: if isActiveOwner()
         && request.resource.data.ownerId == request.auth.uid
         && hasValidSubscriptionPaymentFields(request.resource.data)
@@ -879,34 +997,19 @@ service cloud.firestore {
         && (isAdmin() || resource.data.ownerId == request.auth.uid);
     }
 
-    // Registro de autoridad. Crear desde la consola con un usuario administrador.
-    // Los moteles del módulo principal viven en Supabase, no en Firestore.
+    // Registro anterior de autorización, conservado por compatibilidad.
     match /room_motels/{motelId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    // Relación de Edificio UCO verificada en Supabase. Permite sincronizar
-    // sin crear manualmente el registro; si existe, el registro prevalece.
-    // Al transferir el motel, actualizar este permiso o crear el registro.
-    // También vale la copia de moteles de SQL Connect (motels/{motelId}), que
-    // la app escribe al crear el motel: así el propietario crea tipos de
-    // habitación y habitaciones sin esperar a un administrador (autorizado
-    // por la rama de habitaciones, 2026-11-10).
+    // El propietario activo debe coincidir con el dueño del motel en Firestore.
     function ownsRoomMotel(data) {
       return isActiveOwner()
         && data.ownerId == request.auth.uid
-        && (
-          (exists(/databases/$(database)/documents/motels/$(data.motelId))
-            && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && get(/databases/$(database)/documents/room_motels/$(data.motelId)).data.ownerId
-              == request.auth.uid)
-          || (!exists(/databases/$(database)/documents/room_motels/$(data.motelId))
-            && data.motelId == 'motel_1793753270427'
-            && request.auth.uid == '9pojDLzLw3SL4S3VNK8JTPCUdbE2')
-        );
+        && exists(/databases/$(database)/documents/motels/$(data.motelId))
+        && get(/databases/$(database)/documents/motels/$(data.motelId)).data.ownerId
+          == request.auth.uid;
     }
 
     function validRoomBase(data, id) {

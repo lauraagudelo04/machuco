@@ -57,7 +57,7 @@ class NotificationRepositoryCancellationNotifier
         title: title,
         message: _messageFor(reservation),
         target: NotificationTarget.specificUser,
-        recipientUser: recipient,
+        recipientUid: recipient,
       );
       return true;
     } catch (error) {

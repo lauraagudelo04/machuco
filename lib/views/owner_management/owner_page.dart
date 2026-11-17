@@ -303,7 +303,7 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
       if (!mounted) return;
       if (anonymized != null) {
         _showMessage(
-          '${anonymized.fullName} fue anonimizado y sus moteles quedaron con '
+          '${anonymized.fullName} fue eliminado y sus moteles quedaron con '
           '${blocker.candidates.firstWhere((c) => c.id == targetId).fullName}.',
         );
         return;
@@ -312,28 +312,28 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
 
     if (anonymized == null) {
       _showMessage(
-        _controller.lastError ?? 'No se pudo anonimizar al propietario.',
+        _controller.lastError ?? 'No se pudo eliminar al propietario.',
       );
       return;
     }
     if (_controller.lastAnonymizationIsPending) {
       _showMessage(
-        '${anonymized.fullName} se anonimizará en Firebase cuando vuelva la '
+        '${anonymized.fullName} se eliminará de Firebase cuando vuelva la '
         'conexión.',
       );
       return;
     }
-    _showMessage('${anonymized.fullName} fue anonimizado.');
+    _showMessage('${anonymized.fullName} fue eliminado.');
   }
 
   Future<bool> _confirmAnonymization(Owner owner) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Anonimizar propietario'),
+        title: const Text('Eliminar propietario'),
         content: Text(
-          '${owner.fullName} ya no podrá iniciar sesión y sus datos '
-          'personales se eliminarán. El documento se conserva sin datos para '
+          '${owner.fullName} dejará de poder iniciar sesión y sus datos '
+          'personales se borrarán; el registro se conserva sin datos para '
           'auditoría. Si solo quieres suspender su operación, usa Inactivar.',
         ),
         actions: [
@@ -343,7 +343,7 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Anonimizar'),
+            child: const Text('Eliminar'),
           ),
         ],
       ),
@@ -889,7 +889,7 @@ class _OwnerCard extends StatelessWidget {
               ),
               AppIconButton(
                 icon: Icons.delete_outline,
-                tooltip: 'Anonimizar a ${owner.fullName}',
+                tooltip: 'Eliminar a ${owner.fullName}',
                 variant: AppIconButtonVariant.destructive,
                 onPressed: onDelete,
               ),

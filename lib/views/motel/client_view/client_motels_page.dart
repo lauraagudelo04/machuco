@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../widgets/notification/unread_notification_button.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import '../../../database/repository/motel/motel_repository.dart';
@@ -115,17 +116,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: AppIconButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: 'Notificaciones',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ClientNotificationView(),
-                ),
-              );
-            },
+          child: UnreadNotificationButton(
+            recipientRole: 'client',
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ClientNotificationView(),
+              ),
+            ),
           ),
         ),
         actions: [

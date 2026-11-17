@@ -3,7 +3,6 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:machuco/database/repository/review/review_type_repository.dart';
 import 'package:machuco/models/review/review.dart';
-import 'package:machuco/database/repository/review/firestore_review_repository.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
@@ -83,19 +82,22 @@ class ReviewsController extends ChangeNotifier {
 
   /// Crea y guarda la reseña descrita por [draft].
   ///
-  /// Devuelve `false` sin tocar el repositorio ni notificar si la calificación
-  /// está fuera de rango, si el título o el texto quedan vacíos al recortar
-  /// o si no hay una sesión con autor.
-  Future<bool> submitReview(String motelId, ReviewDraft draft) async {
+  /// Devuelve `null` si se guardó, o el motivo para mostrarlo en el
+  /// formulario. No toca el repositorio ni notifica si los datos no son
+  /// válidos, si es de habitación sin habitación o si no hay sesión.
+  Future<String?> submitReview(String motelId, ReviewDraft draft) async {
     final title = draft.title.trim();
     final body = draft.body.trim();
     if (!ReviewRules.isValidRating(draft.rating) ||
         !ReviewRules.isValidText(title) ||
         !ReviewRules.isValidText(body)) {
-      return false;
+      return 'Revisa la calificación, el título y la reseña';
+    }
+    if (draft.type == ReviewType.room && draft.roomId == null) {
+      return 'Elige la habitación que quieres reseñar';
     }
     final author = await _authorProvider.currentAuthor();
-    if (author == null) return false;
+    if (author == null) return 'Debes iniciar sesión para publicar una reseña';
 
     try {
       await addReview(
@@ -116,10 +118,9 @@ class ReviewsController extends ChangeNotifier {
         ),
       );
     } on ReviewRepositoryException catch (error) {
-      debugPrint('submitReview: $error');
-      return false;
+      return error.message;
     }
-    return true;
+    return null;
   }
 
   Future<void> addReview(Review review) async {
