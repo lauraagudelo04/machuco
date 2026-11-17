@@ -91,16 +91,6 @@ final class FirebaseAuthService implements AuthService {
     }
   }
 
-  /// Los proveedores externos están definidos pero no implementados en esta
-  /// etapa (ver contexto de la rama).
-  @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {
-    throw const AuthFailure(
-      AuthFailureType.invalidConfiguration,
-      'El ingreso con Google aún no está disponible.',
-    );
-  }
-
   /// Registro histórico con nombre completo. Se conserva por compatibilidad;
   /// el flujo vigente es [registerAccount].
   @override

@@ -550,7 +550,10 @@ void main() {
 
       expect(social.deleteCalls, 1);
       expect(auth.deletedWithPasswords, isEmpty);
-      expect(auth.logoutCalled, isTrue);
+      // Ya no pasa por logout (que conserva el correo recordado): limpia todo
+      // el namespace `auth` igual que la eliminación con contraseña.
+      expect(auth.logoutCalled, isFalse);
+      expect(controller.session, isNull);
       expect(deleted, isTrue);
     });
 

@@ -1344,6 +1344,20 @@ class _$PhoneCountryCodeDao extends PhoneCountryCodeDao {
     await _phoneCountryCodeInsertionAdapter.insertList(
         codes, OnConflictStrategy.replace);
   }
+
+  @override
+  Future<void> replaceAll(List<PhoneCountryCode> codes) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(codes);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.phoneCountryCodeDao.replaceAll(codes);
+      });
+    }
+  }
 }
 
 class _$MotelDao extends MotelDao {

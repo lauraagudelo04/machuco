@@ -22,19 +22,25 @@ void ensureAccountSessionWatcher(BuildContext context) {
       profiles: FirestoreUserProfileRepository(),
       clearLocalData: _clearLocalData,
       onSessionEnded: _goToLogin,
-    )..start();
+      // SQ-09: la caché de SQLite se refresca desde Firestore en segundo
+      // plano al abrir la app, al volver a primer plano y periódicamente.
+      onProfileRefreshed: FloorAuthUserProfileRepository().saveCurrent,
+    )..start(checkNow: true);
   } catch (error) {
     debugPrint('Vigilancia de la sesión no disponible: $error');
   }
 }
 
-/// Una cuenta eliminada borra todo el namespace `auth`; una sesión vencida
-/// conserva el correo recordado, igual que cerrar sesión.
+/// Una cuenta eliminada borra todo el namespace `auth`; una sesión vencida,
+/// deshabilitada o rechazada conserva el correo recordado, igual que cerrar
+/// sesión.
 Future<void> _clearLocalData(AccountSessionEnd reason) async {
   final preferences = AuthPreferences();
   await switch (reason) {
     AccountSessionEnd.accountDeleted => preferences.clearAll(),
-    AccountSessionEnd.sessionExpired => preferences.clearCurrentUserEmail(),
+    AccountSessionEnd.sessionExpired ||
+    AccountSessionEnd.accountDisabled ||
+    AccountSessionEnd.accountRejected => preferences.clearCurrentUserEmail(),
   };
   await FloorAuthUserProfileRepository().clear();
 }
@@ -46,6 +52,10 @@ void _goToLogin(AccountSessionEnd reason) {
     AccountSessionEnd.accountDeleted => 'Tu cuenta fue eliminada.',
     AccountSessionEnd.sessionExpired =>
       'Tu sesión expiró. Inicia sesión de nuevo.',
+    AccountSessionEnd.accountDisabled =>
+      'Tu cuenta fue deshabilitada por un administrador.',
+    AccountSessionEnd.accountRejected =>
+      'Tu solicitud de propietario fue rechazada. Inicia sesión para ver el motivo.',
   };
   navigator.pushAndRemoveUntil(
     MaterialPageRoute<void>(builder: (_) => LoginPage(notice: notice)),

@@ -84,10 +84,6 @@ final class FakeAuthService implements AuthService {
   }
 
   @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) =>
-      throw UnimplementedError();
-
-  @override
   Future<void> register({
     required String fullName,
     required String email,

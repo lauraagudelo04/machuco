@@ -214,9 +214,9 @@ class AuthCatalogRepository {
           .toList(growable: false);
 
       final dao = await _dao();
-      // Se reemplaza completa: lo que ya no está en Supabase desaparece.
-      await dao.deleteAll();
-      await dao.insertCountryCodes(entries);
+      // Se reemplaza completa (lo que ya no está en Supabase desaparece) en
+      // una transacción, para no dejar la caché vacía si la inserción falla.
+      await dao.replaceAll(entries);
       await _preferences.saveCatalogsSyncedAt(_clock());
       return true;
     } on FormatException {

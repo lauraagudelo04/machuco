@@ -7,9 +7,13 @@ service cloud.firestore {
       return request.auth != null;
     }
 
+    // Administrador con cuenta activa. Un admin anonimizado, deshabilitado o
+    // sin accountStatus no conserva estos accesos aunque su usuario de Auth
+    // siga vivo.
     function isAdmin() {
-      return isSignedIn() &&
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('accountStatus', '') == 'active';
     }
 
     function isActiveOwner() {
@@ -307,6 +311,28 @@ service cloud.firestore {
         && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('mustChangePassword', false) != true;
     }
 
+    // Admin activo que aun no cambia su contrasena temporal. Solo sirve para
+    // que pueda anonimizar SU propia cuenta (eliminar cuenta); no le da
+    // ningun otro permiso de administrador.
+    function isAdminWithTemporaryPassword() {
+      return isSignedIn()
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'active'
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('mustChangePassword', false) == true;
+    }
+
+    // Documento de identidad de Cliente y Propietario (decision 2026-11-17).
+    // Mismos nombres y valores de documentType que hasValidOwnerManagementFields
+    // (rama de propietarios). El Administrador nunca lo tiene.
+    function hasValidIdentityDocument(data) {
+      return data.documentType is string
+        && data.documentType in [
+          'citizenshipCard', 'foreignerCard', 'taxId', 'passport',
+          'identityCard']
+        && data.documentNumber is string
+        && data.documentNumber.size() >= 4 && data.documentNumber.size() <= 20;
+    }
+
     // Registro de administradores activos (system/adminRegistry). Cuenta todo
     // admin con accountStatus == 'active', incluso con contrasena temporal
     // pendiente. Crear un admin lo sube 1 y anonimizar lo baja 1, en la misma
@@ -367,10 +393,12 @@ service cloud.firestore {
 
     // Anonimizar un admin activo (a otro o a si mismo): el documento queda solo
     // con los campos permitidos y el registro baja 1 sin quedar por debajo de 1.
-    function isAdminAnonymization() {
+    // Sobre SU propia cuenta basta con ser el admin activo del documento,
+    // aunque tenga la contrasena temporal pendiente (eliminar su cuenta).
+    function isAdminAnonymization(uid) {
       let before = resource.data;
       let after = request.resource.data;
-      return isActiveAdmin()
+      return (request.auth.uid == uid || isActiveAdmin())
         && before.role == 'admin'
         && before.accountStatus == 'active'
         && after.keys().hasOnly([
@@ -468,11 +496,14 @@ service cloud.firestore {
       return isSignedIn()
         && request.auth.uid == uid
         && request.resource.data.keys().hasAll(
-          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt'])
+          ['fullName', 'email', 'phoneNumber', 'role', 'accountStatus', 'createdAt',
+            'documentType', 'documentNumber'])
         && request.resource.data.keys().hasOnly([
           'fullName', 'email', 'phoneNumber', 'role', 'accountStatus',
           'createdAt', 'firstNames', 'lastNames', 'phoneCountryCodeId',
-          'birthDate', 'personType', 'nit', 'companyName', 'planId'])
+          'birthDate', 'personType', 'nit', 'companyName', 'planId',
+          'documentType', 'documentNumber'])
+        && hasValidIdentityDocument(request.resource.data)
         && hasValidContactFields(request.resource.data)
         && hasValidCommonExtras(request.resource.data)
         && request.resource.data.email == request.auth.token.email
@@ -492,11 +523,19 @@ service cloud.firestore {
     // Perfiles de usuario. El rol y el estado de la cuenta viven aqui y solo
     // se pueden asignar en la creacion (valores iniciales) o por un admin.
     match /users/{uid} {
-      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin() || isActiveOwner());
+      // Cada usuario lee su perfil; un admin activo, cualquiera. Un
+      // propietario activo solo lee perfiles de clientes (lista de clientes de
+      // sus reservas, ClientController.loadAllClients): nunca los de otros
+      // propietarios (NIT, razon social) ni los de administradores. Firestore
+      // no filtra por campo: ver docs/auth/handoff-otras-ramas.md.
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin()
+        || (resource.data.role == 'client' && isActiveOwner()));
 
-      // Registro publico (nunca admin; cliente activo, propietario pendiente)
-      // o creacion de un administrador por otro administrador activo.
-      allow create: if isPublicRegistration(uid) || isAdminCreation(uid) || isActiveOwner()
+      // Registro publico (nunca admin; cliente activo, propietario pendiente),
+      // creacion de un administrador o de un propietario por un admin activo.
+      // Nadie mas crea perfiles (en particular, un propietario no crea
+      // users/{otroUid}).
+      allow create: if isPublicRegistration(uid) || isAdminCreation(uid)
         || isAdminOwnerCreation(uid);
 
       // Un admin activo (a) atiende solicitudes de propietarios pendientes
@@ -518,12 +557,19 @@ service cloud.firestore {
         || isAdminContactEdit()
         || isAdminOwnerEdit()
         || isAdminOwnerAnonymization()
-        || isAdminAnonymization()
+        || isAdminAnonymization(uid)
         || (isSignedIn()
           && request.auth.uid == uid
           && request.resource.data.diff(resource.data).affectedKeys()
-              .hasOnly(['fullName', 'phoneNumber', 'mustChangePassword'])
+              .hasOnly(['fullName', 'phoneNumber', 'mustChangePassword',
+                'documentType', 'documentNumber'])
           && hasValidContactFields(request.resource.data)
+          // Cliente y Propietario pueden registrar o corregir su documento;
+          // un admin nunca lo tiene.
+          && (!request.resource.data.diff(resource.data).affectedKeys()
+                .hasAny(['documentType', 'documentNumber'])
+            || (resource.data.role in ['client', 'owner']
+              && hasValidIdentityDocument(request.resource.data)))
           && (!('mustChangePassword' in request.resource.data.diff(resource.data).affectedKeys())
             || (resource.data.get('mustChangePassword', false) == true
               && request.resource.data.mustChangePassword == false))));
@@ -531,11 +577,14 @@ service cloud.firestore {
       // Solo cada usuario puede borrar su propio perfil (eliminacion de
       // cuenta, tras reautenticarse). Un administrador no borra cuentas:
       // anonimiza (isAdminOwnerAnonymization / isAdminAnonymization) para
-      // conservar la auditoria. Las subcolecciones no se borran en cascada.
+      // conservar la auditoria. La app borra antes las subcolecciones propias
+      // (Firestore no borra en cascada). Borrar un perfil que ya no existe
+      // (reintento DA-05) se permite: no cambia nada.
       allow delete: if isSignedIn()
         && request.auth.uid == uid
-        && resource.data.role != 'admin'
-        && resource.data.get('accountStatus', '') != 'anonymized';
+        && (resource == null
+          || (resource.data.role != 'admin'
+            && resource.data.get('accountStatus', '') != 'anonymized'));
 
       // Rutas anteriores conservadas tal como están en la versión compartida.
       match /subscriptions/{subscriptionId} {
@@ -545,7 +594,9 @@ service cloud.firestore {
             'localId', 'userEmail', 'planId', 'planName', 'motelName',
             'amount', 'billingPeriod', 'nextBillingDate', 'status',
             'features', 'updatedAt']);
-        allow delete: if false;
+        // Eliminacion de la cuenta (DA-15): el propio usuario borra sus
+        // suscripciones. Los pagos de abajo se conservan (obligacion contable).
+        allow delete: if isSignedIn() && request.auth.uid == uid;
 
         match /payments/{paymentId} {
           allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
@@ -571,19 +622,22 @@ service cloud.firestore {
         }
       }
 
+      // Lectura y borrado separados de la escritura: en una lectura no existe
+      // request.resource. El propio usuario los borra al eliminar su cuenta
+      // (DA-15).
       match /notificationReads/{notificationId} {
-        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+        allow read, delete: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if isSignedIn() && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['readAt'])
           && request.resource.data.readAt == request.time;
-        allow delete: if false;
       }
 
       match /devices/{deviceId} {
-        allow read, create, update: if isSignedIn() && request.auth.uid == uid
+        allow read, delete: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if isSignedIn() && request.auth.uid == uid
           && request.resource.data.keys().hasOnly(['token', 'updatedAt', 'platform'])
           && request.resource.data.token is string
           && request.resource.data.updatedAt == request.time;
-        allow delete: if isSignedIn() && request.auth.uid == uid;
       }
     }
 
@@ -684,17 +738,22 @@ service cloud.firestore {
     // anonimiza un admin (ver isAdminCreation e isAdminAnonymization, que
     // exigen ese cambio).
     match /system/adminRegistry {
-      allow read: if isActiveAdmin();
+      // Un admin con contrasena temporal pendiente solo lo lee y lo baja 1 en
+      // el mismo lote en que anonimiza SU propia cuenta.
+      allow read: if isActiveAdmin() || isAdminWithTemporaryPassword();
       allow create: if isActiveAdmin()
         && request.resource.data.keys().hasOnly(['activeAdminCount'])
         && request.resource.data.activeAdminCount is int
         && request.resource.data.activeAdminCount >= 1;
-      allow update: if isActiveAdmin()
-        && request.resource.data.keys().hasOnly(['activeAdminCount'])
+      allow update: if request.resource.data.keys().hasOnly(['activeAdminCount'])
         && request.resource.data.activeAdminCount is int
         && request.resource.data.activeAdminCount >= 1
-        && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
-          || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1);
+        && ((isActiveAdmin()
+            && (request.resource.data.activeAdminCount == resource.data.activeAdminCount + 1
+              || request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1))
+          || (isAdminWithTemporaryPassword()
+            && request.resource.data.activeAdminCount == resource.data.activeAdminCount - 1
+            && getAfter(/databases/$(database)/documents/users/$(request.auth.uid)).data.accountStatus == 'anonymized'));
       allow delete: if false;
     }
 

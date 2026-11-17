@@ -163,18 +163,6 @@ final class _FakeAuthService implements AuthService {
   }
 
   @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {
-    return const AuthSession(
-      userId: 'user-2',
-      name: 'Google User',
-      email: 'google@example.com',
-      role: RegisteredUserRole.client,
-      accessToken: 'access',
-      idToken: 'header.payload.signature',
-    );
-  }
-
-  @override
   Future<void> register({
     required String fullName,
     required String email,

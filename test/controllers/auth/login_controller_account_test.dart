@@ -166,6 +166,35 @@ void main() {
       expect((await controller.loadCachedProfile())?.uid, 'r1');
     });
 
+    test(
+      '[SQ-09] caché pending_approval y Firestore active: ruta con Firestore '
+      'y fila actualizada',
+      () async {
+        final controller = buildController();
+        auth.nextSession = _session(
+          RegisteredUserRole.owner,
+          status: AccountStatus.pendingApproval,
+        );
+        await controller.login(email: 'ana@example.com', password: 'secret123');
+        expect(
+          (await controller.loadCachedProfile())?.accountStatus,
+          AccountStatus.pendingApproval.storageValue,
+        );
+
+        auth.restored = _session(RegisteredUserRole.owner);
+        final restored = await controller.restoreSession();
+
+        expect(
+          controller.resolvePostLoginRoute(restored!),
+          AppRoutes.ownerMotels,
+        );
+        expect(
+          (await controller.loadCachedProfile())?.accountStatus,
+          AccountStatus.active.storageValue,
+        );
+      },
+    );
+
     test('se borra al cerrar sesión', () async {
       final controller = buildController();
       auth.nextSession = _session(RegisteredUserRole.client);
@@ -588,6 +617,24 @@ void main() {
       },
     );
 
+    test('cuenta de Google o GitHub: tras eliminarla limpia todo el namespace '
+        'auth, incluido el correo recordado', () async {
+      final controller = buildController();
+      auth.nextSession = _session(RegisteredUserRole.client);
+      await controller.login(email: 'ana@example.com', password: 'secret123');
+      await preferences.saveRememberedEmail('ana@example.com');
+
+      await controller.clearDataAfterAccountDeletion();
+
+      expect(controller.session, isNull);
+      expect(controller.currentUserEmail, isNull);
+      expect(await cache.loadCurrent(), isNull);
+      expect(await preferences.loadCurrentUserEmail(), isNull);
+      expect((await preferences.loadRememberedEmail()).email, isNull);
+      // No vuelve a llamar al servicio: la cuenta ya se eliminó.
+      expect(auth.deletedWithPasswords, isEmpty);
+    });
+
     test('si el backend falla no borra nada local', () async {
       final controller = buildController();
       auth.nextSession = _session(RegisteredUserRole.client);
@@ -711,10 +758,6 @@ final class _FakeAuthService implements AuthService {
     if (failure != null) throw failure;
     return nextSession;
   }
-
-  @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async =>
-      nextSession;
 
   @override
   Future<void> register({

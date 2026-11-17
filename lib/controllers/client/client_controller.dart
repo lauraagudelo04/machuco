@@ -213,9 +213,12 @@ class ClientController extends ChangeNotifier {
           i + 30 > guestIds.length ? guestIds.length : i + 30,
         );
 
+        // `firestore.rules` solo deja a un propietario leer perfiles de
+        // clientes: la consulta debe pedirlo explícitamente o se rechaza.
         final usersSnapshot = await _firestore
             .collection('users')
             .where(FieldPath.documentId, whereIn: chunk)
+            .where('role', isEqualTo: 'client')
             .get();
 
         for (final doc in usersSnapshot.docs) {

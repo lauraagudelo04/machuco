@@ -307,20 +307,6 @@ class LoginController extends ChangeNotifier {
     }
   }
 
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {
-    final authService = _requireAuthService();
-    _setSubmitting(true);
-    try {
-      final nextSession = await authService.loginWithGoogle(
-        preferSignup: preferSignup,
-      );
-      await _startSession(nextSession);
-      return nextSession;
-    } finally {
-      _setSubmitting(false);
-    }
-  }
-
   /// Envía el correo de recuperación. Ignora una segunda llamada mientras hay
   /// una en curso y, tras enviar, bloquea nuevos envíos durante
   /// [passwordResetCooldown] segundos ([resetCooldownSeconds]). Dentro del
@@ -402,15 +388,28 @@ class LoginController extends ChangeNotifier {
     notifyListeners();
     try {
       await authService.deleteAccount(password: password);
-      _session = null;
-      _currentUserEmail = null;
-      _stopResetCooldown();
-      await _clearCachedProfile();
-      await _runPreference((preferences) => preferences.clearAll());
+      await _clearDeletedAccountData();
     } finally {
       _isDeletingAccount = false;
       notifyListeners();
     }
+  }
+
+  /// Limpia lo local después de que otro servicio (p. ej. el de Google o
+  /// GitHub) ya eliminó la cuenta: igual que [deleteAccount], borra el perfil
+  /// de SQLite y TODO el namespace `auth`, incluido el correo recordado.
+  Future<void> clearDataAfterAccountDeletion() async {
+    await _clearDeletedAccountData();
+    notifyListeners();
+  }
+
+  Future<void> _clearDeletedAccountData() async {
+    _session = null;
+    _currentUserEmail = null;
+    _stopResetCooldown();
+    unawaited(_analytics.setUser());
+    await _clearCachedProfile();
+    await _runPreference((preferences) => preferences.clearAll());
   }
 
   Future<List<RegisteredUser>> listRegisteredUsers() async {

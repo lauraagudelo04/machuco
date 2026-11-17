@@ -81,7 +81,45 @@ void main() {
     },
   );
 
+  group('cuenta deshabilitada o rechazada', () {
+    test('perfil deshabilitado: cierra sesión y borra lo local', () async {
+      profiles.profile = _profile(AccountStatus.disabled);
+
+      await watcher.check();
+
+      expect(auth.signOutCalls, 1);
+      expect(cleared, [AccountSessionEnd.accountDisabled]);
+      expect(ended, [AccountSessionEnd.accountDisabled]);
+    });
+
+    test('usuario de Auth deshabilitado', () async {
+      user.reloadError = FirebaseAuthException(code: 'user-disabled');
+
+      await watcher.check();
+
+      expect(auth.signOutCalls, 1);
+      expect(ended, [AccountSessionEnd.accountDisabled]);
+    });
+
+    test('solicitud de propietario rechazada', () async {
+      profiles.profile = _profile(AccountStatus.rejected);
+
+      await watcher.check();
+
+      expect(auth.signOutCalls, 1);
+      expect(cleared, [AccountSessionEnd.accountRejected]);
+      expect(ended, [AccountSessionEnd.accountRejected]);
+    });
+  });
+
   group('conserva la sesión', () {
+    test('propietario pendiente de aprobación', () async {
+      profiles.profile = _profile(AccountStatus.pendingApproval);
+      await watcher.check();
+      expect(auth.signOutCalls, 0);
+      expect(ended, isEmpty);
+    });
+
     Future<void> expectKept() async {
       await watcher.check();
       expect(auth.signOutCalls, 0);
@@ -122,6 +160,70 @@ void main() {
       user.reloadError = FirebaseAuthException(code: 'user-not-found');
       user.onReload = () => auth.currentUser = _FakeUser('u2');
       await expectKept();
+    });
+  });
+
+  group('[SQ-09] refresco del perfil local en segundo plano', () {
+    late List<UserProfile> refreshed;
+
+    setUp(() {
+      refreshed = [];
+      watcher = AccountSessionWatcher(
+        auth: auth,
+        profiles: profiles,
+        clearLocalData: (reason) async => cleared.add(reason),
+        onSessionEnded: ended.add,
+        onProfileRefreshed: (profile) async => refreshed.add(profile),
+        interval: const Duration(hours: 1),
+      );
+    });
+
+    test('Firestore dice activo: entrega el perfil fresco', () async {
+      profiles.profile = _profile(AccountStatus.active);
+      await watcher.check();
+      expect(refreshed.single.accountStatus, AccountStatus.active);
+      expect(ended, isEmpty);
+    });
+
+    test('no refresca si la cuenta terminó', () async {
+      profiles.profile = _profile(AccountStatus.disabled);
+      await watcher.check();
+      expect(refreshed, isEmpty);
+      expect(ended, [AccountSessionEnd.accountDisabled]);
+    });
+
+    test('no refresca sin perfil ni con error de lectura', () async {
+      profiles.profile = null;
+      await watcher.check();
+      profiles.error = const UserProfileRepositoryException(
+        UserProfileFailureType.network,
+        'sin red',
+      );
+      await watcher.check();
+      expect(refreshed, isEmpty);
+    });
+
+    test('un fallo al guardar no cierra la sesión', () async {
+      watcher = AccountSessionWatcher(
+        auth: auth,
+        profiles: profiles,
+        clearLocalData: (reason) async => cleared.add(reason),
+        onSessionEnded: ended.add,
+        onProfileRefreshed: (_) async => throw StateError('sqlite'),
+      );
+      profiles.profile = _profile(AccountStatus.active);
+      await watcher.check();
+      expect(auth.signOutCalls, 0);
+      expect(ended, isEmpty);
+    });
+
+    test('al arrancar con checkNow revisa de inmediato', () async {
+      profiles.profile = _profile(AccountStatus.active);
+      watcher.start(checkNow: true);
+      addTearDown(watcher.stop);
+      await pumpEventQueue();
+      expect(user.reloadCalls, 1);
+      expect(refreshed, hasLength(1));
     });
   });
 

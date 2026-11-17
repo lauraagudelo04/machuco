@@ -172,13 +172,11 @@ describe('administrador según su estado', () => {
       );
     });
 
-    // HALLAZGO: isAdmin() (lectura) no exige accountStatus == 'active'; un
-    // admin deshabilitado o sin estado sigue leyendo todos los perfiles y
-    // pagos. Se deja asentado el comportamiento actual (no se cambió la
-    // regla de producción sin aprobación).
-    test(`[EST-07] HALLAZGO: ${uid} todavía puede leer perfiles y pagos`, async () => {
-      await assertSucceeds(getDoc(doc(as(uid), 'users/clientActive')));
-      await assertSucceeds(getDoc(doc(as(uid), 'payments/pay-ownerActive')));
+    // Corregido 2026-11-17: isAdmin() exige accountStatus == 'active'; un
+    // admin deshabilitado o sin estado ya no lee perfiles ni pagos ajenos.
+    test(`[EST-07] ${uid} ya no lee perfiles ni pagos ajenos`, async () => {
+      await assertFails(getDoc(doc(as(uid), 'users/clientActive')));
+      await assertFails(getDoc(doc(as(uid), 'payments/pay-ownerActive')));
     });
   }
 });

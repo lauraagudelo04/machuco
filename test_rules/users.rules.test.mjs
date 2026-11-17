@@ -11,9 +11,14 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collection,
   deleteDoc,
   doc,
+  documentId,
   getDoc,
+  getDocs,
+  query,
+  where,
   serverTimestamp,
   setDoc,
   runTransaction,
@@ -49,6 +54,8 @@ const clientProfile = (overrides = {}) => ({
   lastNames: 'Pérez',
   phoneCountryCodeId: 1,
   birthDate: Timestamp.fromDate(new Date('1995-05-10T00:00:00Z')),
+  documentType: 'citizenshipCard',
+  documentNumber: '1020304050',
   ...overrides,
 });
 
@@ -63,6 +70,8 @@ const ownerProfile = (overrides = {}) => ({
   nit: '900123456-8',
   companyName: 'Inversiones Ejemplo S.A.S.',
   planId: 1,
+  documentType: 'citizenshipCard',
+  documentNumber: '71234567',
   ...overrides,
 });
 
@@ -396,11 +405,11 @@ describe('users: eliminación', () => {
     });
   });
 
-  test('el usuario elimina su propio perfil', async () => {
+  test('[DA-10] el usuario elimina su propio perfil', async () => {
     await assertSucceeds(deleteDoc(doc(as('client'), 'users/client')));
   });
 
-  test('un usuario sin autoridad no elimina el perfil de otro', async () => {
+  test('[DA-09] un usuario sin autoridad no elimina el perfil de otro', async () => {
     await assertFails(deleteDoc(doc(as('other'), 'users/client')));
     await assertFails(deleteDoc(doc(as('client'), 'users/owner')));
     await assertFails(deleteDoc(doc(as('owner'), 'users/client')));
@@ -578,10 +587,10 @@ describe('administradores: crear', () => {
     await assertSucceeds(updateDoc(doc(db, registryPath), { activeAdminCount: 2 }));
   });
 
-  test('el registro solo lo lee un admin activo y nadie lo borra', async () => {
+  test('el registro solo lo lee un admin activo (o uno con contraseña temporal, para eliminar su cuenta) y nadie lo borra', async () => {
     await assertSucceeds(getDoc(doc(as('admin'), registryPath)));
     await assertFails(getDoc(doc(as('client'), registryPath)));
-    await assertFails(getDoc(doc(as('pendingAdmin'), registryPath)));
+    await assertSucceeds(getDoc(doc(as('pendingAdmin'), registryPath)));
     await assertFails(deleteDoc(doc(as('admin'), registryPath)));
   });
 
@@ -617,7 +626,7 @@ describe('administradores: editar', () => {
     await assertSucceeds(updateDoc(doc(as('admin'), 'users/admin2'), contact));
   });
 
-  test('nunca cambia el correo, el rol ni el estado de otro admin', async () => {
+  test('[AG-04] nunca cambia el correo, el rol ni el estado de otro admin', async () => {
     const db = as('admin');
     await assertFails(updateDoc(doc(db, 'users/admin2'), { email: 'nuevo@example.com' }));
     await assertFails(updateDoc(doc(db, 'users/admin2'), { role: 'client' }));
@@ -637,7 +646,7 @@ describe('administradores: editar', () => {
     await assertFails(updateDoc(doc(as('client'), 'users/admin2'), contact));
   });
 
-  test('una cuenta anonimizada no se edita, ni por un admin ni por ella misma', async () => {
+  test('[AG-07] una cuenta anonimizada no se edita, ni por un admin ni por ella misma', async () => {
     await assertFails(updateDoc(doc(as('admin'), 'users/gone'), contact));
     await assertFails(updateDoc(doc(as('admin'), 'users/gone'), { accountStatus: 'active' }));
     await assertFails(updateDoc(doc(as('gone'), 'users/gone'), { fullName: 'Vuelvo Otra Vez' }));
@@ -784,7 +793,7 @@ describe('administradores: contraseña temporal pendiente', () => {
     await seedRegistry(2);
   });
 
-  test('no tiene permisos de admin activo hasta cambiarla', async () => {
+  test('[AG-11] no tiene permisos de admin activo hasta cambiarla', async () => {
     const db = as('pending');
     await assertFails(
       updateDoc(doc(db, 'users/owner'), {
@@ -801,7 +810,11 @@ describe('administradores: contraseña temporal pendiente', () => {
       }),
     );
     await assertFails(updateDoc(doc(db, 'users/client'), { accountStatus: 'disabled' }));
-    await assertFails(getDoc(doc(db, registryPath)));
+    // Solo puede leer el registro para anonimizar SU cuenta (ver "eliminar
+    // su propia cuenta"); nunca cambiarlo por otra vía.
+    await assertSucceeds(getDoc(doc(db, registryPath)));
+    await assertFails(updateDoc(doc(db, registryPath), { activeAdminCount: 3 }));
+    await assertFails(updateDoc(doc(db, registryPath), { activeAdminCount: 1 }));
   });
 
   test('puede leer su propio perfil y limpiar la marca', async () => {
@@ -1032,5 +1045,267 @@ describe('users: CRUD de propietarios por el administrador', () => {
 
   test('un admin ya no borra al propietario', async () => {
     await assertFails(deleteDoc(doc(as('admin'), 'users/owner-panel')));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Endurecimiento 2026-11-17 (rama feature-juan_pablo): creación y lectura por
+// propietarios, isAdmin() activo, eliminación de cuenta (DA-05, DA-15), admin
+// con contraseña temporal y documento de identidad.
+// ---------------------------------------------------------------------------
+
+const activeOwner = (overrides = {}) => ({
+  ...ownerProfile({ accountStatus: 'active' }),
+  createdAt: Timestamp.now(),
+  ...overrides,
+});
+
+describe('users: un propietario activo no crea perfiles ajenos', () => {
+  beforeEach(async () => {
+    await seed({ 'users/owner': activeOwner() });
+  });
+
+  test('no crea users/{otroUid} con ningún rol ni estado', async () => {
+    const db = as('owner');
+    const attempts = [
+      clientProfile({ email: 'victima@example.com' }),
+      { ...seededAdmin, createdAt: serverTimestamp() },
+      ownerProfile({ email: 'otro@example.com', accountStatus: 'active' }),
+      { fullName: 'Cualquiera', role: 'admin', accountStatus: 'active' },
+    ];
+    for (const data of attempts) {
+      await assertFails(setDoc(doc(db, 'users/otro-uid'), data));
+    }
+  });
+});
+
+describe('users: lectura por un propietario activo', () => {
+  beforeEach(async () => {
+    await seed({
+      'users/owner': activeOwner(),
+      'users/owner2': activeOwner({ email: 'owner2@example.com', nit: '800111222-3' }),
+      'users/pendingOwner': { ...ownerProfile(), createdAt: Timestamp.now() },
+      'users/client': { ...clientProfile(), createdAt: Timestamp.now() },
+      'users/client2': { ...clientProfile({ email: 'c2@example.com' }), createdAt: Timestamp.now() },
+      'users/admin': seededAdmin,
+    });
+  });
+
+  test('lee perfiles de clientes (lista de clientes de sus reservas)', async () => {
+    await assertSucceeds(getDoc(doc(as('owner'), 'users/client')));
+  });
+
+  test('no lee el perfil de otro propietario (NIT) ni el de un admin', async () => {
+    const db = as('owner');
+    await assertFails(getDoc(doc(db, 'users/owner2')));
+    await assertFails(getDoc(doc(db, 'users/pendingOwner')));
+    await assertFails(getDoc(doc(db, 'users/admin')));
+  });
+
+  test('la consulta por ids debe filtrar role == client', async () => {
+    const db = as('owner');
+    const users = collection(db, 'users');
+    await assertSucceeds(
+      getDocs(
+        query(
+          users,
+          where(documentId(), 'in', ['client', 'client2']),
+          where('role', '==', 'client'),
+        ),
+      ),
+    );
+    await assertFails(getDocs(query(users, where(documentId(), 'in', ['client', 'owner2']))));
+  });
+
+  test('un propietario pendiente no lee perfiles de clientes', async () => {
+    await assertFails(getDoc(doc(as('pendingOwner'), 'users/client')));
+  });
+});
+
+describe('isAdmin(): exige accountStatus == active', () => {
+  beforeEach(async () => {
+    const { accountStatus: _omit, ...legacyAdmin } = seededAdmin;
+    await seed({
+      'users/client': { ...clientProfile(), createdAt: Timestamp.now() },
+      'users/client/subscriptions/s1': { planName: 'Básico' },
+      'users/gone': anonymizedDoc('admin', { anonymizedAt: Timestamp.now() }),
+      'users/disabledAdmin': { ...seededAdmin, accountStatus: 'disabled' },
+      'users/legacyAdmin': { ...legacyAdmin, email: emails.legacyAdmin },
+      'users/admin': seededAdmin,
+    });
+  });
+
+  test('un admin activo sigue leyendo cualquier perfil', async () => {
+    await assertSucceeds(getDoc(doc(as('admin'), 'users/client')));
+    await assertSucceeds(getDoc(doc(as('admin'), 'users/client/subscriptions/s1')));
+  });
+
+  for (const uid of ['gone', 'disabledAdmin', 'legacyAdmin']) {
+    test(`${uid} pierde los accesos de administrador`, async () => {
+      await assertFails(getDoc(doc(as(uid), 'users/client')));
+      await assertFails(getDoc(doc(as(uid), 'users/client/subscriptions/s1')));
+    });
+  }
+});
+
+describe('eliminar su propia cuenta: admin con contraseña temporal pendiente', () => {
+  beforeEach(async () => {
+    await seed({
+      'users/admin': adminDoc(emails.admin),
+      'users/pending': adminDoc('pendiente@example.com', { mustChangePassword: true }),
+    });
+    await seedRegistry(2);
+  });
+
+  test('anonimiza SU cuenta bajando 1 el registro (misma transacción que la app)', async () => {
+    const db = as('pending');
+    await assertSucceeds(
+      runTransaction(db, async (tx) => {
+        const registry = await tx.get(doc(db, registryPath));
+        await tx.get(doc(db, 'users/pending'));
+        tx.set(doc(db, 'users/pending'), anonymizedDoc('pending'));
+        tx.update(registry.ref, { activeAdminCount: registry.data().activeAdminCount - 1 });
+      }),
+    );
+  });
+
+  test('no puede si es el último administrador activo', async () => {
+    await env.clearFirestore();
+    await seed({ 'users/pending': adminDoc('pendiente@example.com', { mustChangePassword: true }) });
+    await seedRegistry(1);
+    await assertFails(anonymizeBatch(as('pending'), 'pending', 'pending', 0));
+  });
+
+  test('no anonimiza a otro admin ni baja el registro sin anonimizarse', async () => {
+    const db = as('pending');
+    await assertFails(anonymizeBatch(db, 'pending', 'admin', 1));
+    await assertFails(updateDoc(doc(db, registryPath), { activeAdminCount: 1 }));
+  });
+
+  test('no puede borrar su documento (se anonimiza)', async () => {
+    await assertFails(deleteDoc(doc(as('pending'), 'users/pending')));
+  });
+});
+
+describe('[DA-05] reintento de eliminación con users/{uid} ya borrado', () => {
+  test('borrar el propio perfil inexistente no falla por permisos', async () => {
+    await assertSucceeds(deleteDoc(doc(as('client'), 'users/client')));
+  });
+
+  test('borrar un perfil ajeno inexistente sigue denegado', async () => {
+    await assertFails(deleteDoc(doc(as('client'), 'users/otro-uid')));
+    await assertFails(deleteDoc(doc(anonymous(), 'users/client')));
+  });
+});
+
+describe('[DA-15] subcolecciones propias al eliminar la cuenta', () => {
+  beforeEach(async () => {
+    await seed({
+      'users/client': { ...clientProfile(), createdAt: Timestamp.now() },
+      'users/client/notificationReads/n1': { readAt: Timestamp.now() },
+      'users/client/devices/d1': { token: 't', updatedAt: Timestamp.now(), platform: 'android' },
+      'users/client/subscriptions/s1': { planName: 'Básico' },
+      'users/client/subscriptions/s1/payments/p1': { amount: 1000 },
+      'users/client/subscriptions/s1/subscriptionPayments/p2': { amount: 1000 },
+    });
+  });
+
+  test('el usuario lista y borra sus notificationReads, devices y subscriptions', async () => {
+    const db = as('client');
+    for (const name of ['notificationReads', 'devices', 'subscriptions']) {
+      const page = await assertSucceeds(getDocs(collection(db, `users/client/${name}`)));
+      const batch = writeBatch(db);
+      page.docs.forEach((d) => batch.delete(d.ref));
+      await assertSucceeds(batch.commit());
+    }
+    await assertSucceeds(deleteDoc(doc(db, 'users/client')));
+  });
+
+  test('los pagos de suscripción se conservan (obligación contable)', async () => {
+    const db = as('client');
+    await assertFails(deleteDoc(doc(db, 'users/client/subscriptions/s1/payments/p1')));
+    await assertFails(
+      deleteDoc(doc(db, 'users/client/subscriptions/s1/subscriptionPayments/p2')),
+    );
+  });
+
+  test('otro usuario no lee ni borra esas subcolecciones', async () => {
+    const db = as('other');
+    for (const path of [
+      'users/client/notificationReads/n1',
+      'users/client/devices/d1',
+      'users/client/subscriptions/s1',
+    ]) {
+      await assertFails(getDoc(doc(db, path)));
+      await assertFails(deleteDoc(doc(db, path)));
+    }
+  });
+});
+
+describe('documento de identidad (decisión 2026-11-17)', () => {
+  test('cliente y propietario lo exigen en el registro', async () => {
+    const { documentType: _t, documentNumber: _n, ...clientWithout } = clientProfile();
+    await assertFails(setDoc(doc(as('client'), 'users/client'), clientWithout));
+    const { documentNumber: _n2, ...ownerWithout } = ownerProfile();
+    await assertFails(setDoc(doc(as('owner'), 'users/owner'), ownerWithout));
+  });
+
+  test('tipo dentro de la lista y número de 4 a 20 caracteres', async () => {
+    const db = as('client');
+    const invalid = [
+      { documentType: 'dni' },
+      { documentType: 1 },
+      { documentNumber: '123' },
+      { documentNumber: '1'.repeat(21) },
+      { documentNumber: 12345678 },
+    ];
+    for (const overrides of invalid) {
+      await assertFails(setDoc(doc(db, 'users/client'), clientProfile(overrides)));
+    }
+    await assertSucceeds(
+      setDoc(
+        doc(db, 'users/client'),
+        clientProfile({ documentType: 'passport', documentNumber: 'AB12' }),
+      ),
+    );
+  });
+
+  test('un administrador nunca tiene documento', async () => {
+    await seed({ 'users/admin': adminDoc(emails.admin) });
+    await seedRegistry(1);
+    await assertFails(
+      createAdminBatch(
+        as('admin'),
+        'admin',
+        'nuevo',
+        newAdminProfile('admin', {
+          documentType: 'citizenshipCard',
+          documentNumber: '1020304050',
+        }),
+        2,
+      ),
+    );
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/admin'), {
+        documentType: 'citizenshipCard',
+        documentNumber: '1020304050',
+      }),
+    );
+  });
+
+  test('cliente o propietario existente registra o corrige su documento', async () => {
+    const { documentType: _t, documentNumber: _n, ...legacy } = clientProfile();
+    await seed({ 'users/client': { ...legacy, createdAt: Timestamp.now() } });
+    const db = as('client');
+    await assertFails(
+      updateDoc(doc(db, 'users/client'), { documentType: 'dni', documentNumber: '1234' }),
+    );
+    await assertSucceeds(
+      updateDoc(doc(db, 'users/client'), {
+        documentType: 'foreignerCard',
+        documentNumber: 'E12345',
+      }),
+    );
+    await assertFails(updateDoc(doc(db, 'users/client'), { documentNumber: '12' }));
   });
 });

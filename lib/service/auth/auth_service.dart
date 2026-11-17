@@ -77,8 +77,8 @@ final class AuthFailure implements Exception {
 }
 
 /// The authenticated session data the app keeps after a successful
-/// [AuthService.login], [AuthService.loginWithGoogle] or
-/// [AuthService.restoreSession].
+/// [AuthService.login] or [AuthService.restoreSession]. Google y GitHub viven
+/// en `FirebaseSocialAuthService`.
 final class AuthSession {
   const AuthSession({
     required this.userId,
@@ -117,8 +117,6 @@ abstract interface class AuthService {
   Future<AuthSession?> restoreSession();
 
   Future<AuthSession> login({required String email, required String password});
-
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false});
 
   Future<void> register({
     required String fullName,

@@ -115,3 +115,54 @@ También cambia lo siguiente:
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
 | `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
 | Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |
+
+## 6. Cambios en `firestore.rules` (2026-11-17)
+
+### 6.1 Documento de identidad en `users/{uid}` (para la Etapa 2)
+
+Decisión 2026-11-17: Cliente y Propietario **sí** registran documento de
+identidad; el Administrador **no**. Se usan los mismos nombres y valores que
+ya exigen las reglas de propietarios (`hasValidOwnerManagementFields`):
+
+| Campo | Tipo | Regla |
+| --- | --- | --- |
+| `documentType` | `string` | Uno de `citizenshipCard`, `foreignerCard`, `taxId`, `passport`, `identityCard` |
+| `documentNumber` | `string` | De 4 a 20 caracteres |
+
+- **Registro público** (`isPublicRegistration`): ambos campos son
+  obligatorios para `client` y `owner`. **Hasta que la app los envíe (Etapa
+  2), el registro público falla con estas reglas: no desplegarlas antes.**
+- **Actualización**: el propio Cliente o Propietario puede agregarlos o
+  corregirlos (validados). Un perfil antiguo sin documento se puede seguir
+  editando, aprobando o deshabilitando: no se fuerza a completarlo en cada
+  escritura para no bloquear cuentas existentes.
+- **Administrador**: ni `isAdminCreation`, ni la edición de contacto, ni la
+  anonimización, ni la autoedición aceptan esos campos.
+- **Choque con la rama de propietarios**: `hasValidOwnerManagementFields`
+  exige `nit == documentNumber` y `documentNumber` de 5 a 20. Un propietario
+  del registro público tiene NIT con DV (`900123456-8`) y un documento
+  distinto, así que el panel del administrador (`isAdminOwnerEdit`) no podrá
+  editarlo hasta que esa rama separe NIT y documento.
+
+### 6.2 Lectura de `users` por un propietario activo
+
+Antes leía **todos** los perfiles (NIT y datos de otros propietarios y
+administradores). Ahora solo lee perfiles con `role == 'client'` (lista de
+clientes de sus reservas, `ClientController.loadAllClients`). Toda consulta de
+un propietario sobre `users` debe filtrar `where('role', isEqualTo: 'client')`
+o Firestore la rechaza.
+
+Pendiente: Firestore no filtra por campo, así que un propietario aún ve el
+documento, el celular y la fecha de nacimiento de **cualquier** cliente. Para
+cerrarlo hace falta una proyección (p. ej. nombre y celular del huésped
+copiados en `reservations`) y quitar esa lectura. Coordinar con reservas.
+
+### 6.3 Otros cambios
+
+| Cambio | A quién afecta |
+| --- | --- |
+| `isAdmin()` exige `accountStatus == 'active'`: un admin deshabilitado, anonimizado o sin estado pierde lecturas de reservas, pagos, suscripciones, reseñas, etc. | Ramas que usan `isAdmin()` (pruebas en `test_rules/` en verde) |
+| Un propietario activo ya no crea `users/{otroUid}` | Nadie lo usaba en `lib/` |
+| `users/{uid}/subscriptions`: el propio usuario puede borrarlas (eliminar cuenta, DA-15). `payments` y `subscriptionPayments` siguen sin `delete` | Rama de suscripciones |
+| `users/{uid}/notificationReads` y `devices`: lectura y borrado separados de la escritura (antes la lectura evaluaba `request.resource` y siempre se negaba) | Rama de notificaciones |
+| Un admin con contraseña temporal puede leer `system/adminRegistry` y bajarlo 1 solo al anonimizar su propia cuenta | Gestión de administradores |
