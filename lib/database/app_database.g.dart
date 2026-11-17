@@ -86,8 +86,6 @@ class _$AppDatabase extends AppDatabase {
 
   DocumentTypeDao? _documentTypeDaoInstance;
 
-  ClientDao? _clientDaoInstance;
-
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
 
   MotelDao? _motelDaoInstance;
@@ -104,7 +102,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 21,
+      version: 22,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -131,8 +129,6 @@ class _$AppDatabase extends AppDatabase {
             'CREATE TABLE IF NOT EXISTS `payment_method_catalog` (`id` INTEGER NOT NULL, `name` TEXT NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `payments` (`id` TEXT NOT NULL, `bookingId` TEXT NOT NULL, `bookingReference` TEXT NOT NULL, `clientId` TEXT NOT NULL, `client` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motel` TEXT NOT NULL, `roomId` TEXT NOT NULL, `room` TEXT NOT NULL, `reservationDate` INTEGER NOT NULL, `amount` INTEGER NOT NULL, `status` TEXT NOT NULL, `method` TEXT, `paymentMethodId` INTEGER, `paidAt` INTEGER, `receiptNumber` TEXT, FOREIGN KEY (`paymentMethodId`) REFERENCES `payment_method_catalog` (`id`) ON UPDATE NO ACTION ON DELETE NO ACTION, PRIMARY KEY (`id`))');
-        await database.execute(
-            'CREATE TABLE IF NOT EXISTS `clients` (`id` INTEGER PRIMARY KEY AUTOINCREMENT, `name` TEXT NOT NULL, `phone` TEXT NOT NULL, `email` TEXT NOT NULL, `country_code` TEXT NOT NULL)');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `phone_country_codes` (`id` INTEGER NOT NULL, `country_code` TEXT NOT NULL, `country_name` TEXT NOT NULL, `calling_code` TEXT NOT NULL, `active` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -216,11 +212,6 @@ class _$AppDatabase extends AppDatabase {
   DocumentTypeDao get documentTypeDao {
     return _documentTypeDaoInstance ??=
         _$DocumentTypeDao(database, changeListener);
-  }
-
-  @override
-  ClientDao get clientDao {
-    return _clientDaoInstance ??= _$ClientDao(database, changeListener);
   }
 
   @override
@@ -1293,109 +1284,6 @@ class _$DocumentTypeDao extends DocumentTypeDao {
   Future<void> insertDocumentTypes(List<DocumentTypeEntry> types) async {
     await _documentTypeEntryInsertionAdapter.insertList(
         types, OnConflictStrategy.replace);
-  }
-}
-
-class _$ClientDao extends ClientDao {
-  _$ClientDao(
-    this.database,
-    this.changeListener,
-  )   : _queryAdapter = QueryAdapter(database),
-        _clientEntryInsertionAdapter = InsertionAdapter(
-            database,
-            'clients',
-            (ClientEntry item) => <String, Object?>{
-                  'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode
-                }),
-        _clientEntryUpdateAdapter = UpdateAdapter(
-            database,
-            'clients',
-            ['id'],
-            (ClientEntry item) => <String, Object?>{
-                  'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode
-                }),
-        _clientEntryDeletionAdapter = DeletionAdapter(
-            database,
-            'clients',
-            ['id'],
-            (ClientEntry item) => <String, Object?>{
-                  'id': item.id,
-                  'name': item.name,
-                  'phone': item.phone,
-                  'email': item.email,
-                  'country_code': item.countryCode
-                });
-
-  final sqflite.DatabaseExecutor database;
-
-  final StreamController<String> changeListener;
-
-  final QueryAdapter _queryAdapter;
-
-  final InsertionAdapter<ClientEntry> _clientEntryInsertionAdapter;
-
-  final UpdateAdapter<ClientEntry> _clientEntryUpdateAdapter;
-
-  final DeletionAdapter<ClientEntry> _clientEntryDeletionAdapter;
-
-  @override
-  Future<ClientEntry?> findById(int id) async {
-    return _queryAdapter.query('SELECT * FROM clients WHERE id = ?1 LIMIT 1',
-        mapper: (Map<String, Object?> row) => ClientEntry(
-            id: row['id'] as int?,
-            name: row['name'] as String,
-            phone: row['phone'] as String,
-            email: row['email'] as String,
-            countryCode: row['country_code'] as String),
-        arguments: [id]);
-  }
-
-  @override
-  Future<List<ClientEntry>> findAll() async {
-    return _queryAdapter.queryList('SELECT * FROM clients',
-        mapper: (Map<String, Object?> row) => ClientEntry(
-            id: row['id'] as int?,
-            name: row['name'] as String,
-            phone: row['phone'] as String,
-            email: row['email'] as String,
-            countryCode: row['country_code'] as String));
-  }
-
-  @override
-  Future<void> deleteById(int id) async {
-    await _queryAdapter
-        .queryNoReturn('DELETE FROM clients WHERE id = ?1', arguments: [id]);
-  }
-
-  @override
-  Future<int> insertClient(ClientEntry client) {
-    return _clientEntryInsertionAdapter.insertAndReturnId(
-        client, OnConflictStrategy.abort);
-  }
-
-  @override
-  Future<void> insertClients(List<ClientEntry> clients) async {
-    await _clientEntryInsertionAdapter.insertList(
-        clients, OnConflictStrategy.replace);
-  }
-
-  @override
-  Future<int> updateClient(ClientEntry client) {
-    return _clientEntryUpdateAdapter.updateAndReturnChangedRows(
-        client, OnConflictStrategy.abort);
-  }
-
-  @override
-  Future<int> deleteClient(ClientEntry client) {
-    return _clientEntryDeletionAdapter.deleteAndReturnChangedRows(client);
   }
 }
 

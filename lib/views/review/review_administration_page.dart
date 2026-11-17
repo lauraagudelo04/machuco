@@ -6,6 +6,7 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/widgets/review/admin_review_card.dart';
 import 'package:machuco/widgets/review/review_stat_card.dart';
+import 'package:machuco/widgets/review/review_action_error.dart';
 import 'package:machuco/widgets/review/review_reply_sheet.dart';
 
 /// Panel de administración de reseñas. No contiene datos quemados ni
@@ -57,7 +58,8 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
         ],
       ),
     );
-    if (confirmed == true) _controller.delete(review.id);
+    if (confirmed != true || !mounted) return;
+    await showReviewActionError(context, _controller.delete(review.id));
   }
 
   void _openReplySheet(Review review) {
@@ -66,9 +68,12 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
       isScrollControlled: true,
       useSafeArea: true,
       showDragHandle: true,
-      builder: (context) => ReviewReplySheet(
+      builder: (_) => ReviewReplySheet(
         review: review,
-        onSubmit: (message) => _controller.reply(review.id, message),
+        onSubmit: (message) => showReviewActionError(
+          context,
+          _controller.reply(review.id, message),
+        ),
       ),
     );
   }
@@ -145,9 +150,14 @@ class _ReviewAdministrationPageState extends State<ReviewAdministrationPage> {
               padding: const EdgeInsets.only(bottom: AppSpacing.s3),
               child: AdminReviewCard(
                 review: review,
-                onToggleVisibility: () =>
-                    _controller.toggleVisibility(review.id),
-                onDismissReport: () => _controller.dismissReport(review.id),
+                onToggleVisibility: () => showReviewActionError(
+                  context,
+                  _controller.toggleVisibility(review.id),
+                ),
+                onDismissReport: () => showReviewActionError(
+                  context,
+                  _controller.dismissReport(review.id),
+                ),
                 onReply: () => _openReplySheet(review),
                 onDelete: () => _confirmDelete(review),
               ),

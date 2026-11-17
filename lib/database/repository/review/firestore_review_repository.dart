@@ -3,16 +3,6 @@ import 'package:machuco/database/repository/review/review_repository.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
-/// Error al leer o escribir reseñas en Cloud Firestore.
-class ReviewRepositoryException implements Exception {
-  const ReviewRepositoryException(this.message);
-
-  final String message;
-
-  @override
-  String toString() => message;
-}
-
 /// [ReviewRepository] respaldado por la colección `reviews` de Cloud Firestore.
 ///
 /// Cada reseña es un documento cuyo id es [Review.id]. La autorización (que un
@@ -62,6 +52,43 @@ class FirestoreReviewRepository implements ReviewRepository {
 
   @override
   Future<void> delete(String id) => _write(() => _collection.doc(id).delete());
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) =>
+      _updateFields(reviewId, {'ownerReply': reply});
+
+  @override
+  Future<void> reportAsOwner(String reviewId, String reason) => _updateFields(
+    reviewId,
+    {'status': ReviewModerationStatus.reported.name, 'reportReason': reason},
+  );
+
+  @override
+  Future<void> setHiddenAsAdmin(String reviewId, {required bool hidden}) =>
+      _updateFields(reviewId, {
+        'status': hidden
+            ? ReviewModerationStatus.hidden.name
+            : ReviewModerationStatus.visible.name,
+      });
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) =>
+      _updateFields(reviewId, {
+        'status': ReviewModerationStatus.visible.name,
+        'reportReason': FieldValue.delete(),
+      });
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) =>
+      _updateFields(reviewId, {'adminReply': reply});
+
+  /// Actualiza solo [fields]; no hace nada si la reseña no existe.
+  Future<void> _updateFields(String reviewId, Map<String, Object> fields) =>
+      _write(() async {
+        final doc = _collection.doc(reviewId);
+        if (!(await doc.get()).exists) return;
+        await doc.update(fields);
+      });
 
   Future<void> _write(Future<void> Function() operation) async {
     try {

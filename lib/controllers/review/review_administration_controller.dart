@@ -1,8 +1,10 @@
 import 'package:flutter/foundation.dart';
+import 'package:machuco/controllers/review/review_actions.dart';
 import 'package:machuco/models/review/review.dart';
 // Prefijo aparte: el getter [averageRating] tapa el nombre de la función de
 // dominio del mismo nombre dentro de la clase.
 import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 
 /// Filtros disponibles en el panel de administración de reseñas.
 enum ReviewFilter { all, visible, hidden, reported }
@@ -21,12 +23,15 @@ extension ReviewFilterData on ReviewFilter {
 /// Opera directamente sobre el modelo [Review]; ya no usa wrappers
 /// [AdminReviewEntry] porque todos los campos de moderación viven ahora
 /// en el modelo mismo.
-class ReviewAdministrationController extends ChangeNotifier {
+class ReviewAdministrationController extends ChangeNotifier with ReviewActions {
   ReviewAdministrationController({ReviewRepository? repository})
-    : _repository = repository ?? InMemoryReviewRepository.shared;
+    : _repository = repository ?? SqlConnectReviewRepository();
 
   final ReviewRepository _repository;
   final List<Review> _reviews = [];
+
+  @override
+  List<Review> get shownReviews => _reviews;
   ReviewFilter _filter = ReviewFilter.all;
   String _query = '';
   bool _isLoading = false;
@@ -46,6 +51,8 @@ class ReviewAdministrationController extends ChangeNotifier {
       _reviews
         ..clear()
         ..addAll(reviews);
+    } on ReviewRepositoryException catch (error) {
+      _errorMessage = error.message;
     } catch (_) {
       _errorMessage = 'No fue posible cargar las reseñas.';
     } finally {
@@ -93,48 +100,43 @@ class ReviewAdministrationController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> toggleVisibility(String reviewId) => _updateWhere(
-    reviewId,
-    (review) => review.copyWith(
-      status: review.status == ReviewModerationStatus.hidden
-          ? ReviewModerationStatus.visible
-          : ReviewModerationStatus.hidden,
-    ),
-  );
+  Future<String?> toggleVisibility(String reviewId) async {
+    final review = findShownReview(reviewId);
+    if (review == null) return null;
+    final hide = review.status != ReviewModerationStatus.hidden;
+    return saveReview(
+      reviewId,
+      save: () => _repository.setHiddenAsAdmin(reviewId, hidden: hide),
+      change: (review) => review.copyWith(
+        status: hide
+            ? ReviewModerationStatus.hidden
+            : ReviewModerationStatus.visible,
+      ),
+    );
+  }
 
-  Future<void> dismissReport(String reviewId) => _updateWhere(
+  Future<String?> dismissReport(String reviewId) => saveReview(
     reviewId,
-    (review) => review.copyWith(
+    save: () => _repository.dismissReportAsAdmin(reviewId),
+    change: (review) => review.copyWith(
       status: ReviewModerationStatus.visible,
       clearReportReason: true,
     ),
   );
 
-  Future<void> reply(String reviewId, String message) async {
-    final trimmed = message.trim();
-    if (trimmed.isEmpty) return;
-    await _updateWhere(
+  Future<String?> reply(String reviewId, String message) async {
+    final text = message.trim();
+    if (text.isEmpty) return null;
+    return saveReview(
       reviewId,
-      (review) => review.copyWith(adminReply: trimmed),
+      save: () => _repository.replyAsAdmin(reviewId, text),
+      change: (review) => review.copyWith(adminReply: text),
     );
   }
 
-  Future<void> delete(String reviewId) async {
-    await _repository.delete(reviewId);
-    _reviews.removeWhere((r) => r.id == reviewId);
-    notifyListeners();
-  }
-
-  /// Aplica [change] a la reseña [reviewId]; ignora ids desconocidos.
-  Future<void> _updateWhere(
-    String reviewId,
-    Review Function(Review review) change,
-  ) async {
-    final index = _reviews.indexWhere((r) => r.id == reviewId);
-    if (index == -1) return;
-    final updated = change(_reviews[index]);
-    await _repository.update(updated);
-    _reviews[index] = updated;
-    notifyListeners();
-  }
+  Future<String?> delete(String reviewId) => saveReview(
+    reviewId,
+    save: () => _repository.delete(reviewId),
+    change: (_) => null,
+  );
 }

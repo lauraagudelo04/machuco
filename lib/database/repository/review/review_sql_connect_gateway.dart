@@ -35,6 +35,24 @@ abstract interface class ReviewSqlConnectGateway {
   /// asignó la base. El autor y el estado los fija el backend: se ignoran
   /// `review.id`, `review.authorId` y `review.status`.
   Future<String> createMine(Review review);
+
+  /// Guarda la respuesta del propietario. El servidor la rechaza si la
+  /// reseña no es de un motel del usuario con sesión.
+  Future<void> replyAsOwner(String id, String reply);
+
+  /// Reporta la reseña al administrador. El servidor la rechaza si no es de
+  /// un motel del usuario o si no está visible.
+  Future<void> reportAsOwner(String id, String reason);
+
+  // Moderación: el servidor exige el custom claim `role: 'admin'`.
+
+  Future<void> setHiddenAsAdmin(String id, {required bool hidden});
+
+  Future<void> dismissReportAsAdmin(String id);
+
+  Future<void> replyAsAdmin(String id, String reply);
+
+  Future<void> delete(String id);
 }
 
 /// Implementación con el SDK generado del conector `review`.
@@ -97,5 +115,40 @@ class GeneratedReviewSqlConnectGateway implements ReviewSqlConnectGateway {
         .roomId(review.roomId)
         .execute();
     return result.data.review_insert.id;
+  }
+
+  @override
+  Future<void> replyAsOwner(String id, String reply) async {
+    await _connector.replyToReviewAsOwner(id: id, reply: reply).execute();
+  }
+
+  @override
+  Future<void> reportAsOwner(String id, String reason) async {
+    await _connector.reportReviewAsOwner(id: id, reason: reason).execute();
+  }
+
+  @override
+  Future<void> setHiddenAsAdmin(String id, {required bool hidden}) async {
+    final status = hidden
+        ? ReviewModerationStatus.hidden
+        : ReviewModerationStatus.visible;
+    await _connector
+        .adminSetReviewStatus(id: id, status: status.name)
+        .execute();
+  }
+
+  @override
+  Future<void> dismissReportAsAdmin(String id) async {
+    await _connector.adminDismissReviewReport(id: id).execute();
+  }
+
+  @override
+  Future<void> replyAsAdmin(String id, String reply) async {
+    await _connector.adminReplyToReview(id: id, reply: reply).execute();
+  }
+
+  @override
+  Future<void> delete(String id) async {
+    await _connector.adminDeleteReview(id: id).execute();
   }
 }
