@@ -116,6 +116,11 @@ class _ProductFormViewState extends State<ProductFormView> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          tooltip: 'Volver',
+          onPressed: () => Navigator.of(context).maybePop(),
+        ),
         title: Text(widget.isEditing ? 'Editar producto' : 'Nuevo producto'),
       ),
       body: SafeArea(
@@ -210,6 +215,12 @@ class _ProductFormViewState extends State<ProductFormView> {
                             : 'Crear producto',
                         icon: widget.isEditing ? Icons.save_outlined : Icons.add,
                         onPressed: _saveProduct,
+                      ),
+                      const SizedBox(height: AppSpacing.s3),
+                      AppButton(
+                        label: 'Cancelar',
+                        variant: AppButtonVariant.secondary,
+                        onPressed: () => Navigator.of(context).maybePop(),
                       ),
                     ],
                   ),

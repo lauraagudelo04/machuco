@@ -81,6 +81,11 @@ class _CreateBookingPageState extends State<CreateBookingPage> {
       motelId: widget.room.motelId,
     );
     _productsController = ProductController();
+    unawaited(
+      _productsController
+          .loadProducts(motelId: widget.room.motelId)
+          .then((_) => _refresh()),
+    );
     _requestId = 'booking-request-${DateTime.now().microsecondsSinceEpoch}';
     _roomTypeName = buildRoomTypeMockData()
         .firstWhere(

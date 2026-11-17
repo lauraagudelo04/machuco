@@ -1,16 +1,35 @@
 import 'dart:convert';
 
 import '../../models/product/product.dart';
+import '../../repositories/product/product_cloud_repository.dart';
+import '../../service/firebase/current_user.dart';
 import '../../service/storage/local_preferences_service.dart';
 import '../../service/storage/shared_preferences_local_service.dart';
 
 class ProductController {
-  ProductController({LocalPreferencesService? preferences})
-    : _preferences =
-          preferences ?? SharedPreferencesLocalService(namespace: 'products'),
-      _products = List<Product>.of(_sharedProducts ?? _seedProducts);
+  ProductController({
+    LocalPreferencesService? preferences,
+    ProductCloudRepository? cloud,
+    String? Function()? currentUserId,
+  }) : _preferences =
+           preferences ?? SharedPreferencesLocalService(namespace: 'products'),
+       _cloud = cloud ?? _defaultCloud(),
+       _currentUserId = currentUserId ?? (() => CurrentUser.uidOrNull),
+       _products = List<Product>.of(_sharedProducts ?? _seedProducts);
 
   final LocalPreferencesService _preferences;
+  final ProductCloudRepository? _cloud;
+  final String? Function() _currentUserId;
+
+  /// Firestore es la fuente de verdad. Sin Firebase inicializado (pruebas,
+  /// modo demo) el controller trabaja solo con el almacenamiento local.
+  static ProductCloudRepository? _defaultCloud() {
+    try {
+      return FirestoreProductCloudRepository();
+    } catch (_) {
+      return null;
+    }
+  }
   final List<Product> _products;
 
   static const String _productsKey = 'catalog';
@@ -120,7 +139,35 @@ class ProductController {
     ),
   ];
 
-  Future<void> loadProducts() async {
+  /// Carga el catálogo local y, si se indica [motelId], lo sincroniza con
+  /// Firestore. Si la nube no responde se conserva la copia local y el motivo
+  /// queda en [lastSyncError]; no se lanza para que la pantalla siga usable.
+  Future<void> loadProducts({String? motelId}) async {
+    await _loadLocal();
+    if (motelId != null) {
+      await _syncMotelFromCloud(motelId);
+    }
+  }
+
+  /// Último error de sincronización con Firestore, o `null` si fue exitosa.
+  String? lastSyncError;
+
+  Future<void> _syncMotelFromCloud(String motelId) async {
+    final cloud = _cloud;
+    if (cloud == null || _currentUserId() == null) return;
+    try {
+      final remote = await cloud.listByMotel(motelId);
+      lastSyncError = null;
+      _products
+        ..removeWhere((product) => product.motelId == motelId)
+        ..addAll(remote);
+      await _persist();
+    } on ProductCloudException catch (error) {
+      lastSyncError = error.message;
+    }
+  }
+
+  Future<void> _loadLocal() async {
     if (_sharedProducts != null) {
       _products
         ..clear()
@@ -159,7 +206,14 @@ class ProductController {
     }
   }
 
+  /// Escribe en Firestore antes que en local: si falla (permisos, red) la
+  /// excepción llega a la pantalla y la copia local no queda desalineada.
+  bool get _writesToCloud => _cloud != null && _currentUserId() != null;
+
   Future<void> createProduct(Product product) async {
+    if (_writesToCloud) {
+      await _cloud!.create(ownerId: _currentUserId()!, product: product);
+    }
     _products.add(product);
     await _persist();
   }
@@ -169,11 +223,20 @@ class ProductController {
     if (index == -1) {
       throw StateError('No existe un producto con id: ${product.id}');
     }
+    if (_writesToCloud) {
+      await _cloud!.update(product);
+    }
     _products[index] = product;
     await _persist();
   }
 
   Future<void> deleteProduct(String productId) async {
+    if (!_products.any((product) => product.id == productId)) {
+      throw StateError('No existe un producto con id: $productId');
+    }
+    if (_writesToCloud) {
+      await _cloud!.delete(productId);
+    }
     final before = _products.length;
     _products.removeWhere((product) => product.id == productId);
     if (_products.length == before) {

@@ -947,6 +947,54 @@ service cloud.firestore {
         && (isAdmin() || resource.data.ownerId == request.auth.uid);
     }
 
+    // Productos de un motel. Cualquier usuario con sesion los lee (el cliente
+    // los elige al reservar). Solo el propietario activo del motel (o el
+    // administrador) los escribe, y ownerId debe ser el dueno real del motel
+    // segun motels/{motelId}. No se pueden mover de motel ni de dueno.
+    function hasValidProductFields(data) {
+      return data.keys().hasAll([
+          'ownerId', 'motelId', 'name', 'description', 'price', 'stock',
+          'isAvailable', 'updatedAt'
+        ])
+        && data.keys().hasOnly([
+          'ownerId', 'motelId', 'name', 'description', 'price', 'stock',
+          'isAvailable', 'imageUrl', 'updatedAt'
+        ])
+        && data.ownerId is string && data.ownerId.size() > 0
+        && data.motelId is string && data.motelId.size() > 0
+        && data.name is string
+        && data.name.size() > 0 && data.name.size() <= 100
+        && data.description is string && data.description.size() <= 500
+        && data.price is number && data.price >= 0
+        && data.stock is int && data.stock >= 0
+        && data.isAvailable is bool
+        && (!('imageUrl' in data)
+            || (data.imageUrl is string && data.imageUrl.size() <= 2048))
+        && data.updatedAt == request.time;
+    }
+
+    function productMotelOwner(motelId) {
+      return get(/databases/$(database)/documents/motels/$(motelId)).data.ownerId;
+    }
+
+    match /products/{productId} {
+      allow read: if isSignedIn();
+
+      allow create: if isActiveOwnerOrAdmin()
+        && hasValidProductFields(request.resource.data)
+        && request.resource.data.ownerId == productMotelOwner(request.resource.data.motelId)
+        && (isAdmin() || request.resource.data.ownerId == request.auth.uid);
+
+      allow update: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid)
+        && request.resource.data.ownerId == resource.data.ownerId
+        && request.resource.data.motelId == resource.data.motelId
+        && hasValidProductFields(request.resource.data);
+
+      allow delete: if isActiveOwnerOrAdmin()
+        && (isAdmin() || resource.data.ownerId == request.auth.uid);
+    }
+
     // Registro anterior de autorización, conservado por compatibilidad.
     match /room_motels/{motelId} {
       allow read: if isSignedIn();
