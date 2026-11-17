@@ -92,3 +92,7 @@ Plan: `contexts/pqrs/plan_implementacion.md`. Una entrada por etapa, máximo 15 
 - `pqrs.rules.test.mjs` agregado a `npm test` de `test_rules`; suite completa en emulador: 193/193. Comentario de `motelName` en `pqrs.dart` actualizado.
 - Reglas e índices DESPLEGADOS a `machuco` el 2026-11-17 (solo líneas añadidas respecto a develop). `flutter test`: 1278 en verde.
 - Pendiente: pruebas en dispositivo (ver Etapa 6) y revisar versión de base 23 al abrir el PR.
+
+## Etapa 8 - Revisión final (2026-11-17)
+- Sin hallazgos críticos; no se corrigió código. `flutter analyze`: 104 info, 0 en PQRS. Pruebas PQRS (controllers, views, repositories, database): 150 en verde.
+- Importante: no incluir en el commit los registrants regenerados (linux, windows, macos). Menor: `firestore.rules` no ata `photoCount` de la traza al número real de fotos; el tope por foto (900 KB) y tipos coinciden con el SQL.
