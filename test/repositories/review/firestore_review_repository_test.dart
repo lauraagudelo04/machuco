@@ -170,14 +170,14 @@ void main() {
         authorProvider: _FakeAuthorProvider(),
       );
 
-      expect(await controller.submitReview('1', _draft), isTrue);
+      expect(await controller.submitReview('1', _draft), isNull);
 
       final review = (await repository.getAll()).single;
       expect(review.id, matches(RegExp(r'^review-client-uid-7-[0-9]+$')));
     });
 
     test(
-      'si el repositorio falla al guardar devuelve false y no notifica',
+      'si el repositorio falla al guardar devuelve su motivo y no notifica',
       () async {
         final controller = ReviewsController(
           repository: _FlakyReviewRepository()..failing = true,
@@ -186,7 +186,7 @@ void main() {
         var notified = false;
         controller.addListener(() => notified = true);
 
-        expect(await controller.submitReview('1', _draft), isFalse);
+        expect(await controller.submitReview('1', _draft), 'permiso denegado');
         expect(controller.totalCount, 0);
         expect(notified, isFalse);
       },

@@ -8,11 +8,13 @@ class OwnerReviewCard extends StatelessWidget {
     required this.review,
     required this.motelName,
     required this.onReply,
+    required this.onReport,
   });
 
   final Review review;
   final String motelName;
   final VoidCallback onReply;
+  final VoidCallback onReport;
 
   @override
   Widget build(BuildContext context) {
@@ -75,16 +77,35 @@ class OwnerReviewCard extends StatelessWidget {
               text: review.ownerReply!,
             ),
           ],
-          const SizedBox(height: AppSpacing.s3),
-          Align(
-            alignment: Alignment.centerRight,
-            child: TextButton.icon(
-              onPressed: onReply,
-              icon: const Icon(Icons.reply_outlined, size: 18),
-              label: Text(
-                review.ownerReply == null ? 'Responder' : 'Editar respuesta',
-              ),
+          if (review.status == ReviewModerationStatus.reported) ...[
+            const SizedBox(height: AppSpacing.s3),
+            _InlineNote(
+              icon: Icons.flag_outlined,
+              color: AppColors.maintenance,
+              label: 'Reportada al administrador',
+              text: review.reportReason ?? '',
             ),
+          ],
+          const SizedBox(height: AppSpacing.s3),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.end,
+            children: [
+              // Como en el servidor: una oculta ya fue moderada y una
+              // reportada ya está en revisión.
+              if (review.status == ReviewModerationStatus.visible)
+                TextButton.icon(
+                  onPressed: onReport,
+                  icon: const Icon(Icons.flag_outlined, size: 18),
+                  label: const Text('Reportar'),
+                ),
+              TextButton.icon(
+                onPressed: onReply,
+                icon: const Icon(Icons.reply_outlined, size: 18),
+                label: Text(
+                  review.ownerReply == null ? 'Responder' : 'Editar respuesta',
+                ),
+              ),
+            ],
           ),
         ],
       ),

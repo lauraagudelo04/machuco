@@ -5,6 +5,18 @@ import 'dart:convert';
 
 part 'create_my_review.dart';
 
+part 'reply_to_review_as_owner.dart';
+
+part 'report_review_as_owner.dart';
+
+part 'admin_set_review_status.dart';
+
+part 'admin_dismiss_review_report.dart';
+
+part 'admin_reply_to_review.dart';
+
+part 'admin_delete_review.dart';
+
 part 'list_reviews.dart';
 
 part 'list_reviews_by_motel.dart';
@@ -20,6 +32,36 @@ class ReviewConnector {
   
   CreateMyReviewVariablesBuilder createMyReview ({required String authorName, required String title, required String body, required int rating, required String motelId, required int typeId, }) {
     return CreateMyReviewVariablesBuilder(dataConnect, authorName: authorName,title: title,body: body,rating: rating,motelId: motelId,typeId: typeId,);
+  }
+  
+  
+  ReplyToReviewAsOwnerVariablesBuilder replyToReviewAsOwner ({required String id, required String reply, }) {
+    return ReplyToReviewAsOwnerVariablesBuilder(dataConnect, id: id,reply: reply,);
+  }
+  
+  
+  ReportReviewAsOwnerVariablesBuilder reportReviewAsOwner ({required String id, required String reason, }) {
+    return ReportReviewAsOwnerVariablesBuilder(dataConnect, id: id,reason: reason,);
+  }
+  
+  
+  AdminSetReviewStatusVariablesBuilder adminSetReviewStatus ({required String id, required String status, }) {
+    return AdminSetReviewStatusVariablesBuilder(dataConnect, id: id,status: status,);
+  }
+  
+  
+  AdminDismissReviewReportVariablesBuilder adminDismissReviewReport ({required String id, }) {
+    return AdminDismissReviewReportVariablesBuilder(dataConnect, id: id,);
+  }
+  
+  
+  AdminReplyToReviewVariablesBuilder adminReplyToReview ({required String id, required String reply, }) {
+    return AdminReplyToReviewVariablesBuilder(dataConnect, id: id,reply: reply,);
+  }
+  
+  
+  AdminDeleteReviewVariablesBuilder adminDeleteReview ({required String id, }) {
+    return AdminDeleteReviewVariablesBuilder(dataConnect, id: id,);
   }
   
   
