@@ -11,6 +11,7 @@ import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 
 import 'package:machuco/controllers/owner_management/owner_controller.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/repositories/owner/owner_cloud_repository.dart';
@@ -45,11 +46,13 @@ class OwnerFormPage extends StatefulWidget {
 class _OwnerFormPageState extends State<OwnerFormPage> {
   late final TextEditingController _fullNameController;
   late final TextEditingController _documentNumberController;
+  late final TextEditingController _nitController;
   late final TextEditingController _emailController;
   late final TextEditingController _phoneController;
   late final TextEditingController _addressController;
 
   late DocumentType _documentType;
+  late PersonType _personType;
 
   // Estado inicial que elige el administrador al crear la cuenta. En edición
   // el estado se cambia desde la lista de propietarios.
@@ -61,6 +64,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   bool _hasAttemptedSubmit = false;
   String? _fullNameError;
   String? _documentNumberError;
+  String? _nitError;
   String? _emailError;
   String? _phoneError;
 
@@ -83,6 +87,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   bool get _hasErrors =>
       _fullNameError != null ||
       _documentNumberError != null ||
+      _nitError != null ||
       _emailError != null ||
       _phoneError != null;
 
@@ -94,10 +99,12 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     _documentNumberController = TextEditingController(
       text: initialData?.documentNumber,
     );
+    _nitController = TextEditingController(text: initialData?.nit);
     _emailController = TextEditingController(text: initialData?.email);
     _phoneController = TextEditingController(text: initialData?.phone);
     _addressController = TextEditingController(text: initialData?.address);
     _documentType = initialData?.documentType ?? DocumentType.citizenshipCard;
+    _personType = initialData?.personType ?? PersonType.natural;
     WidgetsBinding.instance.addPostFrameCallback((_) => _loadCatalogs());
   }
 
@@ -105,6 +112,7 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
   void dispose() {
     _fullNameController.dispose();
     _documentNumberController.dispose();
+    _nitController.dispose();
     _emailController.dispose();
     _phoneController.dispose();
     _addressController.dispose();
@@ -119,6 +127,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
       _documentNumberController.text,
       _documentType,
     );
+    // El NIT es independiente del documento de identidad.
+    _nitError = OwnerController.validateNit(_nitController.text, _personType);
     _emailError = _isEditing
         ? null
         : OwnerController.validateEmail(_emailController.text);
@@ -219,6 +229,14 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
     });
   }
 
+  void _selectPersonType(PersonType personType) {
+    if (personType == _personType) return;
+    setState(() {
+      _personType = personType;
+      if (_hasAttemptedSubmit) _updateErrors();
+    });
+  }
+
   void _selectInitialStatus(bool pendingApproval) =>
       setState(() => _pendingApproval = pendingApproval);
 
@@ -257,6 +275,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         documentType: _documentType,
         documentNumber: _documentNumberController.text.trim(),
         phone: _phoneController.text.trim(),
+        nit: _nitController.text.trim(),
+        personType: _personType,
         countryCode: countryCode,
         countryName: countryName,
         address: _addressController.text.trim().isEmpty
@@ -271,6 +291,8 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
         documentNumber: _documentNumberController.text.trim(),
         email: _emailController.text.trim(),
         phone: _phoneController.text.trim(),
+        nit: _nitController.text.trim(),
+        personType: _personType,
         countryCode: countryCode,
         countryName: countryName,
         address: address.isEmpty ? null : address,
@@ -415,6 +437,37 @@ class _OwnerFormPageState extends State<OwnerFormPage> {
             textInputAction: TextInputAction.next,
             onChanged: (_) => _revalidateAfterChange(),
             onSubmitted: (_) => _focusNextField(),
+          ),
+        ],
+      ),
+      const SizedBox(height: AppSpacing.s6),
+      _FormSection(
+        title: 'Datos tributarios',
+        children: [
+          _PersonTypeSelector(
+            selected: _personType,
+            onSelected: _selectPersonType,
+          ),
+          const SizedBox(height: AppSpacing.s4),
+          AppTextField(
+            label: 'NIT',
+            controller: _nitController,
+            hint: _personType == PersonType.juridica
+                ? 'Ej.: 900123456-8'
+                : 'Ej.: 1020304050-8',
+            errorText: _nitError,
+            keyboardType: TextInputType.number,
+            textInputAction: TextInputAction.next,
+            onChanged: (_) => _revalidateAfterChange(),
+            onSubmitted: (_) => _focusNextField(),
+          ),
+          const SizedBox(height: AppSpacing.s2),
+          Text(
+            'Con dígito de verificación. Es distinto del documento de '
+            'identidad.',
+            style: Theme.of(
+              context,
+            ).textTheme.bodySmall?.copyWith(color: context.appColors.textMuted),
           ),
         ],
       ),
@@ -718,6 +771,43 @@ class _DocumentTypeSelector extends StatelessWidget {
           style: textTheme.bodySmall?.copyWith(
             color: context.appColors.textMuted,
           ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Persona natural o jurídica; define cómo se valida el NIT.
+class _PersonTypeSelector extends StatelessWidget {
+  const _PersonTypeSelector({required this.selected, required this.onSelected});
+
+  final PersonType selected;
+  final ValueChanged<PersonType> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tipo de persona',
+          style: textTheme.labelMedium?.copyWith(
+            color: context.appColors.textSecondary,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.s2),
+        Wrap(
+          spacing: AppSpacing.s2,
+          runSpacing: AppSpacing.s2,
+          children: [
+            for (final type in PersonType.values)
+              ChoiceChip(
+                label: Text(type.label),
+                selected: type == selected,
+                onSelected: (_) => onSelected(type),
+              ),
+          ],
         ),
       ],
     );

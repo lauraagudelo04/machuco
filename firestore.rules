@@ -866,17 +866,15 @@ service cloud.firestore {
 
     // Propietarios: son usuarios registrados (`users/{uid}` con role owner).
     // El panel de administracion crea la cuenta con password temporal y
-    // escribe los datos legales; `nit` y `personType` se mantienen
-    // sincronizados con `documentNumber` y `documentType` para que el
-    // documento siga siendo valido para el registro y la aprobacion.
+    // escribe los datos legales. El documento de identidad
+    // (documentType/documentNumber) y el NIT (dato tributario base-DV) son
+    // independientes, igual que en el registro publico (separados el
+    // 2026-11-17, acordado con la rama de propietarios).
     function hasValidOwnerManagementFields(data) {
-      return data.documentType in [
-          'citizenshipCard', 'foreignerCard', 'taxId', 'passport',
-          'identityCard']
-        && data.documentNumber is string
-        && data.documentNumber.size() >= 5 && data.documentNumber.size() <= 20
+      return hasValidIdentityDocument(data)
         && data.personType in ['natural', 'juridica']
-        && data.nit is string && data.nit == data.documentNumber
+        && data.nit is string
+        && data.nit.matches('^[0-9]{6,10}-[0-9]$')
         && (!('address' in data)
           || (data.address is string && data.address.size() <= 200))
         && (!('countryCode' in data)

@@ -108,7 +108,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 23,
+      version: 24,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -152,7 +152,7 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `reservation_line_items` (`rowId` INTEGER PRIMARY KEY AUTOINCREMENT, `reservationId` TEXT NOT NULL, `kind` TEXT NOT NULL, `itemId` TEXT NOT NULL, `name` TEXT NOT NULL, `unitPrice` INTEGER NOT NULL, `quantity` INTEGER NOT NULL, `position` INTEGER NOT NULL, FOREIGN KEY (`reservationId`) REFERENCES `reservations` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE)');
         await database.execute(
-            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `accountStatus` TEXT, `pendingDelete` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+            'CREATE TABLE IF NOT EXISTS `owners` (`id` TEXT NOT NULL, `fullName` TEXT NOT NULL, `documentType` TEXT NOT NULL, `documentNumber` TEXT NOT NULL, `email` TEXT NOT NULL, `phone` TEXT NOT NULL, `nit` TEXT, `personType` TEXT, `countryCode` TEXT, `countryName` TEXT, `address` TEXT, `isActive` INTEGER NOT NULL, `synchronized` INTEGER NOT NULL, `accountStatus` TEXT, `pendingDelete` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `document_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL, `example` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
@@ -1079,6 +1079,8 @@ class _$OwnerDao extends OwnerDao {
                   'documentNumber': item.documentNumber,
                   'email': item.email,
                   'phone': item.phone,
+                  'nit': item.nit,
+                  'personType': item.personType,
                   'countryCode': item.countryCode,
                   'countryName': item.countryName,
                   'address': item.address,
@@ -1101,6 +1103,8 @@ class _$OwnerDao extends OwnerDao {
                   'documentNumber': item.documentNumber,
                   'email': item.email,
                   'phone': item.phone,
+                  'nit': item.nit,
+                  'personType': item.personType,
                   'countryCode': item.countryCode,
                   'countryName': item.countryName,
                   'address': item.address,
@@ -1134,6 +1138,8 @@ class _$OwnerDao extends OwnerDao {
             documentNumber: row['documentNumber'] as String,
             email: row['email'] as String,
             phone: row['phone'] as String,
+            nit: row['nit'] as String?,
+            personType: row['personType'] as String?,
             countryCode: row['countryCode'] as String?,
             countryName: row['countryName'] as String?,
             address: row['address'] as String?,
@@ -1157,6 +1163,8 @@ class _$OwnerDao extends OwnerDao {
             documentNumber: row['documentNumber'] as String,
             email: row['email'] as String,
             phone: row['phone'] as String,
+            nit: row['nit'] as String?,
+            personType: row['personType'] as String?,
             countryCode: row['countryCode'] as String?,
             countryName: row['countryName'] as String?,
             address: row['address'] as String?,
@@ -1178,7 +1186,7 @@ class _$OwnerDao extends OwnerDao {
   ) async {
     return _queryAdapter.query(
         'SELECT * FROM owners WHERE documentType = ?1 AND documentNumber = ?2 AND pendingDelete = 0 LIMIT 1',
-        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, countryCode: row['countryCode'] as String?, countryName: row['countryName'] as String?, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int), accountStatus: row['accountStatus'] as String?, pendingDelete: row['pendingDelete'] as int),
+        mapper: (Map<String, Object?> row) => OwnerEntry(id: row['id'] as String, fullName: row['fullName'] as String, documentType: row['documentType'] as String, documentNumber: row['documentNumber'] as String, email: row['email'] as String, phone: row['phone'] as String, nit: row['nit'] as String?, personType: row['personType'] as String?, countryCode: row['countryCode'] as String?, countryName: row['countryName'] as String?, address: row['address'] as String?, isActive: row['isActive'] as int, synchronized: row['synchronized'] as int, createdAt: _subscriptionDateConverter.decode(row['createdAt'] as int), updatedAt: _subscriptionDateConverter.decode(row['updatedAt'] as int), accountStatus: row['accountStatus'] as String?, pendingDelete: row['pendingDelete'] as int),
         arguments: [documentType, documentNumber]);
   }
 
@@ -1199,6 +1207,8 @@ class _$OwnerDao extends OwnerDao {
             documentNumber: row['documentNumber'] as String,
             email: row['email'] as String,
             phone: row['phone'] as String,
+            nit: row['nit'] as String?,
+            personType: row['personType'] as String?,
             countryCode: row['countryCode'] as String?,
             countryName: row['countryName'] as String?,
             address: row['address'] as String?,
@@ -1223,6 +1233,8 @@ class _$OwnerDao extends OwnerDao {
             documentNumber: row['documentNumber'] as String,
             email: row['email'] as String,
             phone: row['phone'] as String,
+            nit: row['nit'] as String?,
+            personType: row['personType'] as String?,
             countryCode: row['countryCode'] as String?,
             countryName: row['countryName'] as String?,
             address: row['address'] as String?,

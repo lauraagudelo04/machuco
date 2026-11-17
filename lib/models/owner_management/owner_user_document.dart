@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
@@ -11,9 +12,10 @@ import 'package:machuco/models/owner_management/owner.dart';
 /// `accountStatus`...) con los datos legales que administra el panel
 /// (`documentType`, `documentNumber`, `address`).
 ///
-/// `nit` y `personType` se escriben junto a `documentType`/`documentNumber`
-/// para que el documento siga siendo válido para el registro público y para
-/// las reglas de aprobación (`hasValidOwnerExtras`).
+/// El documento de identidad (`documentType`/`documentNumber`) y el NIT
+/// (`nit`, dato tributario `base-DV`) son independientes, igual que en el
+/// registro público. `personType` lo elige el administrador.
+/// (`hasValidOwnerManagementFields` en `firestore.rules`).
 abstract final class OwnerUserDocument {
   /// Campos que el administrador puede escribir al crear la cuenta.
   static const createKeys = <String>{
@@ -64,13 +66,15 @@ abstract final class OwnerUserDocument {
     final accountStatus = accountStatusFromStorage(
       _optionalString(data, 'accountStatus'),
     );
-    final documentNumber =
-        _optionalString(data, 'documentNumber') ??
-        _optionalString(data, 'nit') ??
-        '';
+    // El NIT ya no hace de documento: un perfil del registro público sin
+    // documento queda con el número vacío ("Sin documento registrado").
+    final documentNumber = _optionalString(data, 'documentNumber') ?? '';
+    final personType = personTypeFromMetadata(
+      _optionalString(data, 'personType'),
+    );
     final documentType =
         _parseDocumentType(_optionalString(data, 'documentType')) ??
-        _documentTypeFromPersonType(_optionalString(data, 'personType'));
+        DocumentType.citizenshipCard;
 
     final phoneNumber = _optionalString(data, 'phoneNumber');
 
@@ -80,6 +84,12 @@ abstract final class OwnerUserDocument {
       documentType: documentType,
       documentNumber: documentNumber,
       email: _requiredString(data, 'email'),
+      nit: _optionalString(data, 'nit') ?? '',
+      personType:
+          personType ??
+          (documentType == DocumentType.taxId
+              ? PersonType.juridica
+              : PersonType.natural),
       // Si el documento no separa el indicativo (perfiles del registro), el
       // teléfono queda completo; el formulario lo divide con el catálogo.
       phone: _optionalString(data, 'phone') ?? phoneNumber ?? '',
@@ -116,8 +126,8 @@ abstract final class OwnerUserDocument {
       'phoneNumber': phoneNumberFor(owner),
       'documentType': owner.documentType.name,
       'documentNumber': owner.documentNumber,
-      'nit': owner.documentNumber,
-      'personType': personTypeFor(owner.documentType),
+      'nit': owner.nit,
+      'personType': owner.personType.metadataValue,
       'updatedBy': adminId,
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -148,8 +158,8 @@ abstract final class OwnerUserDocument {
       'phoneNumber': phoneNumberFor(owner),
       'documentType': owner.documentType.name,
       'documentNumber': owner.documentNumber,
-      'nit': owner.documentNumber,
-      'personType': personTypeFor(owner.documentType),
+      'nit': owner.nit,
+      'personType': owner.personType.metadataValue,
       'updatedBy': adminId,
       'updatedAt': FieldValue.serverTimestamp(),
     };
@@ -168,15 +178,6 @@ abstract final class OwnerUserDocument {
     final dial = owner.countryCode?.trim() ?? '';
     return '$dial$digits'.isEmpty ? owner.phone : '$dial$digits';
   }
-
-  /// `personType` del perfil: las empresas (NIT) son jurídicas.
-  static String personTypeFor(DocumentType documentType) =>
-      documentType == DocumentType.taxId ? 'juridica' : 'natural';
-
-  static DocumentType _documentTypeFromPersonType(String? personType) =>
-      personType == 'juridica'
-      ? DocumentType.taxId
-      : DocumentType.citizenshipCard;
 
   static DocumentType? _parseDocumentType(String? value) {
     if (value == null) return null;

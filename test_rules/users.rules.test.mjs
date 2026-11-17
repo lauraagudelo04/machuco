@@ -867,7 +867,8 @@ const adminCreatedOwner = (overrides = {}) => ({
   mustChangePassword: true,
   documentType: 'citizenshipCard',
   documentNumber: '1020304050',
-  nit: '1020304050',
+  // NIT independiente del documento (separados el 2026-11-17).
+  nit: '1020304050-8',
   personType: 'natural',
   countryCode: '+57',
   countryName: 'Colombia',
@@ -909,7 +910,7 @@ const ownerEdit = () => ({
   phoneNumber: '+573119998888',
   documentType: 'passport',
   documentNumber: 'AV123456',
-  nit: 'AV123456',
+  nit: '1020304050-8',
   personType: 'natural',
   countryCode: '+57',
   countryName: 'Colombia',
@@ -954,18 +955,46 @@ describe('users: CRUD de propietarios por el administrador', () => {
     );
   });
 
-  test('rechaza un tipo de documento desconocido o un NIT desincronizado', async () => {
+  test('rechaza un tipo de documento desconocido o un NIT mal formado', async () => {
     await assertFails(
       setDoc(
         doc(as('admin'), 'users/owner-bad-type'),
         adminCreatedOwner({ documentType: 'otro' }),
       ),
     );
-    await assertFails(
+    for (const nit of ['1020304050', 'AV123456', '12345-6', "1' OR '1'='1"]) {
+      await assertFails(
+        setDoc(doc(as('admin'), 'users/owner-bad-nit'), adminCreatedOwner({ nit })),
+      );
+    }
+  });
+
+  test('NIT y documento son independientes (ya no deben coincidir)', async () => {
+    await assertSucceeds(
       setDoc(
-        doc(as('admin'), 'users/owner-bad-nit'),
-        adminCreatedOwner({ nit: '900000000-1' }),
+        doc(as('admin'), 'users/owner-separado'),
+        adminCreatedOwner({
+          documentType: 'citizenshipCard',
+          documentNumber: '43123456',
+          nit: '900123456-8',
+          personType: 'juridica',
+        }),
       ),
+    );
+  });
+
+  test('el admin edita a un propietario del registro público (NIT con DV y documento distinto)', async () => {
+    await seed({ 'users/owner': { ...ownerProfile({ accountStatus: 'active' }), createdAt: Timestamp.now() } });
+    await assertSucceeds(
+      updateDoc(doc(as('admin'), 'users/owner'), {
+        fullName: 'Inversiones Ejemplo Editada',
+        documentType: 'citizenshipCard',
+        documentNumber: '71234567',
+        nit: '900123456-8',
+        personType: 'juridica',
+        updatedBy: 'admin',
+        updatedAt: serverTimestamp(),
+      }),
     );
   });
 

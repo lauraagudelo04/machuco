@@ -72,7 +72,7 @@ void main() {
 
   test('[MIG-01] instalación nueva: versión 23 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 23);
+    expect(await raw().getVersion(), 24);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -108,7 +108,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 23);
+      expect(await raw().getVersion(), 24);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _tableExists(raw(), 'clients'), isFalse);
       expect((await raw().query('phone_country_codes')).single['id'], 1);
@@ -124,7 +124,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 23);
+    expect(await raw().getVersion(), 24);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
     expect((await raw().query('phone_country_codes')).single['id'], 1);
   });
@@ -139,7 +139,7 @@ void main() {
 
         await reopen();
 
-        expect(await raw().getVersion(), 23);
+        expect(await raw().getVersion(), 24);
         expect(await _tableExists(raw(), 'auth_user_profile'), isTrue);
         expect(await _tableExists(raw(), 'room_sync_queue'), isTrue);
         expect((await raw().query('phone_country_codes')).single['id'], 1);
@@ -161,7 +161,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 23);
+      expect(await raw().getVersion(), 24);
       expect(await _tableExists(raw(), missingTable), isTrue);
       expect((await raw().query('phone_country_codes')).single['id'], 1);
     });
@@ -182,7 +182,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 23);
+    expect(await raw().getVersion(), 24);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 

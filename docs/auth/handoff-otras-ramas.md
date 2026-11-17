@@ -111,7 +111,8 @@ También cambia lo siguiente:
 
 | Tema | Con quién | Acción |
 | --- | --- | --- |
-| Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14. Quien agregue una migración usa la 15 |
+| Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14 |
+| Versión 24 de SQLite (`owners.nit`, `owners.personType`) | Todas las ramas con `app_database.dart` | La 23 es de PQRS y la 24 separa el NIT del propietario. Quien agregue una migración usa la 25. Las pruebas de PQRS ya aceptan versiones posteriores (`>=`) |
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
 | `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
 | Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |
@@ -138,11 +139,15 @@ ya exigen las reglas de propietarios (`hasValidOwnerManagementFields`):
   escritura para no bloquear cuentas existentes.
 - **Administrador**: ni `isAdminCreation`, ni la edición de contacto, ni la
   anonimización, ni la autoedición aceptan esos campos.
-- **Choque con la rama de propietarios**: `hasValidOwnerManagementFields`
-  exige `nit == documentNumber` y `documentNumber` de 5 a 20. Un propietario
-  del registro público tiene NIT con DV (`900123456-8`) y un documento
-  distinto, así que el panel del administrador (`isAdminOwnerEdit`) no podrá
-  editarlo hasta que esa rama separe NIT y documento.
+- **NIT separado del documento (acordado con la rama de propietarios)**:
+  `hasValidOwnerManagementFields` ya no exige `nit == documentNumber`. El
+  documento usa `hasValidIdentityDocument` (4 a 20 caracteres) y el NIT el
+  mismo formato que el registro público (`^[0-9]{6,10}-[0-9]$`, base-DV).
+  El panel (`OwnerFormPage`) pide aparte el tipo de persona y el NIT
+  (validado con DV por `AuthValidators.nit`); `Owner` tiene `nit` y
+  `personType`, y la caché `owners` los guarda (migración SQLite 23→24).
+  Un propietario creado antes desde el panel tiene `nit` igual a su
+  documento, sin DV: al editarlo, el administrador debe escribir el NIT real.
 
 ### 6.2 Lectura de `users` por un propietario activo
 
@@ -152,10 +157,9 @@ clientes de sus reservas, `ClientController.loadAllClients`). Toda consulta de
 un propietario sobre `users` debe filtrar `where('role', isEqualTo: 'client')`
 o Firestore la rechaza.
 
-Pendiente: Firestore no filtra por campo, así que un propietario aún ve el
-documento, el celular y la fecha de nacimiento de **cualquier** cliente. Para
-cerrarlo hace falta una proyección (p. ej. nombre y celular del huésped
-copiados en `reservations`) y quitar esa lectura. Coordinar con reservas.
+Decisión 2026-11-17: se acepta que un propietario activo lea los datos de
+los clientes (documento, celular, fecha de nacimiento) para sus
+validaciones. Firestore no filtra por campo; no se hará una proyección.
 
 ### 6.3 Otros cambios
 

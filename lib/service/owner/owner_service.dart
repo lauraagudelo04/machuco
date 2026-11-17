@@ -1,5 +1,6 @@
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
@@ -65,6 +66,8 @@ class OwnerService {
     required String documentNumber,
     required String email,
     required String phone,
+    String nit = '',
+    PersonType personType = PersonType.natural,
     String? countryCode,
     String? countryName,
     String? address,
@@ -88,6 +91,8 @@ class OwnerService {
       documentNumber: documentNumber,
       email: email,
       phone: phone,
+      nit: nit,
+      personType: personType,
       countryCode: countryCode,
       countryName: countryName,
       address: address,
@@ -106,6 +111,8 @@ class OwnerService {
     required String documentNumber,
     required String email,
     required String phone,
+    String nit = '',
+    PersonType personType = PersonType.natural,
     String? countryCode,
     String? countryName,
     String? address,
@@ -122,6 +129,8 @@ class OwnerService {
       documentNumber: documentNumber,
       email: email,
       phone: phone,
+      nit: nit,
+      personType: personType,
       countryCode: countryCode,
       countryName: countryName,
       address: address,
@@ -140,6 +149,8 @@ class OwnerService {
     required DocumentType documentType,
     required String documentNumber,
     required String phone,
+    String? nit,
+    PersonType? personType,
     String? countryCode,
     String? countryName,
     String? address,
@@ -157,6 +168,10 @@ class OwnerService {
       documentNumber: documentNumber,
       email: owner.email,
       phone: phone,
+      // Sin valor nuevo se conservan los guardados (p. ej. al cambiar solo el
+      // teléfono).
+      nit: nit ?? owner.nit,
+      personType: personType ?? owner.personType,
       countryCode: countryCode,
       countryName: countryName,
       address: address,

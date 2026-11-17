@@ -16,6 +16,8 @@ class OwnerEntry {
     required this.documentNumber,
     required this.email,
     required this.phone,
+    this.nit,
+    this.personType,
     this.countryCode,
     this.countryName,
     this.address,
@@ -36,6 +38,14 @@ class OwnerEntry {
   final String documentNumber;
   final String email;
   final String phone;
+
+  /// NIT canónico `base-DV`, independiente del documento de identidad.
+  /// `null` en filas anteriores a la versión 24.
+  final String? nit;
+
+  /// `natural` o `juridica` (`PersonType.metadataValue`); `null` en filas
+  /// anteriores a la versión 24.
+  final String? personType;
 
   /// Indicativo del país (`+57`), separado del número nacional.
   final String? countryCode;

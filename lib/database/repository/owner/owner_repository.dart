@@ -2,6 +2,7 @@ import 'package:floor/floor.dart';
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/owner/owner_entry.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 
@@ -180,6 +181,8 @@ class OwnerRepository {
         documentNumber: owner.documentNumber,
         email: owner.email,
         phone: owner.phone,
+        nit: _nitOrNull(owner.nit),
+        personType: owner.personType.metadataValue,
         countryCode: owner.countryCode,
         countryName: owner.countryName,
         address: owner.address,
@@ -198,23 +201,35 @@ class OwnerRepository {
     await database.ownerDao.deleteById(id);
   }
 
-  Owner _toOwner(OwnerEntry entry) => Owner(
-    id: entry.id,
-    fullName: entry.fullName,
-    documentType: DocumentType.values.firstWhere(
+  Owner _toOwner(OwnerEntry entry) {
+    final documentType = DocumentType.values.firstWhere(
       (type) => type.name == entry.documentType,
       orElse: () => DocumentType.citizenshipCard,
-    ),
-    documentNumber: entry.documentNumber,
-    email: entry.email,
-    phone: entry.phone,
-    countryCode: entry.countryCode,
-    countryName: entry.countryName,
-    address: entry.address,
-    isActive: entry.isActive == 1,
-    accountStatus: accountStatusFromStorage(entry.accountStatus),
-    isSynchronized: entry.synchronized == 1,
-  );
+    );
+    return Owner(
+      id: entry.id,
+      fullName: entry.fullName,
+      documentType: documentType,
+      documentNumber: entry.documentNumber,
+      email: entry.email,
+      phone: entry.phone,
+      nit: entry.nit ?? '',
+      // Filas anteriores a la separación: se deduce como antes (NIT => jurídica).
+      personType:
+          personTypeFromMetadata(entry.personType) ??
+          (documentType == DocumentType.taxId
+              ? PersonType.juridica
+              : PersonType.natural),
+      countryCode: entry.countryCode,
+      countryName: entry.countryName,
+      address: entry.address,
+      isActive: entry.isActive == 1,
+      accountStatus: accountStatusFromStorage(entry.accountStatus),
+      isSynchronized: entry.synchronized == 1,
+    );
+  }
+
+  static String? _nitOrNull(String nit) => nit.trim().isEmpty ? null : nit;
 
   /// Al crear, el registro nace con la marca `synchronized = 0` (pendiente
   /// de enviar a la nube) y con las marcas de tiempo de ahora.
@@ -233,6 +248,8 @@ class OwnerRepository {
       documentNumber: owner.documentNumber,
       email: owner.email,
       phone: owner.phone,
+      nit: _nitOrNull(owner.nit),
+      personType: owner.personType.metadataValue,
       countryCode: owner.countryCode,
       countryName: owner.countryName,
       address: owner.address,

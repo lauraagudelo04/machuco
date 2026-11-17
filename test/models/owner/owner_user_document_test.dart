@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_user_document.dart';
@@ -12,6 +13,7 @@ void main() {
     documentNumber: '1020304050',
     email: 'laura.gomez@machuco.com',
     phone: '300 123 4567',
+    nit: '1020304050-8',
     countryCode: '+57',
     countryName: 'Colombia',
     address: 'Calle 10 # 43-25',
@@ -31,14 +33,17 @@ void main() {
         'countryName': 'Colombia',
         'documentType': 'passport',
         'documentNumber': 'AV123456',
-        'nit': 'AV123456',
-        'personType': 'natural',
+        'nit': '900123456-8',
+        'personType': 'juridica',
         'address': 'Calle 10 # 43-25',
       });
 
       expect(result.id, 'uid-1');
       expect(result.documentType, DocumentType.passport);
       expect(result.documentNumber, 'AV123456');
+      // NIT y tipo de persona se leen aparte del documento.
+      expect(result.nit, '900123456-8');
+      expect(result.personType, PersonType.juridica);
       expect(result.phone, '300 123 4567');
       expect(result.countryCode, '+57');
       expect(result.address, 'Calle 10 # 43-25');
@@ -58,8 +63,11 @@ void main() {
         'nit': '900123456-8',
       });
 
-      expect(result.documentType, DocumentType.taxId);
-      expect(result.documentNumber, '900123456-8');
+      // El NIT ya no hace de documento de identidad.
+      expect(result.documentNumber, isEmpty);
+      expect(result.documentLabel, 'Sin documento registrado');
+      expect(result.nit, '900123456-8');
+      expect(result.personType, PersonType.juridica);
       // El registro no separa el indicativo: el formulario lo divide luego.
       expect(result.phone, '+573001112233');
       expect(result.countryCode, isNull);
@@ -80,6 +88,7 @@ void main() {
       expect(result.fullName, 'Juan Camilo Garcia');
       expect(result.documentNumber, isEmpty);
       expect(result.documentLabel, 'Sin documento registrado');
+      expect(result.nit, isEmpty);
       expect(result.phone, '+573102781291');
       expect(result.countryCode, isNull);
       expect(result.isActive, isTrue);
@@ -114,7 +123,8 @@ void main() {
       expect(map['phoneCountryCodeId'], 1);
       expect(map['documentType'], 'citizenshipCard');
       expect(map['documentNumber'], '1020304050');
-      expect(map['nit'], '1020304050');
+      // El NIT no se copia del documento.
+      expect(map['nit'], '1020304050-8');
       expect(map['personType'], 'natural');
       expect(map['address'], 'Calle 10 # 43-25');
       expect(map['countryCode'], '+57');
@@ -144,23 +154,27 @@ void main() {
       expect(map.keys.every(OwnerUserDocument.createKeys.contains), isTrue);
     });
 
-    test('una empresa queda como persona jurídica', () {
+    test('el tipo de persona y el NIT se eligen aparte del documento', () {
       final map = OwnerUserDocument.createMap(
         owner: const Owner(
           id: 'draft',
-          fullName: 'Inversiones Machuco S.A.S.',
-          documentType: DocumentType.taxId,
-          documentNumber: '900123456-7',
+          fullName: 'Ana Representante',
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '43123456',
           email: 'contacto@machuco.com',
           phone: '604 444 5566',
+          nit: '900123456-8',
+          personType: PersonType.juridica,
           countryCode: '+57',
         ),
         accountStatus: AccountStatus.active,
         adminId: 'admin-1',
       );
 
+      expect(map['documentType'], 'citizenshipCard');
+      expect(map['documentNumber'], '43123456');
       expect(map['personType'], 'juridica');
-      expect(map['nit'], '900123456-7');
+      expect(map['nit'], '900123456-8');
     });
   });
 

@@ -5,6 +5,7 @@ import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/service/owner/owner_service.dart';
@@ -199,25 +200,30 @@ void main() {
     },
   );
 
-  test('mergeRemoteOwners quita la fila local si la nube la anonimizó', () async {
-    await repository.insert(buildOwner(id: 'uid-1'));
-    await repository.markSynchronized('uid-1');
-    await repository.insert(buildOwner(id: 'uid-2', documentNumber: '555555'));
-    await repository.markSynchronized('uid-2');
+  test(
+    'mergeRemoteOwners quita la fila local si la nube la anonimizó',
+    () async {
+      await repository.insert(buildOwner(id: 'uid-1'));
+      await repository.markSynchronized('uid-1');
+      await repository.insert(
+        buildOwner(id: 'uid-2', documentNumber: '555555'),
+      );
+      await repository.markSynchronized('uid-2');
 
-    await repository.mergeRemoteOwners([
-      buildOwner(
-        id: 'uid-1',
-        fullName: 'Propietario eliminado',
-        accountStatus: AccountStatus.anonymized,
-        isActive: false,
-      ),
-      buildOwner(id: 'uid-2', documentNumber: '555555'),
-    ]);
+      await repository.mergeRemoteOwners([
+        buildOwner(
+          id: 'uid-1',
+          fullName: 'Propietario eliminado',
+          accountStatus: AccountStatus.anonymized,
+          isActive: false,
+        ),
+        buildOwner(id: 'uid-2', documentNumber: '555555'),
+      ]);
 
-    expect(await repository.findById('uid-1'), isNull);
-    expect(await repository.findById('uid-2'), isNotNull);
-  });
+      expect(await repository.findById('uid-1'), isNull);
+      expect(await repository.findById('uid-2'), isNotNull);
+    },
+  );
 
   test('mergeRemoteOwners inserta nuevos y respeta los pendientes', () async {
     // owner-1 sigue pendiente de envío; owner-2 ya fue confirmado.
@@ -362,7 +368,7 @@ void main() {
       addTearDown(migrated.close);
       final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 23);
+      expect(await raw.getVersion(), 24);
       final columns = await raw.rawQuery('PRAGMA table_info(owners)');
       expect(
         columns.map((column) => column['name']),
@@ -444,7 +450,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 23);
+    expect(await raw.getVersion(), 24);
     expect(
       await raw.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table' "
@@ -510,8 +516,87 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 23);
+    expect(await raw.getVersion(), 24);
     final ids = (await raw.query('owners')).map((r) => r['id']).toList();
     expect(ids, ['AbCdEfGhIjKlMnOpQrStUvWxYz12']);
   });
+
+  test('guarda el NIT y el tipo de persona aparte del documento', () async {
+    final owner = buildOwner().copyWith(
+      nit: '900123456-8',
+      personType: PersonType.juridica,
+    );
+    await repository.insert(owner);
+
+    final loaded = await repository.findById(owner.id);
+
+    expect(loaded!.documentNumber, '1020304050');
+    expect(loaded.nit, '900123456-8');
+    expect(loaded.personType, PersonType.juridica);
+  });
+
+  test(
+    'la migración 23->24 agrega nit y personType sin perder filas',
+    () async {
+      final legacyPath = '${directory.path}${Platform.pathSeparator}v23.db';
+      sqfliteFfiInit();
+      final legacy = await databaseFactoryFfi.openDatabase(
+        legacyPath,
+        options: sqflite.OpenDatabaseOptions(
+          version: 23,
+          onCreate: (db, version) async {
+            await db.execute('''
+            CREATE TABLE owners (
+              id TEXT NOT NULL PRIMARY KEY,
+              fullName TEXT NOT NULL,
+              documentType TEXT NOT NULL,
+              documentNumber TEXT NOT NULL,
+              email TEXT NOT NULL,
+              phone TEXT NOT NULL,
+              countryCode TEXT,
+              countryName TEXT,
+              address TEXT,
+              isActive INTEGER NOT NULL,
+              synchronized INTEGER NOT NULL,
+              pendingDelete INTEGER NOT NULL DEFAULT 0,
+              accountStatus TEXT,
+              createdAt INTEGER NOT NULL,
+              updatedAt INTEGER NOT NULL
+            )
+          ''');
+            await db.insert('owners', {
+              'id': 'uid-legacy',
+              'fullName': 'Empresa Antigua',
+              'documentType': DocumentType.taxId.name,
+              'documentNumber': '900123456-8',
+              'email': 'antigua@machuco.com',
+              'phone': '300 123 4567',
+              'isActive': 1,
+              'synchronized': 1,
+              'createdAt': 1,
+              'updatedAt': 1,
+            });
+          },
+        ),
+      );
+      await legacy.close();
+
+      final migrated = await AppDatabaseProvider.open(name: legacyPath);
+      addTearDown(migrated.close);
+      final raw = migrated.database as sqflite.Database;
+
+      expect(await raw.getVersion(), 24);
+      final columns = (await raw.rawQuery(
+        'PRAGMA table_info(owners)',
+      )).map((column) => column['name']).toSet();
+      expect(columns, containsAll(['nit', 'personType']));
+      final loaded = await OwnerRepository(
+        database: migrated,
+      ).findById('uid-legacy');
+      expect(loaded!.fullName, 'Empresa Antigua');
+      expect(loaded.nit, isEmpty);
+      // Sin dato guardado se deduce como antes: NIT como documento => jurídica.
+      expect(loaded.personType, PersonType.juridica);
+    },
+  );
 }
