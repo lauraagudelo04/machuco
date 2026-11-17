@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/motel/motel_model.dart';
@@ -25,12 +26,24 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
   String? _motelId;
   late Future<List<Motel>> _motelsFuture;
 
-  PqrsController get _store => widget.store ?? PqrsController.instance;
+  PqrsController get _store =>
+      widget.store ??
+      PqrsController.legacyShared(
+        PqrsActor.systemAdmin,
+      ); // TODO(etapa-6): borrar
 
   @override
   void initState() {
     super.initState();
-    _motelsFuture = _store.loadMotelsWithRequests();
+    _motelsFuture = _loadMotelsWithRequests();
+  }
+
+  /// Motels of the real catalog that have PQRS requests (the controller no
+  /// longer knows about motels).
+  Future<List<Motel>> _loadMotelsWithRequests() async {
+    final motelIds = _store.motelIdsWithRequests;
+    final allMotels = await MotelController().getAllMotels();
+    return allMotels.where((motel) => motelIds.contains(motel.id)).toList();
   }
 
   void _openDetail(PqrsRequest request) {
@@ -112,7 +125,7 @@ class _SystemAdminPqrsPageState extends State<SystemAdminPqrsPage> {
                       subtitle:
                           'Porcentajes calculados sobre las PQRS del motel seleccionado.',
                       highlightLabel: 'Solucionadas',
-                      highlightRate: stats.resolutionRate,
+                      highlightRate: stats.solutionRate,
                     ),
                     const SizedBox(height: AppSpacing.s6),
                     Text(

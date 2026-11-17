@@ -21,6 +21,7 @@ class PqrsTimeline extends StatelessWidget {
     final opening = PqrsTraceEntry(
       id: '${request.id}-opening',
       author: PqrsActor.client,
+      authorId: request.clientId,
       message: request.description,
       createdAt: request.createdAt,
       attachments: request.attachments,

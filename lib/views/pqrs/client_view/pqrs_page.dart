@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
@@ -32,7 +31,9 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
 
   final _motelController = MotelController();
 
-  PqrsController get _store => widget.store ?? PqrsController.instance;
+  PqrsController get _store =>
+      widget.store ??
+      PqrsController.legacyShared(PqrsActor.client); // TODO(etapa-6): borrar
 
   @override
   void dispose() {
@@ -81,16 +82,16 @@ class _ClientPqrsPageState extends State<ClientPqrsPage> {
     final motel = await _motelController.getMotelById(pqrsCurrentMotelId);
     if (!mounted) return;
 
-    _store.createRequest(
+    await _store.createRequest(
       motelId: pqrsCurrentMotelId,
       motelName: motel?.name ?? 'Motel',
-      clientId: pqrsCurrentClientId,
-      clientName: ClientController.instance.currentClient!.name,
+      ownerId: motel?.ownerId ?? '',
       type: _selectedType!,
       subject: _subjectController.text.trim(),
       description: _descriptionController.text.trim(),
       attachments: List.of(_attachments),
     );
+    if (!mounted) return;
 
     setState(() {
       _sending = false;

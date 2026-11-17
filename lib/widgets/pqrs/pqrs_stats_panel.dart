@@ -61,7 +61,7 @@ class PqrsStatsPanel extends StatelessWidget {
                     ),
                     _MetricRow(
                       label: 'Tasa de solución',
-                      value: _percent(stats.resolutionRate),
+                      value: _percent(stats.solutionRate),
                     ),
                     _MetricRow(
                       label: 'Cerradas por el cliente',

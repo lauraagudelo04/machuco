@@ -20,16 +20,17 @@ class PqrsPage extends StatelessWidget {
 
   final PqrsController? store;
 
-  PqrsController get _store => store ?? PqrsController.instance;
+  // TODO(etapa-6): borrar la fabrica temporal.
+  PqrsController get _store => store ?? PqrsController.legacyShared();
 
   Future<void> _openProfilePicker(BuildContext context) async {
     final actor = await showPqrsProfilePicker(context);
     if (actor == null || !context.mounted) return;
 
     final page = switch (actor) {
-      PqrsActor.client => ClientPqrsPage(store: _store),
-      PqrsActor.owner => OwnerPqrsPage(store: _store),
-      PqrsActor.systemAdmin => SystemAdminPqrsPage(store: _store),
+      PqrsActor.client => ClientPqrsPage(store: store),
+      PqrsActor.owner => OwnerPqrsPage(store: store),
+      PqrsActor.systemAdmin => SystemAdminPqrsPage(store: store),
     };
 
     await Navigator.of(

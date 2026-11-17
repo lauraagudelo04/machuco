@@ -53,6 +53,7 @@ class PqrsStore {
         motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
         clientName: _resolveClientName(pqrsCurrentClientId),
+        ownerId: 'owner-1',
         type: PqrsType.queja,
         subject: 'Ruido en la habitación 204',
         description:
@@ -71,6 +72,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-001-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message:
                 'Recibimos tu queja. Enviamos personal de mantenimiento a revisar el aislamiento del pasillo.',
             createdAt: ago(5, hours: 20),
@@ -79,6 +81,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-001-t2',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message:
                 'Instalamos burletes en las puertas del pasillo. Adjuntamos el avance.',
             createdAt: ago(3),
@@ -94,6 +97,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-001-t3',
             author: PqrsActor.client,
+            authorId: pqrsCurrentClientId,
             message:
                 'Gracias, sigo atenta. Aún se escucha algo desde la habitación contigua.',
             createdAt: ago(2),
@@ -106,16 +110,19 @@ class PqrsStore {
         motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
         clientName: _resolveClientName(pqrsCurrentClientId),
+        ownerId: 'owner-1',
         type: PqrsType.reclamo,
         subject: 'Cobro duplicado del servicio adicional',
         description:
             'Me cobraron dos veces el servicio de limpieza adicional en la factura del 12 de agosto.',
         createdAt: ago(9),
         status: PqrsStatus.resolved,
+        resolvedAt: ago(4),
         trace: [
           PqrsTraceEntry(
             id: 'pqrs-002-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message: 'Verificamos la factura con el área de pagos.',
             createdAt: ago(8, hours: 18),
             statusChange: PqrsStatus.inProgress,
@@ -123,6 +130,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-002-t2',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message:
                 'Confirmamos el cobro duplicado y aplicamos la devolución. Adjuntamos el soporte.',
             createdAt: ago(4),
@@ -144,6 +152,7 @@ class PqrsStore {
         motelName: 'Motel Paraíso Élite',
         clientId: '2',
         clientName: _resolveClientName('2'),
+        ownerId: 'owner-1',
         type: PqrsType.peticion,
         subject: 'Solicitud de factura electrónica',
         description:
@@ -157,15 +166,18 @@ class PqrsStore {
         motelName: 'Motel Paraíso Élite',
         clientId: pqrsCurrentClientId,
         clientName: _resolveClientName(pqrsCurrentClientId),
+        ownerId: 'owner-1',
         type: PqrsType.sugerencia,
         subject: 'Ampliar el horario de recepción',
         description: 'Sería útil contar con recepción disponible las 24 horas.',
         createdAt: ago(21),
         status: PqrsStatus.closed,
+        closedBy: PqrsClosedBy.client,
         trace: [
           PqrsTraceEntry(
             id: 'pqrs-004-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message: 'Evaluamos la propuesta con el equipo de operaciones.',
             createdAt: ago(20),
             statusChange: PqrsStatus.inProgress,
@@ -173,6 +185,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-004-t2',
             author: PqrsActor.owner,
+            authorId: 'owner-1',
             message:
                 'Ampliamos la recepción hasta las 2:00 a. m. desde este mes.',
             createdAt: ago(16),
@@ -181,6 +194,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-004-t3',
             author: PqrsActor.client,
+            authorId: pqrsCurrentClientId,
             message:
                 'Excelente, la solución cubre lo que necesitaba. Cierro la solicitud.',
             createdAt: ago(15),
@@ -194,6 +208,7 @@ class PqrsStore {
         motelName: 'Motel Eclipse',
         clientId: '3',
         clientName: _resolveClientName('3'),
+        ownerId: 'owner-3',
         type: PqrsType.queja,
         subject: 'Aire acondicionado sin funcionar',
         description:
@@ -204,6 +219,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-005-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-3',
             message:
                 'Revisamos el equipo y estaba operativo; el control remoto se encontraba sin baterías.',
             createdAt: ago(11),
@@ -217,6 +233,7 @@ class PqrsStore {
         motelName: 'Motel Eclipse',
         clientId: '4',
         clientName: _resolveClientName('4'),
+        ownerId: 'owner-3',
         type: PqrsType.reclamo,
         subject: 'Demora en el check-in',
         description:
@@ -227,6 +244,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-006-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-3',
             message:
                 'Estamos reforzando el turno de recepción los fines de semana.',
             createdAt: ago(2),
@@ -240,15 +258,18 @@ class PqrsStore {
         motelName: 'Motel Eclipse',
         clientId: '3',
         clientName: _resolveClientName('3'),
+        ownerId: 'owner-3',
         type: PqrsType.sugerencia,
         subject: 'Incluir opción de pago con QR',
         description: 'Facilitaría el pago al momento del check-out.',
         createdAt: ago(30),
         status: PqrsStatus.closed,
+        closedBy: PqrsClosedBy.client,
         trace: [
           PqrsTraceEntry(
             id: 'pqrs-007-t1',
             author: PqrsActor.owner,
+            authorId: 'owner-3',
             message: 'Habilitamos pago con QR en recepción.',
             createdAt: ago(27),
             statusChange: PqrsStatus.resolved,
@@ -256,6 +277,7 @@ class PqrsStore {
           PqrsTraceEntry(
             id: 'pqrs-007-t2',
             author: PqrsActor.client,
+            authorId: '3',
             message: 'Ya lo probé y funciona. Cierro la solicitud.',
             createdAt: ago(26),
             statusChange: PqrsStatus.closed,

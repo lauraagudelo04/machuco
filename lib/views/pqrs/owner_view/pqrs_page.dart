@@ -28,7 +28,9 @@ class OwnerPqrsPage extends StatefulWidget {
 class _OwnerPqrsPageState extends State<OwnerPqrsPage> {
   PqrsStatus? _filter;
 
-  PqrsController get _store => widget.store ?? PqrsController.instance;
+  PqrsController get _store =>
+      widget.store ??
+      PqrsController.legacyShared(PqrsActor.owner); // TODO(etapa-6): borrar
 
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(

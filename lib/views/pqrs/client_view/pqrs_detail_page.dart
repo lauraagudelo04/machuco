@@ -17,12 +17,13 @@ class ClientPqrsDetailPage extends StatelessWidget {
   final String requestId;
   final PqrsController? store;
 
-  PqrsController get _store => store ?? PqrsController.instance;
+  // TODO(etapa-6): borrar la fabrica temporal.
+  PqrsController get _store =>
+      store ?? PqrsController.legacyShared(PqrsActor.client);
 
   void _addComment(String message, List<PqrsAttachment> attachments) {
     _store.addUpdate(
       requestId: requestId,
-      author: PqrsActor.client,
       message: message,
       attachments: attachments,
     );

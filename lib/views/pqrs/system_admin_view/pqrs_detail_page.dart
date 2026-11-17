@@ -18,7 +18,11 @@ class SystemAdminPqrsDetailPage extends StatelessWidget {
   final String requestId;
   final PqrsController? store;
 
-  PqrsController get _store => store ?? PqrsController.instance;
+  PqrsController get _store =>
+      store ??
+      PqrsController.legacyShared(
+        PqrsActor.systemAdmin,
+      ); // TODO(etapa-6): borrar
 
   @override
   Widget build(BuildContext context) {
