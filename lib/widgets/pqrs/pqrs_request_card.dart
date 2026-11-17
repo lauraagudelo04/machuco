@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/pqrs/pqrs_repository.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 import 'package:machuco/widgets/pqrs/pqrs_status_badge.dart';
+import 'package:machuco/widgets/pqrs/pqrs_sync_notice.dart';
 
 /// Summary card of a PQRS request, reused by the three profiles.
 ///
@@ -16,6 +18,8 @@ class PqrsRequestCard extends StatelessWidget {
     this.showClient = false,
     this.showMotel = false,
     this.trailingHint,
+    this.sync = PqrsSyncState.synced,
+    this.overdue = false,
   });
 
   final PqrsRequest request;
@@ -23,6 +27,12 @@ class PqrsRequestCard extends StatelessWidget {
   final bool showClient;
   final bool showMotel;
   final String? trailingHint;
+
+  /// Local synchronization state; a pending or failed one gets its own mark.
+  final PqrsSyncState sync;
+
+  /// True when the confirmation deadline of the client has expired (owner).
+  final bool overdue;
 
   @override
   Widget build(BuildContext context) {
@@ -38,7 +48,14 @@ class PqrsRequestCard extends StatelessWidget {
 
     return AppCard(
       onTap: onTap,
-      semanticLabel: '${request.subject}, ${request.status.label}',
+      semanticLabel:
+          '${request.subject}, ${request.status.label}'
+          '${sync.isSynced
+              ? ''
+              : sync.isFailed
+              ? ', no se pudo enviar'
+              : ', pendiente de envío'}'
+          '${overdue ? ', plazo vencido' : ''}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -90,6 +107,14 @@ class PqrsRequestCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               PqrsStatusBadge(status: request.status),
+              PqrsSyncBadge(sync: sync),
+              if (overdue)
+                _MetaChip(
+                  icon: Icons.alarm_off_outlined,
+                  label: 'Plazo vencido',
+                  tooltip: 'Plazo de confirmación del cliente vencido',
+                  highlight: true,
+                ),
               _MetaChip(
                 icon: Icons.forum_outlined,
                 label: '${request.trace.length}',
@@ -121,14 +146,19 @@ class _MetaChip extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.tooltip,
+    this.highlight = false,
   });
 
   final IconData icon;
   final String label;
   final String tooltip;
+  final bool highlight;
 
   @override
   Widget build(BuildContext context) {
+    final color = highlight
+        ? Theme.of(context).colorScheme.error
+        : context.appColors.textSecondary;
     return Tooltip(
       message: tooltip,
       child: Semantics(
@@ -137,13 +167,13 @@ class _MetaChip extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 16, color: context.appColors.textSecondary),
+              Icon(icon, size: 16, color: color),
               const SizedBox(width: AppSpacing.s1),
               Text(
                 label,
-                style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+                style: Theme.of(
+                  context,
+                ).textTheme.labelMedium?.copyWith(color: color),
               ),
             ],
           ),

@@ -86,6 +86,12 @@ class _$AppDatabase extends AppDatabase {
 
   DocumentTypeDao? _documentTypeDaoInstance;
 
+  PqrsDao? _pqrsDaoInstance;
+
+  AllowedImageFormatDao? _allowedImageFormatDaoInstance;
+
+  PqrsTypeDao? _pqrsTypeDaoInstance;
+
   PhoneCountryCodeDao? _phoneCountryCodeDaoInstance;
 
   MotelDao? _motelDaoInstance;
@@ -102,7 +108,7 @@ class _$AppDatabase extends AppDatabase {
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 22,
+      version: 23,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -150,6 +156,18 @@ class _$AppDatabase extends AppDatabase {
         await database.execute(
             'CREATE TABLE IF NOT EXISTS `document_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `pattern` TEXT NOT NULL, `example` TEXT NOT NULL, `isActive` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, PRIMARY KEY (`id`))');
         await database.execute(
+            'CREATE TABLE IF NOT EXISTS `pqrs_cache` (`id` TEXT NOT NULL, `clientId` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `motelId` TEXT NOT NULL, `motelName` TEXT NOT NULL, `clientName` TEXT NOT NULL, `type` TEXT NOT NULL, `subject` TEXT NOT NULL, `description` TEXT NOT NULL, `status` TEXT NOT NULL, `resolvedAt` INTEGER, `closedBy` TEXT, `photoCount` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `pqrs_trace_cache` (`id` TEXT NOT NULL, `pqrsId` TEXT NOT NULL, `authorId` TEXT NOT NULL, `authorRole` TEXT NOT NULL, `authorName` TEXT, `message` TEXT NOT NULL, `statusChange` TEXT, `photoCount` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `pqrs_outbox` (`id` TEXT NOT NULL, `pqrsId` TEXT NOT NULL, `action` TEXT NOT NULL, `payload` TEXT NOT NULL, `syncStatus` TEXT NOT NULL, `errorMessage` TEXT, `createdAt` INTEGER NOT NULL, `attempts` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `pqrs_outbox_photo` (`id` TEXT NOT NULL, `outboxId` TEXT NOT NULL, `mimeType` TEXT NOT NULL, `bytes` BLOB NOT NULL, FOREIGN KEY (`outboxId`) REFERENCES `pqrs_outbox` (`id`) ON UPDATE NO ACTION ON DELETE CASCADE, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `allowed_image_formats` (`id` INTEGER NOT NULL, `mimeType` TEXT NOT NULL, `extensions` TEXT NOT NULL, `signatures` TEXT NOT NULL, `maxSizeBytes` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
+            'CREATE TABLE IF NOT EXISTS `pqrs_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `responseDays` INTEGER NOT NULL, `allowsPhotos` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, PRIMARY KEY (`id`))');
+        await database.execute(
             'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)');
         await database.execute(
             'CREATE UNIQUE INDEX `index_notification_reads_notificationId_userId` ON `notification_reads` (`notificationId`, `userId`)');
@@ -167,6 +185,18 @@ class _$AppDatabase extends AppDatabase {
             'CREATE INDEX `index_reservations_motelId` ON `reservations` (`motelId`)');
         await database.execute(
             'CREATE INDEX `index_reservation_line_items_reservationId` ON `reservation_line_items` (`reservationId`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_cache_clientId` ON `pqrs_cache` (`clientId`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_cache_ownerId` ON `pqrs_cache` (`ownerId`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_trace_cache_pqrsId` ON `pqrs_trace_cache` (`pqrsId`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_outbox_pqrsId` ON `pqrs_outbox` (`pqrsId`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_outbox_syncStatus` ON `pqrs_outbox` (`syncStatus`)');
+        await database.execute(
+            'CREATE INDEX `index_pqrs_outbox_photo_outboxId` ON `pqrs_outbox_photo` (`outboxId`)');
 
         await callback?.onCreate?.call(database, version);
       },
@@ -212,6 +242,22 @@ class _$AppDatabase extends AppDatabase {
   DocumentTypeDao get documentTypeDao {
     return _documentTypeDaoInstance ??=
         _$DocumentTypeDao(database, changeListener);
+  }
+
+  @override
+  PqrsDao get pqrsDao {
+    return _pqrsDaoInstance ??= _$PqrsDao(database, changeListener);
+  }
+
+  @override
+  AllowedImageFormatDao get allowedImageFormatDao {
+    return _allowedImageFormatDaoInstance ??=
+        _$AllowedImageFormatDao(database, changeListener);
+  }
+
+  @override
+  PqrsTypeDao get pqrsTypeDao {
+    return _pqrsTypeDaoInstance ??= _$PqrsTypeDao(database, changeListener);
   }
 
   @override
@@ -1284,6 +1330,529 @@ class _$DocumentTypeDao extends DocumentTypeDao {
   Future<void> insertDocumentTypes(List<DocumentTypeEntry> types) async {
     await _documentTypeEntryInsertionAdapter.insertList(
         types, OnConflictStrategy.replace);
+  }
+}
+
+class _$PqrsDao extends PqrsDao {
+  _$PqrsDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _pqrsCacheEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'pqrs_cache',
+            (PqrsCacheEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'clientId': item.clientId,
+                  'ownerId': item.ownerId,
+                  'motelId': item.motelId,
+                  'motelName': item.motelName,
+                  'clientName': item.clientName,
+                  'type': item.type,
+                  'subject': item.subject,
+                  'description': item.description,
+                  'status': item.status,
+                  'resolvedAt': item.resolvedAt,
+                  'closedBy': item.closedBy,
+                  'photoCount': item.photoCount,
+                  'createdAt': item.createdAt,
+                  'updatedAt': item.updatedAt
+                }),
+        _pqrsTraceCacheEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'pqrs_trace_cache',
+            (PqrsTraceCacheEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'pqrsId': item.pqrsId,
+                  'authorId': item.authorId,
+                  'authorRole': item.authorRole,
+                  'authorName': item.authorName,
+                  'message': item.message,
+                  'statusChange': item.statusChange,
+                  'photoCount': item.photoCount,
+                  'createdAt': item.createdAt
+                }),
+        _pqrsOutboxEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'pqrs_outbox',
+            (PqrsOutboxEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'pqrsId': item.pqrsId,
+                  'action': item.action,
+                  'payload': item.payload,
+                  'syncStatus': item.syncStatus,
+                  'errorMessage': item.errorMessage,
+                  'createdAt': item.createdAt,
+                  'attempts': item.attempts
+                }),
+        _pqrsOutboxPhotoEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'pqrs_outbox_photo',
+            (PqrsOutboxPhotoEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'outboxId': item.outboxId,
+                  'mimeType': item.mimeType,
+                  'bytes': item.bytes
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PqrsCacheEntry> _pqrsCacheEntryInsertionAdapter;
+
+  final InsertionAdapter<PqrsTraceCacheEntry>
+      _pqrsTraceCacheEntryInsertionAdapter;
+
+  final InsertionAdapter<PqrsOutboxEntry> _pqrsOutboxEntryInsertionAdapter;
+
+  final InsertionAdapter<PqrsOutboxPhotoEntry>
+      _pqrsOutboxPhotoEntryInsertionAdapter;
+
+  @override
+  Future<List<PqrsCacheEntry>> findAllCached() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_cache ORDER BY createdAt DESC',
+        mapper: (Map<String, Object?> row) => PqrsCacheEntry(
+            id: row['id'] as String,
+            clientId: row['clientId'] as String,
+            ownerId: row['ownerId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            clientName: row['clientName'] as String,
+            type: row['type'] as String,
+            subject: row['subject'] as String,
+            description: row['description'] as String,
+            status: row['status'] as String,
+            photoCount: row['photoCount'] as int,
+            createdAt: row['createdAt'] as int,
+            updatedAt: row['updatedAt'] as int,
+            resolvedAt: row['resolvedAt'] as int?,
+            closedBy: row['closedBy'] as String?));
+  }
+
+  @override
+  Future<PqrsCacheEntry?> findCachedById(String id) async {
+    return _queryAdapter.query('SELECT * FROM pqrs_cache WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => PqrsCacheEntry(
+            id: row['id'] as String,
+            clientId: row['clientId'] as String,
+            ownerId: row['ownerId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            clientName: row['clientName'] as String,
+            type: row['type'] as String,
+            subject: row['subject'] as String,
+            description: row['description'] as String,
+            status: row['status'] as String,
+            photoCount: row['photoCount'] as int,
+            createdAt: row['createdAt'] as int,
+            updatedAt: row['updatedAt'] as int,
+            resolvedAt: row['resolvedAt'] as int?,
+            closedBy: row['closedBy'] as String?),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<PqrsCacheEntry>> findCachedByClient(String clientId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_cache WHERE clientId = ?1 ORDER BY createdAt DESC',
+        mapper: (Map<String, Object?> row) => PqrsCacheEntry(
+            id: row['id'] as String,
+            clientId: row['clientId'] as String,
+            ownerId: row['ownerId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            clientName: row['clientName'] as String,
+            type: row['type'] as String,
+            subject: row['subject'] as String,
+            description: row['description'] as String,
+            status: row['status'] as String,
+            photoCount: row['photoCount'] as int,
+            createdAt: row['createdAt'] as int,
+            updatedAt: row['updatedAt'] as int,
+            resolvedAt: row['resolvedAt'] as int?,
+            closedBy: row['closedBy'] as String?),
+        arguments: [clientId]);
+  }
+
+  @override
+  Future<List<PqrsCacheEntry>> findCachedByOwner(String ownerId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_cache WHERE ownerId = ?1 ORDER BY createdAt DESC',
+        mapper: (Map<String, Object?> row) => PqrsCacheEntry(
+            id: row['id'] as String,
+            clientId: row['clientId'] as String,
+            ownerId: row['ownerId'] as String,
+            motelId: row['motelId'] as String,
+            motelName: row['motelName'] as String,
+            clientName: row['clientName'] as String,
+            type: row['type'] as String,
+            subject: row['subject'] as String,
+            description: row['description'] as String,
+            status: row['status'] as String,
+            photoCount: row['photoCount'] as int,
+            createdAt: row['createdAt'] as int,
+            updatedAt: row['updatedAt'] as int,
+            resolvedAt: row['resolvedAt'] as int?,
+            closedBy: row['closedBy'] as String?),
+        arguments: [ownerId]);
+  }
+
+  @override
+  Future<List<PqrsTraceCacheEntry>> findCachedTraces(String pqrsId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_trace_cache WHERE pqrsId = ?1 ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => PqrsTraceCacheEntry(id: row['id'] as String, pqrsId: row['pqrsId'] as String, authorId: row['authorId'] as String, authorRole: row['authorRole'] as String, message: row['message'] as String, photoCount: row['photoCount'] as int, createdAt: row['createdAt'] as int, authorName: row['authorName'] as String?, statusChange: row['statusChange'] as String?),
+        arguments: [pqrsId]);
+  }
+
+  @override
+  Future<void> deleteAllCached() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM pqrs_cache');
+  }
+
+  @override
+  Future<void> deleteAllTraces() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM pqrs_trace_cache');
+  }
+
+  @override
+  Future<void> deleteTracesOf(String pqrsId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM pqrs_trace_cache WHERE pqrsId = ?1',
+        arguments: [pqrsId]);
+  }
+
+  @override
+  Future<List<PqrsOutboxEntry>> findOutbox() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_outbox ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => PqrsOutboxEntry(
+            id: row['id'] as String,
+            pqrsId: row['pqrsId'] as String,
+            action: row['action'] as String,
+            payload: row['payload'] as String,
+            syncStatus: row['syncStatus'] as String,
+            createdAt: row['createdAt'] as int,
+            errorMessage: row['errorMessage'] as String?,
+            attempts: row['attempts'] as int));
+  }
+
+  @override
+  Future<List<PqrsOutboxEntry>> findOutboxByStatus(String status) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_outbox WHERE syncStatus = ?1 ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => PqrsOutboxEntry(id: row['id'] as String, pqrsId: row['pqrsId'] as String, action: row['action'] as String, payload: row['payload'] as String, syncStatus: row['syncStatus'] as String, createdAt: row['createdAt'] as int, errorMessage: row['errorMessage'] as String?, attempts: row['attempts'] as int),
+        arguments: [status]);
+  }
+
+  @override
+  Future<List<PqrsOutboxEntry>> findOutboxOf(String pqrsId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_outbox WHERE pqrsId = ?1 ORDER BY createdAt ASC',
+        mapper: (Map<String, Object?> row) => PqrsOutboxEntry(
+            id: row['id'] as String,
+            pqrsId: row['pqrsId'] as String,
+            action: row['action'] as String,
+            payload: row['payload'] as String,
+            syncStatus: row['syncStatus'] as String,
+            createdAt: row['createdAt'] as int,
+            errorMessage: row['errorMessage'] as String?,
+            attempts: row['attempts'] as int),
+        arguments: [pqrsId]);
+  }
+
+  @override
+  Future<PqrsOutboxEntry?> findOutboxById(String id) async {
+    return _queryAdapter.query('SELECT * FROM pqrs_outbox WHERE id = ?1',
+        mapper: (Map<String, Object?> row) => PqrsOutboxEntry(
+            id: row['id'] as String,
+            pqrsId: row['pqrsId'] as String,
+            action: row['action'] as String,
+            payload: row['payload'] as String,
+            syncStatus: row['syncStatus'] as String,
+            createdAt: row['createdAt'] as int,
+            errorMessage: row['errorMessage'] as String?,
+            attempts: row['attempts'] as int),
+        arguments: [id]);
+  }
+
+  @override
+  Future<List<PqrsOutboxPhotoEntry>> findOutboxPhotos(String outboxId) async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_outbox_photo WHERE outboxId = ?1 ORDER BY id',
+        mapper: (Map<String, Object?> row) => PqrsOutboxPhotoEntry(
+            id: row['id'] as String,
+            outboxId: row['outboxId'] as String,
+            mimeType: row['mimeType'] as String,
+            bytes: row['bytes'] as Uint8List),
+        arguments: [outboxId]);
+  }
+
+  @override
+  Future<void> deleteOutboxPhotos(String outboxId) async {
+    await _queryAdapter.queryNoReturn(
+        'DELETE FROM pqrs_outbox_photo WHERE outboxId = ?1',
+        arguments: [outboxId]);
+  }
+
+  @override
+  Future<void> deleteOutboxRow(String id) async {
+    await _queryAdapter.queryNoReturn('DELETE FROM pqrs_outbox WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> markOutboxStatus(
+    String id,
+    String status,
+    String message,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE pqrs_outbox SET syncStatus = ?2, errorMessage = ?3, attempts = attempts + 1 WHERE id = ?1',
+        arguments: [id, status, message]);
+  }
+
+  @override
+  Future<void> countOutboxAttempt(String id) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE pqrs_outbox SET attempts = attempts + 1 WHERE id = ?1',
+        arguments: [id]);
+  }
+
+  @override
+  Future<void> resetOutboxStatus(
+    String id,
+    String status,
+  ) async {
+    await _queryAdapter.queryNoReturn(
+        'UPDATE pqrs_outbox SET syncStatus = ?2, errorMessage = NULL WHERE id = ?1',
+        arguments: [id, status]);
+  }
+
+  @override
+  Future<void> upsertAllCached(List<PqrsCacheEntry> requests) async {
+    await _pqrsCacheEntryInsertionAdapter.insertList(
+        requests, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> upsertAllTraces(List<PqrsTraceCacheEntry> traces) async {
+    await _pqrsTraceCacheEntryInsertionAdapter.insertList(
+        traces, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOutbox(PqrsOutboxEntry entry) async {
+    await _pqrsOutboxEntryInsertionAdapter.insert(
+        entry, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> insertOutboxPhotos(List<PqrsOutboxPhotoEntry> photos) async {
+    await _pqrsOutboxPhotoEntryInsertionAdapter.insertList(
+        photos, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> replaceAll(
+    List<PqrsCacheEntry> requests,
+    List<PqrsTraceCacheEntry> traces,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(requests, traces);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.pqrsDao.replaceAll(requests, traces);
+      });
+    }
+  }
+
+  @override
+  Future<void> replaceTracesOf(
+    String pqrsId,
+    List<PqrsTraceCacheEntry> traces,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceTracesOf(pqrsId, traces);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.pqrsDao.replaceTracesOf(pqrsId, traces);
+      });
+    }
+  }
+
+  @override
+  Future<void> enqueue(
+    PqrsOutboxEntry entry,
+    List<PqrsOutboxPhotoEntry> photos,
+  ) async {
+    if (database is sqflite.Transaction) {
+      await super.enqueue(entry, photos);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.pqrsDao.enqueue(entry, photos);
+      });
+    }
+  }
+
+  @override
+  Future<void> removeOutbox(String id) async {
+    if (database is sqflite.Transaction) {
+      await super.removeOutbox(id);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.pqrsDao.removeOutbox(id);
+      });
+    }
+  }
+}
+
+class _$AllowedImageFormatDao extends AllowedImageFormatDao {
+  _$AllowedImageFormatDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _allowedImageFormatEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'allowed_image_formats',
+            (AllowedImageFormatEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'mimeType': item.mimeType,
+                  'extensions': item.extensions,
+                  'signatures': item.signatures,
+                  'maxSizeBytes': item.maxSizeBytes,
+                  'isActive': item.isActive
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<AllowedImageFormatEntry>
+      _allowedImageFormatEntryInsertionAdapter;
+
+  @override
+  Future<List<AllowedImageFormatEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM allowed_image_formats ORDER BY id ASC',
+        mapper: (Map<String, Object?> row) => AllowedImageFormatEntry(
+            id: row['id'] as int,
+            mimeType: row['mimeType'] as String,
+            extensions: row['extensions'] as String,
+            signatures: row['signatures'] as String,
+            maxSizeBytes: row['maxSizeBytes'] as int,
+            isActive: row['isActive'] as int));
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM allowed_image_formats');
+  }
+
+  @override
+  Future<void> insertAll(List<AllowedImageFormatEntry> formats) async {
+    await _allowedImageFormatEntryInsertionAdapter.insertList(
+        formats, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> replaceAll(List<AllowedImageFormatEntry> formats) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(formats);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.allowedImageFormatDao.replaceAll(formats);
+      });
+    }
+  }
+}
+
+class _$PqrsTypeDao extends PqrsTypeDao {
+  _$PqrsTypeDao(
+    this.database,
+    this.changeListener,
+  )   : _queryAdapter = QueryAdapter(database),
+        _pqrsTypeEntryInsertionAdapter = InsertionAdapter(
+            database,
+            'pqrs_types',
+            (PqrsTypeEntry item) => <String, Object?>{
+                  'id': item.id,
+                  'code': item.code,
+                  'name': item.name,
+                  'description': item.description,
+                  'responseDays': item.responseDays,
+                  'allowsPhotos': item.allowsPhotos,
+                  'sortOrder': item.sortOrder,
+                  'isActive': item.isActive
+                });
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<PqrsTypeEntry> _pqrsTypeEntryInsertionAdapter;
+
+  @override
+  Future<List<PqrsTypeEntry>> findAll() async {
+    return _queryAdapter.queryList(
+        'SELECT * FROM pqrs_types ORDER BY sortOrder ASC, id ASC',
+        mapper: (Map<String, Object?> row) => PqrsTypeEntry(
+            id: row['id'] as int,
+            code: row['code'] as String,
+            name: row['name'] as String,
+            description: row['description'] as String,
+            responseDays: row['responseDays'] as int,
+            allowsPhotos: row['allowsPhotos'] as int,
+            sortOrder: row['sortOrder'] as int,
+            isActive: row['isActive'] as int));
+  }
+
+  @override
+  Future<void> deleteAll() async {
+    await _queryAdapter.queryNoReturn('DELETE FROM pqrs_types');
+  }
+
+  @override
+  Future<void> insertAll(List<PqrsTypeEntry> types) async {
+    await _pqrsTypeEntryInsertionAdapter.insertList(
+        types, OnConflictStrategy.replace);
+  }
+
+  @override
+  Future<void> replaceAll(List<PqrsTypeEntry> types) async {
+    if (database is sqflite.Transaction) {
+      await super.replaceAll(types);
+    } else {
+      await (database as sqflite.Database)
+          .transaction<void>((transaction) async {
+        final transactionDatabase = _$AppDatabase(changeListener)
+          ..database = transaction;
+        await transactionDatabase.pqrsTypeDao.replaceAll(types);
+      });
+    }
   }
 }
 
