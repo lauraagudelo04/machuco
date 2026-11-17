@@ -11,7 +11,12 @@ abstract final class PqrsValidator {
   static const messageMinLength = 1;
   static const messageMaxLength = 1000;
   static const rejectReasonMinLength = 10;
-  static const maxPhotos = 3;
+
+  /// Default photo limit; the real one comes from `pqrs_settings.max_photos`.
+  static const defaultMaxPhotos = 3;
+
+  /// Upper bound the Firestore rules accept per entry, whatever Supabase says.
+  static const hardMaxPhotos = 10;
 
   static const motelRequiredMessage = 'Selecciona un motel';
   static const typeRequiredMessage = 'Selecciona un tipo de solicitud';
@@ -60,6 +65,6 @@ abstract final class PqrsValidator {
     return null;
   }
 
-  static String? photoCount(int count) =>
-      count > maxPhotos ? 'Puedes adjuntar máximo $maxPhotos fotos' : null;
+  static String? photoCount(int count, {int max = defaultMaxPhotos}) =>
+      count > max ? 'Puedes adjuntar máximo $max fotos' : null;
 }

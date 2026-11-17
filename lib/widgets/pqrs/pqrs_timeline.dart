@@ -10,18 +10,28 @@ import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 /// The same timeline is used by the three profiles; the administrator simply
 /// renders it without any composer below.
 class PqrsTimeline extends StatelessWidget {
-  const PqrsTimeline({super.key, required this.request});
+  const PqrsTimeline({
+    super.key,
+    required this.request,
+    this.photos = const [],
+  });
 
   final PqrsRequest request;
+
+  /// Photos downloaded for the detail. Each one belongs to the entry whose id
+  /// prefixes its own (`<entryId>_1` to `_3`); the photos of the opening entry
+  /// use `<requestId>-open`, the same id the repository writes.
+  final List<PqrsAttachment> photos;
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
 
     final opening = PqrsTraceEntry(
-      id: '${request.id}-opening',
+      id: '${request.id}-open',
       author: PqrsActor.client,
       authorId: request.clientId,
+      authorName: request.clientName,
       message: request.description,
       createdAt: request.createdAt,
       attachments: request.attachments,
@@ -45,6 +55,7 @@ class PqrsTimeline extends StatelessWidget {
         for (var index = 0; index < entries.length; index++)
           _TimelineTile(
             entry: entries[index],
+            photos: _photosOf(entries[index]),
             isFirst: index == 0,
             isLast: index == entries.length - 1,
           ),
@@ -53,14 +64,29 @@ class PqrsTimeline extends StatelessWidget {
   }
 }
 
+extension on PqrsTimeline {
+  /// Photos of [entry]: those it carries plus the downloaded ones that match.
+  List<PqrsAttachment> _photosOf(PqrsTraceEntry entry) {
+    final matched = photos.where((p) => p.id.startsWith('${entry.id}_'));
+    final known = {for (final p in entry.attachments) p.id};
+    return [
+      ...entry.attachments,
+      for (final photo in matched)
+        if (!known.contains(photo.id)) photo,
+    ];
+  }
+}
+
 class _TimelineTile extends StatelessWidget {
   const _TimelineTile({
     required this.entry,
+    required this.photos,
     required this.isFirst,
     required this.isLast,
   });
 
   final PqrsTraceEntry entry;
+  final List<PqrsAttachment> photos;
   final bool isFirst;
   final bool isLast;
 
@@ -86,22 +112,20 @@ class _TimelineTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Text(
-                        entry.author.label,
-                        style: theme.textTheme.titleSmall?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(width: AppSpacing.s2),
-                      Text(
-                        formatPqrsDateTime(entry.createdAt),
-                        style: theme.textTheme.labelSmall?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
-                      ),
-                    ],
+                  Text(
+                    entry.authorName.isEmpty
+                        ? entry.author.label
+                        : entry.authorName,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    '${entry.author.label} · '
+                    '${formatPqrsDateTime(entry.createdAt)}',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.s2),
                   Text(
@@ -110,9 +134,9 @@ class _TimelineTile extends StatelessWidget {
                       color: context.appColors.textSecondary,
                     ),
                   ),
-                  if (entry.attachments.isNotEmpty) ...[
+                  if (photos.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.s3),
-                    PqrsPhotoStrip(attachments: entry.attachments),
+                    PqrsPhotoStrip(attachments: photos),
                   ],
                   if (entry.statusChange != null) ...[
                     const SizedBox(height: AppSpacing.s3),
@@ -152,8 +176,8 @@ class _Rail extends StatelessWidget {
             height: 32,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: accent.withValues(alpha: .16),
-              border: Border.all(color: accent.withValues(alpha: .4)),
+              color: accent.withValues(alpha: AppOpacity.selectedFill),
+              border: Border.all(color: accent),
             ),
             child: Icon(icon, size: 16, color: accent),
           ),
@@ -180,7 +204,7 @@ class _StatusChangeChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return DecoratedBox(
       decoration: BoxDecoration(
-        color: status.color.withValues(alpha: .1),
+        color: status.color.withValues(alpha: AppOpacity.softFill),
         borderRadius: BorderRadius.circular(AppRadius.sm),
       ),
       child: Padding(

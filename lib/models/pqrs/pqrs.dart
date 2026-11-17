@@ -47,8 +47,8 @@ enum PqrsActor { client, owner, systemAdmin }
 
 /// A photo attached to a trace entry.
 ///
-/// There is no image picker in the project yet, so an attachment is simulated:
-/// [seed] drives a deterministic placeholder rendered by the view layer.
+/// [bytes] and [mimeType] carry the real compressed image. Photos listed
+/// without their bytes still show a placeholder; [seed] only varies it.
 class PqrsAttachment {
   const PqrsAttachment({
     required this.id,
@@ -60,31 +60,13 @@ class PqrsAttachment {
     this.mimeType,
   });
 
-  /// Builds a simulated attachment with a deterministic placeholder.
-  factory PqrsAttachment.simulated({
-    required PqrsActor author,
-    required String label,
-    DateTime? capturedAt,
-    int? seed,
-  }) {
-    final now = capturedAt ?? DateTime.now();
-    return PqrsAttachment(
-      id: 'att-${now.microsecondsSinceEpoch}-${label.hashCode}',
-      label: label,
-      author: author,
-      capturedAt: now,
-      seed: seed ?? label.hashCode.abs(),
-    );
-  }
-
   final String id;
   final String label;
   final PqrsActor author;
   final DateTime capturedAt;
   final int seed;
 
-  /// Compressed image bytes. `null` for simulated attachments, which have no
-  /// real image and are never sent to Firestore.
+  /// Compressed image bytes. `null` while the photo has not been downloaded.
   final Uint8List? bytes;
 
   /// MIME type of [bytes] (for example `image/jpeg`).
@@ -145,9 +127,8 @@ class PqrsRequest {
   final String id;
   final String motelId;
 
-  /// Denormalized display fallback; kept in sync with the real motel name at
-  /// seed time. The authoritative name now comes from `MotelController` via
-  /// `PqrsController.loadMotelsWithRequests`.
+  /// Motel name denormalized when the request is filed, so lists render
+  /// without reading the motel again. Not updated if the motel is renamed.
   final String motelName;
   final String clientId;
   final String clientName;

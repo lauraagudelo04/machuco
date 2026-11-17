@@ -66,7 +66,7 @@ class PqrsNewRequest {
   final String description;
   final DateTime createdAt;
 
-  /// At most [PqrsValidator.maxPhotos]; checked by the controller.
+  /// At most the configured photo limit; checked by the controller.
   final List<PqrsAttachment> photos;
 }
 

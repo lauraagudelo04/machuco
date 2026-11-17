@@ -1,66 +1,142 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/controllers/pqrs/pqrs_photo_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/pqrs/pqrs_repository.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
+import 'package:machuco/utils/pqrs_validator.dart';
 import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+import 'package:machuco/widgets/pqrs/pqrs_state_views.dart';
 import 'package:machuco/widgets/pqrs/pqrs_status_badge.dart';
+import 'package:machuco/widgets/pqrs/pqrs_sync_notice.dart';
 import 'package:machuco/widgets/pqrs/pqrs_timeline.dart';
 import 'package:machuco/widgets/pqrs/pqrs_update_composer.dart';
 
 /// Detail of a request the owner has to attend.
 ///
-/// The owner may answer, attach progress photos, mark the request as solved or
-/// reject it. Closing stays with the client, so no closing action is offered.
-class OwnerPqrsDetailPage extends StatelessWidget {
-  const OwnerPqrsDetailPage({super.key, required this.requestId, this.store});
+/// While the request is open the owner may answer, attach progress photos,
+/// mark it as solved or reject it. Once solved it waits for the client; the
+/// owner can only close it, for lack of answer, after the deadline.
+class OwnerPqrsDetailPage extends StatefulWidget {
+  const OwnerPqrsDetailPage({
+    super.key,
+    required this.requestId,
+    required this.controller,
+    this.photos,
+  });
 
   final String requestId;
-  final PqrsController? store;
+  final PqrsController controller;
 
-  // TODO(etapa-6): borrar la fabrica temporal.
-  PqrsController get _store =>
-      store ?? PqrsController.legacyShared(PqrsActor.owner);
+  /// Photos of the composer; defaults to the composed ones.
+  final PqrsPhotoController? photos;
 
-  void _addUpdate(String message, List<PqrsAttachment> attachments) {
-    _store.addUpdate(
-      requestId: requestId,
-      message: message,
-      attachments: attachments,
-    );
+  @override
+  State<OwnerPqrsDetailPage> createState() => _OwnerPqrsDetailPageState();
+}
+
+class _OwnerPqrsDetailPageState extends State<OwnerPqrsDetailPage> {
+  late final PqrsPhotoController _photos;
+  late final bool _ownsPhotos;
+  List<PqrsAttachment> _downloaded = const [];
+
+  PqrsController get _controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _ownsPhotos = widget.photos == null;
+    _photos =
+        widget.photos ?? PqrsPhotoController.fromProvider(PqrsActor.owner);
+    _load();
   }
 
-  void _markResolved(
-    BuildContext context,
+  @override
+  void dispose() {
+    if (_ownsPhotos) _photos.dispose();
+    super.dispose();
+  }
+
+  /// Reads the detail (which also retries the pending queue) and its photos.
+  Future<void> _load() async {
+    final found = await _controller.loadDetail(widget.requestId);
+    if (!found) return;
+    await _refreshPhotos();
+  }
+
+  Future<void> _refreshPhotos() async {
+    final photos = await _controller.loadPhotos(widget.requestId);
+    if (mounted) setState(() => _downloaded = photos);
+  }
+
+  Future<bool> _addUpdate(
     String message,
     List<PqrsAttachment> attachments,
-  ) {
-    _store.markResolved(
-      requestId: requestId,
+  ) async {
+    final sent = await _controller.addUpdate(
+      requestId: widget.requestId,
       message: message,
       attachments: attachments,
     );
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text(
-          'Marcada como solucionada. El cliente debe confirmar el cierre.',
-        ),
-      ),
-    );
+    if (sent) await _refreshPhotos();
+    return sent;
   }
 
-  Future<void> _reject(BuildContext context) async {
+  Future<bool> _markResolved(
+    String message,
+    List<PqrsAttachment> attachments,
+  ) async {
+    final sent = await _controller.markResolved(
+      requestId: widget.requestId,
+      message: message,
+      attachments: attachments,
+    );
+    if (sent) {
+      await _refreshPhotos();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Marcada como solucionada. El cliente debe confirmar el cierre.',
+            ),
+          ),
+        );
+      }
+    }
+    return sent;
+  }
+
+  Future<void> _reject() async {
     final reason = await showDialog<String>(
       context: context,
       builder: (_) => const _RejectDialog(),
     );
-    if (reason == null || !context.mounted) return;
+    if (reason == null || !mounted) return;
 
-    _store.reject(requestId: requestId, message: reason);
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Solicitud rechazada con la justificación registrada.'),
-      ),
+    final rejected = await _controller.reject(
+      requestId: widget.requestId,
+      message: reason,
     );
+    if (rejected && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Solicitud rechazada con la justificación registrada.'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _closeByTimeout() async {
+    final confirmed = await AppDialog.confirm(
+      context,
+      title: 'Cerrar por falta de respuesta',
+      message:
+          'El cliente no confirmó la solución a tiempo. La solicitud se '
+          'cerrará y ya no admitirá más mensajes.',
+      confirmLabel: 'Cerrar',
+    );
+    if (!confirmed || !mounted) return;
+    await _controller.closeByTimeout(requestId: widget.requestId);
   }
 
   @override
@@ -68,53 +144,140 @@ class OwnerPqrsDetailPage extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(title: const Text('Atender PQRS')),
       body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _store,
-          builder: (context, _) {
-            final request = _store.byId(requestId);
-
-            return ListView(
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(AppSpacing.screen),
-              children: [
-                _RequestHeader(request: request),
-                const SizedBox(height: AppSpacing.s5),
-                PqrsTimeline(request: request),
-                const SizedBox(height: AppSpacing.s6),
-                if (request.status.isFinal)
-                  _FinalNotice(status: request.status)
-                else ...[
-                  PqrsUpdateComposer(
-                    author: PqrsActor.owner,
-                    title: 'Registrar avance',
-                    hint:
-                        'Describe la gestión realizada y adjunta el avance...',
-                    submitLabel: 'Enviar avance',
-                    secondaryLabel: request.status == PqrsStatus.resolved
-                        ? null
-                        : 'Marcar como solucionada',
-                    secondaryIcon: Icons.verified_outlined,
-                    onSubmit: _addUpdate,
-                    onSecondary: request.status == PqrsStatus.resolved
-                        ? null
-                        : (message, attachments) =>
-                              _markResolved(context, message, attachments),
-                  ),
-                  const SizedBox(height: AppSpacing.s4),
-                  _ClosureNotice(status: request.status),
-                  const SizedBox(height: AppSpacing.s3),
-                  AppButton(
-                    label: 'Rechazar solicitud',
-                    icon: Icons.cancel_outlined,
-                    variant: AppButtonVariant.destructive,
-                    onPressed: () => _reject(context),
-                  ),
-                ],
-              ],
-            );
-          },
+              children: _children(context),
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  List<Widget> _children(BuildContext context) {
+    final request = _controller.findById(widget.requestId);
+    final error = _controller.error;
+
+    if (request == null) {
+      if (_controller.isLoading) return const [PqrsLoadingSkeleton()];
+      if (error != null && error.kind != PqrsFailureKind.notFound) {
+        return [
+          AppErrorState(
+            message: error.message,
+            onRetry: error.isRetryable ? _controller.retry : null,
+          ),
+        ];
+      }
+      return const [
+        AppEmptyState(
+          icon: Icons.search_off_outlined,
+          title: 'Solicitud no encontrada',
+          message:
+              'La solicitud no existe o no puedes verla. Vuelve al listado.',
+        ),
+      ];
+    }
+
+    final sync = _controller.syncOf(request.id);
+    return [
+      _RequestHeader(request: request),
+      if (_controller.notice case final notice?) ...[
+        const SizedBox(height: AppSpacing.s4),
+        PqrsInfoBanner(message: notice, icon: Icons.cloud_off_outlined),
+      ],
+      if (!sync.isSynced) ...[
+        const SizedBox(height: AppSpacing.s4),
+        PqrsSyncNotice(
+          sync: sync,
+          busy: _controller.isBusy,
+          onRetry: () => _controller.retryPending(requestId: request.id),
+          onDiscard: () => _controller.discardPending(request.id),
+        ),
+      ],
+      if (error != null) ...[
+        const SizedBox(height: AppSpacing.s4),
+        PqrsErrorBanner(
+          message: error.message,
+          onRetry: error.isRetryable ? _controller.retry : null,
+        ),
+      ],
+      const SizedBox(height: AppSpacing.s5),
+      PqrsTimeline(request: request, photos: _downloaded),
+      const SizedBox(height: AppSpacing.s6),
+      ..._actions(request),
+    ];
+  }
+
+  List<Widget> _actions(PqrsRequest request) {
+    if (request.status.isFinal) {
+      return [
+        PqrsFinalNotice(
+          status: request.status,
+          detail: request.closedBy == PqrsClosedBy.ownerTimeout
+              ? 'Cerrada por vencimiento del plazo de confirmación.'
+              : null,
+        ),
+      ];
+    }
+
+    if (request.status == PqrsStatus.resolved) {
+      final deadline = request.confirmationDeadline;
+      return [
+        PqrsInfoBanner(
+          icon: Icons.hourglass_top_outlined,
+          message: deadline == null
+              ? 'Ya marcaste la solicitud como solucionada. Espera la '
+                    'confirmación del cliente.'
+              : 'Ya marcaste la solicitud como solucionada. El cliente puede '
+                    'confirmarla hasta el ${formatPqrsDate(deadline)}.',
+        ),
+        if (_controller.isOverdue(request)) ...[
+          const SizedBox(height: AppSpacing.s3),
+          AppButton(
+            label: 'Cerrar por falta de respuesta',
+            icon: Icons.lock_clock_outlined,
+            variant: AppButtonVariant.secondary,
+            loading: _controller.isBusy,
+            onPressed: _closeByTimeout,
+          ),
+        ],
+      ];
+    }
+
+    return [
+      PqrsUpdateComposer(
+        key: const ValueKey('pqrs-composer'),
+        author: PqrsActor.owner,
+        title: 'Registrar avance',
+        hint: 'Describe la gestión realizada y adjunta el avance...',
+        submitLabel: 'Enviar avance',
+        secondaryLabel: 'Marcar como solucionada',
+        secondaryIcon: Icons.verified_outlined,
+        photos: _photos,
+        busy: _controller.isBusy,
+        onSubmit: _addUpdate,
+        onSecondary: _markResolved,
+      ),
+      const SizedBox(height: AppSpacing.s4),
+      const PqrsInfoBanner(
+        icon: Icons.person_outline,
+        message:
+            'Recuerda: tú marcas la solución, pero el cierre lo confirma el '
+            'cliente.',
+      ),
+      const SizedBox(height: AppSpacing.s3),
+      AppButton(
+        label: 'Rechazar solicitud',
+        icon: Icons.cancel_outlined,
+        variant: AppButtonVariant.destructive,
+        onPressed: _controller.isBusy ? null : _reject,
+      ),
+    ];
   }
 }
 
@@ -166,59 +329,6 @@ class _RequestHeader extends StatelessWidget {
   }
 }
 
-class _ClosureNotice extends StatelessWidget {
-  const _ClosureNotice({required this.status});
-
-  final PqrsStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      padding: const EdgeInsets.all(AppSpacing.s3),
-      child: Row(
-        children: [
-          Icon(Icons.person_outline, color: context.appColors.textSecondary),
-          const SizedBox(width: AppSpacing.s3),
-          Expanded(
-            child: Text(
-              status == PqrsStatus.resolved
-                  ? 'Ya marcaste la solicitud como solucionada. Solo el cliente puede cerrarla.'
-                  : 'Recuerda: tú marcas la solución, pero el cierre lo hace el cliente.',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _FinalNotice extends StatelessWidget {
-  const _FinalNotice({required this.status});
-
-  final PqrsStatus status;
-
-  @override
-  Widget build(BuildContext context) {
-    return AppCard(
-      child: Row(
-        children: [
-          Icon(status.icon, color: status.color),
-          const SizedBox(width: AppSpacing.s3),
-          Expanded(
-            child: Text(
-              status == PqrsStatus.closed
-                  ? 'El cliente cerró esta solicitud. La trazabilidad queda como historial.'
-                  : 'Esta solicitud fue rechazada y no admite nuevas actualizaciones.',
-              style: Theme.of(context).textTheme.bodyMedium,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _RejectDialog extends StatefulWidget {
   const _RejectDialog();
 
@@ -236,44 +346,54 @@ class _RejectDialogState extends State<_RejectDialog> {
     super.dispose();
   }
 
+  String? get _error => _validationAttempted
+      ? PqrsValidator.rejectReason(_controller.text)
+      : null;
+
   void _confirm() {
     setState(() => _validationAttempted = true);
-    final reason = _controller.text.trim();
-    if (reason.isEmpty) return;
-    Navigator.of(context).pop(reason);
+    if (PqrsValidator.rejectReason(_controller.text) != null) return;
+    Navigator.of(context).pop(_controller.text.trim());
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Rechazar solicitud'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'El rechazo queda en la trazabilidad y el cliente lo verá. '
-            'Explica el motivo.',
-          ),
-          const SizedBox(height: AppSpacing.s4),
-          AppTextField(
-            label: 'Motivo',
-            controller: _controller,
-            maxLines: 3,
-            errorText: _validationAttempted && _controller.text.trim().isEmpty
-                ? 'Campo requerido'
-                : null,
-            onChanged: (_) {
-              if (_validationAttempted) setState(() {});
-            },
-          ),
-        ],
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'El rechazo queda en la trazabilidad y el cliente lo verá. '
+              'Explica el motivo (mínimo ${PqrsValidator.rejectReasonMinLength} '
+              'caracteres).',
+            ),
+            const SizedBox(height: AppSpacing.s4),
+            AppTextField(
+              label: 'Motivo',
+              controller: _controller,
+              maxLines: 3,
+              errorText: _error,
+              errorMaxLines: 3,
+              onChanged: (_) {
+                if (_validationAttempted) setState(() {});
+              },
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Cancelar'),
         ),
-        TextButton(onPressed: _confirm, child: const Text('Rechazar')),
+        TextButton(
+          style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
+          onPressed: _confirm,
+          child: const Text('Rechazar'),
+        ),
       ],
     );
   }

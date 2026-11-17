@@ -1,16 +1,12 @@
 // Named parameters cannot be private, so the fields are set in the initializer.
 // ignore_for_file: prefer_initializing_formals
 import 'package:flutter/foundation.dart';
-import 'package:machuco/controllers/client/client_controller.dart';
-import 'package:machuco/database/repository/pqrs/legacy_in_memory_pqrs_repository.dart';
 import 'package:machuco/database/repository/pqrs/pqrs_repository.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/models/pqrs/pqrs_session.dart';
-import 'package:machuco/models/pqrs/pqrs_store.dart';
+import 'package:machuco/repositories/pqrs/pqrs_repository_provider.dart';
+import 'package:machuco/database/repository/pqrs/synced_pqrs_repository.dart';
 import 'package:machuco/utils/pqrs_validator.dart';
-
-export 'package:machuco/models/pqrs/pqrs_store.dart'
-    show pqrsCurrentClientId, pqrsCurrentMotelId;
 
 /// Fixed message of the trace entry written when the owner closes a request
 /// because the client did not answer in time.
@@ -39,53 +35,56 @@ class PqrsController extends ChangeNotifier {
     required PqrsSession? session,
     required DateTime Function() clock,
     List<PqrsRequest> initialRequests = const [],
+    int maxPhotos = PqrsValidator.defaultMaxPhotos,
   }) : _repository = repository,
        _session = session,
-       _clock = clock {
+       _clock = clock,
+       _maxPhotos = maxPhotos.clamp(1, PqrsValidator.hardMaxPhotos) {
     for (final request in initialRequests) {
       _requests.add(request);
     }
   }
 
-  // TODO(etapa-6): borrar. Fabrica temporal para que las vistas actuales sigan
-  // compilando; sustituir por el repositorio y la sesion reales.
-  static PqrsController? _legacy;
-
-  // TODO(etapa-6): borrar.
-  /// Shared controller of the current views. Passing [role] acts as that
-  /// role; without it the active role is left untouched (read-only use).
-  static PqrsController legacyShared([PqrsActor? role]) {
-    final seed = PqrsStore.instance.requests;
-    final controller = _legacy ??= PqrsController(
-      repository: LegacyInMemoryPqrsRepository(seed),
-      session: null,
+  /// Builds the controller of the signed-in user with the composed
+  /// repository.
+  ///
+  /// Throws [PqrsFailure]: `permission` without a usable session ("Debes
+  /// iniciar sesión"), `connection` when the profile cannot be read and
+  /// `unknown` when the repository was never composed.
+  static Future<PqrsController> forCurrentUser() async {
+    final repository = PqrsRepositoryProvider.instance;
+    if (repository == null) {
+      throw const PqrsFailure(PqrsFailureKind.unknown, _unknownMessage);
+    }
+    final PqrsSession? session;
+    try {
+      session = await PqrsRepositoryProvider.sessionResolver();
+    } on Object catch (error) {
+      debugPrint('PQRS: session ${error.runtimeType}');
+      throw const PqrsFailure(
+        PqrsFailureKind.connection,
+        'No pudimos verificar tu sesión. Revisa tu conexión e intenta de nuevo',
+      );
+    }
+    if (session == null) {
+      throw const PqrsFailure(
+        PqrsFailureKind.permission,
+        _loginRequiredMessage,
+      );
+    }
+    final settings = await PqrsRepositoryProvider.validation?.loadSettings();
+    return PqrsController(
+      repository: repository,
+      session: session,
       clock: DateTime.now,
-      initialRequests: seed,
+      maxPhotos: settings?.value.maxPhotos ?? PqrsValidator.defaultMaxPhotos,
     );
-    if (role == null) return controller;
-    controller._session = switch (role) {
-      PqrsActor.client => PqrsSession(
-        uid: pqrsCurrentClientId,
-        role: role,
-        name: ClientController.instance.currentClient?.name ?? 'Cliente',
-      ),
-      PqrsActor.owner => const PqrsSession(
-        uid: 'owner-1',
-        role: PqrsActor.owner,
-        name: 'Propietario',
-      ),
-      PqrsActor.systemAdmin => const PqrsSession(
-        uid: 'admin-1',
-        role: PqrsActor.systemAdmin,
-        name: 'Administrador',
-      ),
-    };
-    return controller;
   }
 
   final PqrsRepository _repository;
   final DateTime Function() _clock;
-  PqrsSession? _session;
+  final PqrsSession? _session;
+  final int _maxPhotos;
 
   final List<PqrsRequest> _requests = [];
   final Map<String, PqrsSyncState> _sync = {};
@@ -113,6 +112,28 @@ class PqrsController extends ChangeNotifier {
   /// True once a load finished without error and there is nothing to show.
   bool get isEmpty =>
       _loaded && !_loading && _error == null && _requests.isEmpty;
+
+  /// "Datos guardados, sin conexión" while the last read used the local copy;
+  /// `null` otherwise (or when the repository has no local copy).
+  String? get notice {
+    final Object source = _repository;
+    return source is PqrsNoticeSource ? source.notice : null;
+  }
+
+  /// Role of the session, or `null` without one.
+  PqrsActor? get role => _session?.role;
+
+  /// uid of the session, or `null` without one.
+  String? get uid => _session?.uid;
+
+  /// Current time of the injected clock; the views use it to decide whether
+  /// the confirmation deadline has expired.
+  DateTime get now => _clock();
+
+  /// True when [request] is resolved and its confirmation deadline has
+  /// expired. The device clock only decides visibility; Firestore decides.
+  bool isOverdue(PqrsRequest request) =>
+      request.canBeClosedByOwnerTimeout(_clock());
 
   /// Request created by the last successful [createRequest].
   PqrsRequest? get lastCreated => _lastCreated;
@@ -227,11 +248,14 @@ class PqrsController extends ChangeNotifier {
   }
 
   /// Photos of a request, requested only when the detail needs them.
+  ///
+  /// They are optional content: a failure (for example without connection)
+  /// leaves the placeholders and does not raise the error state of the screen.
   Future<List<PqrsAttachment>> loadPhotos(String requestId) async {
     try {
       return await _repository.getPhotos(requestId);
     } on Object catch (error) {
-      _fail(_toFailure(error));
+      debugPrint('PQRS: photos ${error.runtimeType}');
       return const [];
     }
   }
@@ -268,7 +292,7 @@ class PqrsController extends ChangeNotifier {
       }
       _validate(PqrsValidator.subject(subject));
       _validate(PqrsValidator.description(description));
-      _validate(PqrsValidator.photoCount(attachments.length));
+      _validate(PqrsValidator.photoCount(attachments.length, max: _maxPhotos));
       return built = PqrsNewRequest(
         id: _nextId('pqrs'),
         motelId: motelId,
@@ -307,7 +331,7 @@ class PqrsController extends ChangeNotifier {
     final session = _requireSession();
     final request = _requireOpen(requestId);
     _validate(PqrsValidator.message(message));
-    _validate(PqrsValidator.photoCount(attachments.length));
+    _validate(PqrsValidator.photoCount(attachments.length, max: _maxPhotos));
 
     PqrsStatus? change;
     var reopen = false;
@@ -353,7 +377,7 @@ class PqrsController extends ChangeNotifier {
       );
     }
     _validate(PqrsValidator.message(message));
-    _validate(PqrsValidator.photoCount(attachments.length));
+    _validate(PqrsValidator.photoCount(attachments.length, max: _maxPhotos));
     final entry = _entry(
       session,
       message.trim(),
@@ -454,7 +478,13 @@ class PqrsController extends ChangeNotifier {
   Future<bool> discardPending(String requestId) => _write(() async {
     await _repository.discardPending(requestId);
     final record = await _repository.getDetail(requestId);
-    if (record != null) _store(record);
+    if (record != null) {
+      _store(record);
+    } else {
+      // A discarded creation leaves nothing to show.
+      _requests.removeWhere((request) => request.id == requestId);
+      _sync.remove(requestId);
+    }
   }, () => discardPending(requestId));
 
   // ---------------------------------------------------------------- helpers

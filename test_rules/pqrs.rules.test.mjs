@@ -229,7 +229,7 @@ describe('crear PQRS', () => {
     await assertFails(open('client', { pqrs: { motelId: 'no-existe' } }));
   });
 
-  test('[PQ-09] foto de 900 KiB pasa; mayor, tipo no permitido o cuarta foto no', async () => {
+  test('[PQ-09] foto de 900 KiB pasa; mayor, tipo no permitido o foto sobre photoCount no', async () => {
     await assertSucceeds(open('client', { photos: [okPhoto({ bytes: bytesOf(921600) })] }));
     await assertFails(open('client', { photos: [okPhoto({ bytes: bytesOf(921601) })] }));
     await assertFails(open('client', { photos: [okPhoto({ mimeType: 'image/gif' })] }));
@@ -238,12 +238,24 @@ describe('crear PQRS', () => {
     );
   });
 
-  test('[PQ-10] foto con id fuera de _1 a _3 o sobre photoCount se rechaza', async () => {
+  test('[PQ-10] foto con id sin traza que la declare se rechaza', async () => {
     const db = as('client');
     const batch = writeBatch(db);
     batch.set(doc(db, 'pqrs/pqrs-new'), pqrsData());
     batch.set(doc(db, 'pqrs/pqrs-new/traces/pqrs-new-open'), traceData('client', 'client'));
     batch.set(doc(db, 'pqrs/pqrs-new/photos/pqrs-new-open_1'), photoData('client', 'client', 'pqrs-new-open'));
+    await assertFails(batch.commit());
+  });
+
+  test('[PQ-10b] hasta 10 fotos pasan (limite duro); 11 o id no numerico no', async () => {
+    const ten = Array.from({ length: 10 }, () => okPhoto());
+    await assertSucceeds(open('client', { photos: ten }));
+    await assertFails(open('client', { photos: [...ten, okPhoto()] }));
+    const db = as('client');
+    const batch = writeBatch(db);
+    batch.set(doc(db, 'pqrs/pqrs-new'), pqrsData({ photoCount: 1 }));
+    batch.set(doc(db, 'pqrs/pqrs-new/traces/pqrs-new-open'), traceData('client', 'client', { photoCount: 1 }));
+    batch.set(doc(db, 'pqrs/pqrs-new/photos/pqrs-new-open_x'), photoData('client', 'client', 'pqrs-new-open'));
     await assertFails(batch.commit());
   });
 });

@@ -7,9 +7,10 @@ import 'package:machuco/database/repository/pqrs/pqrs_repository.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
-/// Maximum photos per trace entry; mirrors the `_1` to `_3` id suffixes that
-/// `firestore.rules` accepts.
-const pqrsMaxPhotosPerEntry = 3;
+/// Hard maximum of photos per trace entry; mirrors the `_1` to `_10` id
+/// suffixes that `firestore.rules` accepts. The configured limit
+/// (`pqrs_settings.max_photos`) is checked earlier, by the controller.
+const pqrsMaxPhotosPerEntry = 10;
 
 const _connectionMessage =
     'No hay conexión con el servidor. Revisa tu internet e intenta de nuevo';
@@ -164,7 +165,7 @@ class FirestorePqrsRepository implements PqrsRepository {
     return record;
   }
 
-  /// Adds the trace entry and its photos (ids `<traceId>_1` to `_3`).
+  /// Adds the trace entry and its photos (ids `<traceId>_1` to `_10`).
   void _addTrace(
     WriteBatch batch,
     DocumentReference<Map<String, dynamic>> requestRef,

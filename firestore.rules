@@ -1298,7 +1298,7 @@ service cloud.firestore {
         && data.description is string
         && data.description.size() >= 10 && data.description.size() <= 1000
         && data.status == 'pending'
-        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 3
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
         && data.createdAt == request.time
         && data.updatedAt == request.time
         // La PQRS nace con su primera entrada (lleva las fotos de apertura).
@@ -1349,7 +1349,7 @@ service cloud.firestore {
         && data.authorName.size() >= 1 && data.authorName.size() <= 100
         && data.message is string
         && data.message.size() >= 1 && data.message.size() <= 1000
-        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 3
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
         && data.createdAt == request.time
         && pqrsTraceFitsParent(pqrsId, traceId, data);
     }
@@ -1372,10 +1372,14 @@ service cloud.firestore {
         && existsAfter(trace)
         && getAfter(trace).data.authorId == request.auth.uid
         && getAfter(trace).data.authorRole == data.authorRole
-        // Ids fijos <traceId>_1 a _3, sin pasar de photoCount de la traza.
-        && ((photoId == data.traceId + '_1' && getAfter(trace).data.photoCount >= 1)
-          || (photoId == data.traceId + '_2' && getAfter(trace).data.photoCount >= 2)
-          || (photoId == data.traceId + '_3' && getAfter(trace).data.photoCount >= 3));
+        // Ids fijos <traceId>_<n> con n de 1 a photoCount de la traza (maximo
+        // 10). El limite real lo configura Supabase (pqrs_settings.max_photos,
+        // D14) y la app lo valida; las reglas solo fijan este tope duro. Si n
+        // no es numerico, int() falla y la regla deniega.
+        && photoId[0:data.traceId.size() + 1] == data.traceId + '_'
+        && int(photoId[data.traceId.size() + 1:]) >= 1
+        && int(photoId[data.traceId.size() + 1:])
+          <= getAfter(trace).data.photoCount;
     }
 
     match /pqrs/{pqrsId} {

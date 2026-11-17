@@ -451,6 +451,31 @@ void main() {
       expect(repo.createCalls, 0);
     });
 
+    PqrsController buildWithLimit(int maxPhotos) {
+      repo = InMemoryPqrsRepository(seed: const []);
+      return PqrsController(
+        repository: repo,
+        session: clientSession,
+        clock: () => clockNow,
+        maxPhotos: maxPhotos,
+      );
+    }
+
+    test('usa el máximo de fotos configurado en Supabase', () async {
+      final controller = buildWithLimit(5);
+
+      expect(await create(controller, photos: 5), isTrue);
+      expect(await create(controller, photos: 6), isFalse);
+      expect(repo.createCalls, 1);
+    });
+
+    test('el máximo configurado nunca supera el tope de las reglas', () async {
+      final controller = buildWithLimit(50);
+
+      expect(await create(controller, photos: 10), isTrue);
+      expect(await create(controller, photos: 11), isFalse);
+    });
+
     test('rechaza asunto de solo espacios o fuera de rango', () async {
       final controller = build(clientSession, request(PqrsStatus.pending));
 

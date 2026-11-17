@@ -3,48 +3,86 @@ import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+import 'package:machuco/widgets/pqrs/pqrs_state_views.dart';
 import 'package:machuco/widgets/pqrs/pqrs_status_badge.dart';
 import 'package:machuco/widgets/pqrs/pqrs_timeline.dart';
 
 /// Read-only detail for the system administrator: subject, status, indicators
 /// of the request and its full traceability, with no composer at all.
-class SystemAdminPqrsDetailPage extends StatelessWidget {
+class SystemAdminPqrsDetailPage extends StatefulWidget {
   const SystemAdminPqrsDetailPage({
     super.key,
     required this.requestId,
-    this.store,
+    required this.controller,
   });
 
   final String requestId;
-  final PqrsController? store;
+  final PqrsController controller;
 
-  PqrsController get _store =>
-      store ??
-      PqrsController.legacyShared(
-        PqrsActor.systemAdmin,
-      ); // TODO(etapa-6): borrar
+  @override
+  State<SystemAdminPqrsDetailPage> createState() =>
+      _SystemAdminPqrsDetailPageState();
+}
+
+class _SystemAdminPqrsDetailPageState extends State<SystemAdminPqrsDetailPage> {
+  List<PqrsAttachment> _photos = const [];
+
+  PqrsController get _store => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final found = await _store.loadDetail(widget.requestId);
+    if (!found) return;
+    final photos = await _store.loadPhotos(widget.requestId);
+    if (mounted) setState(() => _photos = photos);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Detalle de la PQRS')),
       body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _store,
-          builder: (context, _) {
-            final request = _store.byId(requestId);
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListenableBuilder(
+            listenable: _store,
+            builder: (context, _) {
+              final request = _store.findById(widget.requestId);
+              if (request == null) {
+                return ListView(
+                  children: [
+                    _store.isLoading
+                        ? const Padding(
+                            padding: EdgeInsets.all(AppSpacing.screen),
+                            child: PqrsLoadingSkeleton(),
+                          )
+                        : const AppEmptyState(
+                            icon: Icons.search_off_outlined,
+                            title: 'Solicitud no encontrada',
+                            message: 'Vuelve al listado.',
+                          ),
+                  ],
+                );
+              }
 
-            return ListView(
-              padding: const EdgeInsets.all(AppSpacing.screen),
-              children: [
-                const _ReadOnlyBanner(),
-                const SizedBox(height: AppSpacing.s4),
-                _RequestHeader(request: request),
-                const SizedBox(height: AppSpacing.s5),
-                PqrsTimeline(request: request),
-              ],
-            );
-          },
+              return ListView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(AppSpacing.screen),
+                children: [
+                  const _ReadOnlyBanner(),
+                  const SizedBox(height: AppSpacing.s4),
+                  _RequestHeader(request: request),
+                  const SizedBox(height: AppSpacing.s5),
+                  PqrsTimeline(request: request, photos: _photos),
+                ],
+              );
+            },
+          ),
         ),
       ),
     );

@@ -64,7 +64,7 @@ class PqrsStatsPanel extends StatelessWidget {
                       value: _percent(stats.solutionRate),
                     ),
                     _MetricRow(
-                      label: 'Cerradas por el cliente',
+                      label: 'Tasa de cierre por cliente',
                       value: _percent(stats.closureRate),
                     ),
                     _MetricRow(
@@ -88,6 +88,12 @@ class PqrsStatsPanel extends StatelessWidget {
                 total: stats.total,
               ),
             ),
+          // Closed by timeout are part of "Cerrada", but they do not count
+          // for the closure rate by client, so they are shown apart.
+          _MetricRow(
+            label: 'Cerradas por vencimiento (incluidas en Cerrada)',
+            value: '${stats.closedByTimeoutCount}',
+          ),
         ],
       ),
     );

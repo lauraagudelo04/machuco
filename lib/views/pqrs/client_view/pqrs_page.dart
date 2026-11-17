@@ -1,267 +1,182 @@
 import 'package:flutter/material.dart';
-import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/pqrs/pqrs_controller.dart';
+import 'package:machuco/controllers/pqrs/pqrs_form_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/pqrs/pqrs_repository.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
-import 'package:machuco/widgets/pqrs/pqrs_photo.dart';
-import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+import 'package:machuco/widgets/pqrs/pqrs_controller_gate.dart';
 import 'package:machuco/widgets/pqrs/pqrs_request_card.dart';
+import 'package:machuco/widgets/pqrs/pqrs_state_views.dart';
 import 'pqrs_detail_page.dart';
+import 'pqrs_form_page.dart';
 
-/// PQRS view of the client: files requests, attaches photos of what was found,
-/// follows the answers and is the only profile allowed to close a request.
-class ClientPqrsPage extends StatefulWidget {
-  const ClientPqrsPage({super.key, this.store});
+/// PQRS view of the client: lists the requests, opens the form to file a new
+/// one and is the only profile allowed to confirm a solution and close.
+///
+/// Without [controller] it builds the one of the signed-in user.
+class ClientPqrsPage extends StatelessWidget {
+  const ClientPqrsPage({super.key, this.controller, this.formFactory});
 
-  /// Injectable for tests; defaults to the shared instance.
-  final PqrsController? store;
+  final PqrsController? controller;
+
+  /// Builds the form controller; tests inject a fake one.
+  final PqrsFormController Function(PqrsController controller)? formFactory;
 
   @override
-  State<ClientPqrsPage> createState() => _ClientPqrsPageState();
+  Widget build(BuildContext context) {
+    return PqrsControllerGate(
+      title: 'Mis PQRS',
+      expectedRole: PqrsActor.client,
+      controller: controller,
+      builder: (context, controller) =>
+          _ClientPqrsList(controller: controller, formFactory: formFactory),
+    );
+  }
 }
 
-class _ClientPqrsPageState extends State<ClientPqrsPage> {
-  final _subjectController = TextEditingController();
-  final _descriptionController = TextEditingController();
-  final List<PqrsAttachment> _attachments = [];
+class _ClientPqrsList extends StatefulWidget {
+  const _ClientPqrsList({required this.controller, this.formFactory});
 
-  PqrsType? _selectedType;
-  bool _validationAttempted = false;
-  bool _sending = false;
-
-  final _motelController = MotelController();
-
-  PqrsController get _store =>
-      widget.store ??
-      PqrsController.legacyShared(PqrsActor.client); // TODO(etapa-6): borrar
+  final PqrsController controller;
+  final PqrsFormController Function(PqrsController controller)? formFactory;
 
   @override
-  void dispose() {
-    _subjectController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
+  State<_ClientPqrsList> createState() => _ClientPqrsListState();
+}
+
+class _ClientPqrsListState extends State<_ClientPqrsList> {
+  PqrsController get _controller => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Opening the screen reads the list and retries the pending queue.
+    _controller.loadRequests();
   }
 
-  String? get _typeError => _validationAttempted && _selectedType == null
-      ? 'Selecciona un tipo de solicitud'
-      : null;
-
-  String? get _subjectError =>
-      _validationAttempted && _subjectController.text.trim().isEmpty
-      ? 'Campo requerido'
-      : null;
-
-  String? get _descriptionError =>
-      _validationAttempted && _descriptionController.text.trim().isEmpty
-      ? 'Campo requerido'
-      : null;
-
-  bool get _isValid =>
-      _selectedType != null &&
-      _subjectController.text.trim().isNotEmpty &&
-      _descriptionController.text.trim().isNotEmpty;
-
-  void _attachPhoto() {
-    setState(() {
-      _attachments.add(
-        PqrsAttachment.simulated(
-          author: PqrsActor.client,
-          label: 'hallazgo-${_attachments.length + 1}.jpg',
+  Future<void> _openForm() async {
+    final form =
+        widget.formFactory?.call(_controller) ??
+        PqrsFormController.fromProvider(_controller);
+    final sent = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
+        builder: (_) => ClientPqrsFormPage(controller: _controller, form: form),
+      ),
+    );
+    form.dispose();
+    if (sent == true && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tu solicitud fue radicada correctamente.'),
         ),
       );
-    });
-  }
-
-  Future<void> _submit() async {
-    setState(() => _validationAttempted = true);
-    if (!_isValid) return;
-
-    setState(() => _sending = true);
-    // Simulated latency: there is no network layer in the project yet.
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    final motel = await _motelController.getMotelById(pqrsCurrentMotelId);
-    if (!mounted) return;
-
-    await _store.createRequest(
-      motelId: pqrsCurrentMotelId,
-      motelName: motel?.name ?? 'Motel',
-      ownerId: motel?.ownerId ?? '',
-      type: _selectedType!,
-      subject: _subjectController.text.trim(),
-      description: _descriptionController.text.trim(),
-      attachments: List.of(_attachments),
-    );
-    if (!mounted) return;
-
-    setState(() {
-      _sending = false;
-      _validationAttempted = false;
-      _selectedType = null;
-      _attachments.clear();
-      _subjectController.clear();
-      _descriptionController.clear();
-    });
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Tu solicitud fue radicada correctamente.')),
-    );
+    }
   }
 
   void _openDetail(PqrsRequest request) {
     Navigator.of(context).push(
       MaterialPageRoute<void>(
-        builder: (_) =>
-            ClientPqrsDetailPage(requestId: request.id, store: _store),
+        builder: (_) => ClientPqrsDetailPage(
+          requestId: request.id,
+          controller: _controller,
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text('Mis PQRS')),
       body: SafeArea(
-        child: ListenableBuilder(
-          listenable: _store,
-          builder: (context, _) {
-            final requests = _store.byClient(pqrsCurrentClientId);
-            final awaitingClosure = requests
-                .where((request) => request.canBeClosedByClient)
-                .length;
-
-            return ListView(
+        child: RefreshIndicator(
+          onRefresh: _controller.loadRequests,
+          child: ListenableBuilder(
+            listenable: _controller,
+            builder: (context, _) => ListView(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.all(AppSpacing.screen),
-              children: [
-                Text(
-                  'Peticiones, quejas, reclamos y sugerencias',
-                  style: theme.textTheme.headlineMedium,
-                ),
-                const SizedBox(height: AppSpacing.s2),
-                Text(
-                  'Cuéntanos qué pasó y adjunta fotos de lo que encontraste. '
-                  'Cuando la solución te convenza, tú cierras la solicitud.',
-                  style: theme.textTheme.bodyMedium?.copyWith(
-                    color: context.appColors.textSecondary,
-                  ),
-                ),
-                if (awaitingClosure > 0) ...[
-                  const SizedBox(height: AppSpacing.s4),
-                  _AwaitingClosureBanner(count: awaitingClosure),
-                ],
-                const SizedBox(height: AppSpacing.s5),
-                _buildForm(context),
-                const SizedBox(height: AppSpacing.s6),
-                Text('Mis solicitudes', style: theme.textTheme.headlineSmall),
-                const SizedBox(height: AppSpacing.s3),
-                if (requests.isEmpty)
-                  const AppEmptyState(
-                    icon: Icons.inbox_outlined,
-                    title: 'Sin solicitudes',
-                    message: 'Aún no has radicado ninguna PQRS.',
-                  )
-                else
-                  ...requests.map(
-                    (request) => Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.s3),
-                      child: PqrsRequestCard(
-                        request: request,
-                        showMotel: true,
-                        onTap: () => _openDetail(request),
-                        trailingHint: request.canBeClosedByClient
-                            ? 'Requiere tu cierre'
-                            : null,
-                      ),
-                    ),
-                  ),
-              ],
-            );
-          },
+              children: _children(context),
+            ),
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildForm(BuildContext context) {
+  List<Widget> _children(BuildContext context) {
     final theme = Theme.of(context);
+    final requests = _controller.all;
+    final error = _controller.error;
 
-    return AppCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text('Nueva solicitud', style: theme.textTheme.titleLarge),
-          const SizedBox(height: AppSpacing.s4),
-          Text('Tipo de solicitud', style: theme.textTheme.labelLarge),
-          const SizedBox(height: AppSpacing.s2),
-          Wrap(
-            spacing: AppSpacing.s2,
-            runSpacing: AppSpacing.s2,
-            children: PqrsType.values.map((type) {
-              return ChoiceChip(
-                avatar: Icon(type.icon, size: 18),
-                label: Text(type.label),
-                selected: _selectedType == type,
-                onSelected: (_) => setState(() => _selectedType = type),
-              );
-            }).toList(),
-          ),
-          if (_typeError != null) ...[
-            const SizedBox(height: AppSpacing.s2),
-            Text(
-              _typeError!,
-              style: theme.textTheme.labelMedium?.copyWith(
-                color: theme.colorScheme.error,
-              ),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.s4),
-          AppTextField(
-            label: 'Asunto',
-            controller: _subjectController,
-            hint: 'Ej. Demora en el check-in',
-            errorText: _subjectError,
-            onChanged: (_) {
-              if (_validationAttempted) setState(() {});
-            },
-          ),
-          const SizedBox(height: AppSpacing.s4),
-          AppTextField(
-            label: 'Descripción',
-            controller: _descriptionController,
-            hint: 'Describe con detalle lo que encontraste...',
-            errorText: _descriptionError,
-            maxLines: 5,
-            onChanged: (_) {
-              if (_validationAttempted) setState(() {});
-            },
-          ),
-          if (_attachments.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.s4),
-            PqrsPhotoStrip(
-              attachments: _attachments,
-              onRemove: (attachment) =>
-                  setState(() => _attachments.remove(attachment)),
-            ),
-          ],
-          const SizedBox(height: AppSpacing.s4),
-          AppButton(
-            label: 'Adjuntar foto del hallazgo',
-            icon: Icons.add_a_photo_outlined,
-            variant: AppButtonVariant.secondary,
-            onPressed: _attachPhoto,
-          ),
-          const SizedBox(height: AppSpacing.s3),
-          AppButton(
-            label: 'Radicar solicitud',
-            icon: Icons.send_outlined,
-            loading: _sending,
-            onPressed: _submit,
-          ),
-        ],
+    if (_controller.isLoading && requests.isEmpty) {
+      return const [PqrsLoadingSkeleton()];
+    }
+    if (error != null && requests.isEmpty) {
+      return [
+        AppErrorState(
+          message: error.message,
+          onRetry: error.kind == PqrsFailureKind.permission
+              ? null
+              : _controller.loadRequests,
+        ),
+      ];
+    }
+    if (_controller.isEmpty) {
+      return [
+        AppEmptyState(
+          icon: Icons.inbox_outlined,
+          title: 'Aún no tienes solicitudes',
+          message:
+              'Cuéntanos qué pasó con una petición, queja, reclamo o '
+              'sugerencia.',
+          actionLabel: 'Nueva solicitud',
+          onAction: _openForm,
+        ),
+      ];
+    }
+
+    final awaitingClosure = requests
+        .where((request) => request.canBeClosedByClient)
+        .length;
+    return [
+      Text('Mis solicitudes', style: theme.textTheme.headlineMedium),
+      const SizedBox(height: AppSpacing.s4),
+      AppButton(
+        label: 'Nueva solicitud',
+        icon: Icons.add,
+        onPressed: _openForm,
       ),
-    );
+      if (_controller.notice case final notice?) ...[
+        const SizedBox(height: AppSpacing.s4),
+        PqrsInfoBanner(message: notice, icon: Icons.cloud_off_outlined),
+      ],
+      if (error != null) ...[
+        const SizedBox(height: AppSpacing.s4),
+        PqrsErrorBanner(
+          message: error.message,
+          onRetry: error.isRetryable ? _controller.retry : null,
+        ),
+      ],
+      if (awaitingClosure > 0) ...[
+        const SizedBox(height: AppSpacing.s4),
+        _AwaitingClosureBanner(count: awaitingClosure),
+      ],
+      const SizedBox(height: AppSpacing.s4),
+      for (final request in requests)
+        Padding(
+          padding: const EdgeInsets.only(bottom: AppSpacing.s3),
+          child: PqrsRequestCard(
+            request: request,
+            showMotel: true,
+            sync: _controller.syncOf(request.id),
+            onTap: () => _openDetail(request),
+            trailingHint: request.canBeClosedByClient
+                ? 'Requiere tu cierre'
+                : null,
+          ),
+        ),
+    ];
   }
 }
 
@@ -272,26 +187,11 @@ class _AwaitingClosureBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = PqrsStatus.resolved.color;
-    return Semantics(
-      liveRegion: true,
-      child: AppCard(
-        padding: const EdgeInsets.all(AppSpacing.s3),
-        child: Row(
-          children: [
-            Icon(Icons.verified_outlined, color: color),
-            const SizedBox(width: AppSpacing.s3),
-            Expanded(
-              child: Text(
-                count == 1
-                    ? 'Tienes 1 solicitud solucionada esperando tu cierre.'
-                    : 'Tienes $count solicitudes solucionadas esperando tu cierre.',
-                style: Theme.of(context).textTheme.bodyMedium,
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PqrsInfoBanner(
+      icon: Icons.verified_outlined,
+      message: count == 1
+          ? 'Tienes 1 solicitud solucionada esperando tu cierre.'
+          : 'Tienes $count solicitudes solucionadas esperando tu cierre.',
     );
   }
 }

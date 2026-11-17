@@ -216,9 +216,12 @@ void main() {
     });
 
     test('trace stores role, status key and counts only real photos', () {
-      final simulated = PqrsAttachment.simulated(
-        author: PqrsActor.owner,
+      final simulated = PqrsAttachment(
+        id: 'sim-owner',
         label: 'x',
+        author: PqrsActor.owner,
+        capturedAt: DateTime(2026),
+        seed: 1,
       );
       final data = PqrsFirestoreDocument.traceToFirestore(
         _entry(
@@ -253,9 +256,12 @@ void main() {
     });
 
     test('a photo without image cannot be written', () {
-      final simulated = PqrsAttachment.simulated(
-        author: PqrsActor.client,
+      final simulated = PqrsAttachment(
+        id: 'sim-client',
         label: 'x',
+        author: PqrsActor.client,
+        capturedAt: DateTime(2026),
+        seed: 1,
       );
       expect(
         () => PqrsFirestoreDocument.photoToFirestore(
