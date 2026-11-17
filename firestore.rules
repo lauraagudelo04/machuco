@@ -1192,6 +1192,239 @@ service cloud.firestore {
         && hasValidReviewCreate(reviewId, request.resource.data);
     }
 
+    // ---------------------------------------------------------------------
+    // PQRS: pqrs/{pqrsId} con las subcolecciones traces y photos.
+    //
+    // Reglas escritas a mano que duplican valores configurables en Supabase
+    // (decisiones D14 y D17 del modulo): las reglas no pueden consultar
+    // Supabase, asi que cambiar uno de estos valores exige editar ambos lados.
+    //   - Formatos de imagen permitidos: image/jpeg, image/png, image/webp
+    //     (tabla allowed_image_formats; ver pqrs_image_format.dart).
+    //   - Tamano maximo por foto: 921600 bytes = 900 KiB (pqrs_settings;
+    //     ver pqrsDefaultImageMaxBytes). El limite de Firestore es 1 MiB.
+    //   - Plazo de confirmacion del cliente: 7 dias (pqrsConfirmationDeadline).
+    // La validacion de la app es solo comodidad; estas reglas son la defensa.
+    //
+    // Limite conocido: una regla de update no puede exigir que el mismo lote
+    // incluya una traza (no conoce su id). La traza si exige que el estado
+    // resultante del lote (getAfter) sea el que declara. Un cliente o
+    // propietario podria cambiar el estado sin traza, pero solo por una
+    // transicion valida de su rol.
+    // ---------------------------------------------------------------------
+
+    function pqrsPath(pqrsId) {
+      return /databases/$(database)/documents/pqrs/$(pqrsId);
+    }
+
+    // Rol con el que el solicitante actua sobre una PQRS: cliente dueno,
+    // propietario del motel (ambos activos) o ninguno. El admin solo lee.
+    function pqrsActorRole(data) {
+      return (isActiveClient() && data.clientId == request.auth.uid)
+        ? 'client'
+        : ((isActiveOwner() && data.ownerId == request.auth.uid)
+          ? 'owner'
+          : 'none');
+    }
+
+    function canReadPqrs(data) {
+      return isAdmin() || pqrsActorRole(data) != 'none';
+    }
+
+    // Misma tabla que PqrsController. 'role' es 'client' u 'owner'.
+    //  - Propietario: pending e in_progress avanzan a in_progress (comentario),
+    //    resolved o rejected; resolved pasa a closed solo por vencimiento
+    //    (el plazo se exige aparte). No comenta sobre resolved.
+    //  - Cliente: comenta sin cambiar pending o in_progress; sobre resolved
+    //    confirma (closed) o reabre (in_progress).
+    //  - closed y rejected son finales: ninguna transicion sale de ellos.
+    function isValidPqrsTransition(prev, next, role) {
+      return (role == 'owner'
+          && ((prev in ['pending', 'in_progress']
+              && next in ['in_progress', 'resolved', 'rejected'])
+            || (prev == 'resolved' && next == 'closed')))
+        || (role == 'client'
+          && ((prev in ['pending', 'in_progress'] && next == prev)
+            || (prev == 'resolved' && next in ['closed', 'in_progress'])));
+    }
+
+    // Fechas y cierre coherentes con el estado nuevo y con quien escribe.
+    function hasValidPqrsResolution(prev, next, role) {
+      let resolvedBefore = prev.get('resolvedAt', null);
+      return
+        // Solucionar: resolvedAt es la hora del servidor.
+        (next.status == 'resolved'
+          && next.get('resolvedAt', null) == request.time
+          && !('closedBy' in next))
+        // Cerrar: se conserva resolvedAt. El cliente confirma; el propietario
+        // solo cuando vencieron los 7 dias desde resolvedAt.
+        || (next.status == 'closed'
+          && next.get('resolvedAt', null) == resolvedBefore
+          && (role == 'client'
+            ? next.get('closedBy', '') == 'client'
+            : (next.get('closedBy', '') == 'owner_timeout'
+              && resolvedBefore != null
+              && request.time > resolvedBefore + duration.value(7, 'd'))))
+        // Reabrir o seguir abierta o rechazar: no queda resolvedAt ni closedBy.
+        || (next.status in ['pending', 'in_progress', 'rejected']
+          && !('resolvedAt' in next)
+          && !('closedBy' in next));
+    }
+
+    function hasValidPqrsCreate(pqrsId, data) {
+      let motel = /databases/$(database)/documents/motels/$(data.motelId);
+      return data.keys().hasOnly([
+          'clientId', 'clientName', 'motelId', 'motelName', 'ownerId', 'type',
+          'subject', 'description', 'status', 'photoCount', 'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'clientId', 'clientName', 'motelId', 'motelName', 'ownerId', 'type',
+          'subject', 'description', 'status', 'photoCount', 'createdAt',
+          'updatedAt'
+        ])
+        && data.clientId == request.auth.uid
+        && data.clientName is string
+        && data.clientName.size() >= 1 && data.clientName.size() <= 100
+        && data.motelId is string && data.motelId.size() > 0
+        && data.motelName is string
+        && data.motelName.size() >= 1 && data.motelName.size() <= 200
+        && data.ownerId is string && data.ownerId != data.clientId
+        && exists(motel)
+        && data.ownerId == get(motel).data.ownerId
+        && get(motel).data.get('isAvailable', true) != false
+        && data.type in ['peticion', 'queja', 'reclamo', 'sugerencia']
+        && data.subject is string
+        && data.subject.size() >= 3 && data.subject.size() <= 100
+        && data.description is string
+        && data.description.size() >= 10 && data.description.size() <= 1000
+        && data.status == 'pending'
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        // La PQRS nace con su primera entrada (lleva las fotos de apertura).
+        && existsAfter(
+          /databases/$(database)/documents/pqrs/$(pqrsId)/traces/$(pqrsId + '-open')
+        );
+    }
+
+    // Una traza nueva debe declarar el estado que deja el lote y respetar la
+    // tabla. Si la PQRS aun no existe, es la entrada de apertura del cliente.
+    function pqrsTraceFitsParent(pqrsId, traceId, data) {
+      let parent = pqrsPath(pqrsId);
+      return (!exists(parent)
+          && traceId == pqrsId + '-open'
+          && data.authorRole == 'client'
+          && !('statusChange' in data)
+          && getAfter(parent).data.status == 'pending')
+        || (exists(parent)
+          && isValidPqrsTransition(
+            get(parent).data.status,
+            getAfter(parent).data.status,
+            data.authorRole
+          )
+          && (!('statusChange' in data)
+            ? getAfter(parent).data.status == get(parent).data.status
+            : data.statusChange == getAfter(parent).data.status)
+          // Cierre por vencimiento: mensaje fijo (PqrsController).
+          && (data.authorRole != 'owner'
+            || get(parent).data.status != 'resolved'
+            || data.message == 'Cerrada por vencimiento del plazo de confirmación'));
+    }
+
+    function hasValidPqrsTrace(pqrsId, traceId, data) {
+      let parent = pqrsPath(pqrsId);
+      return data.keys().hasOnly([
+          'authorId', 'authorRole', 'authorName', 'message', 'statusChange',
+          'photoCount', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'authorId', 'authorRole', 'authorName', 'message', 'photoCount',
+          'createdAt'
+        ])
+        && data.authorId == request.auth.uid
+        && data.authorRole in ['client', 'owner']
+        && existsAfter(parent)
+        && pqrsActorRole(getAfter(parent).data) == data.authorRole
+        && data.authorName is string
+        && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.message is string
+        && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
+        && data.createdAt == request.time
+        && pqrsTraceFitsParent(pqrsId, traceId, data);
+    }
+
+    function hasValidPqrsPhoto(pqrsId, photoId, data) {
+      let trace = /databases/$(database)/documents/pqrs/$(pqrsId)/traces/$(data.traceId);
+      return data.keys().hasOnly([
+          'bytes', 'mimeType', 'traceId', 'authorId', 'authorRole', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'bytes', 'mimeType', 'traceId', 'authorId', 'authorRole', 'createdAt'
+        ])
+        && data.authorId == request.auth.uid
+        && data.authorRole in ['client', 'owner']
+        && data.bytes is bytes
+        && data.bytes.size() > 0 && data.bytes.size() <= 921600
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && data.createdAt == request.time
+        && data.traceId is string
+        && existsAfter(trace)
+        && getAfter(trace).data.authorId == request.auth.uid
+        && getAfter(trace).data.authorRole == data.authorRole
+        // Ids fijos <traceId>_<n> con n de 1 a photoCount de la traza (maximo
+        // 10). El limite real lo configura Supabase (pqrs_settings.max_photos,
+        // D14) y la app lo valida; las reglas solo fijan este tope duro. Si n
+        // no es numerico, int() falla y la regla deniega.
+        && photoId[0:data.traceId.size() + 1] == data.traceId + '_'
+        && int(photoId[data.traceId.size() + 1:]) >= 1
+        && int(photoId[data.traceId.size() + 1:])
+          <= getAfter(trace).data.photoCount;
+    }
+
+    match /pqrs/{pqrsId} {
+      // Cliente dueno, propietario del motel o admin. Las consultas deben
+      // filtrar por clientId u ownerId (el admin lista todo).
+      allow read: if canReadPqrs(resource.data);
+
+      allow create: if isActiveClient()
+        && hasValidPqrsCreate(pqrsId, request.resource.data);
+
+      // Solo status, updatedAt, resolvedAt y closedBy; nunca los datos de
+      // radicacion. Sin borrado.
+      allow update: if pqrsActorRole(resource.data) != 'none'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt', 'resolvedAt', 'closedBy'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && isValidPqrsTransition(
+          resource.data.status,
+          request.resource.data.status,
+          pqrsActorRole(resource.data)
+        )
+        && hasValidPqrsResolution(
+          resource.data,
+          request.resource.data,
+          pqrsActorRole(resource.data)
+        );
+
+      allow delete: if false;
+
+      // Trazabilidad inmutable: solo se agregan entradas.
+      match /traces/{traceId} {
+        allow read: if canReadPqrs(get(pqrsPath(pqrsId)).data);
+        allow create: if hasValidPqrsTrace(pqrsId, traceId, request.resource.data);
+        allow update, delete: if false;
+      }
+
+      // Fotos como bytes (decision D1, sin Storage). Inmutables.
+      match /photos/{photoId} {
+        allow read: if canReadPqrs(get(pqrsPath(pqrsId)).data);
+        allow create: if hasValidPqrsPhoto(pqrsId, photoId, request.resource.data);
+        allow update, delete: if false;
+      }
+    }
+
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma
     // explicita ARRIBA de esta regla, con su propia autorizacion por rol.
     match /{document=**} {

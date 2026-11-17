@@ -1,19 +1,28 @@
 // ignore_for_file: experimental_member_use
 
 import 'dart:async';
+import 'dart:typed_data';
 
 import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
+import 'package:machuco/database/model/image_format/allowed_image_format_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/document_type/document_type_entry.dart';
 import 'package:machuco/database/model/notification/notification.dart';
+import 'package:machuco/database/model/pqrs/pqrs_cache_entry.dart';
+import 'package:machuco/database/model/pqrs/pqrs_outbox_entry.dart';
+import 'package:machuco/database/model/pqrs_type/pqrs_type_entry.dart';
 import 'package:machuco/database/model/suscripcion/subscription.dart';
+import 'package:machuco/database/pqrs_migration.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/additional_service/additional_service_category_dao.dart';
 import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
+import 'package:machuco/database/repository/image_format/allowed_image_format_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
+import 'package:machuco/database/repository/pqrs/pqrs_dao.dart';
+import 'package:machuco/database/repository/pqrs_type/pqrs_type_dao.dart';
 import 'package:machuco/database/repository/room/room_dao.dart';
 import 'package:machuco/database/repository/suscripcion/subscription_repository.dart';
 import 'package:machuco/models/additional_service/additional_service_category.dart';
@@ -44,7 +53,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 22,
+  version: 23,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -62,6 +71,12 @@ part 'app_database.g.dart';
     ReservationLineItemEntity,
     OwnerEntry,
     DocumentTypeEntry,
+    PqrsCacheEntry,
+    PqrsTraceCacheEntry,
+    PqrsOutboxEntry,
+    PqrsOutboxPhotoEntry,
+    AllowedImageFormatEntry,
+    PqrsTypeEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -74,6 +89,9 @@ abstract class AppDatabase extends FloorDatabase {
   AdditionalServiceDao get additionalServiceDao;
   OwnerDao get ownerDao;
   DocumentTypeDao get documentTypeDao;
+  PqrsDao get pqrsDao;
+  AllowedImageFormatDao get allowedImageFormatDao;
+  PqrsTypeDao get pqrsTypeDao;
 
   RoomDao get roomDao =>
       _roomDao ??= RoomDao(() async => database as sqflite.Database);
@@ -121,6 +139,7 @@ class AppDatabaseProvider {
         migration19To20,
         migration20To21,
         migration21To22,
+        migration22To23,
       ])
       .addCallback(
         Callback(
