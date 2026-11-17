@@ -69,10 +69,25 @@ class SubscriptionPayment {
 
 /// El catálogo remoto contiene únicamente ID y nombre.
 class SubscriptionPlan {
-  const SubscriptionPlan({required this.id, required this.name});
+  const SubscriptionPlan({
+    required this.id,
+    required this.name,
+    this.description = '',
+    this.price,
+    this.currency = 'COP',
+    this.billingPeriod = 'monthly',
+    this.features = const [],
+    this.maxMotels,
+  });
 
   final int id;
   final String name;
+  final String description;
+  final int? price;
+  final String currency;
+  final String billingPeriod;
+  final List<String> features;
+  final int? maxMotels;
 
   factory SubscriptionPlan.fromJson(Map<String, dynamic> json) {
     if (json['id'] is! int ||
@@ -83,7 +98,37 @@ class SubscriptionPlan {
     return SubscriptionPlan(
       id: json['id'] as int,
       name: json['name'] as String,
+      description: _text(json['description']),
+      price: _int(json['price']),
+      currency: _text(json['currency'], fallback: 'COP'),
+      billingPeriod: _text(
+        json['billing_period'],
+        fallback: 'monthly',
+      ),
+      features: _features(json['features']),
+      maxMotels: _int(json['max_motels']),
     );
+  }
+
+  static String _text(Object? value, {String fallback = ''}) {
+    final text = value is String ? value.trim() : '';
+    return text.isEmpty ? fallback : text;
+  }
+
+  static int? _int(Object? value) => switch (value) {
+    int() => value,
+    num() => value.toInt(),
+    String() => int.tryParse(value),
+    _ => null,
+  };
+
+  static List<String> _features(Object? value) {
+    if (value is! List) return const [];
+    return value
+        .whereType<String>()
+        .map((feature) => feature.trim())
+        .where((feature) => feature.isNotEmpty)
+        .toList(growable: false);
   }
 }
 

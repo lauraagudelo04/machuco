@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/controllers/review/add_review_controller.dart';
@@ -164,6 +166,61 @@ void main() {
       expect(byId['review-owner-1']!.ownerReply, 'Gracias');
       expect(byId['review-owner-2']!.ownerReply, isNull);
     });
+
+    test('reporta con el motivo recortado e ignora motivos vacíos', () async {
+      expect(await controller.report('review-owner-1', '  Spam  '), isNull);
+      expect(await controller.report('review-owner-2', '   '), isNull);
+
+      final stored = {for (final r in await repository.getAll()) r.id: r};
+      expect(stored['review-owner-1']!.status, ReviewModerationStatus.reported);
+      expect(stored['review-owner-1']!.reportReason, 'Spam');
+      expect(stored['review-owner-2']!.status, ReviewModerationStatus.visible);
+      final shown = {for (final r in controller.reviews) r.id: r};
+      expect(shown['review-owner-1']!.status, ReviewModerationStatus.reported);
+      expect(shown['review-owner-1']!.reportReason, 'Spam');
+    });
+
+    test('si el servidor rechaza el reporte, devuelve el motivo y no cambia '
+        'la reseña', () async {
+      final rejecting = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _RejectingRepository(repository),
+      );
+      await rejecting.loadReviews();
+
+      expect(
+        await rejecting.report('review-owner-1', 'Spam'),
+        'No puedes reportar esta reseña',
+      );
+      final shown = rejecting.reviews.firstWhere(
+        (r) => r.id == 'review-owner-1',
+      );
+      expect(shown.status, ReviewModerationStatus.visible);
+      expect(shown.reportReason, isNull);
+    });
+
+    test('reply devuelve null cuando se guarda', () async {
+      expect(await controller.reply('review-owner-1', 'Gracias'), isNull);
+    });
+
+    test('si el servidor rechaza la respuesta, devuelve el motivo y no la '
+        'muestra como guardada', () async {
+      final rejecting = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _RejectingRepository(repository),
+      );
+      await rejecting.loadReviews();
+
+      final error = await rejecting.reply('review-owner-1', 'Gracias');
+
+      expect(error, 'Solo puedes responder reseñas de tus moteles');
+      expect(
+        rejecting.reviews
+            .firstWhere((r) => r.id == 'review-owner-1')
+            .ownerReply,
+        isNull,
+      );
+    });
   });
 
   group('ReviewAdministrationController (administrador)', () {
@@ -215,6 +272,50 @@ void main() {
       await controller.delete('review-1');
       expect(controller.reviews.any((r) => r.id == 'review-1'), isFalse);
       expect(controller.totalCount, 5);
+    });
+
+    test(
+      'las acciones del administrador quedan guardadas en el repositorio',
+      () async {
+        await controller.toggleVisibility('review-1');
+        await controller.dismissReport('review-2');
+        await controller.reply('review-owner-1', 'Revisado');
+        await controller.delete('review-owner-2');
+
+        final stored = {for (final r in await repository.getAll()) r.id: r};
+        expect(stored['review-1']!.status, ReviewModerationStatus.hidden);
+        expect(stored['review-2']!.status, ReviewModerationStatus.visible);
+        expect(stored['review-2']!.reportReason, isNull);
+        expect(stored['review-owner-1']!.adminReply, 'Revisado');
+        expect(stored.containsKey('review-owner-2'), isFalse);
+      },
+    );
+
+    test('si el servidor rechaza una acción, devuelve el motivo y no cambia '
+        'la reseña en pantalla', () async {
+      final rejecting = ReviewAdministrationController(
+        repository: _RejectingRepository(repository),
+      );
+      await rejecting.loadReviews();
+      Review find(String id) => rejecting.reviews.firstWhere((r) => r.id == id);
+      const reason = 'Solo un administrador puede moderar reseñas';
+
+      expect(await rejecting.toggleVisibility('review-1'), reason);
+      expect(await rejecting.dismissReport('review-2'), reason);
+      expect(await rejecting.reply('review-1', 'Hola'), reason);
+      expect(await rejecting.delete('review-1'), reason);
+
+      expect(find('review-1').status, ReviewModerationStatus.visible);
+      expect(find('review-1').adminReply, isNull);
+      expect(find('review-2').status, ReviewModerationStatus.reported);
+      expect(rejecting.totalCount, 6);
+    });
+
+    test('las acciones exitosas devuelven null', () async {
+      expect(await controller.toggleVisibility('review-1'), isNull);
+      expect(await controller.dismissReport('review-2'), isNull);
+      expect(await controller.reply('review-1', 'Hola'), isNull);
+      expect(await controller.delete('review-1'), isNull);
     });
   });
 
@@ -303,7 +404,7 @@ void main() {
         body: ' Limpio ',
       ));
 
-      expect(saved, isTrue);
+      expect(saved, isNull);
       final review = (await repository.getAll()).first;
       expect(review.id, startsWith('review-client-'));
       expect(review.authorId, 'user-7');
@@ -335,8 +436,26 @@ void main() {
         body: 'Limpio',
       ));
 
-      expect(saved, isFalse);
+      expect(saved, 'Debes iniciar sesión para publicar una reseña');
       expect(notified, 0);
+      expect(await repository.getAll(), hasLength(6));
+    });
+
+    test('una reseña de habitación sin habitación no se guarda', () async {
+      final controller = ReviewsController(
+        repository: repository,
+        authorProvider: _FakeAuthorProvider((id: 'user-7', name: 'Ana')),
+      );
+
+      final saved = await controller.submitReview('1', (
+        type: ReviewType.room,
+        roomId: null,
+        rating: 4,
+        title: 'Bien',
+        body: 'Limpio',
+      ));
+
+      expect(saved, 'Elige la habitación que quieres reseñar');
       expect(await repository.getAll(), hasLength(6));
     });
 
@@ -359,7 +478,7 @@ void main() {
           body: body,
         ));
 
-        expect(saved, isFalse);
+        expect(saved, 'Revisa la calificación, el título y la reseña');
         expect(notified, 0);
         expect(await repository.getAll(), hasLength(6));
       });
@@ -381,4 +500,140 @@ void main() {
     ]);
     expect(client.getAverageByMotelId('3'), 3.0);
   });
+
+  test('si la lista se recarga mientras se guarda, el cambio igual se ve', () async {
+    final repository = _SlowReplyRepository();
+    final controller = OwnerReviewController(
+      motelController: _FakeMotelController([_motel('1', 'Sol')]),
+      repository: repository,
+    );
+    await controller.loadReviews();
+
+    final saving = controller.reply('review-owner-1', 'Gracias');
+    await controller.loadReviews();
+    repository.finishSave();
+    await saving;
+
+    expect(
+      controller.reviews.firstWhere((r) => r.id == 'review-owner-1').ownerReply,
+      'Gracias',
+    );
+  });
+
+  group('carga con error del repositorio', () {
+    const reason = 'No hay conexión con el servidor de reseñas';
+
+    test('el propietario ve el motivo del repositorio', () async {
+      final controller = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: _FailingLoadRepository(reason),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, reason);
+    });
+
+    test('el administrador ve el motivo del repositorio', () async {
+      final controller = ReviewAdministrationController(
+        repository: _FailingLoadRepository(reason),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, reason);
+    });
+
+    test('un error inesperado mantiene el mensaje genérico', () async {
+      final controller = ReviewAdministrationController(
+        repository: _FailingLoadRepository(null),
+      );
+
+      await controller.loadReviews();
+
+      expect(controller.errorMessage, 'No fue posible cargar las reseñas.');
+    });
+  });
+
+}
+
+/// Repositorio que lee de [_inner] pero rechaza las respuestas y la
+/// moderación, como hace SQL Connect cuando el usuario no tiene permiso.
+class _RejectingRepository implements ReviewRepository {
+  _RejectingRepository(this._inner);
+
+  final ReviewRepository _inner;
+
+  @override
+  Future<List<Review>> getAll() => _inner.getAll();
+
+  @override
+  Future<void> add(Review review) => _inner.add(review);
+
+  @override
+  Future<void> update(Review review) => _inner.update(review);
+
+  @override
+  Future<void> delete(String id) async =>
+      throw const ReviewRepositoryException(_adminReason);
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async =>
+      throw const ReviewRepositoryException(
+        'Solo puedes responder reseñas de tus moteles',
+      );
+
+  @override
+  Future<void> reportAsOwner(String reviewId, String reason) async =>
+      throw const ReviewRepositoryException('No puedes reportar esta reseña');
+
+  @override
+  Future<void> setHiddenAsAdmin(
+    String reviewId, {
+    required bool hidden,
+  }) async => throw const ReviewRepositoryException(_adminReason);
+
+  @override
+  Future<void> dismissReportAsAdmin(String reviewId) async =>
+      throw const ReviewRepositoryException(_adminReason);
+
+  @override
+  Future<void> replyAsAdmin(String reviewId, String reply) async =>
+      throw const ReviewRepositoryException(_adminReason);
+
+  static const _adminReason = 'Solo un administrador puede moderar reseñas';
+}
+
+/// Repositorio cuya carga falla: con [reason] lanza
+/// [ReviewRepositoryException]; con `null`, un error inesperado.
+class _FailingLoadRepository extends InMemoryReviewRepository {
+  _FailingLoadRepository(this.reason);
+
+  final String? reason;
+
+  @override
+  Future<List<Review>> getAll() async {
+    if (reason case final message?) throw ReviewRepositoryException(message);
+    throw StateError('falla');
+  }
+}
+
+/// Repositorio cuya respuesta del propietario queda pendiente hasta
+/// [finishSave], para simular una recarga de la lista durante el guardado.
+class _SlowReplyRepository extends InMemoryReviewRepository {
+  final _gate = Completer<void>();
+
+  void finishSave() => _gate.complete();
+
+  /// Como SQL Connect, cada carga crea objetos nuevos.
+  @override
+  Future<List<Review>> getAll() async => [
+    for (final review in await super.getAll()) review.copyWith(),
+  ];
+
+  @override
+  Future<void> replyAsOwner(String reviewId, String reply) async {
+    await _gate.future;
+    await super.replyAsOwner(reviewId, reply);
+  }
 }

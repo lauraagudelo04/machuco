@@ -1,7 +1,7 @@
-# Pruebas de autenticación de MACHUCO
+# Pruebas de reglas de Firestore de MACHUCO
 
-Cómo ejecutar las pruebas de la rama `feature-juan_pablo` (decisión D9 de
-`docs/auth/plan-auth-social.md`). Ninguna prueba toca el proyecto real de
+Suite compartida de autenticación, reservas y pagos; origen en la rama
+`feature-juan_pablo` (decisión D9 de `docs/auth/plan-auth-social.md`). Ninguna prueba toca el proyecto real de
 Firebase: el emulador usa el proyecto ficticio `demo-machuco`.
 
 ## 1. Reglas de Firestore y contrato del repositorio de aprobaciones (Node)
@@ -19,7 +19,7 @@ npm run test:emulator
 En PowerShell: `$env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"`.
 
 `npm run test:emulator` levanta el emulador de Firestore (`127.0.0.1:8080`,
-según `firebase.json`), corre los tres archivos en serie y lo apaga. Si ya
+según `firebase.json`), corre los archivos del script `npm test` en serie y lo apaga. Si ya
 tienes el emulador abierto con `firebase emulators:start --only firestore
 --project demo-machuco`, puedes correr solo `npm test`.
 
@@ -31,6 +31,9 @@ las pruebas esperan. El resultado está en el resumen final (`ℹ fail 0`).
 | `users.rules.test.mjs` | Registro con campos válidos e inválidos, lectura y escritura del propio perfil, decisiones del admin, eliminación | sin ID, `[SOC-14]` |
 | `account_status.rules.test.mjs` | Bloqueo de propietarios y clientes pendientes, rechazados o deshabilitados (colección `payments`), admin activo, sin `accountStatus` o deshabilitado | `[EST-01]`–`[EST-08]` |
 | `admin_access.contract.test.mjs` | Réplica de la consulta y de la transacción de `FirestoreAdminAccessRepository`: listar, aprobar, rechazar, doble decisión y concurrencia | `[ADM-01]`–`[ADM-11]` |
+| `reservations.rules.test.mjs` | Creación por cliente, participantes, consultas y prohibición de acreditar el sandbox de tarjeta | `[RES-01]`–`[RES-08]` |
+| `payments.rules.test.mjs` | Vínculo real con reserva, selección pendiente y recepción atómicas, reintento, permisos, datos alterados y vencimiento | sin ID |
+| `shared_collections.rules.test.mjs` | Regresión de los bloques ya publicados de additionalServices y el espejo motels; evita borrarlos por desplegar desde una rama desactualizada | sin ID |
 
 **Por qué el repositorio se prueba con una réplica en Node.** `flutter test`
 no carga el plugin nativo de `cloud_firestore`. Para ejecutar el código Dart
@@ -47,6 +50,13 @@ verifica en la consola de Firebase.
 
 Las pruebas marcadas **HALLAZGO** describen el comportamiento actual de las
 reglas que conviene revisar; no son errores de la prueba.
+
+**Política de eliminación confirmada por el usuario:** el administrador activo
+puede eliminar perfiles de clientes/propietarios, nunca administradores.
+La prueba anterior que negaba todo borrado ajeno contradecía la regla existente
+y se corrigió tras confirmar explícitamente la política. Se prueban también
+usuarios sin autoridad, administradores deshabilitados y contraseña temporal
+pendiente. Las reglas de eliminación no se ampliaron.
 
 ## 2. Pruebas de Flutter (Dart)
 

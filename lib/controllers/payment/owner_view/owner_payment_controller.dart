@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
+import 'package:machuco/repositories/booking/booking_repository.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/repositories/payment/payment_cloud_repository.dart';
 import 'package:machuco/service/firebase/current_user.dart';
@@ -13,11 +14,19 @@ class OwnerPaymentController extends ChangeNotifier {
     PaymentRepository? repository,
     PaymentCloudRepository? cloudRepository,
     String? Function()? currentUserId,
+    Future<void> Function()? refreshReservations,
   }) : _repository = repository ?? PaymentRepository(),
        _cloudRepository =
            cloudRepository ??
            (repository == null ? FirestorePaymentCloudRepository() : null),
-       _currentUserId = currentUserId ?? (() => CurrentUser.uid) {
+       _currentUserId = currentUserId ?? (() => CurrentUser.uid),
+       _refreshReservations =
+           refreshReservations ??
+           (repository == null
+               ? () async {
+                   await BookingRepositoryProvider.instance.getAll();
+                 }
+               : null) {
     ready = load();
   }
 
@@ -25,6 +34,7 @@ class OwnerPaymentController extends ChangeNotifier {
   final PaymentRepository _repository;
   final PaymentCloudRepository? _cloudRepository;
   final String? Function() _currentUserId;
+  final Future<void> Function()? _refreshReservations;
   late final Future<void> ready;
   List<PaymentRecord> _payments = [];
   final Map<int, String> _methodNames = {};
@@ -157,7 +167,7 @@ class OwnerPaymentController extends ChangeNotifier {
     required String paymentId,
     required int paymentMethodId,
   }) async {
-    if (_isLoading || _isSaving || _disposed) {
+    if (_isLoading || _isSaving || _isSyncing || _disposed) {
       throw const PaymentRepositoryException(
         PaymentRepositoryError.invalidPayment,
         'Espera a que termine la operación de pagos actual.',
@@ -209,18 +219,28 @@ class OwnerPaymentController extends ChangeNotifier {
         // La caché existente sigue siendo válida; Firebase se reintenta sin
         // convertir un fallo del maestro en pérdida de los pagos locales.
       }
-      for (final payment in _payments) {
+      await _refreshReservations?.call();
+      // Pull first: a stale pending copy must not stop the whole upload loop
+      // or overwrite a receipt already confirmed on another device.
+      final remote = await cloud.listForOwnerAndMotel(
+        ownerId: ownerId,
+        motelId: motelId,
+      );
+      await _repository.mergeRemotePayments(motelId: motelId, payments: remote);
+      final local = await _repository.findPaymentsByMotel(motelId);
+      if (!_disposed) _payments = local;
+      final remoteById = {for (final payment in remote) payment.id: payment};
+      for (final payment in local) {
+        if (remoteById[payment.id]?.status == payment.status &&
+            payment.status != PaymentStatus.paid) {
+          continue;
+        }
         await cloud.savePayment(
           ownerId: ownerId,
           payment: payment,
           paymentMethodName: _paymentMethodNameForCloud(payment),
         );
       }
-      final remote = await cloud.listForOwnerAndMotel(
-        ownerId: ownerId,
-        motelId: motelId,
-      );
-      await _repository.mergeRemotePayments(motelId: motelId, payments: remote);
       final merged = await _repository.findPaymentsByMotel(motelId);
       if (!_disposed) _payments = merged;
     } on PaymentCloudRepositoryException catch (error) {

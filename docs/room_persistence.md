@@ -69,19 +69,18 @@ Colecciones remotas:
 
 - `room_types/{id}`: campos de `RoomTypeData.toJson()`, `ownerId`, `deleted`, `updatedAt`.
 - `rooms/{id}`: campos de `RoomVisualData.toJson()`, `ownerId`, `deleted`, `updatedAt`.
-- `room_motels/{motelId}`: registro de autorización con el campo `ownerId`.
+- `motels/{motelId}`: copia del motel con el campo `ownerId` de Firebase Auth.
 
 ### Configuración en Firebase (proyecto `machuco`)
 
 1. Habilitar Cloud Firestore si aún no existe, y usar Firebase Authentication
    para iniciar sesión. En `users/{uid}`, el propietario debe tener `role: "owner"`
    y `accountStatus: "active"` (mediante el flujo administrativo existente).
-2. Para cada motel, crear desde la consola el documento
-   `room_motels/<ID exacto del motel>` y agregar `ownerId` como string con el
-   UID real de su propietario en Firebase Authentication. Debe coincidir con
-   `ownerId` del motel en Supabase. No usar el correo ni el ID de una suscripción.
-   Este registro es necesario porque los moteles se almacenan en Supabase y
-   las reglas de Firestore no pueden consultar esa base.
+2. El motel debe existir en Firebase SQL Connect y tener su copia en
+   `motels/<ID exacto del motel>` en Firestore, con `ownerId` igual al UID
+   autenticado. La app crea esa copia al guardar el motel. Para los antiguos
+   sin copia, abrirlos y pulsar Guardar. No usar el registro `room_motels`
+   ni la tabla antigua de Supabase para autorizar habitaciones.
 3. Publicar **todo** el archivo `firestore.rules` en Firestore → Reglas → Publicar,
    conservando las reglas de usuarios, suscripciones y pagos. Alternativamente,
    con Firebase CLI autenticado: `firebase deploy --only firestore:rules --project machuco`.
@@ -105,12 +104,8 @@ entre dos dispositivos que crean registros diferentes a la vez. El bloqueo de
 borrado de tipos con habitaciones es local; no es una restricción transaccional
 entre dispositivos. Las imágenes siguen siendo URLs, no archivos subidos a Firestore.
 
-### Autorización de Edificio UCO sin registro manual
+### Autorización por propietario
 
-Las reglas incluyen la relación explícita de `motel_1793753270427` con el UID
-`9pojDLzLw3SL4S3VNK8JTPCUdbE2`. Para este motel basta desplegar las reglas;
-no es necesario crear `room_motels`. El usuario debe seguir siendo un propietario
-activo y el `ownerId` enviado debe coincidir con su UID. Si existe un documento
-`room_motels` para ese motel, prevalece su propietario. Otros moteles siguen
-requiriendo el registro. Al transferir Edificio UCO se debe actualizar esta
-relación en las reglas o crear el registro con su nuevo propietario.
+Todos los moteles usan la misma validación: el usuario debe ser propietario
+activo, y el `ownerId` del motel y el de la habitación o tipo deben coincidir
+con su UID. No hay excepciones con IDs fijos ni autorización por `room_motels`.
