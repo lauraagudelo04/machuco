@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
+import 'package:machuco/controllers/auth/validators/document_number_validator.dart';
 import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
@@ -540,7 +541,11 @@ final class FirebaseSocialAuthService implements SocialAuthService {
           : null,
       data.phoneCountryCodeId <= 0 ? 'Selecciona el indicativo.' : null,
       AuthValidators.documentType(data.documentType) ??
-          AuthValidators.documentNumber(data.documentType)(data.documentNumber),
+          // El patrón fino lo valida la vista con el maestro `document_types`.
+          DocumentNumberValidator.validate(
+            AuthInputNormalizer.documentNumber(data.documentNumber),
+            null,
+          ),
     ];
     final roleErrors = switch (data.role) {
       RegisteredUserRole.client => [

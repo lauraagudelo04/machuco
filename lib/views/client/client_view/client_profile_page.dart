@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/controllers/client/client_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/client/client_model.dart';
 import 'package:machuco/routes/routes.dart';
+import 'package:machuco/widgets/auth/delete_account_action.dart';
 
 class ClientProfilePage extends StatelessWidget {
-  const ClientProfilePage({super.key});
+  const ClientProfilePage({super.key, this.loginController});
+
+  /// Sesión usada por "Eliminar cuenta"; si es `null` se crea al tocarlo.
+  final LoginController? loginController;
 
   @override
   Widget build(BuildContext context) {
@@ -28,7 +33,8 @@ class ClientProfilePage extends StatelessWidget {
               );
             }
 
-            if (controller.errorMessage != null && controller.currentClient == null) {
+            if (controller.errorMessage != null &&
+                controller.currentClient == null) {
               return AppErrorState(
                 message: controller.errorMessage!,
                 onRetry: controller.loadProfileData,
@@ -40,7 +46,8 @@ class ClientProfilePage extends StatelessWidget {
               return AppEmptyState(
                 icon: Icons.person_off_outlined,
                 title: 'Perfil no encontrado',
-                message: 'No hay datos de perfil guardados en este dispositivo.',
+                message:
+                    'No hay datos de perfil guardados en este dispositivo.',
                 actionLabel: 'Recargar',
                 onAction: controller.loadProfileData,
               );
@@ -63,8 +70,8 @@ class ClientProfilePage extends StatelessWidget {
                       icon: Icons.phone_outlined,
                       label: 'Teléfono',
                       value: client.phone.startsWith('+')
-                              ? client.phone
-                              : '${client.countryCode} ${client.phone}',
+                          ? client.phone
+                          : '${client.countryCode} ${client.phone}',
                     ),
                     _InfoRow(
                       icon: Icons.email_outlined,
@@ -82,6 +89,8 @@ class ClientProfilePage extends StatelessWidget {
                     Navigator.pushNamed(context, AppRoutes.clientProfileEdit);
                   },
                 ),
+                const SizedBox(height: AppSpacing.s6),
+                DeleteAccountAction(controller: loginController),
               ],
             );
           },
@@ -98,7 +107,9 @@ class ClientProfilePage extends StatelessWidget {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.xl),
             ),
             alignment: Alignment.center,
@@ -180,7 +191,9 @@ class _InfoRow extends StatelessWidget {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withValues(alpha: .10),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.sm),
             ),
             child: Icon(
@@ -203,9 +216,9 @@ class _InfoRow extends StatelessWidget {
                 const SizedBox(height: AppSpacing.s1),
                 Text(
                   value,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w600,
-                  ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
                 ),
               ],
             ),

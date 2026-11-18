@@ -1,5 +1,6 @@
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 /// Solicitud de cuenta de propietario pendiente de aprobación por un
 /// administrador (perfil `users/{uid}` con `accountStatus: pending_approval`).
@@ -15,6 +16,8 @@ class OwnerApplication {
     required this.createdAt,
     this.companyName,
     this.planId,
+    this.documentType,
+    this.documentNumber,
   });
 
   /// Construye la solicitud desde un perfil; tolera perfiles antiguos que solo
@@ -33,6 +36,8 @@ class OwnerApplication {
       nit: profile.nit,
       companyName: profile.companyName,
       planId: profile.planId,
+      documentType: profile.documentType,
+      documentNumber: profile.documentNumber,
       createdAt: profile.createdAt,
     );
   }
@@ -50,6 +55,10 @@ class OwnerApplication {
   final String? nit;
   final String? companyName;
   final int? planId;
+
+  /// Documento de identidad (del representante legal si es persona jurídica).
+  final DocumentType? documentType;
+  final String? documentNumber;
   final DateTime? createdAt;
 
   String get fullName => '$firstNames $lastNames'.trim();

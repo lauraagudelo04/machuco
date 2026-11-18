@@ -4,7 +4,7 @@ import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/models/owner_management/document_type.dart';
+import 'package:machuco/models/auth/document_type.dart';
 import 'package:machuco/models/auth/social_auth_result.dart';
 import 'package:machuco/models/auth/social_profile_data.dart';
 import 'package:machuco/service/auth/auth_service.dart';
@@ -64,7 +64,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   late final bool _ownsController;
   RegisteredUserRole _role = RegisteredUserRole.client;
   PersonType _personType = PersonType.natural;
-  DocumentType _documentType = DocumentType.citizenshipCard;
+  DocumentTypeOption? _documentChoice;
   int? _planId;
   String? _planError;
   bool _submitting = false;
@@ -72,6 +72,16 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   AuthFailure? _failure;
 
   SocialAuthIncompleteProfile get _profile => widget.args.profile;
+
+  /// Tipo elegido; si no hay elección (o ya no existe) se usa el
+  /// predeterminado del maestro cargado.
+  DocumentTypeOption? get _documentType {
+    final choice = _documentChoice;
+    if (choice != null && _controller.documentTypes.contains(choice)) {
+      return choice;
+    }
+    return _controller.defaultDocumentType;
+  }
 
   @override
   void initState() {
@@ -82,6 +92,10 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     _prefillNames(_profile.displayName);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
+      if (_controller.documentTypes.isEmpty &&
+          !_controller.isLoadingDocumentTypes) {
+        _controller.loadDocumentTypes();
+      }
       if (_controller.countryPhoneCodes.isEmpty &&
           !_controller.isLoadingCountryPhoneCodes) {
         await _controller.loadCountryPhoneCodes();
@@ -164,6 +178,8 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final code = _controller.selectedCountryPhoneCode;
     if (code == null) return;
+    final documentType = _documentType?.domainType;
+    if (documentType == null) return;
     final isOwner = _role == RegisteredUserRole.owner;
     if (isOwner && _planId == null) {
       setState(() => _planError = 'Selecciona un plan.');
@@ -178,7 +194,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             lastNames: _lastNames.text,
             phoneCountryCodeId: code.id,
             phoneNumber: phone,
-            documentType: _documentType,
+            documentType: documentType,
             documentNumber: _documentNumber.text,
             personType: _personType,
             nit: _nit.text,
@@ -190,7 +206,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             lastNames: _lastNames.text,
             phoneCountryCodeId: code.id,
             phoneNumber: phone,
-            documentType: _documentType,
+            documentType: documentType,
             documentNumber: _documentNumber.text,
             birthDate: AuthValidators.parseBirthDate(_birthDate.text)!,
           );
@@ -284,7 +300,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                           lastNames: _lastNames,
                           documentType: _documentType,
                           onDocumentTypeChanged: (type) =>
-                              setState(() => _documentType = type),
+                              setState(() => _documentChoice = type),
                           documentNumber: _documentNumber,
                           phone: _phone,
                           birthDate: _birthDate,
@@ -354,7 +370,11 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   }
 
   bool get _canSubmit {
-    if (_leaving || _controller.selectedCountryPhoneCode == null) return false;
+    if (_leaving ||
+        _controller.selectedCountryPhoneCode == null ||
+        _documentType == null) {
+      return false;
+    }
     if (_role != RegisteredUserRole.owner) return true;
     return !_controller.isLoadingSubscriptionPlans &&
         _controller.subscriptionPlansError == null &&

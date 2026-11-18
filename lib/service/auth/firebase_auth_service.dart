@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
+import 'package:machuco/controllers/auth/validators/document_number_validator.dart';
 import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
@@ -110,8 +111,9 @@ final class FirebaseAuthService implements AuthService {
       data.documentNumber,
     );
     if (AuthValidators.documentType(data.documentType) != null ||
-        AuthValidators.documentNumber(data.documentType)(documentNumber) !=
-            null) {
+        // El patrón fino del tipo lo valida el controller con el maestro; aquí
+        // solo el formato general que exigen las reglas (4 a 20).
+        DocumentNumberValidator.validate(documentNumber, null) != null) {
       throw const AuthFailure(
         AuthFailureType.invalidInput,
         'Ingresa un documento de identidad válido.',

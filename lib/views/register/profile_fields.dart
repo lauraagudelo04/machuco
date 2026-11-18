@@ -2,13 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
-import 'package:machuco/models/auth/identity_document.dart';
+import 'package:machuco/models/auth/document_type.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/views/register/client_registration_section.dart';
 import 'package:machuco/views/register/owner_registration_section.dart';
 import 'package:machuco/views/register/role_selector.dart';
+import 'package:machuco/widgets/auth/document_field.dart';
 import 'package:machuco/widgets/form/app_phone_field.dart';
 
 /// Campos de perfil por rol que comparten "Registrarse" y "Completar
@@ -45,8 +45,10 @@ class ProfileFields extends StatelessWidget {
   final ValueChanged<RegisteredUserRole> onRoleSelected;
   final TextEditingController firstNames;
   final TextEditingController lastNames;
-  final DocumentType documentType;
-  final ValueChanged<DocumentType> onDocumentTypeChanged;
+
+  /// Tipo elegido del maestro `document_types`; `null` mientras no carga.
+  final DocumentTypeOption? documentType;
+  final ValueChanged<DocumentTypeOption> onDocumentTypeChanged;
   final TextEditingController documentNumber;
   final TextEditingController phone;
   final TextEditingController birthDate;
@@ -93,34 +95,15 @@ class ProfileFields extends StatelessWidget {
           autovalidateMode: AutovalidateMode.onUserInteraction,
         ),
         const SizedBox(height: AppSpacing.s4),
-        Text('Tipo de documento', style: theme.textTheme.bodyLarge),
-        const SizedBox(height: AppSpacing.s2),
-        Wrap(
-          spacing: AppSpacing.s2,
-          runSpacing: AppSpacing.s2,
-          children: [
-            for (final type in registrationDocumentTypes)
-              ChoiceChip(
-                key: ValueKey('document-type-${type.name}'),
-                label: Text(type.description),
-                selected: type == documentType,
-                onSelected: (_) => onDocumentTypeChanged(type),
-              ),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.s4),
-        AppTextField(
-          key: const ValueKey('document-number-field'),
-          label: 'Número de documento',
-          hint: 'Ej. ${documentType.example}',
-          controller: documentNumber,
-          keyboardType: documentType == DocumentType.passport
-              ? TextInputType.text
-              : TextInputType.number,
-          textInputAction: TextInputAction.next,
-          // Se crea con el tipo actual: al cambiarlo se revalida el número.
-          validator: AuthValidators.documentNumber(documentType),
-          autovalidateMode: AutovalidateMode.onUserInteraction,
+        DocumentField(
+          types: controller.documentTypes,
+          selected: documentType,
+          onSelected: onDocumentTypeChanged,
+          numberController: documentNumber,
+          loading: controller.isLoadingDocumentTypes,
+          errorMessage: controller.documentTypesError,
+          onRetry: () => controller.loadDocumentTypes(forceRefresh: true),
+          legalRepresentative: isOwner && personType == PersonType.juridica,
         ),
         const SizedBox(height: AppSpacing.s4),
         Text('Número de celular', style: theme.textTheme.bodyLarge),

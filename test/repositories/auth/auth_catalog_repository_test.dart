@@ -72,10 +72,8 @@ void main() {
       'activos ordenados por nombre', () async {
     final client = MockClient((request) async {
       expect(request.url.path, '/rest/v1/phone_country_codes');
-      expect(
-        request.url.queryParameters['select'],
-        'id,country_code,country_name,calling_code,active',
-      );
+      // `*`: pedir una columna que aún no existe en Supabase daría HTTP 400.
+      expect(request.url.queryParameters['select'], '*');
       expect(request.headers['apikey'], 'public-key');
       return http.Response.bytes(utf8.encode(_supabaseBody), 200);
     });

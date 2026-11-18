@@ -4,11 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
+import 'package:machuco/controllers/auth/validators/document_number_validator.dart';
 import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/document_type.dart';
+import 'package:machuco/models/auth/identity_document.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
@@ -83,6 +87,9 @@ class LoginController extends ChangeNotifier {
   List<SubscriptionPlanOption> _subscriptionPlans = const [];
   bool _isLoadingSubscriptionPlans = false;
   String? _subscriptionPlansError;
+  List<DocumentTypeOption> _documentTypes = const [];
+  bool _isLoadingDocumentTypes = false;
+  String? _documentTypesError;
 
   bool get isAuthConfigured => _authService != null;
 
@@ -122,6 +129,22 @@ class LoginController extends ChangeNotifier {
       List.unmodifiable(_subscriptionPlans);
 
   bool get isLoadingSubscriptionPlans => _isLoadingSubscriptionPlans;
+
+  /// Tipos de documento del registro (maestro `document_types`).
+  List<DocumentTypeOption> get documentTypes =>
+      List.unmodifiable(_documentTypes);
+
+  bool get isLoadingDocumentTypes => _isLoadingDocumentTypes;
+
+  String? get documentTypesError => _documentTypesError;
+
+  /// Tipo preseleccionado: cédula de ciudadanía si existe, o el primero.
+  DocumentTypeOption? get defaultDocumentType {
+    for (final option in _documentTypes) {
+      if (option.domainType == DocumentType.citizenshipCard) return option;
+    }
+    return _documentTypes.isEmpty ? null : _documentTypes.first;
+  }
 
   String? get subscriptionPlansError => _subscriptionPlansError;
 
@@ -453,6 +476,38 @@ class LoginController extends ChangeNotifier {
     }
   }
 
+  /// Carga los tipos de documento (Supabase `document_types`). Sin repositorio
+  /// (desarrollo) usa los del dominio. Permite reintentar con [forceRefresh].
+  Future<void> loadDocumentTypes({bool forceRefresh = false}) async {
+    if (_isLoadingDocumentTypes) return;
+    _isLoadingDocumentTypes = true;
+    _documentTypesError = null;
+    notifyListeners();
+    try {
+      final repository = _catalogRepository;
+      _documentTypes = repository == null
+          ? [
+              for (final type in registrationDocumentTypes)
+                DocumentTypeOption.fromDomain(type),
+            ]
+          : await repository.getDocumentTypes(forceRefresh: forceRefresh);
+    } on AuthCatalogRepositoryException catch (e) {
+      _documentTypes = const [];
+      _documentTypesError = e.message;
+    } finally {
+      _isLoadingDocumentTypes = false;
+      notifyListeners();
+    }
+  }
+
+  /// Opción del maestro que corresponde a [type], o `null` si no se cargó.
+  DocumentTypeOption? documentOptionFor(DocumentType type) {
+    for (final option in _documentTypes) {
+      if (option.domainType == type) return option;
+    }
+    return null;
+  }
+
   Future<void> selectCountryPhoneCode(CountryPhoneCode code) async {
     _selectedCountryPhoneCode = code;
     notifyListeners();
@@ -557,7 +612,7 @@ class LoginController extends ChangeNotifier {
       AuthValidators.email(data.email),
       AuthValidators.password(data.password),
       AuthValidators.documentType(data.documentType) ??
-          AuthValidators.documentNumber(data.documentType)(data.documentNumber),
+          _validateDocumentNumber(data),
     ];
     String? nit;
     String? companyName;
@@ -595,6 +650,14 @@ class LoginController extends ChangeNotifier {
       nit: nit,
       companyName: companyName,
     );
+  }
+
+  /// Con el patrón del maestro si se cargó; si no, el del dominio.
+  String? _validateDocumentNumber(RegistrationData data) {
+    final option = documentOptionFor(data.documentType);
+    return option == null
+        ? AuthValidators.documentNumber(data.documentType)(data.documentNumber)
+        : DocumentNumberValidator.validate(data.documentNumber, option);
   }
 
   void _startResetCooldown() {

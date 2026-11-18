@@ -4,7 +4,7 @@ import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
-import 'package:machuco/models/owner_management/document_type.dart';
+import 'package:machuco/models/auth/document_type.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/views/register/profile_fields.dart';
 import 'package:machuco/widgets/auth/auth_password_field.dart';
@@ -51,11 +51,21 @@ class _RegisterFormState extends State<RegisterForm> {
 
   RegisteredUserRole _role = RegisteredUserRole.client;
   PersonType _personType = PersonType.natural;
-  DocumentType _documentType = DocumentType.citizenshipCard;
+  DocumentTypeOption? _documentChoice;
   int? _planId;
   String? _planError;
 
   LoginController get _controller => widget.controller;
+
+  /// Tipo elegido; si no hay elección (o ya no existe) se usa el
+  /// predeterminado del maestro cargado.
+  DocumentTypeOption? get _documentType {
+    final choice = _documentChoice;
+    if (choice != null && _controller.documentTypes.contains(choice)) {
+      return choice;
+    }
+    return _controller.defaultDocumentType;
+  }
 
   @override
   void initState() {
@@ -65,6 +75,10 @@ class _RegisterFormState extends State<RegisterForm> {
       if (_controller.countryPhoneCodes.isEmpty &&
           !_controller.isLoadingCountryPhoneCodes) {
         _controller.loadCountryPhoneCodes();
+      }
+      if (_controller.documentTypes.isEmpty &&
+          !_controller.isLoadingDocumentTypes) {
+        _controller.loadDocumentTypes();
       }
     });
   }
@@ -118,6 +132,8 @@ class _RegisterFormState extends State<RegisterForm> {
     if (!(_formKey.currentState?.validate() ?? false)) return;
     final code = _controller.selectedCountryPhoneCode;
     if (code == null) return;
+    final documentType = _documentType?.domainType;
+    if (documentType == null) return;
     final isOwner = _role == RegisteredUserRole.owner;
     if (isOwner && _planId == null) {
       setState(() => _planError = 'Selecciona un plan.');
@@ -132,7 +148,7 @@ class _RegisterFormState extends State<RegisterForm> {
             phoneNumber: phone,
             email: _email.text,
             password: _password.text,
-            documentType: _documentType,
+            documentType: documentType,
             documentNumber: _documentNumber.text,
             personType: _personType,
             nit: _nit.text,
@@ -146,7 +162,7 @@ class _RegisterFormState extends State<RegisterForm> {
             phoneNumber: phone,
             email: _email.text,
             password: _password.text,
-            documentType: _documentType,
+            documentType: documentType,
             documentNumber: _documentNumber.text,
             birthDate: AuthValidators.parseBirthDate(_birthDate.text)!,
           );
@@ -162,6 +178,7 @@ class _RegisterFormState extends State<RegisterForm> {
         final isOwner = _role == RegisteredUserRole.owner;
         final canSubmit =
             _controller.selectedCountryPhoneCode != null &&
+            _documentType != null &&
             (!isOwner || _plansAvailable);
         return Form(
           key: _formKey,
@@ -178,7 +195,7 @@ class _RegisterFormState extends State<RegisterForm> {
                   lastNames: _lastNames,
                   documentType: _documentType,
                   onDocumentTypeChanged: (type) =>
-                      setState(() => _documentType = type),
+                      setState(() => _documentChoice = type),
                   documentNumber: _documentNumber,
                   phone: _phone,
                   birthDate: _birthDate,

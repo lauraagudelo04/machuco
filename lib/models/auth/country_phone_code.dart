@@ -17,14 +17,28 @@ class CountryPhoneCode {
     this.isDevelopmentSeed = false,
   });
 
-  /// El maestro de Supabase todavía no publica la longitud del celular por
-  /// país; mientras tanto se usa el rango del plan de numeración E.164.
+  /// Rango por defecto (plan de numeración E.164) cuando el maestro no trae
+  /// `phone_min_length` y `phone_max_length`.
   static const defaultPhoneMinLength = 7;
   static const defaultPhoneMaxLength = 15;
 
   /// Convierte la fila cacheada en SQLite (o recibida de Supabase).
-  factory CountryPhoneCode.fromEntry(PhoneCountryCode entry) {
+  ///
+  /// [phoneMinLength] y [phoneMaxLength] vienen de las columnas homónimas de
+  /// Supabase cuando existen y son coherentes; si no, se usa 7 a 15 dígitos.
+  factory CountryPhoneCode.fromEntry(
+    PhoneCountryCode entry, {
+    int? phoneMinLength,
+    int? phoneMaxLength,
+  }) {
+    final validLengths =
+        phoneMinLength != null &&
+        phoneMaxLength != null &&
+        phoneMinLength > 0 &&
+        phoneMinLength <= phoneMaxLength;
     return CountryPhoneCode(
+      phoneMinLength: validLengths ? phoneMinLength : defaultPhoneMinLength,
+      phoneMaxLength: validLengths ? phoneMaxLength : defaultPhoneMaxLength,
       id: entry.id,
       isoCode: entry.countryCode.trim().toUpperCase(),
       countryName: entry.countryName.trim(),

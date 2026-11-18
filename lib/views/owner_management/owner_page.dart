@@ -416,6 +416,10 @@ class _OwnerPageState extends State<OwnerPage> with WidgetsBindingObserver {
             Navigator.of(drawerContext).pop();
             _openApprovals();
           },
+          onOpenAdministrators: () {
+            Navigator.of(drawerContext).pop();
+            Navigator.of(context).pushNamed(AppRoutes.adminAdministrators);
+          },
           onOpenNotifications: () {
             Navigator.of(drawerContext).pop();
             _openNotifications();

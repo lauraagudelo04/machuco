@@ -54,16 +54,32 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  /// Documento de identidad (decisión 2026-11-17): CC, CE y pasaporte.
-  void expectIdentityDocument() {
-    expect(find.text('Tipo de documento'), findsOneWidget);
+  /// Documento de identidad (decisión 2026-11-17): CC, CE y pasaporte, con
+  /// selector de tipo (hoja inferior) y número en una sola fila.
+  Future<void> expectIdentityDocument(WidgetTester tester) async {
+    expect(find.byKey(const ValueKey('document-field')), findsOneWidget);
+    expect(find.text('Documento de identidad'), findsOneWidget);
+    expect(find.byKey(const ValueKey('document-type-button')), findsOneWidget);
     expect(field('Número de documento'), findsOneWidget);
+    // El hint es el ejemplo del tipo elegido (CC por defecto).
+    expect(find.text('1020304050'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('document-type-button')));
+    await tester.pumpAndSettle();
     expect(find.text('Cédula de ciudadanía'), findsOneWidget);
     expect(find.text('Cédula de extranjería'), findsOneWidget);
     expect(find.text('Pasaporte'), findsOneWidget);
     // Ni tarjeta de identidad (menores) ni NIT como documento.
     expect(find.text('Tarjeta de identidad'), findsNothing);
     expect(find.text('Número de identificación tributaria'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('document-type-option-CC')));
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> pickPassport(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('document-type-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('document-type-option-PAS')));
+    await tester.pumpAndSettle();
   }
 
   testWidgets('cliente: muestra sus campos y el documento de identidad', (
@@ -76,7 +92,7 @@ void main() {
     expect(field('Fecha de nacimiento'), findsOneWidget);
     expect(field('NIT'), findsNothing);
     expect(find.text('Plan de suscripción'), findsNothing);
-    expectIdentityDocument();
+    await expectIdentityDocument(tester);
   });
 
   testWidgets('propietario: muestra NIT y planes, sin fecha de nacimiento', (
@@ -92,7 +108,7 @@ void main() {
     expect(find.text('Premium'), findsOneWidget);
     expect(field('Fecha de nacimiento'), findsNothing);
     // El documento de identidad va aparte del NIT.
-    expectIdentityDocument();
+    await expectIdentityDocument(tester);
   });
 
   testWidgets('la razón social aparece solo en persona jurídica y el NIT se '
@@ -224,10 +240,12 @@ void main() {
     await tester.tap(find.widgetWithText(AppButton, 'Crear cuenta'));
     await tester.pumpAndSettle();
     expect(submitted, isNull);
-    expect(find.textContaining('Número no válido para CC'), findsOneWidget);
+    expect(
+      find.textContaining('Número no válido. Ejemplo: 1020304050.'),
+      findsOneWidget,
+    );
 
-    await tester.tap(find.text('Pasaporte'));
-    await tester.pumpAndSettle();
+    await pickPassport(tester);
     await tester.tap(find.widgetWithText(AppButton, 'Crear cuenta'));
     await tester.pumpAndSettle();
     expect(submitted?.documentType, DocumentType.passport);

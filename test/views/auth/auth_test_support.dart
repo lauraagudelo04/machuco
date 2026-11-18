@@ -3,6 +3,8 @@ import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/document_type.dart';
+import 'package:machuco/models/auth/identity_document.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
@@ -26,7 +28,15 @@ final class FakeCatalogRepository extends AuthCatalogRepository {
       SubscriptionPlanOption(id: 2, name: 'Premium'),
     ],
     this.failPlans = false,
-  }) : super(
+    this.failDocumentTypes = false,
+    List<DocumentTypeOption>? documentTypes,
+  }) : documentTypes =
+           documentTypes ??
+           [
+             for (final type in registrationDocumentTypes)
+               DocumentTypeOption.fromDomain(type),
+           ],
+       super(
          supabaseUrl: '',
          publishableKey: '',
          preferences: AuthPreferences(),
@@ -34,11 +44,28 @@ final class FakeCatalogRepository extends AuthCatalogRepository {
 
   List<SubscriptionPlanOption> plans;
   bool failPlans;
+  bool failDocumentTypes;
+  List<DocumentTypeOption> documentTypes;
 
   @override
   Future<List<CountryPhoneCode>> getCountryPhoneCodes({
     bool forceRefresh = false,
   }) async => const [testColombia];
+
+  @override
+  Future<List<DocumentTypeOption>> getDocumentTypes({
+    bool forceRefresh = false,
+  }) async {
+    if (failDocumentTypes) {
+      throw const AuthCatalogRepositoryException('Sin conexión');
+    }
+    if (documentTypes.isEmpty) {
+      throw const AuthCatalogRepositoryException(
+        'No hay tipos de documento disponibles por ahora.',
+      );
+    }
+    return documentTypes;
+  }
 
   @override
   Future<List<SubscriptionPlanOption>> getSubscriptionPlans({
@@ -56,6 +83,7 @@ final class FakeAuthService implements AuthService {
   AuthFailure? loginFailure;
   AuthFailure? resetFailure;
   AuthFailure? deleteFailure;
+  AuthFailure? registerFailure;
   AuthSession? loginResult;
   RegistrationData? registered;
   final List<String> resetEmails = [];
@@ -85,6 +113,8 @@ final class FakeAuthService implements AuthService {
 
   @override
   Future<void> registerAccount(RegistrationData data) async {
+    final failure = registerFailure;
+    if (failure != null) throw failure;
     registered = data;
   }
 

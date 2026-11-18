@@ -51,8 +51,9 @@ Future<AuthFailure?> routeSocialResult(
       );
       return null;
     case SocialAuthRejected(:final reason):
-      Navigator.of(context).pushNamed(
+      Navigator.of(context).pushNamedAndRemoveUntil(
         AuthRoutes.accountReview,
+        (_) => false,
         arguments: AccountReviewArgs(
           email: '',
           rejected: true,

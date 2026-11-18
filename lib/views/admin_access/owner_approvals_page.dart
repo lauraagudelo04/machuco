@@ -3,6 +3,7 @@ import 'package:machuco/controllers/auth/admin_access_controller.dart';
 import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/admin_access_repository.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/models/auth/owner_approval_request.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/views/admin_access/owner_approval_detail_page.dart';
@@ -29,7 +30,11 @@ class _OwnerApprovalsPageState extends State<OwnerApprovalsPage> {
     _ownsController = widget.controller == null;
     _controller =
         widget.controller ??
-        AdminAccessController(repository: FirestoreAdminAccessRepository());
+        AdminAccessController(
+          repository: FirestoreAdminAccessRepository(),
+          loadPlans:
+              AuthCatalogRepository.fromEnvironment().getSubscriptionPlans,
+        );
     _controller.loadPendingOwners();
   }
 

@@ -57,7 +57,9 @@ class _AuthTabButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textColor = selected ? Colors.white : context.appColors.textSecondary;
+    final textColor = selected
+        ? Theme.of(context).colorScheme.onPrimary
+        : context.appColors.textSecondary;
     return Semantics(
       button: true,
       selected: selected,

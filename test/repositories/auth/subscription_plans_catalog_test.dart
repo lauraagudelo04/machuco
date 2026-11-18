@@ -42,7 +42,7 @@ void main() {
         return http.Response.bytes(
           utf8.encode(
             '[{"id":1,"name":"Básico"},{"id":2,"name":"Premium"},'
-            '{"id":3,"name":""},{"name":"sin id"}]',
+            '{"name":"sin id"}]',
           ),
           200,
         );
@@ -52,8 +52,11 @@ void main() {
 
       expect(requested.path, '/rest/v1/subscription_plans');
       expect(requested.queryParameters, {
-        'select': 'id,name',
-        'order': 'id.asc',
+        'select':
+            'id,name,description,price,currency,billing_period,features,'
+            'max_motels,sort_order',
+        'is_active': 'eq.true',
+        'order': 'sort_order.asc',
       });
       expect(plans, const [
         SubscriptionPlanOption(id: 1, name: 'Básico'),

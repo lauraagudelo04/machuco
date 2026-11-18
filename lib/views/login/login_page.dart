@@ -4,6 +4,7 @@ import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/database/repository/auth/admin_access_repository.dart';
+import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/models/auth/auth_provider_kind.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
@@ -20,6 +21,7 @@ import 'package:machuco/widgets/auth/auth_header.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
 import 'package:machuco/widgets/auth/auth_tab_switcher.dart';
 import 'package:machuco/widgets/auth/delete_account_sheet.dart';
+import 'package:machuco/widgets/auth/email_in_use_notice.dart';
 import 'package:machuco/widgets/auth/forgot_password_sheet.dart';
 import 'package:machuco/widgets/auth/login_form.dart';
 import 'package:machuco/widgets/auth/social_auth_buttons.dart';
@@ -61,6 +63,9 @@ class _LoginPageState extends State<LoginPage> {
   final _loginEmailController = TextEditingController();
   final _loginPasswordController = TextEditingController();
 
+  /// Conserva lo escrito en el registro cuando aparece o se quita el aviso.
+  final _registerFormKey = GlobalKey();
+
   late AuthTab _selectedTab;
   late final LoginController _controller;
   late final bool _ownsController;
@@ -72,6 +77,9 @@ class _LoginPageState extends State<LoginPage> {
   VoidCallback? _noticeRetry;
   SocialAuthService? _social;
   AuthProviderKind? _socialBusy;
+
+  /// Correo que el registro rechazó por ya tener cuenta.
+  String? _emailInUse;
 
   bool get _isSubmitting => _controller.isSubmitting;
   AuthSession? get _session => _controller.session;
@@ -119,6 +127,7 @@ class _LoginPageState extends State<LoginPage> {
     if (_adminController == null) {
       _adminController = AdminAccessController(
         repository: FirestoreAdminAccessRepository(),
+        loadPlans: AuthCatalogRepository.fromEnvironment().getSubscriptionPlans,
       );
       _ownsAdminController = true;
     }
@@ -158,7 +167,10 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
-  void _selectTab(AuthTab tab) => setState(() => _selectedTab = tab);
+  void _selectTab(AuthTab tab) => setState(() {
+    _selectedTab = tab;
+    _emailInUse = null;
+  });
 
   /// Retoma "Completar perfil" si la app se cerró antes de terminarlo, o
   /// vuelve a leer el perfil de un usuario ya autenticado (p. ej. tras un
@@ -267,8 +279,10 @@ class _LoginPageState extends State<LoginPage> {
   void _handleLoginFailure(AuthFailure failure) {
     switch (failure.type) {
       case AuthFailureType.accountRejected:
-        Navigator.of(context).pushNamed(
+        // Reemplaza la pila: con "atrás" no se vuelve al login.
+        Navigator.of(context).pushNamedAndRemoveUntil(
           AuthRoutes.accountReview,
+          (_) => false,
           arguments: AccountReviewArgs(
             email: _loginEmailController.text.trim(),
             rejected: true,
@@ -297,6 +311,15 @@ class _LoginPageState extends State<LoginPage> {
         _goToRoleHome(session);
         return;
       }
+      if (data.role == RegisteredUserRole.client) {
+        // El cliente entra directo a su ruta (sin pasar por el login).
+        final session = await _signInAfterRegister(data);
+        if (!mounted) return;
+        if (session != null) {
+          _goToRoleHome(session);
+          return;
+        }
+      }
       _loginEmailController.text = data.email.trim();
       _loginPasswordController.clear();
       _showSnack(
@@ -308,8 +331,38 @@ class _LoginPageState extends State<LoginPage> {
       setState(() => _selectedTab = AuthTab.login);
     } on AuthFailure catch (failure) {
       if (!mounted) return;
+      if (failure.type == AuthFailureType.emailAlreadyExists) {
+        setState(() => _emailInUse = data.email.trim());
+        return;
+      }
+      setState(() => _emailInUse = null);
       _showSnack(message: failure.message, isError: true);
     }
+  }
+
+  /// Abre sesión con las credenciales recién registradas; `null` si falla
+  /// (entonces se cae al flujo de "inicia sesión").
+  Future<AuthSession?> _signInAfterRegister(RegistrationData data) async {
+    try {
+      return await _controller.login(
+        email: data.email,
+        password: data.password,
+        rememberEmail: false,
+      );
+    } on AuthFailure {
+      return null;
+    }
+  }
+
+  void _useEmailInUseToLogin() {
+    _loginEmailController.text = _emailInUse ?? '';
+    _loginPasswordController.clear();
+    _selectTab(AuthTab.login);
+  }
+
+  Future<void> _forgotPasswordForEmailInUse() async {
+    _loginEmailController.text = _emailInUse ?? '';
+    await _openForgotPassword();
   }
 
   Future<void> _openForgotPassword() async {
@@ -457,11 +510,27 @@ class _LoginPageState extends State<LoginPage> {
                                   socialButtons: socialButtons,
                                 ),
                               )
-                            : RegisterForm(
-                                controller: _controller,
-                                onSubmit: _submitRegister,
-                                onLoginTap: () => _selectTab(AuthTab.login),
-                                socialButtons: socialButtons,
+                            : Column(
+                                key: const ValueKey('register-tab'),
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  if (_emailInUse case final email?) ...[
+                                    EmailInUseNotice(
+                                      email: email,
+                                      onLogin: _useEmailInUseToLogin,
+                                      onForgotPassword:
+                                          _forgotPasswordForEmailInUse,
+                                    ),
+                                    const SizedBox(height: AppSpacing.s4),
+                                  ],
+                                  RegisterForm(
+                                    key: _registerFormKey,
+                                    controller: _controller,
+                                    onSubmit: _submitRegister,
+                                    onLoginTap: () => _selectTab(AuthTab.login),
+                                    socialButtons: socialButtons,
+                                  ),
+                                ],
                               ),
                       ),
                     ],

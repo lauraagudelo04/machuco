@@ -12,6 +12,7 @@ class AdminPanelDrawer extends StatelessWidget {
     required this.pendingRequests,
     required this.adminEmail,
     required this.onOpenApprovals,
+    required this.onOpenAdministrators,
     required this.onOpenNotifications,
     required this.onOpenProfile,
     required this.onLogout,
@@ -20,6 +21,7 @@ class AdminPanelDrawer extends StatelessWidget {
   final int pendingRequests;
   final String? adminEmail;
   final VoidCallback onOpenApprovals;
+  final VoidCallback onOpenAdministrators;
   final VoidCallback onOpenNotifications;
   final VoidCallback onOpenProfile;
   final VoidCallback onLogout;
@@ -27,6 +29,8 @@ class AdminPanelDrawer extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final email = adminEmail?.trim();
+    final textTheme = Theme.of(context).textTheme;
+    final onPrimary = Theme.of(context).colorScheme.onPrimary;
     return Drawer(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       child: ListView(
@@ -40,24 +44,20 @@ class AdminPanelDrawer extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                const Text(
+                Text(
                   'Menú Administrador',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                  style: textTheme.headlineMedium?.copyWith(color: onPrimary),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: AppSpacing.s1),
                 Text(
                   email == null || email.isEmpty
                       ? 'Sesión de administrador'
                       : 'Sesión: $email',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: textTheme.bodySmall?.copyWith(color: onPrimary),
                 ),
               ],
             ),
@@ -73,13 +73,17 @@ class AdminPanelDrawer extends StatelessWidget {
             trailing: pendingRequests > 0
                 ? Chip(
                     label: Text('$pendingRequests'),
-                    backgroundColor: Theme.of(
-                      context,
-                    ).colorScheme.primary.withValues(alpha: .12),
+                    backgroundColor: Theme.of(context).colorScheme.primary
+                        .withValues(alpha: AppOpacity.softFill),
                     visualDensity: VisualDensity.compact,
                   )
                 : null,
             onTap: onOpenApprovals,
+          ),
+          ListTile(
+            leading: const Icon(Icons.admin_panel_settings_outlined),
+            title: const Text('Administradores'),
+            onTap: onOpenAdministrators,
           ),
           ListTile(
             leading: const Icon(Icons.notifications_outlined),
