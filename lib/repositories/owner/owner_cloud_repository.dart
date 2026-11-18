@@ -265,6 +265,12 @@ class FirestoreOwnerCloudRepository implements OwnerCloudRepository {
             'firstNames': null,
             'lastNames': null,
             'mustChangePassword': null,
+            // Campos que `isAdminOwnerAnonymization` (firestore.rules) no
+            // admite en el documento resultante: hay que eliminarlos, o la
+            // regla rechaza la operación con permission-denied.
+            'approvedAt': FieldValue.delete(),
+            'approvedBy': FieldValue.delete(),
+            'birthDate': FieldValue.delete(),
             'anonymizedAt': FieldValue.serverTimestamp(),
             'anonymizedBy': adminId,
             'updatedBy': adminId,

@@ -14,6 +14,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  deleteField,
   documentId,
   getDoc,
   getDocs,
@@ -1040,6 +1041,45 @@ describe('users: CRUD de propietarios por el administrador', () => {
   test('un admin activo anonimiza a un propietario', async () => {
     await assertSucceeds(
       updateDoc(doc(as('admin'), 'users/owner-panel'), ownerAnonymization()),
+    );
+  });
+
+  test('un propietario aprobado (approvedAt/approvedBy/birthDate) falla si esos campos no se eliminan', async () => {
+    await seed({
+      'users/owner-approved': {
+        ...adminCreatedOwner(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        approvedAt: Timestamp.now(),
+        approvedBy: 'admin',
+        birthDate: Timestamp.now(),
+      },
+    });
+    await assertFails(
+      updateDoc(doc(as('admin'), 'users/owner-approved'), ownerAnonymization()),
+    );
+  });
+
+  test('un propietario aprobado se anonimiza al eliminar esos campos (payload de anonymizeOwner)', async () => {
+    await seed({
+      'users/owner-approved': {
+        ...adminCreatedOwner(),
+        createdAt: Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        approvedAt: Timestamp.now(),
+        approvedBy: 'admin',
+        birthDate: Timestamp.now(),
+      },
+    });
+    await assertSucceeds(
+      updateDoc(
+        doc(as('admin'), 'users/owner-approved'),
+        ownerAnonymization({
+          approvedAt: deleteField(),
+          approvedBy: deleteField(),
+          birthDate: deleteField(),
+        }),
+      ),
     );
   });
 
