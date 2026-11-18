@@ -131,8 +131,19 @@ ya exigen las reglas de propietarios (`hasValidOwnerManagementFields`):
 | `documentNumber` | `string` | De 4 a 20 caracteres |
 
 - **Registro público** (`isPublicRegistration`): ambos campos son
-  obligatorios para `client` y `owner`. **Hasta que la app los envíe (Etapa
-  2), el registro público falla con estas reglas: no desplegarlas antes.**
+  obligatorios para `client` y `owner`. La app ya los envía desde
+  "Registrarse" y "Completar perfil" (Google/GitHub): `RegistrationData`,
+  `SocialProfileData` y `UserProfile` tienen `documentType` y
+  `documentNumber`, y `ProfileFields` muestra el selector y el número.
+- **Tipos que ofrece el registro** (`registrationDocumentTypes`): cédula de
+  ciudadanía, cédula de extranjería y pasaporte. No se ofrece tarjeta de
+  identidad (el registro exige mayoría de edad) ni NIT (va en su propio
+  campo). Las reglas aceptan los 5 valores para no romper el panel de
+  propietarios.
+- **Normalización**: el número se guarda sin espacios, puntos ni guiones y en
+  mayúsculas (`1.020.304.050` → `1020304050`) y se valida con el patrón del
+  tipo (`DocumentType.pattern`). Nunca se guarda en SQLite ni en
+  SharedPreferences.
 - **Actualización**: el propio Cliente o Propietario puede agregarlos o
   corregirlos (validados). Un perfil antiguo sin documento se puede seguir
   editando, aprobando o deshabilitando: no se fuerza a completarlo en cada

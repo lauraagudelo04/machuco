@@ -22,6 +22,7 @@ import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_social_auth_service.dart';
 import 'package:machuco/service/auth/github_email_verifier.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 import '../analytics/recording_analytics_service.dart';
 
@@ -42,6 +43,8 @@ UserProfile _profile({
 );
 
 SocialProfileData _client({DateTime? birthDate}) => SocialProfileData.client(
+  documentType: DocumentType.citizenshipCard,
+  documentNumber: '1020304050',
   firstNames: 'Ana',
   lastNames: 'Pérez',
   phoneCountryCodeId: 1,
@@ -50,6 +53,8 @@ SocialProfileData _client({DateTime? birthDate}) => SocialProfileData.client(
 );
 
 SocialProfileData _owner() => SocialProfileData.owner(
+  documentType: DocumentType.citizenshipCard,
+  documentNumber: '1020304050',
   firstNames: 'Luis',
   lastNames: 'Gómez',
   phoneCountryCodeId: 1,
@@ -256,7 +261,10 @@ void main() {
       );
     }
 
-    for (final code in ['unsupported-platform', 'unsupported-platform-operation']) {
+    for (final code in [
+      'unsupported-platform',
+      'unsupported-platform-operation',
+    ]) {
       test('$code explica la limitación de la plataforma', () async {
         auth.signInError = FirebaseAuthException(code: code);
         final result = expectType<SocialAuthError>(
@@ -543,6 +551,8 @@ void main() {
       expect(created.role, RegisteredUserRole.client);
       expect(created.accountStatus, AccountStatus.active);
       expect(created.email, 'ana@example.com');
+      expect(created.documentType, DocumentType.citizenshipCard);
+      expect(created.documentNumber, '1020304050');
       expect(created.nit, isNull);
       expect(result.session.userId, 'u1');
       expect(cache.saved?.uid, 'u1');
@@ -576,6 +586,8 @@ void main() {
       result = expectType<SocialAuthError>(
         await service.completeProfile(
           SocialProfileData.owner(
+            documentType: DocumentType.citizenshipCard,
+            documentNumber: '1020304050',
             firstNames: 'Luis',
             lastNames: 'Gómez',
             phoneCountryCodeId: 1,

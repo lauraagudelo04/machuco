@@ -561,7 +561,8 @@ class LoginController extends ChangeNotifier {
   }
 
   /// Normaliza y valida; devuelve los datos listos para el servicio (celular
-  /// con indicativo, NIT canónico `base-DV`).
+  /// con indicativo, documento sin puntos ni espacios, NIT canónico
+  /// `base-DV`).
   RegistrationData _prepareRegistration(
     RegistrationData data,
     CountryPhoneCode? code,
@@ -582,6 +583,8 @@ class LoginController extends ChangeNotifier {
       ),
       AuthValidators.email(data.email),
       AuthValidators.password(data.password),
+      AuthValidators.documentType(data.documentType) ??
+          AuthValidators.documentNumber(data.documentType)(data.documentNumber),
     ];
     String? nit;
     String? companyName;
@@ -615,6 +618,7 @@ class LoginController extends ChangeNotifier {
       phoneCountryCodeId: code.id,
       phoneNumber: '${code.dialCode}$phoneDigits',
       email: AuthInputNormalizer.email(data.email),
+      documentNumber: AuthInputNormalizer.documentNumber(data.documentNumber),
       nit: nit,
       companyName: companyName,
     );

@@ -7,6 +7,7 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 void main() {
   group('PersonType', () {
@@ -23,6 +24,8 @@ void main() {
   group('RegistrationData', () {
     test('cliente lleva fecha de nacimiento y ningún dato de propietario', () {
       final data = RegistrationData.client(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Ana',
         lastNames: 'Pérez',
         phoneCountryCodeId: 1,
@@ -41,6 +44,8 @@ void main() {
 
     test('propietario natural descarta la razón social', () {
       final data = RegistrationData.owner(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Luz',
         lastNames: 'Mora',
         phoneCountryCodeId: 1,
@@ -60,6 +65,8 @@ void main() {
 
     test('toString no expone la contraseña', () {
       final data = RegistrationData.client(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Ana',
         lastNames: 'Pérez',
         phoneCountryCodeId: 1,
@@ -147,6 +154,37 @@ void main() {
       expect(map['birthDate'], Timestamp.fromDate(DateTime.utc(1990, 5, 20)));
       expect(map.containsKey('nit'), isFalse);
       expect(map.containsKey('rejectionReason'), isFalse);
+    });
+
+    test('escribe y lee el documento de identidad (decisión 2026-11-17)', () {
+      const client = UserProfile(
+        uid: 'u',
+        fullName: 'Ana Pérez',
+        email: 'ana@example.com',
+        phoneNumber: '+573001234567',
+        role: RegisteredUserRole.client,
+        accountStatus: AccountStatus.active,
+        documentType: DocumentType.foreignerCard,
+        documentNumber: '345678',
+      );
+      final map = client.toFirestore();
+      // Mismo nombre y valor que exige firestore.rules.
+      expect(map['documentType'], 'foreignerCard');
+      expect(map['documentNumber'], '345678');
+
+      final read = UserProfile.fromFirestore('u', {
+        ...map,
+        'createdAt': Timestamp.now(),
+      });
+      expect(read.documentType, DocumentType.foreignerCard);
+      expect(read.documentNumber, '345678');
+
+      final unknown = UserProfile.fromFirestore('u', {
+        'fullName': 'Ana',
+        'role': 'client',
+        'documentType': 'dni',
+      });
+      expect(unknown.documentType, isNull);
     });
 
     test('el propietario escribe tipo, NIT, razón social y plan', () {

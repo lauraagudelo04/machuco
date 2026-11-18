@@ -539,6 +539,8 @@ final class FirebaseSocialAuthService implements SocialAuthService {
           ? 'Ingresa tu número de celular.'
           : null,
       data.phoneCountryCodeId <= 0 ? 'Selecciona el indicativo.' : null,
+      AuthValidators.documentType(data.documentType) ??
+          AuthValidators.documentNumber(data.documentType)(data.documentNumber),
     ];
     final roleErrors = switch (data.role) {
       RegisteredUserRole.client => [
@@ -573,6 +575,8 @@ final class FirebaseSocialAuthService implements SocialAuthService {
       firstNames: firstNames,
       lastNames: lastNames,
       phoneCountryCodeId: data.phoneCountryCodeId,
+      documentType: data.documentType,
+      documentNumber: AuthInputNormalizer.documentNumber(data.documentNumber),
       birthDate: isOwner ? null : data.birthDate,
       personType: isOwner ? data.personType : null,
       nit: isOwner ? AuthInputNormalizer.nit(data.nit) : null,

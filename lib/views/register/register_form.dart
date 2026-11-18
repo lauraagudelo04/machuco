@@ -4,6 +4,7 @@ import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/views/register/profile_fields.dart';
 import 'package:machuco/widgets/auth/auth_password_field.dart';
@@ -39,6 +40,7 @@ class _RegisterFormState extends State<RegisterForm> {
   final _formKey = GlobalKey<FormState>();
   final _firstNames = TextEditingController();
   final _lastNames = TextEditingController();
+  final _documentNumber = TextEditingController();
   final _phone = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -49,6 +51,7 @@ class _RegisterFormState extends State<RegisterForm> {
 
   RegisteredUserRole _role = RegisteredUserRole.client;
   PersonType _personType = PersonType.natural;
+  DocumentType _documentType = DocumentType.citizenshipCard;
   int? _planId;
   String? _planError;
 
@@ -71,6 +74,7 @@ class _RegisterFormState extends State<RegisterForm> {
     for (final c in [
       _firstNames,
       _lastNames,
+      _documentNumber,
       _phone,
       _email,
       _password,
@@ -128,6 +132,8 @@ class _RegisterFormState extends State<RegisterForm> {
             phoneNumber: phone,
             email: _email.text,
             password: _password.text,
+            documentType: _documentType,
+            documentNumber: _documentNumber.text,
             personType: _personType,
             nit: _nit.text,
             companyName: _company.text,
@@ -140,6 +146,8 @@ class _RegisterFormState extends State<RegisterForm> {
             phoneNumber: phone,
             email: _email.text,
             password: _password.text,
+            documentType: _documentType,
+            documentNumber: _documentNumber.text,
             birthDate: AuthValidators.parseBirthDate(_birthDate.text)!,
           );
     await widget.onSubmit(data);
@@ -168,6 +176,10 @@ class _RegisterFormState extends State<RegisterForm> {
                   onRoleSelected: _selectRole,
                   firstNames: _firstNames,
                   lastNames: _lastNames,
+                  documentType: _documentType,
+                  onDocumentTypeChanged: (type) =>
+                      setState(() => _documentType = type),
+                  documentNumber: _documentNumber,
                   phone: _phone,
                   birthDate: _birthDate,
                   nit: _nit,

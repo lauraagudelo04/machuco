@@ -3,6 +3,7 @@ import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/service/analytics/analytics_service.dart';
 import 'package:machuco/service/auth/auth_service.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../service/analytics/recording_analytics_service.dart';
@@ -56,6 +57,8 @@ void main() {
 
     await controller.registerAccount(
       RegistrationData.client(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Ana',
         lastNames: 'Pérez',
         phoneCountryCodeId: testColombia.id,

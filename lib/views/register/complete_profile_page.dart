@@ -4,6 +4,7 @@ import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/auth/social_auth_result.dart';
 import 'package:machuco/models/auth/social_profile_data.dart';
 import 'package:machuco/service/auth/auth_service.dart';
@@ -52,6 +53,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   final _formKey = GlobalKey<FormState>();
   final _firstNames = TextEditingController();
   final _lastNames = TextEditingController();
+  final _documentNumber = TextEditingController();
   final _phone = TextEditingController();
   final _birthDate = TextEditingController();
   final _nit = TextEditingController();
@@ -62,6 +64,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
   late final bool _ownsController;
   RegisteredUserRole _role = RegisteredUserRole.client;
   PersonType _personType = PersonType.natural;
+  DocumentType _documentType = DocumentType.citizenshipCard;
   int? _planId;
   String? _planError;
   bool _submitting = false;
@@ -126,6 +129,7 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
     for (final c in [
       _firstNames,
       _lastNames,
+      _documentNumber,
       _phone,
       _birthDate,
       _nit,
@@ -174,6 +178,8 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             lastNames: _lastNames.text,
             phoneCountryCodeId: code.id,
             phoneNumber: phone,
+            documentType: _documentType,
+            documentNumber: _documentNumber.text,
             personType: _personType,
             nit: _nit.text,
             companyName: _company.text,
@@ -184,6 +190,8 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
             lastNames: _lastNames.text,
             phoneCountryCodeId: code.id,
             phoneNumber: phone,
+            documentType: _documentType,
+            documentNumber: _documentNumber.text,
             birthDate: AuthValidators.parseBirthDate(_birthDate.text)!,
           );
 
@@ -274,6 +282,10 @@ class _CompleteProfilePageState extends State<CompleteProfilePage> {
                           onRoleSelected: _selectRole,
                           firstNames: _firstNames,
                           lastNames: _lastNames,
+                          documentType: _documentType,
+                          onDocumentTypeChanged: (type) =>
+                              setState(() => _documentType = type),
+                          documentNumber: _documentNumber,
                           phone: _phone,
                           birthDate: _birthDate,
                           nit: _nit,

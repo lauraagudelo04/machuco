@@ -9,6 +9,7 @@ import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_auth_service.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 UserProfile _stored({
   required RegisteredUserRole role,
@@ -203,6 +204,8 @@ void main() {
     test('cliente: activo, con fecha de nacimiento y sin NIT', () async {
       await service.registerAccount(
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: ' Ana ',
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -221,6 +224,8 @@ void main() {
       expect(profile.firstNames, 'Ana');
       expect(profile.phoneCountryCodeId, 1);
       expect(profile.birthDate, DateTime(1990, 5, 20));
+      expect(profile.documentType, DocumentType.citizenshipCard);
+      expect(profile.documentNumber, '1020304050');
       expect(profile.nit, isNull);
       expect(profile.personType, isNull);
       expect(firebase.signOutCalls, 1);
@@ -231,6 +236,8 @@ void main() {
       () async {
         await service.registerAccount(
           RegistrationData.owner(
+            documentType: DocumentType.citizenshipCard,
+            documentNumber: '1020304050',
             firstNames: 'Luz',
             lastNames: 'Mora',
             phoneCountryCodeId: 1,
@@ -249,6 +256,8 @@ void main() {
         expect(profile.accountStatus, AccountStatus.pendingApproval);
         expect(profile.personType, PersonType.juridica);
         expect(profile.nit, '900123456-8');
+        // Documento de identidad aparte del NIT.
+        expect(profile.documentNumber, '1020304050');
         expect(profile.companyName, 'Moteles SAS');
         expect(profile.planId, 2);
         expect(profile.birthDate, isNull);
@@ -263,6 +272,8 @@ void main() {
       await expectLater(
         service.registerAccount(
           RegistrationData.client(
+            documentType: DocumentType.citizenshipCard,
+            documentNumber: '1020304050',
             firstNames: 'Ana',
             lastNames: 'Pérez',
             phoneCountryCodeId: 1,

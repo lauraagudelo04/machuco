@@ -17,6 +17,7 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _colombia = CountryPhoneCode(
@@ -392,6 +393,8 @@ void main() {
 
     RegistrationData client({String phone = '300 123 4567'}) =>
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: '  Ana María ',
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -412,14 +415,42 @@ void main() {
       expect(sent.firstNames, 'Ana María');
       expect(sent.phoneNumber, '+573001234567');
       expect(sent.phoneCountryCodeId, 1);
+      expect(sent.documentType, DocumentType.citizenshipCard);
+      expect(sent.documentNumber, '1020304050');
       expect(await preferences.loadLastCountryCodeId(), 1);
     });
+
+    test(
+      'documento: se envía normalizado y uno inválido no llega al servicio',
+      () async {
+        final controller = await readyController();
+
+        await controller.registerAccount(
+          client().copyWith(documentNumber: ' 1.020.304.050 '),
+        );
+        expect(auth.registered.single.documentNumber, '1020304050');
+
+        await expectLater(
+          controller.registerAccount(client().copyWith(documentNumber: '12')),
+          throwsA(
+            isA<AuthFailure>().having(
+              (f) => f.type,
+              'type',
+              AuthFailureType.invalidInput,
+            ),
+          ),
+        );
+        expect(auth.registered, hasLength(1));
+      },
+    );
 
     test('propietario jurídico: NIT canónico y razón social', () async {
       final controller = await readyController();
 
       await controller.registerAccount(
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -442,6 +473,8 @@ void main() {
 
     test('propietario natural ignora la razón social', () {
       final data = RegistrationData.owner(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Luz',
         lastNames: 'Mora',
         phoneCountryCodeId: 1,
@@ -480,6 +513,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: "Robert'); DROP TABLE users;--",
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -492,6 +527,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Ana',
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -504,6 +541,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -519,6 +558,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -537,6 +578,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Ana',
           lastNames: 'Pérez',
           phoneCountryCodeId: 999,

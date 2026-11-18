@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
+import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
@@ -119,7 +120,7 @@ final class FirebaseAuthService implements AuthService {
   }
 
   /// Registro por rol: guarda en `users/{uid}` nombres, apellidos, indicativo,
-  /// y los campos propios del rol (fecha de nacimiento para el cliente;
+  /// documento de identidad y los campos propios del rol (fecha de nacimiento para el cliente;
   /// tipo de persona, NIT, razón social y plan para el propietario). Esos
   /// datos sensibles solo viven en Firestore.
   ///
@@ -132,6 +133,17 @@ final class FirebaseAuthService implements AuthService {
     final lastNames = AuthInputNormalizer.text(data.lastNames);
     final isOwner = data.role == RegisteredUserRole.owner;
     final personType = data.personType;
+    final documentNumber = AuthInputNormalizer.documentNumber(
+      data.documentNumber,
+    );
+    if (AuthValidators.documentType(data.documentType) != null ||
+        AuthValidators.documentNumber(data.documentType)(documentNumber) !=
+            null) {
+      throw const AuthFailure(
+        AuthFailureType.invalidInput,
+        'Ingresa un documento de identidad válido.',
+      );
+    }
     if (isOwner &&
         (personType == null ||
             AuthInputNormalizer.nit(data.nit) == null ||
@@ -157,6 +169,8 @@ final class FirebaseAuthService implements AuthService {
         firstNames: firstNames,
         lastNames: lastNames,
         phoneCountryCodeId: data.phoneCountryCodeId,
+        documentType: data.documentType,
+        documentNumber: documentNumber,
         birthDate: isOwner ? null : data.birthDate,
         personType: isOwner ? personType : null,
         nit: isOwner ? AuthInputNormalizer.nit(data.nit) : null,

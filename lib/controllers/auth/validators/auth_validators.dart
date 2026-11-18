@@ -1,5 +1,7 @@
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
+import 'package:machuco/models/auth/identity_document.dart';
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 /// Validadores de formato de los formularios de autenticación y registro.
 ///
@@ -126,6 +128,29 @@ abstract final class AuthValidators {
             ? '$minLength'
             : '$minLength a $maxLength';
         return 'Ingresa un número de $range dígitos.';
+      }
+      return null;
+    };
+  }
+
+  // --------------------------------------------------- documento de identidad
+
+  /// Tipo de documento del registro público ([registrationDocumentTypes]).
+  static String? documentType(DocumentType? value) =>
+      value == null || !registrationDocumentTypes.contains(value)
+      ? 'Selecciona el tipo de documento.'
+      : null;
+
+  /// Número de documento según el patrón de [type] (CC: 6 a 10 dígitos; CE:
+  /// 6 a 12; pasaporte: 6 a 12 letras o números). Se valida ya normalizado
+  /// (sin espacios, puntos ni guiones).
+  static String? Function(String?) documentNumber(DocumentType type) {
+    return (value) {
+      final text = AuthInputNormalizer.documentNumber(value);
+      if (text.isEmpty) return 'Ingresa tu número de documento.';
+      if (!type.acceptsDocumentNumber(text)) {
+        return 'Número no válido para ${type.shortLabel}. '
+            'Ejemplo: ${type.example}.';
       }
       return null;
     };
