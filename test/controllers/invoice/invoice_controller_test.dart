@@ -122,16 +122,23 @@ void main() {
       expect(repository.issueCalls, 1);
     });
 
-    test('pago en efectivo pendiente: no emite', () async {
-      final controller = newController();
+    test(
+      'pago en el local confirmado por el propietario: emite la factura',
+      () async {
+        final controller = newController();
 
-      await controller.loadForReservation(
-        _reservation('res-1', invoiceAccessStatus: InvoiceAccessStatus.pending),
-      );
+        await controller.loadForReservation(
+          _reservation(
+            'res-1',
+            status: ReservationStatus.upcoming,
+            invoiceAccessStatus: InvoiceAccessStatus.pending,
+          ),
+        );
 
-      expect(controller.status, InvoiceLoadStatus.pending);
-      expect(repository.issueCalls, 0);
-    });
+        expect(controller.status, InvoiceLoadStatus.available);
+        expect(repository.issueCalls, 1);
+      },
+    );
 
     test('reserva cancelada: no hay factura', () async {
       final controller = newController();

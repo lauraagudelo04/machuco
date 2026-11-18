@@ -98,9 +98,6 @@ class InvoiceController extends ChangeNotifier {
       if (existing != null) {
         _invoice = existing;
         _status = InvoiceLoadStatus.available;
-      } else if (reservation.invoiceAccessStatus ==
-          InvoiceAccessStatus.pending) {
-        _status = InvoiceLoadStatus.pending;
       } else if (!_canIssue(reservation, paymentMethod)) {
         _status = InvoiceLoadStatus.notAvailable;
       } else {
@@ -117,6 +114,10 @@ class InvoiceController extends ChangeNotifier {
 
   /// Una reserva cancelada nunca se factura; una pendiente solo cuando se
   /// viene del flujo de pago (acaba de pagarse).
+  ///
+  /// `invoiceAccessStatus == pending` no bloquea: el módulo de pagos lo pone
+  /// cuando el propietario confirma un pago en el local, es decir, la reserva
+  /// ya está pagada y solo falta emitir su factura, que se emite aquí.
   bool _canIssue(Reservation reservation, PaymentMethodModel? paymentMethod) =>
       switch (reservation.status) {
         ReservationStatus.cancelled => false,
