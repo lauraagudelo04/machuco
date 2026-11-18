@@ -149,7 +149,9 @@ service cloud.firestore {
         && after.diff(before).affectedKeys().hasOnly([
           'status', 'cancellationActor', 'updatedAt'])
         && ((before.status == 'pending' && after.status == 'cancelled')
-          || (actor == 'owner' && before.status == 'paid' && after.status == 'refunded'))
+          || (before.status == 'paid' && after.status == 'refunded'
+            && (actor == 'owner' || (actor == 'client'
+              && before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']))))
         && paymentMatchesReservation(paymentId, after)
         && hasValidPaymentFields(after);
     }
@@ -164,10 +166,13 @@ service cloud.firestore {
         && ((before.status == 'pending'
             && after.status == 'cancelled'
             && after.get('cancellationActor', '') == actor && metadataOnly)
-          || (before.status == 'paid' && actor == 'owner'
+          || (before.status == 'paid' && (actor == 'owner'
+              || (actor == 'client' && before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']))
             && after.status == 'refunded'
             && after.get('cancellationActor', '') == actor && metadataOnly)
-          || (before.status == 'paid' && actor == 'client' && after == before)
+          || (before.status == 'paid' && actor == 'client'
+            && !(before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito'])
+            && after == before)
           || (before.status in ['cancelled', 'refunded'] && after == before));
     }
 
