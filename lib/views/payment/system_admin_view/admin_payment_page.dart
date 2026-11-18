@@ -31,9 +31,20 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
 
   Widget _buildPage(BuildContext context) {
     final motels = _controller.motelFinances;
+    String money(int value) =>
+        _controller.hasFinanceSnapshot ? formatPaymentMoney(value) : '—';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Finanzas globales')),
+      appBar: AppBar(
+        title: const Text('Finanzas globales'),
+        actions: [
+          IconButton(
+            onPressed: _controller.load,
+            tooltip: 'Actualizar finanzas',
+            icon: const Icon(Icons.refresh),
+          ),
+        ],
+      ),
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -47,12 +58,24 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
                 ),
                 const SizedBox(height: AppSpacing.s2),
                 Text(
-                  'Ingresos, pagos y comisiones de todos los moteles durante el mes actual.',
+                  'Pagos confirmados en Firebase, de todas las fechas. '
+                  'El detalle incluye únicamente moteles con movimientos; '
+                  'los ingresos no representan utilidad ni incluyen gastos o comisiones.',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: context.appColors.textSecondary,
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s4),
+                if (_controller.isLoading) const LinearProgressIndicator(),
+                if (_controller.errorMessage case final message?) ...[
+                  Text(message),
+                  if (_controller.hasFinanceSnapshot)
+                    const Text('Se muestra la última consulta confirmada.'),
+                  TextButton(
+                    onPressed: _controller.load,
+                    child: const Text('Reintentar'),
+                  ),
+                ],
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final columns = constraints.maxWidth >= 720 ? 4 : 2;
@@ -67,29 +90,27 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
                           width: width,
                           icon: Icons.trending_up_outlined,
                           label: 'Ingresos',
-                          value: formatPaymentMoney(_controller.totalIncome),
+                          value: money(_controller.totalIncome),
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.receipt_long_outlined,
                           label: 'Pagos recibidos',
-                          value: '${_controller.totalPaymentsReceived}',
+                          value: _controller.hasFinanceSnapshot
+                              ? '${_controller.totalPaymentsReceived}'
+                              : '—',
                         ),
                         PaymentMetricCard(
                           width: width,
                           icon: Icons.schedule_outlined,
                           label: 'Por recaudar',
-                          value: formatPaymentMoney(
-                            _controller.totalPendingAmount,
-                          ),
+                          value: money(_controller.totalPendingAmount),
                         ),
                         PaymentMetricCard(
                           width: width,
-                          icon: Icons.percent_outlined,
-                          label: 'Comisiones',
-                          value: formatPaymentMoney(
-                            _controller.totalCommissions,
-                          ),
+                          icon: Icons.undo_outlined,
+                          label: 'Reembolsos',
+                          value: money(_controller.totalRefundedAmount),
                         ),
                       ],
                     );
@@ -105,12 +126,16 @@ class _AdminFinancePageState extends State<AdminFinancePage> {
                       ),
                     ),
                     Text(
-                      '${motels.length} moteles',
+                      _controller.hasFinanceSnapshot
+                          ? '${motels.length} moteles con movimientos'
+                          : 'Sin consulta confirmada',
                       style: Theme.of(context).textTheme.labelMedium,
                     ),
                   ],
                 ),
                 const SizedBox(height: AppSpacing.s3),
+                if (_controller.hasFinanceSnapshot && motels.isEmpty)
+                  const Text('No hay pagos registrados en Firebase.'),
                 ...motels.map(
                   (motel) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.s3),
@@ -144,10 +169,6 @@ class _MotelFinanceCard extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleLarge,
               ),
             ),
-            Text(
-              '${finance.rooms} habitaciones',
-              style: Theme.of(context).textTheme.labelMedium,
-            ),
           ],
         ),
         const SizedBox(height: AppSpacing.s4),
@@ -165,8 +186,8 @@ class _MotelFinanceCard extends StatelessWidget {
               value: formatPaymentMoney(finance.pendingAmount),
             ),
             _FinanceValue(
-              label: 'Comisión',
-              value: formatPaymentMoney(finance.commissions),
+              label: 'Reembolsos',
+              value: formatPaymentMoney(finance.refundedAmount),
             ),
           ],
         ),

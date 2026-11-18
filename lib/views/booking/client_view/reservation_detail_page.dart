@@ -9,6 +9,7 @@ import 'package:machuco/core/design_system/components/status_badge.dart';
 import 'package:machuco/core/design_system/theme/app_theme_extensions.dart';
 import 'package:machuco/core/design_system/tokens/app_spacing.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
@@ -108,9 +109,6 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
       );
       if (cancelled && mounted) {
         setState(() {});
-        // Status changed: the reviews section may now be visible and needs
-        // its motel data.
-        _loadReviewMotel();
       }
     } on ReservationCancellationException catch (e) {
       if (!mounted) return;
@@ -267,7 +265,26 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
                     ),
                   ],
                   const SizedBox(height: AppSpacing.s5),
-                  if (_completePaymentEnabled(reservation.status)) ...[
+                  if (reservation.status == ReservationStatus.pending &&
+                      reservation.paymentMethod ==
+                          ReservationPaymentTerms.payAtProperty) ...[
+                    const AppCard(
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(Icons.storefront_outlined),
+                          SizedBox(width: AppSpacing.s3),
+                          Expanded(
+                            child: Text(
+                              'Esta reserva debe pagarse en la recepción del motel.',
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s3),
+                  ],
+                  if (_completePaymentEnabled(reservation)) ...[
                     AppButton(
                       label: 'Completar pago',
                       icon: Icons.payments_outlined,
@@ -312,8 +329,9 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     );
   }
 
-  bool _completePaymentEnabled(ReservationStatus status) =>
-      status == ReservationStatus.pending;
+  bool _completePaymentEnabled(Reservation reservation) =>
+      reservation.status == ReservationStatus.pending &&
+      reservation.paymentMethod != ReservationPaymentTerms.payAtProperty;
 
   bool _invoiceEnabled(ReservationStatus status) => switch (status) {
     ReservationStatus.active ||
@@ -322,12 +340,8 @@ class _ReservationDetailPageState extends State<ReservationDetailPage> {
     ReservationStatus.pending || ReservationStatus.cancelled => false,
   };
 
-  bool _reviewEnabled(ReservationStatus status) => switch (status) {
-    ReservationStatus.completed || ReservationStatus.cancelled => true,
-    ReservationStatus.pending ||
-    ReservationStatus.active ||
-    ReservationStatus.upcoming => false,
-  };
+  bool _reviewEnabled(ReservationStatus status) =>
+      status == ReservationStatus.completed;
 
   bool _cancelEnabled(ReservationStatus status) =>
       status == ReservationStatus.pending ||

@@ -1,13 +1,19 @@
 import 'package:flutter/material.dart';
+import 'package:machuco/controllers/pqrs/pqrs_photo_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
-import 'package:machuco/widgets/pqrs/pqrs_photo.dart';
+import 'package:machuco/utils/pqrs_validator.dart';
+import 'package:machuco/widgets/pqrs/pqrs_photo_picker_field.dart';
 import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
+
+/// Result of an action started from the composer: `true` when it succeeded.
+typedef PqrsComposerAction =
+    Future<bool> Function(String message, List<PqrsAttachment> attachments);
 
 /// Composer used by the client and the owner to push a new trace entry.
 ///
-/// Photo upload is simulated: there is no image picker dependency yet, so
-/// "Adjuntar foto" creates a [PqrsAttachment.simulated] placeholder.
+/// The text and the photos are cleared only when the action succeeds, so a
+/// failed send keeps what the user wrote. Photos come from [photos].
 class PqrsUpdateComposer extends StatefulWidget {
   const PqrsUpdateComposer({
     super.key,
@@ -16,6 +22,8 @@ class PqrsUpdateComposer extends StatefulWidget {
     required this.hint,
     required this.submitLabel,
     required this.onSubmit,
+    required this.photos,
+    this.busy = false,
     this.secondaryLabel,
     this.secondaryIcon,
     this.onSecondary,
@@ -25,16 +33,17 @@ class PqrsUpdateComposer extends StatefulWidget {
   final String title;
   final String hint;
   final String submitLabel;
+  final PqrsPhotoController photos;
 
-  /// Receives the message and the simulated photos attached to it.
-  final void Function(String message, List<PqrsAttachment> attachments)
-  onSubmit;
+  /// True while the controller is sending; disables the buttons.
+  final bool busy;
 
-  /// Optional second action, e.g. "Marcar como solucionada" or "Cerrar".
+  final PqrsComposerAction onSubmit;
+
+  /// Optional second action, e.g. "Marcar como solucionada".
   final String? secondaryLabel;
   final IconData? secondaryIcon;
-  final void Function(String message, List<PqrsAttachment> attachments)?
-  onSecondary;
+  final PqrsComposerAction? onSecondary;
 
   @override
   State<PqrsUpdateComposer> createState() => _PqrsUpdateComposerState();
@@ -42,7 +51,6 @@ class PqrsUpdateComposer extends StatefulWidget {
 
 class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
   final _controller = TextEditingController();
-  final List<PqrsAttachment> _attachments = [];
   bool _validationAttempted = false;
 
   @override
@@ -52,31 +60,20 @@ class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
   }
 
   String? get _messageError =>
-      _validationAttempted && _controller.text.trim().isEmpty
-      ? 'Escribe un mensaje'
-      : null;
+      _validationAttempted ? PqrsValidator.message(_controller.text) : null;
 
-  void _attachPhoto() {
-    setState(() {
-      _attachments.add(
-        PqrsAttachment.simulated(
-          author: widget.author,
-          label: 'evidencia-${_attachments.length + 1}.jpg',
-        ),
-      );
-    });
-  }
-
-  void _run(void Function(String, List<PqrsAttachment>) action) {
+  Future<void> _run(PqrsComposerAction action) async {
     setState(() => _validationAttempted = true);
-    final message = _controller.text.trim();
-    if (message.isEmpty) return;
+    if (PqrsValidator.message(_controller.text) != null) return;
 
-    action(message, List.of(_attachments));
-
+    final succeeded = await action(
+      _controller.text.trim(),
+      widget.photos.photos,
+    );
+    if (!succeeded || !mounted) return;
+    widget.photos.clear();
     setState(() {
       _controller.clear();
-      _attachments.clear();
       _validationAttempted = false;
     });
   }
@@ -108,25 +105,13 @@ class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
               if (_validationAttempted) setState(() {});
             },
           ),
-          if (_attachments.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.s4),
-            PqrsPhotoStrip(
-              attachments: _attachments,
-              onRemove: (attachment) =>
-                  setState(() => _attachments.remove(attachment)),
-            ),
-          ],
           const SizedBox(height: AppSpacing.s4),
-          AppButton(
-            label: 'Adjuntar foto',
-            icon: Icons.add_a_photo_outlined,
-            variant: AppButtonVariant.secondary,
-            onPressed: _attachPhoto,
-          ),
+          PqrsPhotoPickerField(controller: widget.photos),
           const SizedBox(height: AppSpacing.s3),
           AppButton(
             label: widget.submitLabel,
             icon: Icons.send_outlined,
+            loading: widget.busy,
             onPressed: () => _run(widget.onSubmit),
           ),
           if (widget.onSecondary != null) ...[
@@ -135,7 +120,7 @@ class _PqrsUpdateComposerState extends State<PqrsUpdateComposer> {
               label: widget.secondaryLabel!,
               icon: widget.secondaryIcon,
               variant: AppButtonVariant.secondary,
-              onPressed: () => _run(widget.onSecondary!),
+              onPressed: widget.busy ? null : () => _run(widget.onSecondary!),
             ),
           ],
         ],

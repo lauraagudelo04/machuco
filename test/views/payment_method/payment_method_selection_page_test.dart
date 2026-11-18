@@ -12,7 +12,12 @@ import 'package:machuco/views/payment_method/payment_method_selection_page.dart'
 
 /// Records card payments without touching SQLite or Firebase.
 class _FakeCheckout implements PaymentCheckoutController {
-  _FakeCheckout({this.failuresBeforeSuccess = 0});
+  _FakeCheckout({
+    this.failuresBeforeSuccess = 0,
+    this.updatesReservation = false,
+  });
+  final bool updatesReservation;
+  String? syncWarning;
 
   /// Number of card registrations that fail before one succeeds.
   int failuresBeforeSuccess;
@@ -33,6 +38,8 @@ class _FakeCheckout implements PaymentCheckoutController {
     }
     registeredCardPayments.add(reservation.id);
     return PaymentCheckoutResult(
+      reservationUpdated: updatesReservation,
+      syncWarning: syncWarning,
       payment: PaymentRecord(
         id: 'pay-${reservation.id}',
         bookingId: reservation.id,
@@ -135,7 +142,7 @@ void main() {
   });
 
   testWidgets(
-    'the real card sandbox cannot confirm Booking or navigate to an invoice',
+    'a failed authenticated checkout does not navigate to an invoice',
     (tester) async {
       final pending = (await BookingRepositoryProvider.instance.getAll())
           .firstWhere((r) => r.status == ReservationStatus.pending);
@@ -152,7 +159,10 @@ void main() {
         },
       );
       expect(confirmations, 0);
-      expect(find.textContaining('Tarjeta es una simulación'), findsOneWidget);
+      expect(
+        find.textContaining('Inicia sesión con la cuenta'),
+        findsOneWidget,
+      );
       expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
       expect(
         (await BookingRepositoryProvider.instance.getById(pending.id))!.status,
@@ -160,6 +170,26 @@ void main() {
       );
     },
   );
+
+  testWidgets('tarjeta persistida continúa a Factura sin confirmar dos veces', (
+    tester,
+  ) async {
+    final pending = (await BookingRepositoryProvider.instance.getAll())
+        .firstWhere((r) => r.status == ReservationStatus.pending);
+    var confirmations = 0;
+    await _payWithCard(
+      tester,
+      pending,
+      checkoutController: _FakeCheckout(updatesReservation: true),
+      confirmReservationPayment: (_) async {
+        confirmations++;
+        return false;
+      },
+    );
+    expect(confirmations, 0);
+    expect(find.text('route:${AppRoutes.invoice}'), findsOneWidget);
+    expect(find.textContaining('Tarjeta es una simulación'), findsNothing);
+  });
 
   testWidgets(
     'En el Local returns to reservations without presenting a paid invoice',
@@ -188,11 +218,25 @@ void main() {
       await tester.tap(find.text('Finalizar'));
       await tester.pumpAndSettle();
       expect(checkout.registeredLocalPayments, [pending.id]);
-      expect(
-        find.text('route:${AppRoutes.clientReservations}'),
-        findsOneWidget,
-      );
+      expect(find.text('route:${AppRoutes.clientMotels}'), findsOneWidget);
       expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
+    },
+  );
+
+  testWidgets(
+    'sin confirmación Firebase no emite factura y permite reintentar',
+    (tester) async {
+      final pending = (await BookingRepositoryProvider.instance.getAll())
+          .firstWhere((r) => r.status == ReservationStatus.pending);
+      final checkout = _FakeCheckout(updatesReservation: true)
+        ..syncWarning = 'Sin conexión con Firebase.';
+      await _payWithCard(tester, pending, checkoutController: checkout);
+      expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
+      expect(find.text('Sin conexión con Firebase.'), findsOneWidget);
+      checkout.syncWarning = null;
+      await tester.tap(find.text('Continuar'));
+      await tester.pumpAndSettle();
+      expect(find.text('route:${AppRoutes.invoice}'), findsOneWidget);
     },
   );
 

@@ -1,5 +1,5 @@
 // Migraciones SQLite del módulo de autenticación (`auth_user_profile`), que
-// llegaron en la versión 14 y hoy viajan hasta la 22. Complementa la prueba
+// llegaron en la versión 14 y hoy viajan hasta la 23. Complementa la prueba
 // 13 -> 14 de test/repositories/auth/auth_user_profile_repository_test.dart.
 import 'dart:io';
 
@@ -70,9 +70,9 @@ void main() {
     await directory.delete(recursive: true);
   });
 
-  test('[MIG-01] instalación nueva: versión 22 con auth_user_profile sin '
+  test('[MIG-01] instalación nueva: versión 23 con auth_user_profile sin '
       'NIT ni fecha de nacimiento', () async {
-    expect(await raw().getVersion(), 22);
+    expect(await raw().getVersion(), 24);
     final columns = await _columns(raw(), 'auth_user_profile');
     expect(columns, _profileColumns);
     expect(
@@ -85,7 +85,7 @@ void main() {
   });
 
   test(
-    '[MIG-02] de v11 a v22 aplica todas las migraciones sin perder datos',
+    '[MIG-02] de v11 a v23 aplica todas las migraciones sin perder datos',
     () async {
       final db = raw();
       await db.execute('DROP TABLE auth_user_profile');
@@ -108,7 +108,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 22);
+      expect(await raw().getVersion(), 24);
       expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
       expect(await _tableExists(raw(), 'clients'), isFalse);
       expect((await raw().query('phone_country_codes')).single['id'], 1);
@@ -124,7 +124,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 22);
+    expect(await raw().getVersion(), 24);
     expect(await _columns(raw(), 'auth_user_profile'), _profileColumns);
     expect((await raw().query('phone_country_codes')).single['id'], 1);
   });
@@ -139,7 +139,7 @@ void main() {
 
         await reopen();
 
-        expect(await raw().getVersion(), 22);
+        expect(await raw().getVersion(), 24);
         expect(await _tableExists(raw(), 'auth_user_profile'), isTrue);
         expect(await _tableExists(raw(), 'room_sync_queue'), isTrue);
         expect((await raw().query('phone_country_codes')).single['id'], 1);
@@ -161,7 +161,7 @@ void main() {
 
       await reopen();
 
-      expect(await raw().getVersion(), 22);
+      expect(await raw().getVersion(), 24);
       expect(await _tableExists(raw(), missingTable), isTrue);
       expect((await raw().query('phone_country_codes')).single['id'], 1);
     });
@@ -182,7 +182,7 @@ void main() {
 
     await reopen();
 
-    expect(await raw().getVersion(), 22);
+    expect(await raw().getVersion(), 24);
     expect((await raw().query('auth_user_profile')).single['uid'], 'u1');
   });
 

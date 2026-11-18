@@ -1,9 +1,29 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 
 void main() {
+  testWidgets('sin motel real no abre finanzas de un motel de ejemplo', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        onGenerateRoute: AppRoutes.onGenerateRoute,
+        initialRoute: AppRoutes.ownerPayments,
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(OwnerPaymentsPage), findsNothing);
+    expect(
+      find.text('Selecciona un motel real para consultar sus finanzas.'),
+      findsOneWidget,
+    );
+    expect(find.text('Motel Paraíso Élite'), findsNothing);
+  });
+
   testWidgets(
     'Booking opens finance for its real motel, not the fallback motel',
     (tester) async {

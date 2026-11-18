@@ -50,6 +50,7 @@ dependencies:
   flutter_local_notifications: ^23.0.0
   firebase_data_connect: ^0.4.1
   firebase_crashlytics: ^6.0.1
+  image_picker: ^1.2.4
 
 dev_dependencies:
   flutter_test:

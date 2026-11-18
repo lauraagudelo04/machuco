@@ -204,6 +204,70 @@ abstract class PaymentDao {
     return changed;
   }
 
+  /// Educational card checkout: receipt and reservation change atomically.
+  @transaction
+  Future<PaymentRecord> registerSimulatedCardPayment(
+    PaymentRecord payment,
+    int nowMilliseconds,
+  ) async {
+    final reservation = _validateReservation(
+      payment,
+      await findReservationForPayment(payment.bookingId),
+    );
+    final existing = await findById(payment.id);
+    if (existing != null) {
+      _validateReservation(existing, reservation);
+      if (existing.status == PaymentStatus.paid &&
+          (existing.receiptNumber ==
+                  ReservationPaymentTerms.receiptNumber(existing.id) ||
+              existing.receiptNumber == 'LOCAL-${existing.id}') &&
+          existing.paymentMethodId == payment.paymentMethodId &&
+          (reservation.status == 'upcoming' ||
+              reservation.status == 'active')) {
+        return existing;
+      }
+      if (existing.status != PaymentStatus.pending) {
+        throw const PaymentReservationException('Este pago ya fue procesado.');
+      }
+    }
+    if (reservation.status != 'pending' ||
+        (reservation.paymentMethod != ReservationPaymentTerms.payAtProperty &&
+            nowMilliseconds - reservation.createdAt >=
+                ReservationPaymentTerms.checkoutTimeout.inMilliseconds)) {
+      throw const PaymentReservationException(
+        'La reserva ya no admite completar el pago con tarjeta.',
+      );
+    }
+    final catalog = await findCatalogEntries();
+    final methods = catalog.where(
+      (entry) => entry.id == payment.paymentMethodId,
+    );
+    if (methods.isEmpty ||
+        !const [
+          'Tarjeta de crédito',
+          'Tarjeta de débito',
+        ].contains(methods.single.name) ||
+        payment.status != PaymentStatus.paid ||
+        payment.paidAt == null ||
+        payment.receiptNumber !=
+            ReservationPaymentTerms.receiptNumber(payment.id)) {
+      throw const PaymentReservationException(
+        'El pago de tarjeta es inválido.',
+      );
+    }
+    if (existing == null) {
+      await insertPayment(payment);
+    } else {
+      await updatePayment(payment);
+    }
+    await updateReservationAfterReceipt(
+      reservation.id,
+      nowMilliseconds >= reservation.checkIn ? 'active' : 'upcoming',
+      methods.single.name,
+    );
+    return payment;
+  }
+
   /// Imports cloud records without letting an older pending copy regress a
   /// payment that was already processed on this device.
   @transaction

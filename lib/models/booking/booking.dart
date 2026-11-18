@@ -86,6 +86,7 @@ class Reservation {
     this.guestName = '',
     this.categoryId,
     this.cancellationReason,
+    this.cancellationActor,
     this.invoiceAccessStatus = InvoiceAccessStatus.notApplicable,
     this.paymentMethod,
   });
@@ -134,6 +135,9 @@ class Reservation {
   /// Queda visible de forma permanente en el detalle una vez existe.
   final String? cancellationReason;
 
+  /// Role that explicitly cancelled: `owner` or `client`; null for legacy data.
+  final String? cancellationActor;
+
   /// Estado del acceso a la factura. Ver [InvoiceAccessStatus].
   final InvoiceAccessStatus invoiceAccessStatus;
 
@@ -154,6 +158,7 @@ class Reservation {
   Reservation copyWith({
     ReservationStatus? status,
     String? cancellationReason,
+    String? cancellationActor,
     InvoiceAccessStatus? invoiceAccessStatus,
     int? categoryId,
     String? paymentMethod,
@@ -180,6 +185,7 @@ class Reservation {
       guestName: guestName,
       categoryId: categoryId ?? this.categoryId,
       cancellationReason: cancellationReason ?? this.cancellationReason,
+      cancellationActor: cancellationActor ?? this.cancellationActor,
       invoiceAccessStatus: invoiceAccessStatus ?? this.invoiceAccessStatus,
       paymentMethod: paymentMethod ?? this.paymentMethod,
     );

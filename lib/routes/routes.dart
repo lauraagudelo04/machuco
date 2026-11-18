@@ -7,7 +7,6 @@ import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/views/booking/client_view/booking_checkout_page.dart';
 import 'package:machuco/views/booking/client_view/create_booking_page.dart';
 import 'package:machuco/views/booking/client_view/reservation_detail_page.dart';
-import 'package:machuco/views/booking/client_view/client_reservations_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_cash_payment_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservation_detail_page.dart';
 import 'package:machuco/views/booking/owner_view/owner_reservations_page.dart';
@@ -26,11 +25,10 @@ import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
-import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 import 'package:machuco/views/invoice/invoice_page.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
-import 'package:machuco/views/pqrs/PqrsPage.dart';
+import 'package:machuco/views/pqrs/pqrs_page.dart';
 import 'package:machuco/views/pqrs/client_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/owner_view/pqrs_page.dart';
 import 'package:machuco/views/pqrs/system_admin_view/pqrs_page.dart';
@@ -143,9 +141,14 @@ abstract final class AppRoutes {
           motelId: id,
           motelName: name,
         ),
-        _ => const OwnerPaymentsPage(
-          motelId: PaymentStore.fallbackMotelId,
-          motelName: 'Motel Paraíso Élite',
+        _ => const Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Text(
+                'Selecciona un motel real para consultar sus finanzas.',
+              ),
+            ),
+          ),
         ),
       },
       ownerSubscription => const OwnerSubscriptionPage(),
@@ -204,7 +207,7 @@ abstract final class AppRoutes {
             ? RoomAdminPage(motel: settings.arguments! as Motel)
             : const AdminMotelsPage(),
 
-      clientReservations => const ClientReservationsPage(),
+      clientReservations => const ClientMotelsPage(initialIndex: 1),
       clientCreateBooking => CreateBookingPage(
         room: settings.arguments is RoomVisualData
             ? settings.arguments! as RoomVisualData

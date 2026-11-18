@@ -220,6 +220,24 @@ class PaymentRepository {
     );
   }
 
+  Future<PaymentRecord> registerSimulatedCardPayment(
+    PaymentRecord pending, {
+    required int paymentMethodId,
+  }) {
+    _validatePayment(pending);
+    final now = _now();
+    final payment = pending.copyWith(
+      status: PaymentStatus.paid,
+      paymentMethodId: paymentMethodId,
+      paidAt: now,
+      receiptNumber: ReservationPaymentTerms.receiptNumber(pending.id),
+    );
+    return _withDao(
+      (dao) =>
+          dao.registerSimulatedCardPayment(payment, now.millisecondsSinceEpoch),
+    );
+  }
+
   /// Recover a durable local selection/receipt when an older remote
   /// reservation arrives after restarting. Never resurrect a cancellation.
   Future<Reservation> reconcileReservation(Reservation reservation) =>
@@ -237,7 +255,10 @@ class PaymentRepository {
         if (reservation.status == ReservationStatus.cancelled) {
           if (payment.status == PaymentStatus.pending) {
             await dao.updatePayment(
-              payment.copyWith(status: PaymentStatus.cancelled),
+              payment.copyWith(
+                status: PaymentStatus.cancelled,
+                cancellationActor: reservation.cancellationActor,
+              ),
             );
           }
           return reservation;
@@ -332,7 +353,7 @@ class PaymentRepository {
         motel,
         paymentMethodId,
         _now(),
-        'LOCAL-${payment.id}',
+        ReservationPaymentTerms.receiptNumber(payment.id),
       );
       if (changed != 1) {
         throw const PaymentRepositoryException(

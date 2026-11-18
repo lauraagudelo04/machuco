@@ -22,6 +22,11 @@ class ReservationFirestoreDocument {
     final guestCount = _requiredInt(data, 'guestCount');
     final roomTotal = _requiredInt(data, 'roomTotal');
     final total = _requiredInt(data, 'total');
+    final cancellationActor = _optionalString(data, 'cancellationActor');
+    if (cancellationActor != null &&
+        !['owner', 'client'].contains(cancellationActor)) {
+      throw const FormatException('Autor de cancelación remoto inválido.');
+    }
     if (guestCount <= 0 || roomTotal < 0 || total < 0) {
       throw const FormatException('Valores de reserva remota inválidos.');
     }
@@ -50,6 +55,7 @@ class ReservationFirestoreDocument {
         guestName: _plainString(data, 'guestName'),
         categoryId: _optionalInt(data, 'categoryId'),
         cancellationReason: _optionalString(data, 'cancellationReason'),
+        cancellationActor: cancellationActor,
         invoiceAccessStatus: _enum(
           InvoiceAccessStatus.values,
           data,
@@ -83,6 +89,8 @@ class ReservationFirestoreDocument {
     if (reservation.categoryId != null) 'categoryId': reservation.categoryId,
     if (reservation.cancellationReason != null)
       'cancellationReason': reservation.cancellationReason,
+    if (reservation.cancellationActor != null)
+      'cancellationActor': reservation.cancellationActor,
     'invoiceAccessStatus': reservation.invoiceAccessStatus.name,
     if (reservation.paymentMethod != null)
       'paymentMethod': reservation.paymentMethod,

@@ -712,13 +712,29 @@ class BookingService {
   /// Cancels a reservation. Only `pending` and `upcoming` reservations can be
   /// cancelled, and a non blank reason is mandatory. Throws
   /// [ReservationCancellationException] otherwise.
-  Future<Reservation> cancelReservation(String id, String reason) async {
+  Future<Reservation> cancelReservation(
+    String id,
+    String reason, {
+    String? actor,
+  }) async {
     if (reason.trim().isEmpty) {
       throw const ReservationCancellationException(
         ReservationCancellationError.reasonRequired,
       );
     }
     final reservation = await _requireReservation(id);
+    if (actor != null && actor != 'owner' && actor != 'client') {
+      throw const ReservationCancellationException(
+        ReservationCancellationError.invalidStatus,
+      );
+    }
+    if (actor != null &&
+        reservation.status == ReservationStatus.cancelled &&
+        reservation.cancellationActor == actor &&
+        reservation.cancellationReason == reason.trim()) {
+      await _repository.update(reservation);
+      return reservation;
+    }
     final cancellable =
         reservation.status == ReservationStatus.pending ||
         reservation.status == ReservationStatus.upcoming;
@@ -730,6 +746,7 @@ class BookingService {
     final cancelled = reservation.copyWith(
       status: ReservationStatus.cancelled,
       cancellationReason: reason.trim(),
+      cancellationActor: actor,
     );
     await _repository.update(cancelled);
     _report(AnalyticsEvents.reservationCancelled, {
