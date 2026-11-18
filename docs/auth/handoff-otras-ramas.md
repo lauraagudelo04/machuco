@@ -54,8 +54,9 @@ Future<void> _onDeleteAccount(BuildContext context, LoginController controller) 
 - **Limitación**: no se comprueba si el usuario tiene reservas activas,
   moteles o si es el último administrador. Si una rama lo necesita, debe
   bloquear el acceso antes de abrir el panel.
-- Por ahora la subcolección `users/{uid}/subscriptions` queda huérfana al
-  eliminar la cuenta (rama de suscripciones).
+- Al eliminar la cuenta se borran `users/{uid}/notificationReads` y
+  `users/{uid}/subscriptions` (DA-15, ver 6.3); `payments` se conserva por
+  obligación contable, sin datos personales.
 
 ## 3. Enlazar "Solicitudes de propietarios" (menú o panel del administrador)
 
@@ -113,6 +114,7 @@ También cambia lo siguiente:
 | --- | --- | --- |
 | Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14 |
 | Versión 24 de SQLite (`owners.nit`, `owners.personType`) | Todas las ramas con `app_database.dart` | La 23 es de PQRS y la 24 separa el NIT del propietario. Quien agregue una migración usa la 25. Las pruebas de PQRS ya aceptan versiones posteriores (`>=`) |
+| `phone_min_length` y `phone_max_length` en `phone_country_codes` | Quien administre Supabase | Siguen **pendientes**: sin ellas el celular se valida con 7 a 15 dígitos. La app las lee en cuanto existan (`select=*`) |
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
 | `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
 | Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |
@@ -176,8 +178,8 @@ validaciones. Firestore no filtra por campo; no se hará una proyección.
 
 | Cambio | A quién afecta |
 | --- | --- |
-| `isAdmin()` exige `accountStatus == 'active'`: un admin deshabilitado, anonimizado o sin estado pierde lecturas de reservas, pagos, suscripciones, reseñas, etc. | Ramas que usan `isAdmin()` (pruebas en `test_rules/` en verde) |
+| `isAdmin()` exige `accountStatus == 'active'` (vigente; no se revirtió en la Etapa 1): un admin deshabilitado, anonimizado o sin estado pierde lecturas de reservas, pagos, suscripciones, reseñas, etc. | Ramas que usan `isAdmin()` (pruebas en `test_rules/` en verde) |
 | Un propietario activo ya no crea `users/{otroUid}` | Nadie lo usaba en `lib/` |
-| `users/{uid}/subscriptions`: el propio usuario puede borrarlas (eliminar cuenta, DA-15). `payments` y `subscriptionPayments` siguen sin `delete` | Rama de suscripciones |
-| `users/{uid}/notificationReads` y `devices`: lectura y borrado separados de la escritura (antes la lectura evaluaba `request.resource` y siempre se negaba) | Rama de notificaciones |
+| **DA-15** `users/{uid}/subscriptions`: el propio usuario puede borrarlas al eliminar su cuenta. `payments` y `subscriptionPayments` siguen sin `delete` y se conservan por obligación contable | Rama de suscripciones |
+| **DA-15** `users/{uid}/notificationReads` y `devices`: lectura y borrado separados de la escritura (antes la lectura evaluaba `request.resource` y siempre se negaba); el propio usuario las borra al eliminar su cuenta | Rama de notificaciones |
 | Un admin con contraseña temporal puede leer `system/adminRegistry` y bajarlo 1 solo al anonimizar su propia cuenta | Gestión de administradores |

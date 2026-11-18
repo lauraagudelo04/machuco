@@ -62,15 +62,19 @@ rechazar cuentas `pending_approval`).
 - **Eliminación de cuenta**: el usuario autenticado puede eliminar su propia
   cuenta tras reautenticarse. Se borran su perfil en Firestore, su usuario en
   Firebase Auth y todos sus datos locales (SQLite y SharedPreferences).
-- **Supabase**: fuente de los maestros de **indicativo telefónico por país**
-  y de **planes de suscripción para propietarios**, consumidos por REST
-  (`/rest/v1/...`) con el mismo patrón de `RoomServiceRepository` (caché
-  primero, red después). El maestro de planes reutiliza la tabla
-  `subscription_plans` que ya consume la rama de suscripciones; se amplía en
-  coordinación con ella, no se duplica.
-- **Sin documento de identidad**: ningún perfil (Cliente, Propietario ni
-  Administrador) solicita tipo ni número de documento. Se retira el maestro
-  `identification_types` del alcance de esta rama.
+- **Supabase**: fuente de los maestros de **indicativo telefónico por país**,
+  de **tipos de documento** (`document_types`) y de **planes de suscripción
+  para propietarios**, consumidos por REST (`/rest/v1/...`) con el mismo patrón
+  de `RoomServiceRepository` (caché primero, red después). El maestro de planes
+  reutiliza la tabla `subscription_plans` que ya consume la rama de
+  suscripciones; no se duplica.
+- **Documento de identidad (decisión 2026-11-17; reemplaza "Sin documento de
+  identidad")**: Cliente y Propietario **sí** piden tipo y número de documento
+  (maestro `document_types` de Supabase). El Cliente lo da para validar la
+  mayoría de edad en versiones futuras; el Propietario, para tener registro de
+  empresas (natural: su documento; jurídica: el documento del representante
+  legal, además de NIT y razón social). El Administrador sigue sin documento.
+  El documento **nunca** se guarda en SQLite ni en SharedPreferences.
 - **NIT y tipo de persona del Propietario**: todo propietario, sea persona
   **natural** o **jurídica**, debe indicar su tipo de persona y su **NIT**
   (dato tributario, no documento de identidad). La razón social solo se pide
@@ -94,10 +98,11 @@ rechazar cuentas `pending_approval`).
 > - Recuperar contraseña: implementado en
 >   `FirebaseAuthService.requestPasswordReset` (trata `user-not-found` como
 >   éxito para no revelar el correo).
-> - Eliminar cuenta: **no implementado**. Solo existe `_rollbackAccount`
+> - Eliminar cuenta: **no implementado** *(hecho después, ver el estado
+>   2026-11-17 abajo)*. Solo existe `_rollbackAccount`
 >   (borra la cuenta huérfana si falla el registro); no hay operación ni vista
 >   para que el usuario elimine su cuenta.
-> - Perfil en SQLite: **no implementado**. `AppDatabase` (versión 12) no tiene
+> - Perfil en SQLite: **no implementado** *(hecho después)*. `AppDatabase` (versión 12 entonces) no tiene
 >   tabla del perfil del usuario; el perfil solo se lee de Firestore con
 >   `UserProfileRepository`.
 > - Credenciales de prueba: **retiradas (2026-11-04)**. Se borró
@@ -107,6 +112,15 @@ rechazar cuentas `pending_approval`).
 > - Indicativos: la tabla real de Supabase es `phone_country_codes`; la que se
 >   consultaba (`country_phone_codes`) no existía. **Corregido (2026-11-04)**
 >   con banderas de `country_flags` (ver "Lista de indicativos con bandera").
+
+> **Estado al 2026-11-17 (etapas 1 y 2 cerradas)**: hechos la eliminación de
+> cuenta en los tres perfiles y en "Cuenta en revisión" (`DeleteAccountAction`),
+> el perfil en SQLite (`auth_user_profile`), Google y GitHub, "Completar
+> perfil", la creación y gestión de administradores, las solicitudes de
+> propietarios (con alertas de validación), el documento de identidad desde
+> `document_types`, los planes completos de `subscription_plans`, la longitud
+> del celular desde `phone_country_codes` y `isAdmin()` con `accountStatus`.
+> Ver "Limitaciones aceptadas para la entrega".
 
 ## Feature: Inicio de sesión
 
@@ -218,7 +232,7 @@ Given un usuario que acaba de presionar "Enviar instrucciones"
 When la petición sigue en curso
 Then el botón muestra estado de carga y queda deshabilitado
 And tras una respuesta exitosa el botón queda deshabilitado 60 segundos con una cuenta regresiva
-But si Firebase responde `too-many-requests`, muestra "Demasiados intentos. Intenta más tarde" sin revelar si el correo existe
+But si Firebase responde `too-many-requests`, muestra "Demasiados intentos. Espera un momento e intenta nuevamente." (`FirebaseAuthService`) sin revelar si el correo existe
 
 Scenario: Error de red al solicitar el restablecimiento
 Given un usuario sin conexión
@@ -272,8 +286,11 @@ Then la plantilla está en español, con el nombre "Machuco" y sin datos persona
 ## Feature: Perfil del usuario autenticado en SQLite
 
 > Caché local de **una sola fila** con el perfil básico del usuario que
-> inició sesión, en la tabla `auth_user_profile` de `AppDatabase` (migración
-> 12 → 13, coordinar el número con las otras ramas). Firestore
+> inició sesión, en la tabla `auth_user_profile` de `AppDatabase`. La tabla se
+> crea en la migración 13 → 14 (`migration13To14`, `app_database.dart:488`, que
+> llama a `_createAuthUserProfileSchema`, `:458`, idempotente). `AppDatabase`
+> está hoy en la **versión 24** (verificado en el código; la 23 es de PQRS y la
+> 24 del NIT del propietario). Firestore
 > (`users/{uid}`) es la fuente de verdad; SQLite solo sirve para mostrar
 > datos sin esperar a la red. **No autoriza nada.**
 
@@ -287,12 +304,12 @@ Then la plantilla está en español, con el nombre "Machuco" y sin datos persona
 | `last_names` | `TEXT` | |
 | `role` | `TEXT` | `client` / `owner` / `admin` (solo para mostrar) |
 | `account_status` | `TEXT` | `active` / `pending_approval` / `rejected` / `disabled` |
-| `phone_country_code_id` | `INTEGER` nullable | id del maestro `country_phone_codes` |
+| `phone_country_code_id` | `INTEGER` nullable | id del maestro `phone_country_codes` (la tabla local obsoleta `country_phone_codes` **sigue creándose** en el esquema) |
 | `phone_number` | `TEXT` nullable | |
 | `company_name` | `TEXT` nullable | Solo propietario jurídico |
 | `synced_at` | `TEXT` | ISO-8601 de la última sincronización con Firestore |
 
-No se guardan contraseñas, tokens, NIT ni fecha de nacimiento en SQLite.
+No se guardan contraseñas, tokens, NIT, documento de identidad ni fecha de nacimiento en SQLite.
 
 Scenario: Guardar el perfil al iniciar sesión o registrarse
 Given un usuario que inicia sesión o se registra con éxito
@@ -344,7 +361,7 @@ And si no hay perfil guardado recibe `null`
 | SQ-02 | Unitaria (DAO) | Guardar A y luego B | La tabla tiene solo B |
 | SQ-03 | Unitaria (DAO) | Borrar el perfil | La lectura devuelve `null` |
 | SQ-04 | Unitaria (DAO) | Nombres con `'; DROP TABLE auth_user_profile; --` | Se guarda como texto literal; la tabla sigue existiendo |
-| SQ-05 | Migración | Abrir una base en versión 12 y migrar a 13 | La tabla existe; los datos de las demás tablas se conservan |
+| SQ-05 | Migración | Abrir una base en versión 13 y migrar a 14 (`migration13To14`); `AppDatabase` está en la versión 24 | La tabla existe; los datos de las demás tablas se conservan; una base que ya la tenía conserva su fila |
 | SQ-06 | Unitaria (controller) | Login exitoso | Llama a guardar el perfil una vez |
 | SQ-07 | Unitaria (controller) | Login con cuenta `disabled` | No guarda el perfil |
 | SQ-08 | Unitaria (controller) | Logout | Borra el perfil y conserva los maestros |
@@ -366,10 +383,10 @@ And si no hay perfil guardado recibe `null`
 > Cualquier usuario autenticado (Cliente, Propietario o Administrador) puede
 > eliminar **su propia** cuenta desde su perfil o menú. Firebase exige un
 > inicio de sesión reciente para `User.delete()`, por eso se pide la
-> contraseña antes de eliminar. Destino: una operación de backend (Cloud
-> Function con Admin SDK) que borre perfil y usuario de forma atómica;
-> mientras no exista, la app lo hace en el orden indicado abajo. Respaldo
-> legal: derecho de supresión de la Ley 1581 de 2012.
+> contraseña antes de eliminar. **Plan Spark, sin Cloud Functions ni plan
+> Blaze**: la app borra perfil y usuario en el orden indicado abajo (Firestore
+> primero, Auth después, con reintento idempotente). Respaldo legal: derecho de
+> supresión de la Ley 1581 de 2012.
 
 > **Qué pasa con los datos según el rol (decisión 2026-11-08)**: las cuentas
 > de **Cliente y Propietario se eliminan** con sus datos personales. Las de
@@ -424,7 +441,7 @@ Given un propietario con moteles registrados o un cliente con reservas futuras o
 When intenta eliminar su cuenta
 Then el sistema le informa qué debe resolver antes (cancelar reservas, dar de baja moteles o la suscripción)
 And no elimina la cuenta hasta que esas dependencias queden resueltas
-And la verificación la hace el backend, no solo la vista
+But esta revisión **no se hace en la entrega** (sin backend en Spark): ver "Limitaciones aceptadas para la entrega"
 
 Scenario: El último administrador intenta eliminar su cuenta
 Given un administrador que es el único con estado `active`
@@ -457,8 +474,9 @@ But si cancela la confirmación del proveedor, no se elimina nada y mantiene la 
 Scenario: Qué datos personales se eliminan
 Given un Cliente o Propietario que confirmó la eliminación
 When el sistema termina el proceso
-Then ya no existen su documento `users/{uid}` (nombres, apellidos, correo, celular, fecha de nacimiento, tipo de persona, NIT, razón social y plan de interés) ni su usuario de Firebase Auth
-And tampoco sus subcolecciones de `users/{uid}`, que Firestore no borra en cascada
+Then ya no existen su documento `users/{uid}` (nombres, apellidos, correo, celular, fecha de nacimiento, tipo y número de documento, tipo de persona, NIT, razón social y plan de interés) ni su usuario de Firebase Auth
+And tampoco sus subcolecciones `notificationReads` y `subscriptions` de `users/{uid}`, que Firestore no borra en cascada (DA-15)
+And `payments` se conserva por obligación contable, sin datos personales
 And se borran su perfil de SQLite y el namespace `auth` de SharedPreferences
 And quedan desvinculados sus proveedores de ingreso
 
@@ -509,7 +527,7 @@ And un segundo toque no repite la operación
 | DA-12 | Manual | Eliminar una cuenta real del equipo y volver a registrarse | El registro nuevo funciona; el perfil anterior no existe en Firestore |
 | DA-13 | Widget | Perfiles de Cliente, Propietario y Administrador | Los tres muestran "Eliminar cuenta" |
 | DA-14 | Unitaria (servicio) | Cuenta solo de Google o GitHub | Reautentica con el proveedor, sin pedir contraseña |
-| DA-15 | Unitaria (servicio) | Cliente con subcolecciones en `users/{uid}` | No quedan documentos bajo `users/{uid}` |
+| DA-15 | Unitaria (servicio) + reglas | Cliente con `notificationReads`, `subscriptions` y `payments` bajo `users/{uid}` | Se borran `notificationReads` y `subscriptions`; `payments` se conserva por obligación contable, sin datos personales |
 | DA-16 | Unitaria (servicio) | Administrador elimina su cuenta | Anonimiza; no borra `users/{uid}` |
 | DA-17 | Manual | Eliminar con sesión abierta en otro dispositivo | Ese dispositivo pierde acceso y borra sus datos locales |
 
@@ -517,14 +535,14 @@ And un segundo toque no repite la operación
 
 | Riesgo | Impacto | Mitigación |
 | --- | --- | --- |
-| Borrado parcial (Firestore sin Auth o Auth sin Firestore) sin Cloud Functions | Cuentas huérfanas o perfiles sin usuario | Orden fijo (Firestore primero, Auth después), reintento idempotente y, como destino, una función de backend atómica |
+| Borrado parcial (Firestore sin Auth o Auth sin Firestore) sin Cloud Functions | Cuentas huérfanas o perfiles sin usuario | Orden fijo (Firestore primero, Auth después) y reintento idempotente; no hay función de backend (plan Spark) |
 | Datos del usuario en otras colecciones (reservas, moteles, reseñas, PQRS, pagos) de otras ramas | Datos huérfanos o pérdida de historial que otras partes necesitan | Coordinar con esas ramas qué se borra, qué se anonimiza y qué se conserva por obligación legal o contable |
 | Eliminación accidental | Pérdida irreversible de la cuenta | Reautenticación, texto de confirmación y mensaje explícito de permanencia |
 | Quedarse sin administradores | Nadie puede aprobar propietarios ni crear administradores | Bloquear la eliminación del último administrador activo (validado en backend) |
 | `requires-recent-login` en sesiones viejas | La operación falla de forma confusa | Reautenticar siempre antes de eliminar |
 | Reglas de Firestore que permitan borrar perfiles ajenos | Borrado malicioso de cuentas | Regla `allow delete: if request.auth.uid == uid`; pruebas DA-09 y DA-10 en el emulador |
 | Datos locales que sobreviven a la eliminación | Fuga de información en el dispositivo | Borrar SQLite y el namespace `auth` completo tras confirmar la eliminación |
-| Subcolecciones de `users/{uid}` que sobreviven: Firestore no borra en cascada y las reglas hoy tienen `allow delete: if false` en `subscriptions` y `payments` | Datos personales huérfanos tras "eliminar" | Borrarlas desde el backend o acordar el cambio de reglas con la rama de suscripciones; prueba DA-15 |
+| Subcolecciones de `users/{uid}` que sobreviven: Firestore no borra en cascada | Datos personales huérfanos tras "eliminar" | Las reglas permiten al propio usuario borrar `notificationReads` y `subscriptions`; `payments` se conserva por obligación contable sin datos personales; prueba DA-15 |
 
 ## Feature: Correo del usuario compartido (SharedPreferences)
 
@@ -632,12 +650,12 @@ Then usan un servicio de autenticación falso inyectado, sin red ni credenciales
 | Aspecto | Cliente (registro público) | Propietario (registro público) | Administrador (lo crea otro administrador) |
 | --- | --- | --- | --- |
 | Datos comunes (nombres, apellidos, indicativo y celular, correo, contraseña, confirmación) | Sí | Sí | Sí (sin contraseña, ver feature de creación) |
-| Tipo y número de documento | **No se solicita** | **No se solicita** | **No se solicita** |
+| Tipo y número de documento (maestro `document_types`) | **Sí** (para validar la mayoría de edad en versiones futuras) | **Sí** (natural: su documento; jurídica: el del representante legal, además de NIT y razón social) | **No se solicita** |
 | Campos propios | Fecha de nacimiento | Tipo de persona (natural/jurídica), NIT y plan de suscripción de interés (obligatorios); si es jurídica, además razón social | — |
 | Regla clave | Debe ser mayor de 18 años | Su cuenta debe aprobarla un administrador | Solo un administrador autenticado puede crearlo |
 | Estado inicial de la cuenta | `active` | `pending_approval` | `active` |
 | Destino tras el registro | Ruta del cliente | Pantalla "Cuenta en revisión" | (No aplica: el creador permanece en su vista) |
-| Registro con Google o GitHub ([Futuro], no se implementa aún) | Sí | Sí, pero luego debe completar los campos propios | No |
+| Registro con Google o GitHub | Sí | Sí, pero luego debe completar los campos propios | No |
 
 Scenario: Visitante elige el rol antes de diligenciar el formulario
 Given un visitante en la pestaña "Registrarse"
@@ -645,17 +663,16 @@ When ve el selector de tipo de perfil
 Then solo se ofrecen las opciones Cliente y Propietario (Administrador no aparece)
 When selecciona un tipo de perfil
 Then el sistema muestra el bloque de datos comunes más los campos propios de ese rol
-And ningún perfil muestra campos de tipo ni número de documento
+And Cliente y Propietario muestran el selector de tipo de documento (maestro `document_types`) y el número de documento
 When el visitante cambia de rol con datos ya escritos
 Then el sistema conserva los datos comunes
 And descarta los campos propios del rol anterior
 
 Scenario: Cliente se registra (camino feliz)
 Given un visitante que eligió el perfil Cliente
-When diligencia nombres, apellidos, indicativo y celular, correo, contraseña, confirmación y fecha de nacimiento
+When diligencia nombres, apellidos, tipo y número de documento, indicativo y celular, correo, contraseña, confirmación y fecha de nacimiento
 And presiona "Crear cuenta"
-Then el sistema no le solicita tipo ni número de documento
-And crea la cuenta en Firebase Auth con rol `client` y estado `active`
+Then crea la cuenta en Firebase Auth con rol `client`, su tipo y número de documento y estado `active`
 And guarda el perfil con el id del indicativo telefónico (no el texto mostrado)
 And guarda en SharedPreferences el correo del usuario y el indicativo usado como último indicativo seleccionado
 And navega a la ruta inicial del cliente
@@ -669,19 +686,19 @@ And no crea la cuenta
 Scenario: Propietario persona natural se registra (camino feliz)
 Given un visitante que eligió el perfil Propietario y el tipo de persona "Natural"
 When el sistema muestra el campo NIT como obligatorio
-And el visitante diligencia los datos comunes y su NIT
+And el visitante diligencia los datos comunes, su tipo y número de documento y su NIT
 And presiona "Crear cuenta"
-Then el sistema no le solicita tipo ni número de documento ni razón social
-And crea la cuenta con rol `owner`, tipo de persona natural, su NIT y estado `pending_approval`
+Then el sistema no le solicita razón social
+And crea la cuenta con rol `owner`, tipo de persona natural, su documento, su NIT y estado `pending_approval`
 And la solicitud aparece en "Solicitudes de propietarios" de los administradores
 And navega a la pantalla "Cuenta en revisión", que explica que un administrador debe aprobarla
 
 Scenario: Propietario persona jurídica se registra
 Given un visitante que eligió el perfil Propietario y el tipo de persona "Jurídica"
 When el sistema muestra los campos razón social y NIT como obligatorios
-And el visitante los diligencia junto con los datos comunes del representante (sin documento del representante)
+And el visitante los diligencia junto con los datos comunes del representante, incluido el tipo y número de documento del representante legal
 And presiona "Crear cuenta"
-Then el sistema crea la cuenta con rol `owner`, tipo de persona jurídica, razón social, NIT y estado `pending_approval`
+Then el sistema crea la cuenta con rol `owner`, tipo de persona jurídica, razón social, NIT, documento del representante y estado `pending_approval`
 But si falta la razón social o el NIT tiene un formato inválido, no envía el formulario y señala el campo
 
 Scenario: Propietario sin tipo de persona o sin NIT
@@ -720,11 +737,12 @@ When escribe un número de celular con longitud fuera del rango definido por ese
 Then el sistema señala que el número no es válido para el país seleccionado
 And no permite enviar el formulario
 
-Scenario: Ningún formulario solicita documento de identidad
-Given un visitante en el registro público o un administrador en "Crear administrador"
-When revisa el formulario de cualquier perfil
+Scenario: Solo el Administrador se crea sin documento
+Given un administrador en "Crear administrador"
+When revisa el formulario
 Then no encuentra campos de tipo ni número de documento
 And la petición al backend no incluye esos datos
+But el registro público de Cliente y Propietario sí los exige, y el número no se guarda nunca en SQLite ni en SharedPreferences
 
 Scenario: Campos obligatorios del registro
 Given un visitante en el formulario de registro con un rol elegido
@@ -804,22 +822,17 @@ And el precio nunca se toma del valor enviado por la app
 > histórica y la fuente vigente es `docs/auth/`. El texto siguiente ("solo
 > definición") ya no aplica.
 >
-> **Solo definición, no implementación (histórico).** Estos escenarios se implementarán
-> más adelante con los proveedores de Firebase Auth (`GoogleAuthProvider` y
-> `GithubAuthProvider`) y **en cooperación con otras ramas** (configuración
-> del proyecto de Firebase, OAuth App de GitHub, SHA-1/SHA-256 de Android,
-> URL schemes de iOS). En esta rama **no** se agregan dependencias
-> (`google_sign_in` u otras), ni lógica de controller, ni servicios para
-> ellos. Mientras tanto solo aplica el escenario "Proveedores externos aún no
-> disponibles".
+> Implementados con los proveedores de Firebase Auth (`GoogleAuthProvider` y
+> `GithubAuthProvider`). La configuración (proyecto de Firebase, OAuth App de
+> GitHub, SHA-1 de Android) está en `docs/auth/`.
 
-Scenario: Proveedores externos aún no disponibles
-Given la aplicación sin los proveedores externos habilitados
+Scenario: Botones de proveedores externos
+Given la aplicación con los proveedores externos habilitados
 When el usuario ve la pantalla de login o de registro
-Then los botones "Continuar con Google" y "Continuar con GitHub" no se muestran, o se muestran deshabilitados con la etiqueta "Próximamente"
-And presionarlos no lanza una excepción ni bloquea el formulario de correo y contraseña
+Then se muestran los botones "Continuar con Google" y "Continuar con GitHub"
+And un fallo del proveedor no lanza una excepción ni bloquea el formulario de correo y contraseña
 
-Scenario: [Futuro] Inicio de sesión con Google (Gmail)
+Scenario: Inicio de sesión con Google (Gmail)
 Given un usuario con cuenta existente vinculada a Google y Firebase Auth configurado con el proveedor de Google
 When presiona "Continuar con Google" y completa el flujo del proveedor
 Then el sistema autentica al usuario con Firebase Auth
@@ -827,7 +840,7 @@ And obtiene su rol y estado de cuenta desde el backend
 And guarda su correo en SharedPreferences y navega a la ruta de su rol mediante `resolvePostLoginRoute`
 But si el usuario cancela el flujo, permanece en el login sin mostrar error
 
-Scenario: [Futuro] Inicio de sesión con GitHub
+Scenario: Inicio de sesión con GitHub
 Given un usuario con cuenta existente vinculada a GitHub y Firebase Auth configurado con el proveedor de GitHub
 When presiona "Continuar con GitHub" y autoriza la aplicación
 Then el sistema autentica al usuario con Firebase Auth
@@ -835,7 +848,7 @@ And obtiene su rol y estado de cuenta desde el backend
 And guarda su correo en SharedPreferences y navega a la ruta de su rol
 But si GitHub no entrega un correo verificado, el sistema no crea sesión e informa que debe usar una cuenta con correo público o verificado
 
-Scenario: [Futuro] Registro con un proveedor externo según el rol
+Scenario: Registro con un proveedor externo según el rol
 Given un visitante en el formulario de registro que eligió un tipo de perfil
 When elige "Continuar con Google" o "Continuar con GitHub" y completa el flujo
 Then para Cliente, el sistema pide completar los datos que el proveedor no entrega (nombres y apellidos si faltan, indicativo y celular, fecha de nacimiento) antes de crear el perfil y navegar
@@ -843,13 +856,13 @@ And para Propietario, pide completar indicativo y celular, tipo de persona, NIT 
 And el rol y el estado inicial los asigna y valida el backend, igual que en el registro con correo
 And nunca se crea una cuenta `admin` por este medio
 
-Scenario: [Futuro] Correo ya registrado con otro método
+Scenario: Correo ya registrado con otro método
 Given un visitante cuyo correo ya tiene cuenta con correo y contraseña u otro proveedor
 When intenta ingresar con Google o GitHub usando ese mismo correo
 Then el sistema no crea una cuenta duplicada
 And le indica que ya existe una cuenta con ese correo y que inicie sesión con el método original para vincular el proveedor
 
-Scenario: [Futuro] Cuenta deshabilitada, pendiente o rechazada con proveedor externo
+Scenario: Cuenta deshabilitada, pendiente o rechazada con proveedor externo
 Given un usuario cuya cuenta está `disabled`, `pending_approval` o `rejected`
 When inicia sesión con Google o GitHub
 Then el sistema aplica las mismas reglas que en el inicio de sesión con correo y contraseña
@@ -867,6 +880,7 @@ Then el sistema aplica las mismas reglas que en el inicio de sesión con correo 
 | Nombres / apellidos | Solo letras (con tildes y ñ), espacios, guion y apóstrofo; 2 a 50 caracteres; sin espacios dobles |
 | Correo | Formato `usuario@dominio.ext`, máx. 254 caracteres; se recortan espacios y se guarda en minúsculas |
 | Celular | Solo dígitos; longitud entre `phone_min_length` y `phone_max_length` del país |
+| Número de documento (Cliente y Propietario) | Se normaliza (sin espacios, puntos ni guiones, en mayúsculas) y se valida con el `pattern` del tipo elegido en `document_types`; respaldo básico de 4 a 20 caracteres si no hay patrón |
 | NIT del propietario (natural y jurídica, obligatorio) | Solo dígitos, guion opcional y dígito de verificación válido. Jurídica: 9 dígitos + DV (p. ej. `900123456-8`). Natural: número base de 6 a 10 dígitos + DV (p. ej. `1020304050-8`) |
 | Razón social | 2 a 120 caracteres; letras, números, espacios y `. , & -` |
 | Fecha de nacimiento | Fecha real, no futura, edad ≥ 18 años |
@@ -920,13 +934,12 @@ When se filtra la lista
 Then el filtro se aplica en memoria o con parámetros enlazados
 And la app no falla ni muestra resultados inesperados
 
-## Feature: Creación de administradores (vista del administrador) [Datos y reglas hechos 2026-11-09; vista pendiente]
+## Feature: Creación de administradores (vista del administrador) [Hecho]
 
 > Datos, controller y reglas implementados el 2026-11-09
 > (`AdministratorsRepository`, `AdministratorsController`, `firestore.rules`);
-> `AdministratorsPage` sigue mostrando "Próximamente" hasta que la rama de
-> frontend construya las vistas con ese contrato. Antes se creaban a mano en la
-> consola de Firebase (`users/{uid}` con `role: admin`).
+> `AdministratorsPage` y `create_admin_page.dart` ya existen. Antes se creaban a
+> mano en la consola de Firebase (`users/{uid}` con `role: admin`).
 
 > **Sin backend propio (plan Spark, decisión 2026-11-09).** Solo un
 > administrador activo puede crear otro; la autoridad son las reglas de
@@ -1002,7 +1015,7 @@ Then el sistema conserva los datos escritos y ofrece reintentar
 And si el usuario de Auth ya se había creado y falla la escritura del perfil, la app lo borra (reversión)
 And reintentar no deja una segunda cuenta huérfana con el mismo correo
 
-## Feature: Gestión de administradores (vista del administrador) [Datos y reglas hechos 2026-11-09; vista pendiente]
+## Feature: Gestión de administradores (vista del administrador) [Hecho]
 
 > Vista "Administradores": consultar, registrar (ver "Creación de
 > administradores"), actualizar y eliminar cuentas de administrador. **Siempre
@@ -1221,12 +1234,12 @@ And un segundo toque no repite la operación
 | Un administrador malintencionado escribe `system/adminRegistry` directamente | El contador se desvía y la regla del último administrador falla | Las reglas limitan el cambio a +-1 y >= 1; aceptado en un proyecto universitario |
 | `firestore.rules` permitía a cualquier usuario borrar su propio `users/{uid}` | El último administrador podía saltarse la regla | **Resuelto 2026-11-09:** `delete` excluye `role == 'admin'` y cuentas `anonymized` |
 | Sin Admin SDK no se puede borrar el usuario de Auth de otro administrador | Su correo queda ocupado y su usuario de Auth sigue existiendo | **Limitación aceptada (2026-11-09).** Las reglas niegan toda edición de la cuenta anonimizada y la app rechaza su ingreso |
-| `isAdmin()` (fuera de esta rama) solo comprueba `role == 'admin'` | Un administrador anonimizado por otro o con contraseña temporal pendiente conserva los accesos que dependen de `isAdmin()` (lecturas de `users`, `owners`, `payments`, `subscriptions`) | Pedir a la rama dueña que lo cambie por una comprobación de estado `active` (ver informe del 2026-11-09) |
+| `isAdmin()` ya exige `role == 'admin'` y `accountStatus == 'active'` (2026-11-17) | Un administrador anonimizado o deshabilitado pierde los accesos que dependen de `isAdmin()` | Resuelto; pruebas en `test_rules/` |
 | Datos personales fuera de `users/{uid}` (registros de auditoría, cachés, otras ramas) | Anonimización incompleta | Guardar en auditoría solo uids; revisar colecciones de otras ramas; prueba AG-05 |
 | Estado nuevo `anonymized` no contemplado por otras ramas | Pantallas que fallan o tratan la cuenta como activa | Actualizar `AccountStatus` y `accountAccessFailure`; denegar por defecto cualquier estado desconocido |
 | Un administrador malintencionado elimina a los demás | Pérdida de acceso de otros administradores | Reautenticación, registro de quién y cuándo; evaluar confirmación de un segundo administrador |
 
-## Feature: Solicitudes de aprobación de propietarios (vista del administrador) [Parcial]
+## Feature: Solicitudes de aprobación de propietarios (vista del administrador) [Hecho]
 
 > Al 2026-11-08 existen `owner_approvals_page.dart`,
 > `owner_approval_detail_page.dart`, `reject_owner_sheet.dart` y
@@ -1234,9 +1247,8 @@ And un segundo toque no repite la operación
 > 2026-11-09** la capa de datos expone las alertas de validación
 > (`AdminAccessController.loadAlerts` -> `OwnerRequestAlerts`: dígito de
 > verificación del NIT, NIT duplicado y plan disponible; solo informan, no
-> bloquean); falta que el frontend las muestre en el detalle y pida confirmar
-> antes de aprobar. Pendiente también enlazar la vista desde el menú del
-> administrador en las demás ramas (`docs/auth/handoff-otras-ramas.md`).
+> bloquean); el detalle las muestra y la vista se enlaza desde el menú y el perfil
+> del administrador (`admin_panel_drawer.dart`, `admin_profile_page.dart`).
 
 Scenario: El administrador valida los datos antes de decidir
 Given un administrador en el detalle de una solicitud pendiente
@@ -1453,17 +1465,15 @@ ampliarla (sobre todo `phone_min_length` y `phone_max_length`).
 
 `subscription_plans` (planes de suscripción para propietarios)
 
-La tabla **ya existe** en Supabase y la rama de suscripciones la consulta
-hoy con `select=id,name`. Esta rama la **amplía** con las columnas
-siguientes, en coordinación con esa rama (agregar columnas no rompe su
-consulta actual):
+La tabla **ya existe** en Supabase con todas las columnas siguientes y esta
+rama las consume completas (`SubscriptionPlanOption`):
 
 | Columna | Tipo | Notas |
 | --- | --- | --- |
-| `id` | `int` PK | Existente |
+| `id` | `int8` PK | Existente |
 | `name` | `text` | Existente; texto visible en español |
 | `description` | `text` nullable | Resumen del plan |
-| `price` | `numeric(12,2)` | Precio de referencia; el backend valida el cobro |
+| `price` | `int4` | Precio en COP (entero); referencia, el backend valida el cobro |
 | `currency` | `text` | `COP` por defecto |
 | `billing_period` | `text` | `monthly` / `yearly` |
 | `max_motels` | `int` nullable | Límite de moteles del plan |
@@ -1471,8 +1481,22 @@ consulta actual):
 | `is_active` | `bool` | |
 | `sort_order` | `int` | |
 
-> El maestro `identification_types` (tipo de identificación) se retiró del
-> alcance: ningún perfil solicita tipo ni número de documento.
+`document_types` (tipos de documento de identidad; decisión 2026-11-17).
+Reemplaza a la antigua propuesta `identification_types`. Cliente y Propietario
+lo usan en el registro y en "Completar perfil".
+
+| Columna | Tipo | Notas |
+| --- | --- | --- |
+| `id` | `int` PK | |
+| `code` | `text` | Código corto del tipo |
+| `name` | `text` | Texto visible; es el valor que acepta `users/{uid}.documentType` en las reglas |
+| `pattern` | `text` | Expresión regular del número; la app valida con ella |
+| `example` | `text` | Ejemplo para el texto de ayuda |
+| `is_active` | `bool` | Solo se ofrecen los activos |
+| `sort_order` | `int` | Orden en el selector |
+
+Pendiente en Supabase: `phone_min_length` y `phone_max_length` en
+`phone_country_codes` (la app ya las lee si existen).
 
 Las tablas son de **solo lectura** para la app: política RLS que permita
 `select` con la clave pública y ninguna escritura desde el cliente. La
@@ -1515,23 +1539,23 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - Controllers: `lib/controllers/auth/login_controller.dart`. Si la carga de maestros crece, separarla en `lib/controllers/auth/auth_catalog_controller.dart`. Las vistas del administrador usan `lib/controllers/auth/admin_access_controller.dart` (creación de administradores y aprobación de propietarios). Validadores de formato en `lib/controllers/auth/validators/`.
   - Rutas nuevas en `lib/routes/routes.dart` (solo rol administrador): `adminAdministrators` (`/auth/admin/administrators`), `adminCreateAdministrator` (`/auth/admin/administrators/new`), `adminAdministratorDetail` (`/auth/admin/administrators/detail`), `adminOwnerApprovals` (`/auth/admin/owner-approvals`) y `adminOwnerApprovalDetail` (`/auth/admin/owner-approvals/detail`). Se enlazan desde el perfil o menú del administrador.
   - Modelos: `lib/models/auth/`.
-    - `registered_user.dart`: agregar `firstNames`, `lastNames`, `phoneCountryCodeId` y `accountStatus`. No incluir campos de tipo ni número de documento.
+    - `registered_user.dart`: agregar `firstNames`, `lastNames`, `phoneCountryCodeId` y `accountStatus`, y `documentType` y `documentNumber` para Cliente y Propietario (el Administrador no los lleva; nunca van a SQLite ni a SharedPreferences).
     - Datos propios por rol: `birthDate` (cliente); `personType` y `nit` obligatorios y `companyName` solo para persona jurídica (propietario). Modelarlos como campos opcionales validados por rol o como un objeto de detalle por rol; no crear tres modelos de usuario paralelos.
-    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled` y, para administradores eliminados, `anonymized`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo). Al 2026-10-28 existen `country_phone_code.dart`, `account_status.dart` y `user_profile.dart`; `person_type.dart` y `owner_approval_request.dart` siguen pendientes.
+    - Nuevos: `country_phone_code.dart`, `person_type.dart` (enum), `account_status.dart` (enum: `active`, `pending_approval`, `rejected`, `disabled` y, para administradores eliminados, `anonymized`) y `owner_approval_request.dart` (solicitud con fecha, y al resolverse: administrador, fecha y motivo de rechazo). Existen `country_phone_code.dart`, `account_status.dart`, `user_profile.dart`, `person_type.dart`, `owner_approval_request.dart` y `document_type.dart` (`DocumentTypeOption`).
     - Se mantiene `RegisteredUserRole { admin, client, owner }` como único enum de rol.
   - Registro por rol: la validación específica de cada rol vive en el controller (o en un validador por rol en `lib/controllers/auth/`), no en la vista. La vista solo decide qué bloque de campos mostrar según el rol elegido.
   - Servicios de autenticación: `lib/service/auth/`.
     - Destino final: `firebase_auth_service.dart` como **único** proveedor. **Hecho (2026-10-27):** decisión documentada y `firebase_core`, `firebase_auth` y `cloud_firestore` agregados.
     - `hardcoded_auth_service.dart` y el flag `AUTH_USE_HARDCODED_AUTH_USERS` se **eliminan** (ver "Retiro de las credenciales de prueba"). El contrato `AuthService` / `AuthSession` / `AuthFailure` solo se conserva como costura para fakes de prueba; no se agregan implementaciones alternativas.
-    - Operaciones nuevas en `FirebaseAuthService`: `deleteAccount({required String password})` (reautentica con `EmailAuthProvider.credential`, borra `users/{uid}` vía `UserProfileRepository.deleteProfile` y llama a `User.delete()`). `requestPasswordReset` ya existe; falta mapear `too-many-requests`.
+    - Operaciones nuevas en `FirebaseAuthService`: `deleteAccount({required String password})` (reautentica con `EmailAuthProvider.credential`, borra `users/{uid}` vía `UserProfileRepository.deleteProfile` y llama a `User.delete()`). `requestPasswordReset` ya existe y `too-many-requests` ya está mapeado.
     - `firestore.rules`: permitir `delete` de `users/{uid}` solo si `request.auth.uid == uid` (y nunca del último administrador, validado en backend cuando exista).
-    - La creación de administradores y la aprobación/rechazo de propietarios se exponen como operaciones del backend; la app solo las invoca a través de un repositorio (p. ej. `lib/database/repository/auth/admin_access_repository.dart`, aún no creado).
+    - La creación de administradores y la aprobación/rechazo de propietarios se exponen como operaciones del backend; la app solo las invoca a través de un repositorio (`lib/database/repository/auth/admin_access_repository.dart`, ya existe).
     - Limpieza (no es un escenario): el código heredado de un proveedor anterior (`auth0_auth_service.dart`, `auth0_config.dart`, la dependencia `auth0_flutter` y sus referencias en `login_controller.dart`, `login_page.dart`, `logout_navigation.dart`, `backend_registered_user_directory.dart`, `hardcoded_auth_service.dart` y las pruebas) se retira al integrar Firebase. Antes de borrarlo, verificar con `grep` que ninguna otra rama lo importa. No se escriben escenarios ni se amplía ese código. **Hecho (2026-10-27):** `FirebaseAuthService` reemplaza a Auth0; el contrato quedó en `auth_service.dart` y los flags en `auth_config.dart`.
-  - Maestros: `lib/database/repository/auth/auth_catalog_repository.dart` (REST a Supabase `phone_country_codes` + caché con el DAO compartido `PhoneCountryCodeDao`), siguiendo el patrón de `lib/database/repository/client/client_repository.dart`. `auth_catalog_dao.dart` se eliminó (2026-11-04); `subscription_plan_options` sigue pendiente. Modelo nuevo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
+  - Maestros: `lib/database/repository/auth/auth_catalog_repository.dart` (REST a Supabase `phone_country_codes` + caché con el DAO compartido `PhoneCountryCodeDao`), siguiendo el patrón de `lib/database/repository/client/client_repository.dart`. `auth_catalog_dao.dart` se eliminó (2026-11-04); la caché de planes y de tipos de documento es en memoria. Modelo: `lib/models/auth/subscription_plan_option.dart` (no reutilizar `SubscriptionPlan` de la rama de suscripciones, que solo tiene `id` y `name`, ni su tabla `subscriptions` de SQLite).
   - Almacenamiento en Firebase: el perfil del usuario y las solicitudes de propietarios se leen y escriben a través de un repositorio (p. ej. `lib/database/repository/auth/user_profile_repository.dart`), nunca desde la vista.
   - Preferencias: `SharedPreferencesLocalService` con `namespace: 'auth'` (contrato en `lib/service/storage/local_preferences_service.dart`). El acceso compartido al correo se expone con una clase pequeña (p. ej. `lib/service/auth/auth_preferences.dart`) que otras ramas consumen sin conocer las claves.
-- **Claves de SharedPreferences (namespace `auth`)**: `current_user_email` (string; correo del usuario autenticado, compartido con otras funcionalidades), `remember_email` (bool), `remembered_email` (string), `last_country_code_id` (int), `last_auth_tab` (string), `catalogs_synced_at` (string ISO-8601). **Nota 2026-11-09:** `SharedPreferencesLocalService` solo acepta claves en lowerCamelCase sin puntos, así que las claves reales son `currentUserEmail`, `rememberEmail`, `rememberedEmail`, `lastCountryCodeId` y `catalogsSyncedAt` (los nombres en snake_case son solo descriptivos). API: `AuthPreferences.loadRememberedEmail()`, `saveRememberedEmail(email)` y `clearRememberedEmail()`; el controller las usa en `LoginController.login(rememberEmail:)` y `loadRememberedEmail()`. **Nunca** guardar contraseñas, tokens ni el NIT en SharedPreferences. La persistencia del token la maneja el SDK de Firebase. Al eliminar la cuenta se borra el namespace `auth` completo.
-- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 12; `country_phone_codes` se creó en la 10 → 11. `auth_user_profile` irá en la 12 → 13 con su DAO `lib/database/repository/auth/auth_user_profile_dao.dart` y su entidad en `lib/models/auth/`; la caché de planes, si se implementa, en otra migración). Es un archivo compartido con otras ramas (`room`, `suscripcion`, `motel`, `client`, pagos): coordinar el número de versión antes de hacer merge para no chocar migraciones.
+- **Claves de SharedPreferences (namespace `auth`)**: `currentUserEmail` (string; correo del usuario autenticado, compartido con otras funcionalidades), `rememberEmail` (bool), `rememberedEmail` (string), `lastCountryCodeId` (int), `catalogsSyncedAt` (string ISO-8601) y `phoneLengths` (longitudes de celular por país). `SharedPreferencesLocalService` solo acepta claves en lowerCamelCase sin puntos. La clave `last_auth_tab` se quitó: no existe. API: `AuthPreferences.loadRememberedEmail()`, `saveRememberedEmail(email)` y `clearRememberedEmail()`; el controller las usa en `LoginController.login(rememberEmail:)` y `loadRememberedEmail()`. **Nunca** guardar contraseñas, tokens, el NIT ni el documento de identidad en SharedPreferences. La persistencia del token la maneja el SDK de Firebase. Al eliminar la cuenta se borra el namespace `auth` completo.
+- **SQLite**: las tablas nuevas se registran en `lib/database/app_database.dart` con una migración nueva (versión actual: 24; `country_phone_codes` se creó en la 10 → 11 y sigue creándose aunque está obsoleta. `auth_user_profile` se crea en la 13 → 14; su DAO abstracto `AuthUserProfileDao` está en `lib/database/repository/auth/auth_user_profile_repository.dart` y su entidad `AuthUserProfileEntry` en `lib/database/model/auth/auth_user_profile_entry.dart`). Es un archivo compartido con otras ramas (`room`, `suscripcion`, `motel`, `client`, pagos): coordinar el número de versión antes de hacer merge para no chocar migraciones.
 - **Configuración de Supabase**: reutilizar `SUPABASE_URL` y `SUPABASE_ANON_KEY` vía `--dart-define`. Las ramas de suscripciones y notificaciones leen `SUPABASE_PUBLISHABLE_KEY`; proponer al equipo un solo nombre. `SupabaseRoomConfig` es específico de habitaciones; si se necesita una configuración común, proponer al equipo una sola clase compartida en lugar de crear otra copia.
 - **Dependencias de entrada**: rutas por rol de `lib/routes/routes.dart` (`clientMotels`, `ownerMotels`, `ownerManagement`); componentes del sistema de diseño (`AppTextField`, `AppButton`, `AppCard`, `AppBottomSheet`).
 - **Dependencias de salida**: todas las vistas protegidas dependen de la sesión que expone `LoginController` (usuario y rol). `logout_navigation.dart` es consumido por otras ramas para cerrar sesión: no cambiar su firma sin avisar. El lector del correo compartido (`AuthPreferences` o equivalente) también es una API pública para otras ramas.
@@ -1552,6 +1576,19 @@ Validar con el equipo antes de comprometerlos en el alcance de esta rama:
   - Los mensajes de error de login y de recuperación de contraseña no deben revelar si un correo existe.
   - El correo guardado en SharedPreferences sirve para mostrar y precargar datos, no para autorizar.
   - Ninguna vista consulta Supabase, Firebase, SQLite ni SharedPreferences directamente: siempre a través del controller y del repositorio o servicio.
+
+## Limitaciones aceptadas para la entrega
+
+- **Revisión antes de eliminar**: no se comprueba si el Cliente tiene reservas
+  activas o si el Propietario tiene moteles antes de eliminar la cuenta (sin
+  backend en el plan Spark).
+- **Validación solo en la app**: el `planId` y el `pattern` del documento los
+  valida únicamente la app. Las reglas de Firestore no pueden consultar
+  Supabase: solo validan el tipo y la longitud del documento.
+- **Cachés en memoria**: los planes y los tipos de documento se cachean en
+  memoria, no en SQLite.
+- **Vistas que instancian Firebase**: algunas vistas crean sus propios
+  servicios de Firebase en lugar de recibirlos por inyección.
 
 ## Pendientes de validar con producto
 
@@ -1577,8 +1614,7 @@ nadie las corrija, pero deben confirmarse:
 - Eliminación de cuenta: si se exige resolver reservas, moteles y
   suscripciones antes de eliminar (propuesta) o se anonimizan; qué datos de
   otras ramas (reseñas, PQRS, pagos) se borran, anonimizan o conservan por
-  obligación legal; y si se implementa como Cloud Function (requiere plan
-  Blaze de Firebase).
+  obligación legal; y, resuelto, que no hay Cloud Function: plan Spark.
 - ~~**Backend de la gestión de administradores**: Cloud Functions con Admin
   SDK (plan Blaze).~~ **Resuelto (2026-11-09): no hay Cloud Functions.** Se usa
   el plan Spark: la app crea el usuario con una instancia secundaria de
@@ -1589,8 +1625,8 @@ nadie las corrija, pero deben confirmarse:
   administradores" está implementada) y si un administrador puede eliminar a
   otro sin la confirmación de un tercero (hoy basta con reautenticarse y las
   reglas no exigen un tercero).
-- `isAdmin()` en `firestore.rules` (fuera de esta rama) solo comprueba el rol:
-  endurecerlo con el estado `active` con la rama dueña.
+- ~~`isAdmin()` en `firestore.rules` solo comprueba el rol.~~ **Resuelto
+  (2026-11-17):** exige también `accountStatus == 'active'`.
 - Si las alertas de validación de una solicitud de propietario solo informan
   (propuesta) o algunas, como un NIT duplicado, deben bloquear la aprobación.
 - Si un propietario rechazado puede corregir sus datos y volver a enviar la
@@ -1610,8 +1646,8 @@ nadie las corrija, pero deben confirmarse:
   credenciales de prueba"). **Hecho (2026-10-28):** se retiraron los avisos
   del proveedor anterior, el indicativo fijo `'CO +57'` se reemplazó por
   `AppPhoneField` alimentado por el maestro y la opción "Administrador" ya
-  no aparece en el registro público. Pendiente: la pantalla "Cuenta en
-  revisión" (hoy el propietario pendiente solo ve un mensaje en el login).
+  no aparece en el registro público. **Hecho:** la pantalla "Cuenta en
+  revisión" (`lib/views/account_review/account_review_page.dart`).
 - `login_page.dart` tiene más de 1100 líneas. Al tocarlo, extraer los
   componentes reutilizables a `lib/widgets/` en lugar de seguir creciendo el
   archivo.
@@ -1628,7 +1664,7 @@ nadie las corrija, pero deben confirmarse:
   correo, contraseña (con botón mostrar/ocultar), casilla "Recordar mi
   correo", enlace "¿Olvidaste tu contraseña?" y botón principal "Ingresar".
   Los botones secundarios "Continuar con Google" y "Continuar con GitHub"
-  quedan ocultos o deshabilitados ("Próximamente") hasta que se implementen.
+  están habilitados.
 - **Sin aviso de modo desarrollo**: el banner y la lista de usuarios de
   prueba se retiran junto con las credenciales de prueba.
 - **Eliminar cuenta**: acción de peligro al final del perfil o menú del
