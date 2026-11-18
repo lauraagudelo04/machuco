@@ -8,7 +8,8 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/utils/date_formatter.dart';
 
-/// Muestra la factura de una reserva tal como está guardada en Firebase.
+/// Muestra la factura de una reserva tal como está guardada en Firebase (o su
+/// copia local cuando no hay conexión).
 class InvoicePage extends StatefulWidget {
   const InvoicePage({super.key, required this.reservation, this.paymentMethod});
 
@@ -301,6 +302,10 @@ class _InvoicePageState extends State<InvoicePage> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s3),
+                _DetailRow(
+                  label: 'Método',
+                  value: _paymentValue(invoice.paymentMethodName),
+                ),
                 _DetailRow(
                   label: 'Concepto',
                   value: _paymentValue(payment?.concept),
