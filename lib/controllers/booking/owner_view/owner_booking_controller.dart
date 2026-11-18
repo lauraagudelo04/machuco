@@ -9,6 +9,7 @@ import 'package:machuco/repositories/booking/reservation_category_repository.dar
 import 'package:machuco/repositories/booking/reservation_cloud_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/service/booking/booking_service.dart';
+import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
 import 'package:machuco/utils/booking/reservation_cancellation_exception.dart';
 import 'package:machuco/utils/booking/reservation_transition_exception.dart';
 
@@ -36,6 +37,7 @@ class OwnerBookingController extends ChangeNotifier {
     ReservationCategoryRepository? categoryRepository,
     BookingService? bookingService,
     UserProfileRepository? profileRepository,
+    ReservationCancellationNotifier? cancellationNotifier,
   }) : ownerId = ownerId ?? CurrentUser.uidOrNull ?? demoOwnerId,
        _motelController =
            motelController ??
@@ -45,7 +47,10 @@ class OwnerBookingController extends ChangeNotifier {
        _categoryRepository =
            categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
        _service = bookingService ?? BookingService(),
-       _profileRepository = profileRepository;
+       _profileRepository = profileRepository,
+       _cancellationNotifier =
+           cancellationNotifier ??
+           ReservationCancellationNotifierProvider.instance;
 
   /// Propietario de demostración: coincide con el `ownerId` que ya trae
   /// mockeado `MotelController` (dueño de "Motel Paraíso Élite" y "Motel El
@@ -105,6 +110,15 @@ class OwnerBookingController extends ChangeNotifier {
     final start = reservation.id.indexOf('booking');
     return start >= 0 ? reservation.id.substring(start) : reservation.id;
   }
+
+  final ReservationCancellationNotifier _cancellationNotifier;
+
+  bool _lastCancellationNotified = false;
+
+  /// Whether the guest was notified of the last successful
+  /// [cancelReservation]. The UI uses it so it only claims a notification
+  /// that was really stored.
+  bool get lastCancellationNotified => _lastCancellationNotified;
 
   List<ReservationCategory> _categories = const [];
 
@@ -330,12 +344,14 @@ class OwnerBookingController extends ChangeNotifier {
 
   Future<Reservation?> getById(String id) => _service.getReservation(id);
 
-  /// Cancela una reserva y simula la notificación al cliente. Solo permitido
+  /// Cancela una reserva y notifica al cliente con
+  /// [ReservationCancellationNotifier]. Solo permitido
   /// si el estado actual es `pending` o `upcoming`; en cualquier otro caso
   /// (o si el motivo viene vacío, o si el id no existe) lanza
   /// [ReservationCancellationException] con un motivo específico, en vez de
   /// devolver silenciosamente `false`, para que la UI pueda mostrar un
-  /// mensaje preciso.
+  /// mensaje preciso. Un fallo al notificar no revierte la cancelación:
+  /// queda reflejado en [lastCancellationNotified].
   Future<void> cancelReservation(String id, String reason) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     final cancelled = await _service.cancelReservation(
@@ -345,30 +361,32 @@ class OwnerBookingController extends ChangeNotifier {
     );
     await _reloadOwnedReservations();
 
-    // Notificación real fuera de alcance de esta rama: se simula solo de
-    // forma visual/registrada, sin backend ni notificación real.
-    debugPrint(
-      'Notificación simulada: se avisó a "${cancelled.guestName}" sobre '
-      'la cancelación de la reserva $id.',
-    );
+    try {
+      _lastCancellationNotified = await _cancellationNotifier.notifyCancelled(
+        cancelled,
+      );
+    } catch (error) {
+      debugPrint('No se pudo notificar la cancelación $id: $error');
+      _lastCancellationNotified = false;
+    }
 
     notifyListeners();
   }
 
   /// Registra el cobro en efectivo de una reserva como realizado. Si la
   /// reserva seguía `pending`, además la mueve a `active`/`upcoming` según
-  /// la fecha de entrada. El acceso a la factura queda en
-  /// `InvoiceAccessStatus.pending`: la generación real de facturas está
-  /// fuera de alcance de este módulo.
+  /// la fecha de entrada. Devuelve la reserva pagada para abrir su factura
+  /// (la emite el módulo de facturas en `AppRoutes.invoice`).
   ///
   /// Lanza [ReservationCancellationException] (`notFound`) si el id no
   /// existe y [ReservationTransitionException] si la reserva está
   /// cancelada o completada.
-  Future<void> registerCashPayment(String id) async {
+  Future<Reservation> registerCashPayment(String id) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    await _service.registerCashPayment(id);
+    final paid = await _service.registerCashPayment(id);
     await _reloadOwnedReservations();
     notifyListeners();
+    return paid;
   }
 
   Future<void> _reloadOwnedReservations() async {

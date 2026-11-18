@@ -10,9 +10,9 @@ import 'package:machuco/utils/currency_formatter.dart';
 import 'package:machuco/widgets/layout/responsive_content.dart';
 
 /// Pantalla de cobro en efectivo: muestra el concepto y el monto a cobrar
-/// de una reserva, con un único botón de confirmación que registra el pago.
-/// La generación de la factura queda fuera de alcance: tras confirmar, el
-/// acceso a "Ver factura" solo queda marcado como pendiente.
+/// de una reserva, con un único botón de confirmación que registra el pago
+/// y abre la factura de la reserva pagada (`AppRoutes.invoice`, que la
+/// emite si aún no existe).
 class OwnerCashPaymentPage extends StatefulWidget {
   const OwnerCashPaymentPage({super.key, required this.reservationId});
 
@@ -66,16 +66,14 @@ class _OwnerCashPaymentPageState extends State<OwnerCashPaymentPage> {
     }
     setState(() => _isSubmitting = true);
     try {
-      await _controller.registerCashPayment(widget.reservationId);
+      final paid = await _controller.registerCashPayment(widget.reservationId);
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Cobro registrado. El acceso a la factura queda pendiente.',
-          ),
-        ),
-      );
-      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Cobro registrado.')));
+      await Navigator.of(
+        context,
+      ).pushReplacementNamed(AppRoutes.invoice, arguments: paid);
     } on ReservationCancellationException catch (error) {
       _showPaymentError(error.message);
     } on ReservationTransitionException catch (error) {

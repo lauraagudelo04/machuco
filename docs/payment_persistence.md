@@ -2,6 +2,14 @@
 
 ## Cancelaciones vinculadas al pago (2026-11-17)
 
+Tras integrar develop `a664c626`, la versión conjunta es SQLite v24.
+Se conservan las migraciones de develop hasta v23 y se añade 23→24 para
+completar propietarios/tipos de documento y `cancellationActor` de forma
+idempotente. Así se admiten tanto las bases v18 de Payment (con autor de
+cancelación pero sin propietarios) como las de develop (con propietarios pero
+sin autor). Floor se regenera desde las entidades combinadas. La mención v18
+de abajo describe la incorporación original de la cancelación.
+
 Nueva política autorizada:
 
 - Propietario cancela una reserva pagada: pago `refunded`, conserva importe,

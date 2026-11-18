@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:cloud_firestore/cloud_firestore.dart' hide Query;
 import 'package:floor/floor.dart';
 import 'package:http/http.dart' as http;
 import 'package:machuco/database/app_database.dart';
 import 'package:machuco/database/model/notification/notification.dart';
 import 'package:machuco/models/notification/notification_model.dart';
+import 'package:machuco/service/room/supabase_room_config.dart';
 
 @dao
 abstract class NotificationDao {
@@ -12,12 +14,21 @@ abstract class NotificationDao {
   Future<List<NotificationEntry>> findAll();
 
   @Query(
-    "SELECT * FROM notifications WHERE target = 'all' OR lower(recipientUser) = lower(:recipientUser) ORDER BY sentAt DESC, id DESC",
+    "SELECT * FROM notifications WHERE target = 'all' OR (target = 'clients' AND :role = 'client') OR (target = 'owners' AND :role = 'owner') OR recipientUid = :recipientUid ORDER BY sentAt DESC, id DESC",
   )
-  Future<List<NotificationEntry>> findForRecipient(String recipientUser);
+  Future<List<NotificationEntry>> findForRecipient(
+    String recipientUid,
+    String role,
+  );
 
   @insert
   Future<int> insertNotification(NotificationEntry notification);
+
+  @Query('SELECT * FROM notifications WHERE remoteId = :remoteId LIMIT 1')
+  Future<NotificationEntry?> findByRemoteId(String remoteId);
+
+  @update
+  Future<int> updateNotification(NotificationEntry notification);
 
   @Query('SELECT notificationId FROM notification_reads WHERE userId = :userId')
   Future<List<int>> findReadNotificationIds(String userId);
@@ -42,28 +53,23 @@ class NotificationRepository {
     http.Client? client,
     String? supabaseUrl,
     String? publishableKey,
+    FirebaseFirestore? firestore,
   }) : _database = database == null
            ? AppDatabaseProvider.database
            : Future.value(database),
        _get = client?.get ?? http.get,
-       _supabaseUrl =
-           supabaseUrl ??
-           const String.fromEnvironment(
-             'SUPABASE_URL',
-             defaultValue: 'https://ogrbbuwtsyezegkpwtsl.supabase.co',
-           ),
-       _publishableKey =
-           publishableKey ??
-           const String.fromEnvironment(
-             'SUPABASE_PUBLISHABLE_KEY',
-             defaultValue: 'sb_publishable_Wv16MVxsTzA89lBeocarLQ_YL33Ya_E',
-           );
+       _supabaseUrl = supabaseUrl ?? SupabaseRoomConfig.baseUrl,
+       _publishableKey = publishableKey ?? SupabaseRoomConfig.apiKey,
+       _configuredFirestore = firestore;
 
   final Future<AppDatabase> _database;
   final Future<http.Response> Function(Uri, {Map<String, String>? headers})
   _get;
   final String _supabaseUrl;
   final String _publishableKey;
+  final FirebaseFirestore? _configuredFirestore;
+  FirebaseFirestore get _firestore =>
+      _configuredFirestore ?? FirebaseFirestore.instance;
 
   Future<List<NotificationType>> findTypes() async {
     final base = Uri.tryParse(_supabaseUrl);
@@ -120,10 +126,43 @@ class NotificationRepository {
       (await _database).notificationDao.findAll();
 
   Future<List<NotificationEntry>> findNotificationsForRecipient(
-    String recipientUser,
-  ) async => (await _database).notificationDao.findForRecipient(
-    recipientUser.trim().toLowerCase(),
+    String recipientUid, {
+    required String role,
+  }) async => (await _database).notificationDao.findForRecipient(
+    recipientUid.trim(),
+    role.trim().toLowerCase(),
   );
+
+  /// Searches active client/owner profiles for the administrator's recipient
+  /// picker. Email is only a search/display aid; callers store [uid].
+  Future<List<NotificationRecipient>> searchActiveRecipients(
+    String query,
+  ) async {
+    final normalized = query.trim().toLowerCase();
+    if (normalized.length < 2) return const [];
+    final snapshot = await _firestore
+        .collection('users')
+        .where('accountStatus', isEqualTo: 'active')
+        .orderBy('email')
+        .startAt([normalized])
+        .endAt(['$normalized\uf8ff'])
+        .limit(12)
+        .get();
+    return snapshot.docs
+        .map((doc) {
+          final data = doc.data();
+          final role = data['role']?.toString() ?? '';
+          if (role != 'client' && role != 'owner') return null;
+          return NotificationRecipient(
+            uid: doc.id,
+            fullName: data['fullName']?.toString().trim() ?? '',
+            email: data['email']?.toString().trim() ?? '',
+            role: role,
+          );
+        })
+        .whereType<NotificationRecipient>()
+        .toList(growable: false);
+  }
 
   Future<Set<int>> findReadNotificationIds(String userId) async =>
       (await _database).notificationDao
@@ -135,21 +174,39 @@ class NotificationRepository {
     required String title,
     required String message,
     required NotificationTarget target,
-    String? recipientUser,
+    String? recipientUid,
+    String? recipientName,
+    String? recipientEmail,
+    String? remoteId,
+    String syncState = 'synced',
+    DateTime? sentAt,
   }) async {
-    final normalizedRecipient = recipientUser?.trim().toLowerCase();
-    return (await _database).notificationDao.insertNotification(
-      NotificationEntry(
-        typeId: typeId,
-        title: title.trim(),
-        message: message.trim(),
-        sentAt: DateTime.now(),
-        target: target.name,
-        recipientUser: normalizedRecipient?.isEmpty ?? true
-            ? null
-            : normalizedRecipient,
-      ),
+    final normalizedRecipient = recipientUid?.trim();
+    final normalizedRemoteId = remoteId?.trim();
+    final dao = (await _database).notificationDao;
+    final existing = normalizedRemoteId == null || normalizedRemoteId.isEmpty
+        ? null
+        : await dao.findByRemoteId(normalizedRemoteId);
+    final entry = NotificationEntry(
+      id: existing?.id,
+      typeId: typeId,
+      title: title.trim(),
+      message: message.trim(),
+      sentAt: sentAt ?? existing?.sentAt ?? DateTime.now(),
+      target: target.name,
+      recipientUid: normalizedRecipient?.isEmpty ?? true
+          ? null
+          : normalizedRecipient,
+      recipientName: recipientName?.trim(),
+      recipientEmail: recipientEmail?.trim(),
+      remoteId: normalizedRemoteId?.isEmpty ?? true ? null : normalizedRemoteId,
+      syncState: syncState,
     );
+    if (existing != null) {
+      await dao.updateNotification(entry);
+      return existing.id!;
+    }
+    return dao.insertNotification(entry);
   }
 
   Future<void> markAsRead({

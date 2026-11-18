@@ -11,6 +11,10 @@ import '../../payment/owner_view/owner_payment_page.dart';
 import '../../notification/client_view/client_notification_view.dart';
 import '../../client/owner_view/client_list_page.dart';
 import '../../booking/owner_view/owner_reservations_page.dart';
+import '../../../service/auth/auth_preferences.dart';
+import '../../../database/repository/auth/user_profile_repository.dart';
+import '../../../widgets/notification/unread_notification_button.dart';
+import 'owner_profile_page.dart';
 
 class OwnerMotelsPage extends StatefulWidget {
   const OwnerMotelsPage({super.key});
@@ -33,7 +37,15 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   String get _currentOwnerId => FirebaseAuth.instance.currentUser?.uid ?? '';
 
-  String get _ownerName {
+  String? _ownerName;
+  String? _ownerEmail;
+
+  /// Nombre a mostrar: el del perfil de `users/{uid}`, o su correo.
+  String get _displayName {
+    final name = _ownerName?.trim();
+    if (name != null && name.isNotEmpty) return name;
+    final email = _ownerEmail?.trim();
+    if (email != null && email.isNotEmpty) return email;
     final user = FirebaseAuth.instance.currentUser;
     return user?.displayName ?? user?.email ?? 'Propietario';
   }
@@ -41,7 +53,34 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   @override
   void initState() {
     super.initState();
+    _loadSession();
     _loadMotels();
+  }
+
+  /// Carga el nombre y el correo reales de la sesión para el menú y el chip.
+  ///
+  /// Si Firebase no responde se conserva el correo de `shared_preferences`:
+  /// el encabezado nunca bloquea el listado de moteles.
+  Future<void> _loadSession() async {
+    try {
+      final email = await AuthPreferences().loadCurrentUserEmail();
+      if (mounted && email != null) setState(() => _ownerEmail = email);
+    } catch (_) {
+      // Sin preferencias disponibles se usa el perfil o el texto genérico.
+    }
+    if (_currentOwnerId.isEmpty) return;
+    try {
+      final profile = await FirestoreUserProfileRepository().getProfile(
+        _currentOwnerId,
+      );
+      if (!mounted || profile == null) return;
+      setState(() {
+        _ownerName = profile.fullName;
+        _ownerEmail = profile.email;
+      });
+    } catch (_) {
+      // Sin conexión se mantiene el correo guardado localmente.
+    }
   }
 
   Future<void> _loadMotels() async {
@@ -51,10 +90,16 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
       _isLoadingReservationCounts = true;
     });
 
+    if (_currentOwnerId.isEmpty) {
+      setState(() {
+        _motels = [];
+        _isLoading = false;
+        _isLoadingReservationCounts = false;
+      });
+      return;
+    }
+
     try {
-      if (_currentOwnerId.isEmpty) {
-        throw StateError('Inicia sesión para consultar tus moteles.');
-      }
       // El backend filtra por el propietario de la sesión (token de Firebase).
       final motelesObtenidos = await _motelController.getMyMotels();
 
@@ -170,24 +215,21 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
     return Scaffold(
       appBar: AppBar(
         centerTitle: true,
-        title: Text(_ownerName),
+        title: Text(_displayName, overflow: TextOverflow.ellipsis),
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: AppIconButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: 'Notificaciones',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => ClientNotificationView(
-                    recipientUser: _currentOwnerId,
-                    title: 'Notificaciones Propietario',
-                  ),
+          child: UnreadNotificationButton(
+            recipientRole: 'owner',
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ClientNotificationView(
+                  recipientRole: 'owner',
+                  title: 'Notificaciones Propietario',
                 ),
-              );
-            },
+              ),
+            ),
           ),
         ),
         actions: [
@@ -226,11 +268,24 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'Sesión: $_ownerName',
+                    'Sesión: $_displayName',
                     style: const TextStyle(color: Colors.white70, fontSize: 13),
                   ),
                 ],
               ),
+            ),
+            _MenuTile(
+              icon: Icons.person_outline,
+              title: 'Mi perfil',
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const OwnerProfilePage(),
+                  ),
+                );
+              },
             ),
             _MenuTile(
               icon: Icons.card_membership_outlined,
@@ -282,7 +337,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                 ),
                 Chip(
                   label: Text(
-                    _ownerName.split(' ').first,
+                    _displayName,
                     style: const TextStyle(fontSize: 12),
                   ),
                   backgroundColor: Theme.of(
@@ -307,9 +362,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
               child: _isLoading
                   ? const Center(child: CircularProgressIndicator())
                   : _motels.isEmpty
-                  ? const Center(
+                  ? Center(
                       child: Text(
-                        'Aún no tienes establecimientos registrados.',
+                        _currentOwnerId.isEmpty
+                            ? 'Inicia sesión para ver tus establecimientos.'
+                            : 'Aún no tienes establecimientos registrados.',
                       ),
                     )
                   : filteredMotels.isEmpty
@@ -333,6 +390,9 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                                 ? null
                                 : _activeReservationCounts![motel.id] ?? 0,
                             isLoadingReservations: _isLoadingReservationCounts,
+                            onSaved: () async {
+                              if (mounted) await _loadMotels();
+                            },
                             onToggleStatus: () => _toggleMotelStatus(motel.id),
                           );
                         },
@@ -368,12 +428,14 @@ class _OwnerMotelCard extends StatelessWidget {
     required this.activeReservations,
     required this.isLoadingReservations,
     required this.onToggleStatus,
+    required this.onSaved,
   });
 
   final Motel motel;
   final int? activeReservations;
   final bool isLoadingReservations;
   final VoidCallback onToggleStatus;
+  final Future<void> Function() onSaved;
 
   void _showConfirmDialog(BuildContext context) {
     final isActive = motel.isAvailable;
@@ -464,8 +526,8 @@ class _OwnerMotelCard extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.edit_outlined),
                 tooltip: 'Editar Motel',
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  final saved = await Navigator.push<bool>(
                     context,
                     MaterialPageRoute(
                       builder: (context) => OwnerMotelFormPage(
@@ -475,6 +537,7 @@ class _OwnerMotelCard extends StatelessWidget {
                       ),
                     ),
                   );
+                  if (saved == true) await onSaved();
                 },
               ),
               IconButton(

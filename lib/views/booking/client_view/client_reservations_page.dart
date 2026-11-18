@@ -14,7 +14,12 @@ import 'package:machuco/widgets/booking/reservation_card.dart';
 /// "Mis reservas": lista de tarjetas del cliente ordenadas de más reciente
 /// a más antigua, con filtro por motel/habitación y orden configurable.
 class ClientReservationsPage extends StatefulWidget {
-  const ClientReservationsPage({super.key});
+  const ClientReservationsPage({super.key, this.onBack});
+
+  /// Back action when the page is a tab of the client shell (there is no
+  /// route to pop). Without it the app bar shows the default back button
+  /// only when the navigator can pop.
+  final VoidCallback? onBack;
 
   @override
   State<ClientReservationsPage> createState() => _ClientReservationsPageState();
@@ -62,6 +67,13 @@ class _ClientReservationsPageState extends State<ClientReservationsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: widget.onBack == null
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.arrow_back_rounded),
+                tooltip: 'Volver',
+                onPressed: widget.onBack,
+              ),
         title: const Text('Mis reservas'),
         actions: [
           // Mock failure simulation: development builds only.

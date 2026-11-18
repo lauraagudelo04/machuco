@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
+import '../../../widgets/notification/unread_notification_button.dart';
 import './../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
 import '../../../database/repository/motel/motel_repository.dart';
@@ -11,9 +12,12 @@ import '../../notification/client_view/client_notification_view.dart';
 import '../../../controllers/client/client_controller.dart';
 
 class ClientMotelsPage extends StatefulWidget {
-  const ClientMotelsPage({super.key, this.controller});
+  const ClientMotelsPage({super.key, this.controller, this.initialIndex = 0});
 
   final MotelController? controller;
+
+  /// Tab shown first: 0 Moteles, 1 Mis Reservas, 2 Mis PQRS.
+  final int initialIndex;
 
   @override
   State<ClientMotelsPage> createState() => _ClientMotelsPageState();
@@ -21,8 +25,8 @@ class ClientMotelsPage extends StatefulWidget {
 
 class _ClientMotelsPageState extends State<ClientMotelsPage> {
   final TextEditingController _searchController = TextEditingController();
-  int _selectedIndex = 0;
-  final Set<int> _visitedTabs = {0};
+  late int _selectedIndex = widget.initialIndex;
+  late final Set<int> _visitedTabs = {0, widget.initialIndex};
 
   late final MotelController _motelController;
   late Future<List<Motel>> _motelsFuture;
@@ -52,6 +56,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
     }
   }
 
+  void _selectTab(int index) {
+    setState(() {
+      _selectedIndex = index;
+      _visitedTabs.add(index);
+    });
+    if (index == 0) _refreshMotels();
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -66,7 +78,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         children: [
           _buildMotelsContent(),
           _visitedTabs.contains(1)
-              ? const ClientReservationsPage()
+              ? ClientReservationsPage(onBack: () => _selectTab(0))
               : const SizedBox.shrink(),
           _visitedTabs.contains(2)
               ? const ClientPqrsPage()
@@ -75,13 +87,7 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
       ),
       bottomNavigationBar: AppNavigationBar(
         selectedIndex: _selectedIndex,
-        onDestinationSelected: (index) {
-          setState(() {
-            _selectedIndex = index;
-            _visitedTabs.add(index);
-          });
-          if (index == 0) _refreshMotels();
-        },
+        onDestinationSelected: _selectTab,
         destinations: const [
           AppNavigationDestination(
             icon: Icons.home_outlined,
@@ -115,17 +121,14 @@ class _ClientMotelsPageState extends State<ClientMotelsPage> {
         leadingWidth: 68,
         leading: Padding(
           padding: const EdgeInsets.only(left: AppSpacing.s4),
-          child: AppIconButton(
-            icon: Icons.notifications_none_outlined,
-            tooltip: 'Notificaciones',
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => const ClientNotificationView(),
-                ),
-              );
-            },
+          child: UnreadNotificationButton(
+            recipientRole: 'client',
+            onPressed: () => Navigator.push<void>(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const ClientNotificationView(),
+              ),
+            ),
           ),
         ),
         actions: [

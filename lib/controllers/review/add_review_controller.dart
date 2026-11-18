@@ -1,15 +1,19 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:machuco/database/repository/review/review_type_repository.dart';
 import 'package:machuco/models/review/review.dart';
 import 'package:machuco/database/repository/review/review_repository.dart';
+import 'package:machuco/database/repository/review/sql_connect_review_repository.dart';
 import 'package:machuco/service/review/review_author_provider.dart';
+import 'package:machuco/service/room/supabase_room_config.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
 /// Controlador de reseñas para el cliente.
 ///
-/// Lee y guarda las reseñas a través de [ReviewRepository]; al enviar una
+/// Lee y guarda las reseñas a través de [ReviewRepository] (por defecto en
+/// Firebase SQL Connect, [SqlConnectReviewRepository]); al enviar una
 /// reseña nueva desde [AddReviewSheet] se refleja en la UI mediante
 /// [ListenableBuilder].
 class ReviewsController extends ChangeNotifier {
@@ -17,18 +21,35 @@ class ReviewsController extends ChangeNotifier {
     LocalPreferencesService? preferences,
     ReviewRepository? repository,
     ReviewAuthorProvider? authorProvider,
+    ReviewTypeRepository? typeRepository,
   }) : _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'reviews'),
-       _repository = repository ?? InMemoryReviewRepository.shared,
-       _authorProvider = authorProvider ?? FirebaseReviewAuthorProvider();
+       _repository = repository ?? SqlConnectReviewRepository(),
+       _authorProvider = authorProvider ?? FirebaseReviewAuthorProvider(),
+       _typeRepository =
+           typeRepository ??
+           ReviewTypeRepository(
+             baseUrl: SupabaseRoomConfig.baseUrl,
+             apiKey: SupabaseRoomConfig.apiKey,
+           );
 
   static const _draftKey = 'addReviewDraft';
 
   final LocalPreferencesService _preferences;
   final ReviewRepository _repository;
   final ReviewAuthorProvider _authorProvider;
+  final ReviewTypeRepository _typeRepository;
 
   final List<Review> _reviews = [];
+
+  List<ReviewTypeOption>? _reviewTypes;
+
+  /// Tipos de reseña de Supabase. Se consultan una sola vez por controller.
+  ///
+  /// Lanza [ReviewTypeRepositoryException] si no se pudieron obtener.
+  Future<List<ReviewTypeOption>> loadReviewTypes() async {
+    return _reviewTypes ??= await _typeRepository.getReviewTypes();
+  }
 
   int get totalCount => _reviews.length;
 
@@ -42,14 +63,18 @@ class ReviewsController extends ChangeNotifier {
       _reviews.where((r) => r.status != ReviewModerationStatus.hidden);
 
   List<Review> getReviewsByMotelId(String motelId) {
-    return _publicReviews.where((r) => r.motelId == motelId).toList(growable: false);
+    return _publicReviews
+        .where((r) => r.motelId == motelId)
+        .toList(growable: false);
   }
 
   double getAverageByMotelId(String motelId) =>
       averageRatingOf(getReviewsByMotelId(motelId));
 
   List<Review> getReviewsByRoomId(String roomId) {
-    return _publicReviews.where((r) => r.roomId == roomId).toList(growable: false);
+    return _publicReviews
+        .where((r) => r.roomId == roomId)
+        .toList(growable: false);
   }
 
   double getAverageByRoomId(String roomId) =>
@@ -57,36 +82,45 @@ class ReviewsController extends ChangeNotifier {
 
   /// Crea y guarda la reseña descrita por [draft].
   ///
-  /// Devuelve `false` sin tocar el repositorio ni notificar si la calificación
-  /// está fuera de rango, si el título o el texto quedan vacíos al recortar
-  /// o si no hay una sesión con autor.
-  Future<bool> submitReview(String motelId, ReviewDraft draft) async {
+  /// Devuelve `null` si se guardó, o el motivo para mostrarlo en el
+  /// formulario. No toca el repositorio ni notifica si los datos no son
+  /// válidos, si es de habitación sin habitación o si no hay sesión.
+  Future<String?> submitReview(String motelId, ReviewDraft draft) async {
     final title = draft.title.trim();
     final body = draft.body.trim();
     if (!ReviewRules.isValidRating(draft.rating) ||
         !ReviewRules.isValidText(title) ||
         !ReviewRules.isValidText(body)) {
-      return false;
+      return 'Revisa la calificación, el título y la reseña';
+    }
+    if (draft.type == ReviewType.room && draft.roomId == null) {
+      return 'Elige la habitación que quieres reseñar';
     }
     final author = await _authorProvider.currentAuthor();
-    if (author == null) return false;
+    if (author == null) return 'Debes iniciar sesión para publicar una reseña';
 
-    await addReview(
-      Review(
-        id: 'review-client-${DateTime.now().millisecondsSinceEpoch}',
-        authorId: author.id,
-        authorName: author.name,
-        title: title,
-        body: body,
-        rating: draft.rating,
-        date: DateTime.now(),
-        motelId: motelId,
-        roomId: draft.roomId,
-        type: draft.type,
-        status: ReviewModerationStatus.visible,
-      ),
-    );
-    return true;
+    try {
+      await addReview(
+        Review(
+          // Incluye el uid: en Firestore el id es la clave del documento y dos
+          // clientes no deben pisarse aunque publiquen en el mismo instante.
+          id: 'review-client-${author.id}-${DateTime.now().millisecondsSinceEpoch}',
+          authorId: author.id,
+          authorName: author.name,
+          title: title,
+          body: body,
+          rating: draft.rating,
+          date: DateTime.now(),
+          motelId: motelId,
+          roomId: draft.roomId,
+          type: draft.type,
+          status: ReviewModerationStatus.visible,
+        ),
+      );
+    } on ReviewRepositoryException catch (error) {
+      return error.message;
+    }
+    return null;
   }
 
   Future<void> addReview(Review review) async {
@@ -147,8 +181,15 @@ class ReviewsController extends ChangeNotifier {
     }
   }
 
+  /// Carga las reseñas del repositorio. Si falla, conserva las que ya había.
   Future<void> loadReviews() async {
-    final reviews = await _repository.getAll();
+    final List<Review> reviews;
+    try {
+      reviews = await _repository.getAll();
+    } on ReviewRepositoryException catch (error) {
+      debugPrint('loadReviews: $error');
+      return;
+    }
     _reviews
       ..clear()
       ..addAll(reviews);

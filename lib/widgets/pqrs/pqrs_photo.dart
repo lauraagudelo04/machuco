@@ -3,22 +3,35 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/pqrs/pqrs.dart';
 import 'package:machuco/widgets/pqrs/pqrs_presentation.dart';
 
-/// Placeholder for a simulated photo.
+/// Side of a photo tile.
+const _tileSize = 88.0;
+
+/// Thumbnail of a photo.
 ///
-/// The project has no image picker yet, so every attachment renders as a
-/// deterministic gradient derived from [PqrsAttachment.seed]. Replacing this
-/// widget with a real `Image` is the only change needed once uploads exist.
+/// It draws the real image when the attachment carries its bytes and a neutral
+/// placeholder otherwise (photos are only downloaded in the detail, and never
+/// from the network: the bytes come from Firestore or the local queue).
 class PqrsPhotoTile extends StatelessWidget {
-  const PqrsPhotoTile({super.key, required this.attachment, this.size = 88});
+  const PqrsPhotoTile({super.key, required this.attachment, this.size});
 
   final PqrsAttachment attachment;
-  final double size;
+  final double? size;
 
   @override
   Widget build(BuildContext context) {
-    final hue = (attachment.seed % 360).toDouble();
-    final base = HSLColor.fromAHSL(1, hue, .45, .62).toColor();
-    final tint = HSLColor.fromAHSL(1, (hue + 40) % 360, .5, .48).toColor();
+    final side = size ?? _tileSize;
+    final colors = context.appColors;
+    final bytes = attachment.bytes;
+    final placeholder = ColoredBox(
+      color: colors.mediaFallback,
+      child: Center(
+        child: Icon(
+          Icons.image_outlined,
+          color: colors.textSecondary,
+          size: side * .35,
+        ),
+      ),
+    );
 
     return Semantics(
       label:
@@ -27,47 +40,19 @@ class PqrsPhotoTile extends StatelessWidget {
       child: ExcludeSemantics(
         child: Tooltip(
           message: '${attachment.label} · ${attachment.author.label}',
-          child: Container(
-            width: size,
-            height: size,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [base, tint],
-              ),
-            ),
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                Center(
-                  child: Icon(
-                    Icons.photo_camera_back_outlined,
-                    color: Colors.white.withValues(alpha: .85),
-                    size: size * .3,
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.bottomLeft,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s1,
-                      vertical: 2,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(AppRadius.md),
+            child: SizedBox(
+              width: side,
+              height: side,
+              child: bytes == null
+                  ? placeholder
+                  : Image.memory(
+                      bytes,
+                      fit: BoxFit.cover,
+                      gaplessPlayback: true,
+                      errorBuilder: (_, _, _) => placeholder,
                     ),
-                    color: Colors.black.withValues(alpha: .35),
-                    child: Text(
-                      attachment.author.label,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.labelSmall?.copyWith(color: Colors.white),
-                    ),
-                  ),
-                ),
-              ],
             ),
           ),
         ),
@@ -76,7 +61,7 @@ class PqrsPhotoTile extends StatelessWidget {
   }
 }
 
-/// Horizontal strip of simulated photos.
+/// Horizontal strip of photos. With [onRemove] each tile gets a remove button.
 class PqrsPhotoStrip extends StatelessWidget {
   const PqrsPhotoStrip({super.key, required this.attachments, this.onRemove});
 
@@ -88,7 +73,7 @@ class PqrsPhotoStrip extends StatelessWidget {
     if (attachments.isEmpty) return const SizedBox.shrink();
 
     return SizedBox(
-      height: 92,
+      height: _tileSize + AppSpacing.s1,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: attachments.length,
@@ -97,14 +82,14 @@ class PqrsPhotoStrip extends StatelessWidget {
           final attachment = attachments[index];
           if (onRemove == null) return PqrsPhotoTile(attachment: attachment);
           return Stack(
+            clipBehavior: Clip.none,
             children: [
               PqrsPhotoTile(attachment: attachment),
               Positioned(
-                top: -6,
-                right: -6,
+                top: -AppSpacing.s3,
+                right: -AppSpacing.s3,
                 child: IconButton(
                   tooltip: 'Quitar ${attachment.label}',
-                  iconSize: 18,
                   onPressed: () => onRemove!(attachment),
                   icon: const Icon(Icons.cancel),
                   color: context.appColors.textSecondary,

@@ -46,21 +46,48 @@ class OwnerSubscriptionController extends ChangeNotifier {
     _plans = [];
     _notify();
     try {
-      _plans = await _repository.findPlans();
-      final subscription = subscriptionId == null
-          ? await _repository.findSubscriptionByEmail(
-              await _preferences.getUserEmail(),
-              plans: _plans,
-            )
-          : await _repository.findSubscription(subscriptionId, plans: _plans);
-      final payments = subscription == null
-          ? <SubscriptionPayment>[]
-          : await _repository.findPayments(subscription.id!);
+      _plans = await _repository.findPlans(
+        includeDetails: _firestoreRepository != null,
+      );
+      final email = await _preferences.getUserEmail();
+      final firestoreRepository = _firestoreRepository;
+      final cloudData = firestoreRepository == null ||
+              email == null ||
+              email.isEmpty
+          ? null
+          : await firestoreRepository.findByEmail(email, plans: _plans);
+      final subscription = firestoreRepository != null
+          ? cloudData?.subscription
+          : (subscriptionId == null
+                ? (email == null || email.isEmpty
+                      ? null
+                      : await _repository.findSubscriptionByEmail(
+                          email,
+                          plans: _plans,
+                        ))
+                : await _repository.findSubscription(
+                    subscriptionId,
+                    plans: _plans,
+                  ));
+      final payments = firestoreRepository != null
+          ? (cloudData?.payments ?? <SubscriptionPayment>[])
+          : (subscription == null
+                ? <SubscriptionPayment>[]
+                : await _repository.findPayments(subscription.id!));
+      if (cloudData != null) {
+        await _repository.cacheSubscription(cloudData.subscription);
+        for (final payment in cloudData.payments) {
+          await _repository.cachePayment(payment);
+        }
+        // Si la suscripción se construyó desde users.planId y el catálogo de
+        // Supabase, este paso crea la copia completa en Firestore. Si ya
+        // existía, actualiza la misma información sin cambiar su localId.
+        if (firestoreRepository != null) {
+          await _syncToFirestore(cloudData.subscription, cloudData.payments);
+        }
+      }
       _subscription = subscription;
       _payments = payments;
-      if (subscription != null && _firestoreRepository != null) {
-        await _syncToFirestore(subscription, payments);
-      }
     } on SubscriptionRepositoryException catch (error) {
       _errorMessage = error.message;
     } catch (_) {
@@ -101,9 +128,12 @@ class OwnerSubscriptionController extends ChangeNotifier {
         reference: reference.trim(),
         status: AppStatus.completed,
       );
-      final savedPayment = await _repository.savePayment(payment);
+      // Se persiste primero en SQLite para conservar el mismo registro local.
+      final savedPayment = await _saveLocalPayment(subscription, payment);
       // Actualiza el historial solo después de confirmar la escritura en SQLite.
       _payments = [savedPayment, ..._payments];
+      // Luego se replica el mismo registro en la subcolección exclusiva de
+      // pagos de suscripción, nunca en la colección raíz de reservas.
       if (_firestoreRepository != null) {
         await _syncToFirestore(subscription, _payments);
       }
@@ -111,6 +141,14 @@ class OwnerSubscriptionController extends ChangeNotifier {
       _isSaving = false;
       _notify();
     }
+  }
+
+  Future<SubscriptionPayment> _saveLocalPayment(
+    SubscriptionDetails subscription,
+    SubscriptionPayment payment,
+  ) async {
+    await _repository.saveSubscription(subscription);
+    return _repository.savePayment(payment);
   }
 
   Future<void> _syncToFirestore(
@@ -126,6 +164,7 @@ class OwnerSubscriptionController extends ChangeNotifier {
       // La copia local ya está confirmada. Firestore puede reintentar sus
       // escrituras cuando vuelva la conexión.
       debugPrint('No se pudo sincronizar con Firestore: $error');
+      throw StateError('No se pudo sincronizar el pago de suscripción.');
     }
   }
 

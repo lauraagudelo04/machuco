@@ -11,6 +11,7 @@ abstract final class AuthRoutes {
   static const adminOwnerApprovals = '/auth/admin/owner-approvals';
   static const adminOwnerApprovalDetail = '/auth/admin/owner-approvals/detail';
   static const adminAdministrators = '/auth/admin/administrators';
+  static const adminProfile = '/auth/admin/profile';
   static const adminCreateAdministrator = '/auth/admin/administrators/new';
   static const adminAdministratorDetail = '/auth/admin/administrators/detail';
 

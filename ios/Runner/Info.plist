@@ -26,6 +26,10 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>Machuco usa la cámara para que adjuntes fotos como evidencia en tus solicitudes (PQRS).</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Machuco accede a tu galería para que adjuntes fotos como evidencia en tus solicitudes (PQRS).</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
