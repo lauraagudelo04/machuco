@@ -7,6 +7,7 @@ import 'package:floor/floor.dart';
 import 'package:machuco/database/migrations/suscripcion/subscription_test_owner_migration.dart';
 import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/model/image_format/allowed_image_format_entry.dart';
+import 'package:machuco/database/model/invoice/invoice_entry.dart';
 import 'package:machuco/database/model/motel/motel_entity.dart';
 import 'package:machuco/database/model/document_type/document_type_entry.dart';
 import 'package:machuco/database/model/notification/notification.dart';
@@ -19,6 +20,7 @@ import 'package:machuco/database/repository/auth/auth_user_profile_repository.da
 import 'package:machuco/database/repository/additional_service/additional_service_category_dao.dart';
 import 'package:machuco/database/repository/additional_service/additional_service_dao.dart';
 import 'package:machuco/database/repository/image_format/allowed_image_format_dao.dart';
+import 'package:machuco/database/repository/invoice/invoice_dao.dart';
 import 'package:machuco/database/repository/motel/motel_dao.dart';
 import 'package:machuco/database/repository/notification/notification_repository.dart';
 import 'package:machuco/database/repository/pqrs/pqrs_dao.dart';
@@ -53,7 +55,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 24,
+  version: 25,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -77,6 +79,7 @@ part 'app_database.g.dart';
     PqrsOutboxPhotoEntry,
     AllowedImageFormatEntry,
     PqrsTypeEntry,
+    InvoiceEntry,
   ],
 )
 abstract class AppDatabase extends FloorDatabase {
@@ -103,6 +106,8 @@ abstract class AppDatabase extends FloorDatabase {
   ReservationCategoryDao get reservationCategoryDao;
 
   ReservationDao get reservationDao;
+
+  InvoiceDao get invoiceDao;
 }
 
 class AppDatabaseProvider {
@@ -141,6 +146,7 @@ class AppDatabaseProvider {
         migration21To22,
         migration22To23,
         migration23To24,
+        migration24To25,
       ])
       .addCallback(
         Callback(
@@ -833,3 +839,41 @@ Future<void> _addCancellationActorColumns(
     }
   }
 }
+
+/// Copia local de las facturas emitidas en Firestore (módulo de facturas).
+/// Solo agrega la tabla `invoices`; no modifica ni borra tablas existentes.
+final migration24To25 = Migration(24, 25, (database) async {
+  await database.execute('''
+    CREATE TABLE IF NOT EXISTS `invoices` (
+      `id` TEXT NOT NULL,
+      `ownerId` TEXT NOT NULL,
+      `invoiceNumber` TEXT NOT NULL,
+      `clientId` TEXT,
+      `clientName` TEXT,
+      `motelId` TEXT NOT NULL,
+      `motelName` TEXT NOT NULL,
+      `roomName` TEXT NOT NULL,
+      `roomNumber` TEXT NOT NULL,
+      `checkIn` INTEGER NOT NULL,
+      `checkOut` INTEGER NOT NULL,
+      `guestCount` INTEGER NOT NULL,
+      `itemsJson` TEXT NOT NULL,
+      `roomTotal` INTEGER NOT NULL,
+      `total` INTEGER NOT NULL,
+      `paymentConcept` TEXT,
+      `paymentAmount` INTEGER,
+      `cardHolder` TEXT,
+      `cardLast4` TEXT,
+      `installments` INTEGER,
+      `paymentMethodName` TEXT,
+      `issuedAt` INTEGER NOT NULL,
+      PRIMARY KEY (`id`)
+    )
+  ''');
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_invoices_clientId` ON `invoices` (`clientId`)',
+  );
+  await database.execute(
+    'CREATE INDEX IF NOT EXISTS `index_invoices_ownerId` ON `invoices` (`ownerId`)',
+  );
+});

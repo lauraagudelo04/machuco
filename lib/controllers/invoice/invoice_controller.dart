@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
+import 'package:machuco/database/repository/invoice/cached_invoice_repository.dart';
 import 'package:machuco/database/repository/invoice/invoice_repository.dart';
 import 'package:machuco/models/invoice/invoice_model.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
+import 'package:machuco/service/invoice/invoice_payment_method_source.dart';
 import 'package:machuco/service/invoice/invoice_pdf_service.dart';
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
@@ -22,7 +24,9 @@ enum InvoiceLoadStatus {
   error,
 }
 
-/// Conecta la pantalla de factura con [InvoiceRepository] (Cloud Firestore).
+/// Conecta la pantalla de factura con [InvoiceRepository] (Cloud Firestore
+/// como fuente de verdad, copia local en SQLite y maestro de métodos de pago
+/// de Supabase por REST).
 ///
 /// Además recuerda entre sesiones (vía [LocalPreferencesService], namespace
 /// `invoices`) qué reservas ya tienen su factura descargada y cuándo. Solo se
@@ -32,7 +36,7 @@ class InvoiceController extends ChangeNotifier {
     InvoiceRepository? repository,
     LocalPreferencesService? preferences,
     InvoicePdfService? pdfService,
-  }) : _repository = repository ?? FirestoreInvoiceRepository(),
+  }) : _repository = repository ?? CachedInvoiceRepository(),
        _preferences =
            preferences ?? SharedPreferencesLocalService(namespace: 'invoices'),
        _pdfService = pdfService ?? const PrintingInvoicePdfService();
@@ -87,7 +91,10 @@ class InvoiceController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final existing = await _repository.findByReservation(reservation.id);
+      final existing = await _repository.findByReservation(
+        reservation.id,
+        paymentMethodHint: invoicePaymentMethodHint(reservation, paymentMethod),
+      );
       if (existing != null) {
         _invoice = existing;
         _status = InvoiceLoadStatus.available;

@@ -81,7 +81,10 @@ class PrintingInvoicePdfService implements InvoicePdfService {
               child: pw.Column(
                 children: [
                   _sectionTitle('Datos de pago'),
-                  _paymentDetails(invoice.payment!),
+                  _paymentDetails(
+                    invoice.payment!,
+                    methodName: invoice.paymentMethodName,
+                  ),
                 ],
               ),
             ),
@@ -444,8 +447,9 @@ class PrintingInvoicePdfService implements InvoicePdfService {
     );
   }
 
-  pw.Widget _paymentDetails(InvoicePayment payment) {
+  pw.Widget _paymentDetails(InvoicePayment payment, {String? methodName}) {
     final rows = <(String, String)>[
+      if (methodName != null) ('Método', _pdfText(methodName)),
       ('Concepto', _pdfText(payment.concept)),
       ('Importe', formatCurrencyAmount(payment.amount)),
       if (payment.cardHolder != null)
