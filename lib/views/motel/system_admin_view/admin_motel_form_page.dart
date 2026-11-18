@@ -1,26 +1,45 @@
 import 'package:flutter/material.dart';
+import '../../../controllers/motel/motel_controller.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
+import '../../../models/owner_management/owner.dart';
 import '../../../utils/motel_form_validators.dart';
 import '../../../widgets/motel/phone_number_field.dart';
 
-class OwnerMotelFormPage extends StatefulWidget {
-  const OwnerMotelFormPage({
+/// Formulario del administrador del sistema para registrar o editar el motel
+/// de cualquier propietario.
+///
+/// Guarda en el servidor con [MotelController.adminAddMotel] o
+/// [MotelController.adminUpdateMotel] y, si sale bien, cierra devolviendo el
+/// [Motel] guardado. Si el servidor lo rechaza (por ejemplo, NIT duplicado o
+/// sin conexión) se queda abierto y muestra el motivo.
+class AdminMotelFormPage extends StatefulWidget {
+  const AdminMotelFormPage({
     super.key,
-    this.isEditing = false,
+    required this.motelController,
     this.motel,
     this.ownerId,
+    this.owners = const [],
   });
 
-  final bool isEditing;
+  final MotelController motelController;
+
+  /// Motel a editar; `null` para registrar uno nuevo.
   final Motel? motel;
+
+  /// Propietario al que se asigna el motel nuevo. Si es `null` el
+  /// administrador lo elige de [owners].
   final String? ownerId;
 
+  final List<Owner> owners;
+
+  bool get isEditing => motel != null;
+
   @override
-  State<OwnerMotelFormPage> createState() => _OwnerMotelFormPageState();
+  State<AdminMotelFormPage> createState() => _AdminMotelFormPageState();
 }
 
-class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
+class _AdminMotelFormPageState extends State<AdminMotelFormPage> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
@@ -41,26 +60,34 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
 
   List<String> _imageUrls = [];
   bool _showPaymentMethodsError = false;
+  bool _isSaving = false;
+  String? _selectedOwnerId;
 
   /// Indicativo telefónico elegido; se concatena al número al guardar.
   String _selectedCallingCode = '+57';
 
+  /// El selector de propietario solo aparece al registrar sin dueño fijo.
+  bool get _choosesOwner => !widget.isEditing && widget.ownerId == null;
+
   @override
   void initState() {
     super.initState();
-    if (widget.isEditing && widget.motel != null) {
-      _emailController.text = widget.motel!.email;
-      _nameController.text = widget.motel!.name;
-      _roomsController.text = widget.motel!.roomCount.toString();
-      _nitController.text = widget.motel!.nit;
-      _addressController.text = widget.motel!.address;
-      _setPhoneFromSaved(widget.motel!.phone);
-      _descriptionController.text = widget.motel!.description ?? '';
-      _generalLocationController.text = widget.motel!.generalLocation ?? '';
-      _selectedPaymentMethods.addAll(widget.motel!.paymentMethods);
-      _imageUrls = List.from(widget.motel!.imageUrls);
+    final motel = widget.motel;
+    if (motel != null) {
+      _emailController.text = motel.email;
+      _nameController.text = motel.name;
+      _roomsController.text = motel.roomCount.toString();
+      _nitController.text = motel.nit;
+      _addressController.text = motel.address;
+      _setPhoneFromSaved(motel.phone);
+      _descriptionController.text = motel.description ?? '';
+      _generalLocationController.text = motel.generalLocation ?? '';
+      _selectedPaymentMethods.addAll(motel.paymentMethods);
+      _imageUrls = List.from(motel.imageUrls);
+      _selectedOwnerId = motel.ownerId;
     } else {
       _selectedPaymentMethods.add('Efectivo');
+      _selectedOwnerId = widget.ownerId;
     }
   }
 
@@ -102,7 +129,14 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
     });
   }
 
-  void _onSave() {
+  String? _trimmedOrNull(TextEditingController controller) {
+    final text = controller.text.trim();
+    return text.isEmpty ? null : text;
+  }
+
+  Future<void> _onSave() async {
+    if (_isSaving) return;
+
     final isFormValid = _formKey.currentState?.validate() ?? false;
     final paymentMethodsError = MotelFormValidators.validatePaymentMethods(
       _selectedPaymentMethods,
@@ -111,31 +145,43 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
 
     if (!isFormValid || paymentMethodsError != null) return;
 
-    final int roomCountParsed = int.parse(_roomsController.text.trim());
+    final ownerId = _selectedOwnerId;
+    if (ownerId == null || ownerId.isEmpty) return;
 
-    final Motel motelToSave = Motel(
-      id: widget.isEditing && widget.motel != null
-          ? widget.motel!.id
-          : 'motel_${DateTime.now().millisecondsSinceEpoch}',
-      ownerId: widget.ownerId ?? widget.motel?.ownerId ?? 'owner_1',
+    setState(() => _isSaving = true);
+
+    final original = widget.motel;
+    final motelToSave = Motel(
+      // Al registrar, el id definitivo lo asigna el servidor.
+      id: original?.id ?? '',
+      ownerId: ownerId,
       name: _nameController.text.trim(),
       email: _emailController.text.trim(),
-      roomCount: roomCountParsed,
+      roomCount: int.parse(_roomsController.text.trim()),
       nit: _nitController.text.trim(),
       address: _addressController.text.trim(),
       phone: '$_selectedCallingCode ${_phoneController.text.trim()}',
-      description: _descriptionController.text.trim(),
-      generalLocation: _generalLocationController.text.trim(),
-      paymentMethods: _selectedPaymentMethods,
+      description: _trimmedOrNull(_descriptionController),
+      generalLocation: _trimmedOrNull(_generalLocationController),
+      paymentMethods: List.of(_selectedPaymentMethods),
       imageUrls: _imageUrls.isEmpty
           ? ['https://via.placeholder.com/400']
           : _imageUrls,
-      isAvailable: widget.isEditing && widget.motel != null
-          ? widget.motel!.isAvailable
-          : true,
+      isAvailable: original?.isAvailable ?? true,
     );
 
-    Navigator.pop(context, motelToSave);
+    try {
+      final saved = widget.isEditing
+          ? await widget.motelController.adminUpdateMotel(motelToSave)
+          : await widget.motelController.adminAddMotel(motelToSave);
+      if (mounted) Navigator.pop(context, saved);
+    } catch (error) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(error.toString())));
+    }
   }
 
   @override
@@ -157,6 +203,29 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const SizedBox(height: AppSpacing.s2),
+              if (_choosesOwner) ...[
+                DropdownButtonFormField<String>(
+                  initialValue: _selectedOwnerId,
+                  isExpanded: true,
+                  decoration: _inputDecoration('Propietario'),
+                  items: [
+                    for (final owner in widget.owners)
+                      DropdownMenuItem(
+                        value: owner.id,
+                        child: Text(
+                          owner.fullName,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                  ],
+                  onChanged: (value) =>
+                      setState(() => _selectedOwnerId = value),
+                  validator: (value) => value == null || value.isEmpty
+                      ? 'Selecciona el propietario del motel'
+                      : null,
+                ),
+                const SizedBox(height: AppSpacing.s3),
+              ],
               _buildTextField(
                 controller: _nameController,
                 label: 'Nombre del establecimiento',
@@ -187,6 +256,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
               ),
               const SizedBox(height: AppSpacing.s3),
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Expanded(
                     child: _buildTextField(
@@ -266,17 +336,14 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
                     );
                   });
                 },
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(AppRadius.md),
                 child: Container(
                   height: 120,
                   width: double.infinity,
                   decoration: BoxDecoration(
                     color: context.appColors.mediaFallback,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: context.appColors.border,
-                      style: BorderStyle.solid,
-                    ),
+                    borderRadius: BorderRadius.circular(AppRadius.md),
+                    border: Border.all(color: context.appColors.border),
                   ),
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
@@ -307,8 +374,26 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       bottomNavigationBar: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(AppSpacing.s4),
-          child: AppButton(label: 'Guardar', onPressed: _onSave),
+          child: AppButton(
+            label: 'Guardar',
+            loading: _isSaving,
+            onPressed: _isSaving ? null : _onSave,
+          ),
         ),
+      ),
+    );
+  }
+
+  InputDecoration _inputDecoration(String label, {int maxLines = 1}) {
+    return InputDecoration(
+      labelText: label,
+      alignLabelWithHint: maxLines > 1,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+      ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: AppSpacing.s4,
+        vertical: AppSpacing.s3,
       ),
     );
   }
@@ -325,15 +410,7 @@ class _OwnerMotelFormPageState extends State<OwnerMotelFormPage> {
       keyboardType: keyboardType,
       maxLines: maxLines,
       validator: validator,
-      decoration: InputDecoration(
-        labelText: label,
-        alignLabelWithHint: maxLines > 1,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8.0)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 16,
-          vertical: 12,
-        ),
-      ),
+      decoration: _inputDecoration(label, maxLines: maxLines),
     );
   }
 }
