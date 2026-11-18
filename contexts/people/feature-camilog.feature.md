@@ -11,7 +11,7 @@ Feature: Pagos de reservas y pago en el local
     Given la pantalla Método de pago de Payment_Method
     When se muestran las opciones de pago de la reserva
     Then la opción antes llamada Efectivo muestra exactamente «En el Local»
-    And Tarjeta se identifica como simulación y no acredita pagos reales
+    And Tarjeta es un ejercicio educativo que registra paid y un comprobante LOCAL sin cobro bancario
 
   Scenario: Consultar el maestro de métodos de pago
     Given el catálogo payment_method de Supabase con id y nombre
@@ -108,10 +108,13 @@ Feature: Pagos de reservas y pago en el local
     And Firebase confirma pago y reserva en una sola transacción remota
     And si falla la red el comprobante local se conserva y se informa el reintento
 
-  Scenario: No acreditar el sandbox de tarjeta
+  Scenario: Contabilizar la tarjeta del ejercicio educativo y continuar a Factura
     Given el formulario de tarjeta de demostración
     When finaliza la simulación de una reserva real
-    Then no se crea un pago paid ni se confirma la reserva como pagada
+    Then se guarda un único pago paid con método de crédito o débito y comprobante LOCAL-pay-<reserva>
+    And pago y reserva se actualizan atómicamente en SQLite y en Firestore
+    And después de confirmar Firebase se continúa a Factura y aumenta el ingreso virtual del motel
+    And si falla Firebase se conserva el pago local pagado para reintentar sin duplicar
 
   Scenario: Validar el vínculo remoto del pago
     Given una reserva y un pago con sus identificadores reales
@@ -133,7 +136,82 @@ Feature: Pagos de reservas y pago en el local
     And el formulario consulta GetMotelById y usa el nombre real
     And si no logra consultar un motel disponible informa el error y permite reintentar
 
+  Scenario: Consultar finanzas reales confirmadas por Firebase
+    Given un propietario autenticado y el ID real de su motel
+    When abre Finanzas de mi motel
+    Then los ingresos, pagos recibidos, por recaudar y reembolsos provienen de pagos confirmados por el servidor
+    And se actualizan al cambiar esos pagos en Firestore
+    And no se incluyen fixtures ni cambios locales todavía sin confirmar
+
+  Scenario: No interpretar una consulta fallida como saldo cero
+    Given que no se pudo obtener una consulta confirmada de Firebase
+    When el propietario consulta el resumen
+    Then los indicadores se muestran no disponibles y se permite reintentar
+    And si hubo una consulta anterior se conserva indicando que no se verificó la conexión actual
+    And no se presenta el resumen como utilidad ni se inventan gastos o comisiones
+
+  Scenario: Consultar finanzas globales reales como administrador
+    Given una sesión de administrador con permisos de lectura de payments
+    When abre Finanzas globales o el resumen de Finanzas de la plataforma
+    Then los importes provienen únicamente de la consulta confirmada de Firestore
+    And se actualizan en tiempo real y se agrupan por ID real del motel
+    And distingue ingresos paid, pendientes pending y reembolsos refunded
+    And no suma cancelled ni los fixtures históricos
+    And sin confirmación muestra indicadores no disponibles en vez de falsos ceros
+    And ante desconexión conserva la última consulta marcada sin verificar y ofrece reintento
+
+## Nueva decisión educativa autorizada (2026-11-17)
+
+El usuario confirmó expresamente que el proyecto es un ejercicio educativo:
+Tarjeta debe registrar Pagado, aumentar los ingresos del motel y continuar a
+Factura. Esto sustituye la prohibición anterior de contabilizar el sandbox,
+sin introducir una pasarela ni afirmar que hubo un cobro bancario. El recibo
+LOCAL- es el formato común autorizado para tarjeta y efectivo, sin etiqueta
+de simulación en el identificador ni en la tarjeta del pago. En el Local conserva su flujo
+pendiente y los recibos del propietario siguen siendo LOCAL-. Se autorizan
+los ajustes puntuales en checkout, DAO, generación Floor, navegación y reglas
+con pruebas. El usuario autorizó después publicar únicamente estas reglas,
+comparando y respaldando la versión publicada y preservando todos los bloques
+de sus compañeros. No autoriza borrar documentos ni desplegar otros servicios.
+
+La comparación previa a esta publicación encontró el ruleset remoto
+`4a9b3b15-41b5-4d2a-af22-3dee3fe5e5ce`, con cambios de compañeros ausentes
+localmente. Se tomó esa fuente íntegra como base y se añadieron exclusivamente
+3 helpers y permisos acotados de tarjeta en Payment (42 líneas añadidas, ninguna
+eliminada frente a la fuente publicada). Se conservan, entre otros, PQRS,
+reseñas, notificaciones, dispositivos, suscripciones, anonimización,
+habitaciones y permisos del espejo de moteles. La política remota actual NO
+permite al administrador borrar perfiles ajenos; prevalece sobre la antigua
+nota histórica de esta rama porque el usuario exigió preservar las reglas
+publicadas. No cambiar esa política para satisfacer pruebas locales antiguas.
+
+Publicación realizada y verificada el `2026-11-17T18:50:14.685Z`, únicamente
+Firestore Rules en `machuco`, ruleset `184eea7e-51ff-4e4e-bbce-4670b2ebf0e6`.
+Fuente remota releída idéntica a la local; 958 pruebas Flutter y 132 de reglas
+aprobadas; análisis 0 errores/0 warnings/63 infos. APK dev instalado y abierto
+en emulator-5554 sin borrar datos. No se desplegaron otros servicios ni se
+crearon pagos por cuenta del agente. Respaldo y detalle en docs/payment_persistence.md.
+No interpretar esta autorización como permiso para futuras publicaciones.
+
 ## Alcance técnico
+
+### Política de cancelación autorizada posteriormente (2026-11-17)
+
+Propietario cancela un pago recibido → `refunded`, resta de ingresos y suma en
+reembolsos; aparece en Pagos realizados como «Cancelado por propietario».
+Cancelar un pendiente → `cancelled`, nunca suma dinero, con etiqueta según
+propietario o usuario. Cliente cancelando una reserva ya pagada no inicia
+devolución automática. `cancellationActor` nullable (`owner`/`client`) persiste
+en reservas y pagos, con SQLite v18 (migración 17→18 conservando datos).
+Cancelación y pago se actualizan atómicamente en SQLite y Firestore.
+Los históricos sin autor no se infieren ni se reescriben.
+
+Publicación autorizada, respaldada y verificada de Firestore Rules únicamente,
+ruleset `7093f86f-d8da-49b3-b498-bd8b31441a47`, verificación
+`2026-11-17T23:46:33.479Z`. Bloques de compañeros preservados. No se crearon
+pagos ni se borraron datos por el agente. Compilaciones aprobadas; no ejecutar
+pruebas por ahora, según nueva preferencia expresa del usuario.
+No autoriza publicaciones futuras. Detalles y respaldo en docs/payment_persistence.md.
 
 - **Carpetas donde trabajo**: lib/models/payment/, lib/repositories/payment/, lib/controllers/payment/, lib/views/payment/, test/database/ y pruebas específicas de Payment. Contrato y guía de configuración en docs/payment_persistence.md.
 - **Archivo común autorizado**: lib/database/app_database.dart y su código generado, con migraciones que conserven los demás módulos.
@@ -147,7 +225,8 @@ Feature: Pagos de reservas y pago en el local
 - **Verificación de esa conexión**: 27 pruebas focalizadas y 918 Flutter completas aprobadas; análisis dirigido sin avisos. APK instalado en emulator-5554 conservando la sesión. Se comprobó visualmente que el motel creado por el usuario aparece en el catálogo real; emulator-5556 no se actualizó ni se crearon reservas. La sincronización de habitaciones entre dispositivos sigue siendo un flujo separado, no darla por validada por ver el motel.
 - **Integración Git posterior**: develop se incorporó hasta `ba5a2bc`, conservando SQLite v17, servicios adicionales, facturas y registro espejo de moteles. Se resolvió el conflicto de firestore.rules manteniendo el bloque de facturas además de Payment/Reservas. Esta integración no publica reglas ni reinstala las apps de los emuladores. El commit solicitado excluye la eliminación local previa de android/key.properties.example y los cuatro archivos generados de plugins que ya estaban modificados antes del trabajo.
 - **Validación posterior a integrar develop**: 938 pruebas Flutter y 125 pruebas de reglas aprobadas. Análisis completo: 0 errores, 0 warnings y 63 infos. Las pruebas de reglas se ejecutaron únicamente contra demo-machuco; no se desplegaron cambios al proyecto compartido.
-- **Fuera de alcance**: integración de una pasarela, escrituras en Supabase, nuevas colecciones, migración del administrador de Payment y una política automática de inasistencia. No reinicializar Firebase ni reemplazar su configuración.
+- **Ampliación autorizada — Finanzas del administrador**: conectar la pantalla global de Payment y la tarjeta financiera de OwnerPage a `payments` en Firestore, exclusivamente lectura, sin migrar el CRUD de propietarios ni otros apartados administrativos. Mostrar todas las fechas y solo moteles con movimientos; no inventar inventario de habitaciones, gastos o comisiones. Reembolsos sustituye la comisión ficticia. Conservar datos ajenos; no publicar reglas ni ejecutar pruebas por ahora.
+- **Fuera de alcance**: integración de una pasarela, escrituras en Supabase, nuevas colecciones y una política automática de inasistencia. No reinicializar Firebase ni reemplazar su configuración.
 - **Despliegue autorizado en esta intervención**: el usuario autorizó explícitamente probar y publicar únicamente Firestore Rules en `machuco`, respaldando y comparando primero la versión publicada para conservar reglas de otras ramas. No autoriza borrar documentos, desplegar índices/SQL Connect ni futuras publicaciones sin revisión.
 - **Política de perfiles confirmada por el usuario**: conservar la regla existente que permite al administrador activo eliminar clientes/propietarios, nunca administradores; estos se anonimizan. La antigua prueba que prohibía toda eliminación ajena se ajusta a esta política e incluye denegación a administradores deshabilitados o con contraseña temporal pendiente.
 - **Reglas compartidas preservadas**: al comparar con Firebase se encontraron `additionalServices` y el espejo `motels` publicados pero ausentes en la referencia local. Conservar esos bloques sin cambiar sus permisos; no confundir el espejo con una migración de Payment o Moteles.
@@ -162,7 +241,7 @@ Feature: Pagos de reservas y pago en el local
 - No usar datos de demostración en Payment ni sincronizarlos con el proyecto Firebase compartido.
 - No borrar ni recrear la base existente como sustituto de una migración.
 - Los fixtures históricos `pay-001` a `pay-003` y `owner-pay-001` a `owner-pay-003` se eliminan de SQLite antes de sincronizar. Los pendientes nuevos nacen del checkout de una reserva real; no inventar pagos para sustituir ese flujo.
-- En la vista del propietario, los totales salen de SQLite y las comisiones quedan sin calcular hasta acordar su regla. No mantener los anteriores indicadores fijos como si fueran reales.
+- En la vista del propietario, el resumen financiero usa exclusivamente la última consulta confirmada al servidor de Firestore por propietario y motel, con actualizaciones en tiempo real. SQLite conserva comprobantes y cambios pendientes, señalados sin sumarlos como ingresos confirmados. Sin consulta confirmada mostrar indicadores no disponibles, no falsos ceros. Las comisiones y gastos no se inventan; la cuarta tarjeta muestra reembolsos. Contrato actualizado en docs/payment_persistence.md.
 - Ejecutar las pruebas mediante un subagente con el modelo openai/gpt-6-luna-fast (GPT-6 Luna Fast), según la preferencia explícita del usuario.
 - Por decisión explícita del usuario, eliminar el historial de Payment del cliente («Mis pagos»), su controlador y sus rutas/alias exclusivos. No reintroducirlo ni planificar su conexión a SQLite: no pertenece a la app final. Conservar Payment_Method, los datos y modelos compartidos, y los filtros del repositorio; no borrar pagos existentes.
 
@@ -175,6 +254,6 @@ Feature: Pagos de reservas y pago en el local
 - **Método en Firestore**: conservar `paymentMethodId` como identidad del maestro y guardar también `paymentMethodName` como copia legible. Firestore no hace joins con Supabase; no reemplazar el ID por el nombre ni volver a publicar documentos numéricos sin su nombre cuando exista un método del maestro.
 - **Históricos sin maestro**: un pago antiguo puede tener `paymentMethodId = NULL` y `method = 'online'`. Eso no equivale a un pago pendiente ni permite inferir crédito, débito o transferencia. Para consultar nombres puede usarse `COALESCE(catalog.name, payments.method, 'Sin definir')` con LEFT JOIN.
 - **Fechas en SQLite**: fechas de Payment (paidAt, reservationDate) en microsegundos; fechas de ReservationEntity (checkIn, createdAt) en milisegundos. No mezclarlas. Para paidAt en SQL usar `datetime(paidAt / 1000000, 'unixepoch', 'localtime')`.
-- **Persistencia local y remota**: tras integrar develop, SQLite usa v17 por las tablas de servicios adicionales; Payment no agrega otra migración. La selección y la recepción ligadas a reservas usan transacciones de Firestore (requieren conexión); si fallan, SQLite conserva los datos para reintento explícito. Booking reconcilia pendientes/comprobantes locales después de reiniciar antes de aceptar una copia remota antigua. El administrador todavía usa memoria y el historial del cliente sigue retirado.
+- **Persistencia local y remota**: la cancelación autorizada utiliza SQLite v18. La selección y la recepción ligadas a reservas usan transacciones de Firestore (requieren conexión); si fallan, SQLite conserva los datos para reintento explícito. Booking reconcilia pendientes/comprobantes locales después de reiniciar antes de aceptar una copia remota antigua. Finanzas del administrador lee Firestore confirmado, sin escrituras ni sincronización de la base local del administrador; el historial del cliente sigue retirado.
 - **Configuración**: Payment recibe `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` mediante `--dart-define`. La sincronización requiere una sesión Firebase real, no autenticación hardcodeada, y Payment no admite un modo demo. No copiar valores por defecto de otros módulos ni introducir credenciales en archivos versionados. La clave publicable no es `service_role` y no reemplaza RLS.
 - **Inspección de la base**: dev usa `/data/data/co.machuco.app.dev/databases/machuco.db`; prod usa co.machuco.app. La antigua com.example.machuco conserva su base independiente: no borrarla ni desinstalarla para migrar datos. Las copias para DB Browser son fotografías; cerrar la app y copiar también -wal/-shm si existen. No borrar originales del dispositivo.

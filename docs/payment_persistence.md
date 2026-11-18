@@ -1,5 +1,63 @@
 # Payment: persistencia y maestro de métodos
 
+## Cancelaciones vinculadas al pago (2026-11-17)
+
+Nueva política autorizada:
+
+- Propietario cancela una reserva pagada: pago `refunded`, conserva importe,
+  método y comprobante; deja de sumar ingresos y suma en reembolsos.
+  Permanece en «Pagos realizados» con «Cancelado por propietario».
+- Propietario cancela una reserva sin pagar: pago `cancelled`, sin ingresos
+  ni reembolsos y con la misma etiqueta de autor.
+- Cliente cancela una reserva pendiente: pago `cancelled`, sin ingresos ni
+  reembolsos, visible en otros estados como «Cancelado por el usuario».
+- La cancelación por cliente de una reserva ya pagada no inicia una devolución:
+  se conserva el pago recibido; no se extendió automáticamente esa política.
+
+Se guarda `cancellationActor` (`owner` o `client`) en reserva y pago. SQLite v18
+añade columnas nullable con migración 17→18, sin borrar registros. La cancelación
+y el cambio del pago local se aplican en la misma transacción Floor. Firestore
+actualiza reserva y pago atómicamente y valida identidad, autor, vínculo e
+importe. El cliente no obtiene acceso de lectura a Payment. Si falta un pago
+eliminado previamente, no se inventa uno para cancelar la reserva.
+
+La cancelación espera la sincronización; si falla se conserva localmente y se
+avisa que falta confirmación remota. El actor persistido permite reintentar
+tras reiniciar sin restablecer una reserva pendiente antigua. Los reintentos
+no generan otro pago ni duplican el reembolso.
+
+Los históricos sin autor no se recategorizan ni generan reembolsos retroactivos.
+No se modificaron documentos reales por cuenta del agente.
+
+Reglas respaldadas y comparadas con la fuente publicada; solo cambiaron helpers,
+validadores y permisos de Payment/Reservas. Se conservaron los bloques de los
+compañeros y el flujo previo de administrador. Publicación exclusiva de
+`firestore:rules`, releída idéntica al archivo local el
+`2026-11-17T23:46:33.479Z`. Ruleset:
+`7093f86f-d8da-49b3-b498-bd8b31441a47`.
+Respaldo: `C:/Users/juan0/AppData/Local/Temp/opencode/machuco-cancellation-actors-before/`.
+Compilación APK y de reglas aprobadas. **No se ejecutaron pruebas** por
+indicación del usuario; la publicación no equivale a verificar el flujo real.
+
+## Formato de comprobante actualizado (2026-11-17)
+
+Por solicitud y autorización posterior del usuario, los comprobantes nuevos
+se guardan desde `booking…`, por ejemplo `booking-request-1794955944724012`,
+para tarjeta y cobros del propietario. El ID del pago no cambia.
+`ReservationPaymentTerms.receiptNumber` recorta solo el prefijo; si un ID
+histórico no contiene `booking`, conserva el formato `LOCAL-<id>`.
+No se reescribieron comprobantes existentes. Los reintentos aceptan también
+el comprobante anterior y las reglas validan el nuevo contra el `requestId`
+de la reserva, conservando la compatibilidad con `LOCAL-pay-<reserva>`.
+
+Se respaldó y comparó la fuente publicada antes de modificar únicamente la
+validación de recibos de Payment. Firestore Rules publicadas y releídas
+idénticas a la fuente local el `2026-11-17T22:57:52.316Z`, ruleset
+`8eb44118-dbd4-4a97-b721-3c5babbdf2a2`. Reglas de compañeros preservadas;
+sin modificaciones de documentos, índices ni otros servicios. Respaldo:
+`C:/Users/juan0/AppData/Local/Temp/opencode/machuco-booking-receipts-before/`.
+No se ejecutaron pruebas por indicación del usuario.
+
 ## Alcance de esta etapa
 
 `PaymentRepository` coordina el DAO de Payment y el maestro de Supabase.
@@ -29,10 +87,45 @@ selección de método de pago de Reservas ni los registros compartidos de SQLite
 6. El guardado local no se revierte si Firebase no está disponible. La pantalla
    informa el problema y el botón de actualización permite reintentar.
 
-Ingresos, cantidad recibida, pendiente y clientes frecuentes se calculan con
-los registros locales, no con los totales fijos anteriores. El resumen no se
-presenta como mensual. Las comisiones se muestran como no calculadas hasta
-que exista una regla acordada.
+### Resumen financiero confirmado en Firebase
+
+Ingresos, cantidad recibida, por recaudar, reembolsos y clientes frecuentes
+se calculan con la última consulta confirmada por el servidor de Firestore,
+filtrada por `ownerId` de la sesión y `motelId` real. La lectura inicial usa
+`Source.server`; la pantalla escucha cambios de esa misma consulta, incluidos
+sus metadatos. Una respuesta de caché o con escrituras pendientes no acredita
+ingresos ni sustituye el último resumen confirmado. Se muestra su fecha de
+verificación y si la conexión actual dejó de estar confirmada.
+
+- `paid`: suma ingresos y cantidad recibida; `pending`: suma por recaudar.
+- `refunded`: suma reembolsos, sin volver a descontarlo de los ingresos que
+  ya excluyen esos registros; `cancelled`: no suma ingresos ni cartera.
+- Un comprobante guardado en SQLite no se pierde sin red, pero no incrementa
+  el resumen de Firebase hasta que el servidor confirme el cambio. Su tarjeta
+  muestra «Pendiente de confirmar en Firebase».
+- Si nunca se logró consultar Firebase, los indicadores muestran `—`, no
+  saldos de cero. Un cero solo representa una consulta confirmada sin importes.
+- Los pagos remotos se pueden visualizar aunque falle su copia en SQLite;
+  el formulario sigue exigiendo persistencia local y un método real del maestro.
+- Los nombres `paymentMethodName` de Firestore se conservan para presentación;
+  no se convierten en un método inventado del catálogo de Supabase.
+- Se excluyen los seis IDs históricos de demostración, sin borrar documentos
+  remotos. La ruta sin motel muestra un aviso en lugar de abrir un motel ficticio.
+- La escucha se cancela al cerrar la pantalla. Actualizar reintenta la
+  sincronización y vuelve a consultar el servidor.
+
+El resumen es acumulado, no mensual, y representa ingresos y cartera de pagos,
+**no contabilidad completa ni utilidad**. No hay gastos ni regla acordada de
+comisiones; no se inventan. La cuarta tarjeta muestra reembolsos reales.
+
+Verificación de esta actualización (2026-11-17): análisis con 0 errores,
+0 warnings y 63 infos; 86 pruebas focalizadas y 953 pruebas Flutter completas
+aprobadas. APK dev compilado e instalado en `Camilo_Pixel10` sin borrar sus
+datos. No se desplegaron reglas ni se crearon movimientos en Firebase.
+Queda por comprobar manualmente el flujo entre dispositivos con una reserva
+real. `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` se proporcionan al iniciar
+la app: son necesarios para consultar el maestro al registrar un nuevo
+cobro; el resumen de Firebase no depende de ese catálogo.
 
 ## Pago creado desde Payment_Method
 
@@ -45,9 +138,28 @@ determinista `pay-<id de la reserva>`:
   el método. La reserva conserva `pending` y `paymentMethod = 'En el Local'`:
   es un lugar de pago, no una prueba de dinero recibido. Se vuelve a Mis reservas,
   no a una factura de pago realizado.
-- **Tarjeta:** el formulario es solo una simulación. El checkout real la
-  rechaza sin crear un registro `paid` ni confirmar Booking. No existe una
-  pasarela aprobada; no se generan comprobantes `CARD-…` nuevos.
+- **Tarjeta (ejercicio educativo autorizado el 2026-11-17):** al pulsar
+  «Continuar» tras aprobar el formulario se registra `paid` con el método de
+  crédito/débito del maestro, fecha y comprobante `LOCAL-pay-<reserva>`.
+  Pago y reserva (`upcoming`/`active`, método y acceso a factura pendiente)
+  se guardan en una transacción SQLite y luego en una transacción Firestore.
+  Una vez confirmada esta última se navega a `AppRoutes.invoice`; si falla,
+  se conserva el recibo local y se permite reintentar sin emitir una factura
+  prematura ni duplicar el pago. El resumen del motel incluye el importe
+  **virtual** cuando Firebase lo confirma. No se realiza un cobro bancario.
+  El comprobante usa el mismo formato para tarjeta y cobros del propietario,
+  sin etiqueta de simulación en el identificador ni en la tarjeta del pago,
+  por decisión explícita del usuario.
+
+Esta decisión sustituye la anterior restricción que rechazaba todo pago
+simulado de tarjeta. No requiere pasarela ni almacena número completo o CVV.
+Las reglas locales autorizan únicamente pagos educativos de la reserva propia,
+con importe e identificadores vinculados, método de tarjeta, comprobante
+`LOCAL-pay-<reserva>` y actualización atómica de la reserva. El cliente no
+obtiene lectura de Payment ni puede acreditar otros métodos como efectivo.
+El usuario autorizó publicar únicamente las reglas tras respaldar y comparar
+la versión publicada, preservando las reglas de las otras personas.
+No basta con reinstalar el APK. El ejercicio no procesa un cobro bancario.
 
 El pago se guarda primero en SQLite y después se intenta enviar a Firestore con
 `PaymentCloudRepository`. Se exige la sesión del cliente que creó la reserva;
@@ -289,6 +401,36 @@ sincronización de Git no vuelve a desplegar reglas ni SQL Connect.
 
 ### Comprobación manual pendiente en dos dispositivos
 
+#### Actualización publicada el 2026-11-17
+
+- Autorización explícita del usuario: comprobante uniforme `LOCAL-<id del pago>`
+  para tarjeta y efectivo, sin etiqueta de simulación en el identificador ni
+  en la tarjeta del pago; publicar solo reglas conservando las de compañeros.
+- La fuente publicada tenía cambios no presentes en esta rama. Se tomó
+  íntegra como base y se añadieron únicamente 42 líneas: tres helpers y la
+  excepción de tarjeta educativa dentro de Payment. **Ninguna línea remota
+  eliminada**; los demás bloques quedaron idénticos, incluidos PQRS, reseñas,
+  notificaciones, dispositivos, suscripciones, perfiles, moteles y habitaciones.
+- La política publicada impide al administrador borrar perfiles ajenos. Se
+  conservó sin modificarla y se actualizó la prueba local que esperaba la
+  política anterior. No se borraron perfiles ni documentos.
+- Respaldo de fuente, release y prueba de preservación:
+  `C:/Users/juan0/AppData/Local/Temp/opencode/machuco-rules-unified-receipts-before/`.
+  Ruleset previo: `4a9b3b15-41b5-4d2a-af22-3dee3fe5e5ce`.
+- Se verificó que la release no cambió antes de desplegar únicamente
+  `firestore:rules`. Publicación releída y comparada exactamente con el archivo
+  local el `2026-11-17T18:50:14.685Z`.
+  Ruleset: `184eea7e-51ff-4e4e-bbce-4670b2ebf0e6`.
+  SHA-256: `c329d0e3a899d16ae972d2cf4ec3e8c57130948cd45d588a534beee695a0b198`.
+- Validación: 958 pruebas Flutter y 132 pruebas de reglas aprobadas,
+  análisis con 0 errores, 0 warnings y 63 infos; compilación remota sin issues.
+- APK dev con configuración del maestro compilado, instalado con `adb install -r`
+  y abierto en `emulator-5554`, sin borrar datos. No se desplegaron índices,
+  SQL Connect ni otros servicios. No se crearon pagos por cuenta del agente.
+- El flujo requiere comprobación manual con la cuenta del usuario:
+  Tarjeta → Pagado → ingreso del motel tras confirmar Firebase → Factura.
+  «En el Local» sigue pendiente hasta que el propietario registre el cobro.
+
 1. Cliente real: crear reserva y elegir «En el Local»; comprobar pendiente,
    sin método ni comprobante, incluso después de 15 minutos y reiniciar.
 2. Propietario real en otro dispositivo: actualizar Finanzas del mismo motel,
@@ -298,3 +440,22 @@ sincronización de Git no vuelve a desplegar reglas ni SQL Connect.
 4. Repetir con pérdida de conexión y reintento explícito. Una recepción local
    no equivale a sincronización exitosa; los conflictos deben quedar visibles.
 5. Cancelar una reserva pendiente: no debe resucitar ni admitir recibir dinero.
+# Finanzas globales del administrador
+
+La pantalla `AdminFinancePage` y el resumen financiero de `OwnerPage` consultan
+`payments` en Firestore en tiempo real, con la sesión Firebase actual y los
+permisos del servidor. No usan `PaymentStore` ni SQLite como origen financiero.
+Al cambiar la identidad se descarta el resumen anterior.
+
+Solo se contabilizan consultas completas confirmadas por el servidor, sin
+escrituras pendientes. `paid` suma ingresos y pagos recibidos; `pending` suma
+por recaudar; `refunded` suma reembolsos y no ingresos; `cancelled` no suma.
+Los seis IDs de fixtures históricos conocidos se excluyen sin borrar documentos.
+El detalle se agrupa por `motelId`, usando el nombre guardado en los pagos;
+incluye todas las fechas y únicamente moteles con movimientos. No es un
+inventario de moteles ni habitaciones, ni un cálculo de utilidad o comisión.
+
+Hasta la primera confirmación se muestra `—`, no saldo cero. Ante desconexión
+se conserva el último resumen con advertencia; ante denegación de permisos se
+retira. La pantalla permite actualizar/reintentar. Esta intervención no publica
+reglas, no escribe documentos y no migra la gestión de propietarios.

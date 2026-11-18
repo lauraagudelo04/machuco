@@ -24,7 +24,6 @@ import 'package:machuco/views/owner_management/owner_page.dart';
 import 'package:machuco/views/owner_subscription/owner_subscription_page.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/system_admin_view/admin_payment_page.dart';
-import 'package:machuco/controllers/payment/payment_store.dart';
 import 'package:machuco/views/payment_method/payment_method_selection_page.dart';
 import 'package:machuco/views/invoice/invoice_page.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
@@ -137,9 +136,14 @@ abstract final class AppRoutes {
           motelId: id,
           motelName: name,
         ),
-        _ => const OwnerPaymentsPage(
-          motelId: PaymentStore.fallbackMotelId,
-          motelName: 'Motel Paraíso Élite',
+        _ => const Scaffold(
+          body: SafeArea(
+            child: Center(
+              child: Text(
+                'Selecciona un motel real para consultar sus finanzas.',
+              ),
+            ),
+          ),
         ),
       },
       ownerSubscription => const OwnerSubscriptionPage(),

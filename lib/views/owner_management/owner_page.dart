@@ -45,6 +45,7 @@ class _OwnerPageState extends State<OwnerPage> {
   void dispose() {
     _searchController.dispose();
     _controller.dispose();
+    _financeSummary.dispose();
     super.dispose();
   }
 
@@ -247,9 +248,19 @@ class _OwnerPageState extends State<OwnerPage> {
                               horizontalPadding,
                               AppSpacing.s2,
                             ),
-                            child: _PlatformFinanceBanner(
-                              totals: _financeSummary.totals,
-                              onTap: _openPlatformFinances,
+                            child: ListenableBuilder(
+                              listenable: _financeSummary,
+                              builder: (context, _) => _PlatformFinanceBanner(
+                                totals: _financeSummary.hasFinanceSnapshot
+                                    ? _financeSummary.totals
+                                    : null,
+                                message:
+                                    _financeSummary.errorMessage ??
+                                    (_financeSummary.isLoading
+                                        ? 'Consultando Firebase…'
+                                        : null),
+                                onTap: _openPlatformFinances,
+                              ),
                             ),
                           ),
                         ),
@@ -438,9 +449,14 @@ class _OwnerList extends StatelessWidget {
 /// Muestra solo las dos cifras principales; el detalle completo vive en la
 /// pantalla de finanzas globales, a la que se llega tocando la tarjeta.
 class _PlatformFinanceBanner extends StatelessWidget {
-  const _PlatformFinanceBanner({required this.totals, required this.onTap});
+  const _PlatformFinanceBanner({
+    required this.totals,
+    required this.onTap,
+    this.message,
+  });
 
-  final PlatformFinanceTotals totals;
+  final PlatformFinanceTotals? totals;
+  final String? message;
   final VoidCallback onTap;
 
   @override
@@ -471,18 +487,26 @@ class _PlatformFinanceBanner extends StatelessWidget {
               Expanded(
                 child: _FinanceMetric(
                   label: 'Ingresos',
-                  value: formatPaymentMoney(totals.income),
+                  value: totals == null
+                      ? '—'
+                      : formatPaymentMoney(totals!.income),
                 ),
               ),
               const SizedBox(width: AppSpacing.s3),
               Expanded(
                 child: _FinanceMetric(
                   label: 'Por recaudar',
-                  value: formatPaymentMoney(totals.pendingAmount),
+                  value: totals == null
+                      ? '—'
+                      : formatPaymentMoney(totals!.pendingAmount),
                 ),
               ),
             ],
           ),
+          if (message != null) ...[
+            const SizedBox(height: AppSpacing.s2),
+            Text(message!, style: Theme.of(context).textTheme.bodySmall),
+          ],
         ],
       ),
     );

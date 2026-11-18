@@ -5,7 +5,12 @@
 ///
 /// Compartida entre los controllers de Cliente y Propietario del módulo
 /// Bookings para no duplicar el mismo contrato de cancelación.
-enum ReservationCancellationError { reasonRequired, notFound, invalidStatus }
+enum ReservationCancellationError {
+  reasonRequired,
+  notFound,
+  invalidStatus,
+  synchronizationFailed,
+}
 
 class ReservationCancellationException implements Exception {
   const ReservationCancellationException(this.reason);
@@ -18,6 +23,9 @@ class ReservationCancellationException implements Exception {
     ReservationCancellationError.notFound => 'No encontramos esa reserva.',
     ReservationCancellationError.invalidStatus =>
       'Solo se pueden cancelar reservas pendientes o próximas.',
+    ReservationCancellationError.synchronizationFailed =>
+      'La cancelación quedó guardada en este dispositivo, pero falta confirmarla '
+          'en Firebase. Actualiza con conexión para reintentar.',
   };
 
   @override

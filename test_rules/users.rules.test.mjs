@@ -406,9 +406,11 @@ describe('users: eliminación', () => {
     await assertFails(deleteDoc(doc(as('owner'), 'users/client')));
   });
 
-  test('el admin activo elimina perfiles de clientes y propietarios', async () => {
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/client')));
-    await assertSucceeds(deleteDoc(doc(as('admin'), 'users/owner')));
+  // Política publicada preservada: los administradores anonimizan, no borran
+  // perfiles ajenos. No ampliar permisos para satisfacer la expectativa vieja.
+  test('el admin activo no elimina perfiles ajenos de clientes y propietarios', async () => {
+    await assertFails(deleteDoc(doc(as('admin'), 'users/client')));
+    await assertFails(deleteDoc(doc(as('admin'), 'users/owner')));
   });
 
   test('el admin activo no elimina a otro administrador', async () => {

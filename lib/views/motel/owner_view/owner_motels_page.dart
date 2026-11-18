@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../../core/design_system/design_system.dart';
 import '../../../models/motel/motel_model.dart';
 import '../../../controllers/motel/motel_controller.dart';
+import '../../../controllers/booking/owner_view/owner_booking_controller.dart';
 import 'owner_motel_form_page.dart';
 import './../../../routes/routes.dart';
 import '../../login/logout_navigation.dart';
@@ -25,6 +26,8 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
 
   List<Motel> _motels = [];
   bool _isLoading = true;
+  Map<String, int>? _activeReservationCounts;
+  bool _isLoadingReservationCounts = false;
 
   String _searchQuery = '';
 
@@ -42,7 +45,11 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
   }
 
   Future<void> _loadMotels() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _activeReservationCounts = null;
+      _isLoadingReservationCounts = true;
+    });
 
     try {
       if (_currentOwnerId.isEmpty) {
@@ -62,6 +69,18 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
+    }
+    if (!mounted) return;
+    final bookingController = OwnerBookingController(ownerId: _currentOwnerId);
+    try {
+      final counts = await bookingController.activeReservationCounts();
+      if (mounted) setState(() => _activeReservationCounts = counts);
+    } catch (_) {
+      // Unknown is not zero: do not present an unverified count as real.
+      if (mounted) setState(() => _activeReservationCounts = null);
+    } finally {
+      bookingController.dispose();
+      if (mounted) setState(() => _isLoadingReservationCounts = false);
     }
   }
 
@@ -118,6 +137,7 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
         selectedIndex: _selectedIndex,
         onDestinationSelected: (index) {
           setState(() => _selectedIndex = index);
+          if (index == 0) _loadMotels();
         },
         destinations: const [
           AppNavigationDestination(
@@ -298,18 +318,25 @@ class _OwnerMotelsPageState extends State<OwnerMotelsPage> {
                         'No se encontraron resultados para tu búsqueda.',
                       ),
                     )
-                  : ListView.separated(
-                      itemCount: filteredMotels.length,
-                      separatorBuilder: (_, _) =>
-                          const SizedBox(height: AppSpacing.s3),
-                      itemBuilder: (context, index) {
-                        final motel = filteredMotels[index];
-                        return _OwnerMotelCard(
-                          motel: motel,
-                          activeReservations: 3,
-                          onToggleStatus: () => _toggleMotelStatus(motel.id),
-                        );
-                      },
+                  : RefreshIndicator(
+                      onRefresh: _loadMotels,
+                      child: ListView.separated(
+                        physics: const AlwaysScrollableScrollPhysics(),
+                        itemCount: filteredMotels.length,
+                        separatorBuilder: (_, _) =>
+                            const SizedBox(height: AppSpacing.s3),
+                        itemBuilder: (context, index) {
+                          final motel = filteredMotels[index];
+                          return _OwnerMotelCard(
+                            motel: motel,
+                            activeReservations: _activeReservationCounts == null
+                                ? null
+                                : _activeReservationCounts![motel.id] ?? 0,
+                            isLoadingReservations: _isLoadingReservationCounts,
+                            onToggleStatus: () => _toggleMotelStatus(motel.id),
+                          );
+                        },
+                      ),
                     ),
             ),
           ],
@@ -339,11 +366,13 @@ class _OwnerMotelCard extends StatelessWidget {
   const _OwnerMotelCard({
     required this.motel,
     required this.activeReservations,
+    required this.isLoadingReservations,
     required this.onToggleStatus,
   });
 
   final Motel motel;
-  final int activeReservations;
+  final int? activeReservations;
+  final bool isLoadingReservations;
   final VoidCallback onToggleStatus;
 
   void _showConfirmDialog(BuildContext context) {
@@ -417,7 +446,11 @@ class _OwnerMotelCard extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s1),
                 Text(
-                  '$activeReservations reservas activas',
+                  activeReservations == null
+                      ? isLoadingReservations
+                            ? 'Consultando reservas…'
+                            : 'Reservas sin verificar'
+                      : '$activeReservations ${activeReservations == 1 ? 'reserva activa' : 'reservas activas'}',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                     color: context.appColors.textSecondary,
                   ),

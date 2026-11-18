@@ -188,6 +188,253 @@ void main() {
     expect(cloud.saved, isEmpty);
     expect(cloud.requestedOwnerId, isNull);
     expect(owner.syncWarningMessage, contains('Inicia sesión'));
+    expect(owner.hasFinanceSnapshot, isFalse);
+    expect(owner.pendingAmount, 0);
+  });
+
+  test('el resumen usa Firebase, no pagos locales sin confirmar', () async {
+    await repository.createPayment(
+      payment(id: 'offline-receipt', status: PaymentStatus.paid),
+    );
+    final cloud = _FakePaymentCloudRepository();
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(owner.hasFinanceSnapshot, isTrue);
+    expect(owner.isFinanceCurrent, isTrue);
+    expect(owner.totalIncome, 0);
+    expect(owner.paymentsReceived, 0);
+    expect(owner.frequentClients, isEmpty);
+    expect(owner.unconfirmedPayments, 1);
+    expect(owner.completedPayments, hasLength(1));
+  });
+
+  test(
+    'un error inicial de Firebase no se interpreta como saldo cero',
+    () async {
+      await repository.createPayment(payment(status: PaymentStatus.paid));
+      final cloud = _FakePaymentCloudRepository()..failRead = true;
+      final owner = OwnerPaymentController(
+        motelId: 'motel-1',
+        repository: repository,
+        cloudRepository: cloud,
+        currentUserId: () => 'firebase-owner',
+      );
+      controllers.add(owner);
+      await owner.ready;
+
+      expect(owner.hasFinanceSnapshot, isFalse);
+      expect(owner.isFinanceCurrent, isFalse);
+      expect(owner.lastFinanceUpdate, isNull);
+      expect(owner.syncWarningMessage, contains('Sin conexión'));
+      expect(cloud.saved, isEmpty);
+    },
+  );
+
+  test(
+    'calcula ingresos, cartera y reembolsos separados desde Firebase',
+    () async {
+      final cloud = _FakePaymentCloudRepository(
+        remotePayments: [
+          payment(id: 'paid', status: PaymentStatus.paid, amount: 90000),
+          payment(id: 'pending', amount: 30000),
+          payment(
+            id: 'refunded',
+            status: PaymentStatus.refunded,
+            amount: 40000,
+          ),
+          payment(
+            id: 'cancelled',
+            status: PaymentStatus.cancelled,
+            amount: 80000,
+          ),
+        ],
+      );
+      final owner = OwnerPaymentController(
+        motelId: 'motel-1',
+        repository: repository,
+        cloudRepository: cloud,
+        currentUserId: () => 'firebase-owner',
+      );
+      controllers.add(owner);
+      await owner.ready;
+
+      expect(owner.totalIncome, 90000);
+      expect(owner.paymentsReceived, 1);
+      expect(owner.pendingAmount, 30000);
+      expect(owner.refundedAmount, 40000);
+      expect(owner.frequentClients.single.totalPaid, 90000);
+      expect(owner.unconfirmedPayments, 0);
+      expect(owner.lastFinanceUpdate, isNotNull);
+    },
+  );
+
+  test('conserva el último resumen confirmado si se pierde conexión', () async {
+    final cloud = _FakePaymentCloudRepository(
+      remotePayments: [payment(amount: 35000)],
+    );
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+    final lastUpdate = owner.lastFinanceUpdate;
+    cloud.failRead = true;
+    await owner.load();
+
+    expect(owner.hasFinanceSnapshot, isTrue);
+    expect(owner.isFinanceCurrent, isFalse);
+    expect(owner.pendingAmount, 35000);
+    expect(owner.lastFinanceUpdate, lastUpdate);
+    expect(owner.syncWarningMessage, contains('Sin conexión'));
+  });
+
+  test('muestra pagos remotos aunque falle la copia SQLite', () async {
+    repository.failLoad = true;
+    final cloud = _FakePaymentCloudRepository(
+      remotePayments: [payment(id: 'remote', status: PaymentStatus.paid)],
+    );
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(owner.hasFinanceSnapshot, isTrue);
+    expect(owner.errorMessage, isNull);
+    expect(owner.totalIncome, 120000);
+    expect(owner.completedPayments.single.id, 'remote');
+    expect(owner.syncWarningMessage, isNotNull);
+  });
+
+  test('no acepta un resumen de otro motel', () async {
+    final cloud = _FakePaymentCloudRepository(
+      remotePayments: [payment(motelId: 'other-motel')],
+    );
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+
+    expect(owner.hasFinanceSnapshot, isFalse);
+    expect(owner.pendingAmount, 0);
+    expect(cloud.saved, isEmpty);
+    expect(owner.syncWarningMessage, contains('fuera del motel'));
+  });
+
+  test(
+    'actualiza saldos y nombres con eventos confirmados, no caché',
+    () async {
+      final cloud = _LivePaymentCloudRepository();
+      addTearDown(cloud.updates.close);
+      final owner = OwnerPaymentController(
+        motelId: 'motel-1',
+        repository: repository,
+        cloudRepository: cloud,
+        currentUserId: () => 'firebase-owner',
+      );
+      controllers.add(owner);
+      await owner.ready;
+      await repository.findPaymentMethods();
+      final paid = payment(
+        id: 'live',
+        status: PaymentStatus.paid,
+        amount: 74000,
+      ).copyWith(paymentMethodId: 2);
+      final changed = Completer<void>();
+      owner.addListener(() {
+        if (owner.methodName(paid) == 'Crédito registrado' &&
+            !changed.isCompleted) {
+          changed.complete();
+        }
+      });
+      cloud.updates.add(
+        PaymentCloudSnapshot(
+          payments: [paid],
+          methodNames: {'live': 'Crédito registrado'},
+        ),
+      );
+      await changed.future;
+
+      expect(owner.totalIncome, 74000);
+      expect(owner.methodName(paid), 'Crédito registrado');
+      expect(owner.isFinanceCurrent, isTrue);
+
+      final cached = Completer<void>();
+      owner.addListener(() {
+        if (!owner.isFinanceCurrent && !cached.isCompleted) cached.complete();
+      });
+      cloud.updates.add(
+        PaymentCloudSnapshot(
+          payments: [payment(status: PaymentStatus.paid, amount: 999999)],
+          isFromCache: true,
+        ),
+      );
+      await cached.future;
+      expect(owner.totalIncome, 74000);
+      expect(owner.isFinanceCurrent, isFalse);
+    },
+  );
+
+  test('ignora escrituras Firebase que aún no confirmó el servidor', () async {
+    final cloud = _LivePaymentCloudRepository();
+    addTearDown(cloud.updates.close);
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+    final changed = Completer<void>();
+    owner.addListener(() {
+      if (!owner.isFinanceCurrent && !changed.isCompleted) changed.complete();
+    });
+    cloud.updates.add(
+      PaymentCloudSnapshot(
+        payments: [payment(status: PaymentStatus.paid)],
+        hasPendingWrites: true,
+      ),
+    );
+    await changed.future;
+
+    expect(owner.totalIncome, 0);
+    expect(owner.paymentsReceived, 0);
+  });
+
+  test('cancela la escucha al cerrar la pantalla', () async {
+    final cloud = _LivePaymentCloudRepository();
+    addTearDown(cloud.updates.close);
+    final owner = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: cloud,
+      currentUserId: () => 'firebase-owner',
+    );
+    controllers.add(owner);
+    await owner.ready;
+    expect(cloud.updates.hasListener, isTrue);
+
+    owner.dispose();
+    controllers.remove(owner);
+    expect(cloud.updates.hasListener, isFalse);
   });
 
   test('descarga el maestro al solicitarlo y conserva sus nombres', () async {
@@ -399,6 +646,7 @@ class _FakePaymentCloudRepository implements PaymentCloudRepository {
 
   final List<PaymentRecord> remotePayments;
   final bool failSave;
+  bool failRead = false;
   final List<_SavedCloudPayment> saved = [];
   String? requestedOwnerId;
   String? requestedMotelId;
@@ -425,6 +673,23 @@ class _FakePaymentCloudRepository implements PaymentCloudRepository {
   }) async {
     requestedOwnerId = ownerId;
     requestedMotelId = motelId;
+    if (failRead) {
+      throw const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.network,
+        'Sin conexión con Firebase.',
+      );
+    }
     return remotePayments;
   }
+}
+
+class _LivePaymentCloudRepository extends _FakePaymentCloudRepository
+    implements PaymentCloudWatchRepository {
+  final updates = StreamController<PaymentCloudSnapshot>.broadcast();
+
+  @override
+  Stream<PaymentCloudSnapshot> watchForOwnerAndMotel({
+    required String ownerId,
+    required String motelId,
+  }) => updates.stream;
 }

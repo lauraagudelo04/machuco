@@ -42,7 +42,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 17,
+  version: 18,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -112,6 +112,7 @@ class AppDatabaseProvider {
         migration14To15,
         migration15To16,
         migration16To17,
+        migration17To18,
       ])
       .addCallback(
         Callback(
@@ -527,5 +528,15 @@ final migration16To17 = Migration(16, 17, (database) async {
     'id TEXT PRIMARY KEY, motelId TEXT NOT NULL, name TEXT NOT NULL, '
     'description TEXT NOT NULL, category TEXT NOT NULL, price INTEGER NOT NULL, '
     'active INTEGER NOT NULL)',
+  );
+});
+
+/// Preserve all records while adding cancellation provenance to both modules.
+final migration17To18 = Migration(17, 18, (database) async {
+  await database.execute(
+    'ALTER TABLE reservations ADD COLUMN cancellationActor TEXT',
+  );
+  await database.execute(
+    'ALTER TABLE payments ADD COLUMN cancellationActor TEXT',
   );
 });
