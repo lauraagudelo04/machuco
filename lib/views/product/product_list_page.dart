@@ -47,6 +47,8 @@ class _ProductListViewBody extends StatefulWidget {
 
 class _ProductListViewBodyState extends State<_ProductListViewBody> {
   late final ProductController _controller;
+  final TextEditingController _searchController = TextEditingController();
+  String _query = '';
   bool _isLoading = true;
   String? _error;
 
@@ -57,6 +59,37 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
     _loadProducts();
   }
 
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  /// Productos del motel filtrados por nombre o descripción (sin tildes ni
+  /// mayúsculas relevantes).
+  List<Product> _filtered() {
+    final all = _controller.getProductsByMotel(widget.motelId);
+    final query = _normalize(_query);
+    if (query.isEmpty) return all;
+    return all
+        .where(
+          (product) =>
+              _normalize(product.name).contains(query) ||
+              _normalize(product.description).contains(query),
+        )
+        .toList();
+  }
+
+  static String _normalize(String value) => value
+      .trim()
+      .toLowerCase()
+      .replaceAll('á', 'a')
+      .replaceAll('é', 'e')
+      .replaceAll('í', 'i')
+      .replaceAll('ó', 'o')
+      .replaceAll('ú', 'u')
+      .replaceAll('ü', 'u');
+
   Future<void> _loadProducts() async {
     setState(() {
       _isLoading = true;
@@ -64,7 +97,7 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
     });
 
     try {
-      await _controller.loadProducts();
+      await _controller.loadProducts(motelId: widget.motelId);
     } catch (error) {
       _error = 'No fue posible cargar los productos.';
       if (!mounted) return;
@@ -181,7 +214,8 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
 
   @override
   Widget build(BuildContext context) {
-    final products = _controller.getProductsByMotel(widget.motelId);
+    final allCount = _controller.getProductsByMotel(widget.motelId).length;
+    final products = _filtered();
 
     return Scaffold(
       appBar: AppBar(title: const Text('Productos')),
@@ -214,7 +248,7 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
               );
             }
 
-            if (products.isEmpty) {
+            if (allCount == 0) {
               return AppEmptyState(
                 icon: Icons.inventory_2_outlined,
                 title: 'No hay productos',
@@ -222,10 +256,52 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
               );
             }
 
-            return ListView.separated(
+            final searchField = Padding(
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
-                AppSpacing.s5,
+                AppSpacing.s4,
+                horizontalPadding,
+                0,
+              ),
+              child: AppTextField(
+                label: 'Buscar producto',
+                hint: 'Nombre o descripción',
+                controller: _searchController,
+                textInputAction: TextInputAction.search,
+                prefixIcon: const Icon(Icons.search),
+                suffixIcon: _query.isEmpty
+                    ? null
+                    : IconButton(
+                        icon: const Icon(Icons.close),
+                        tooltip: 'Limpiar búsqueda',
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                      ),
+                onChanged: (value) => setState(() => _query = value),
+              ),
+            );
+
+            if (products.isEmpty) {
+              return Column(
+                children: [
+                  searchField,
+                  Expanded(
+                    child: AppEmptyState(
+                      icon: Icons.search_off,
+                      title: 'Sin resultados',
+                      message: 'Ningún producto coincide con "$_query".',
+                    ),
+                  ),
+                ],
+              );
+            }
+
+            final list = ListView.separated(
+              padding: EdgeInsets.fromLTRB(
+                horizontalPadding,
+                AppSpacing.s4,
                 horizontalPadding,
                 AppSpacing.s12,
               ),
@@ -249,6 +325,13 @@ class _ProductListViewBodyState extends State<_ProductListViewBody> {
                   onToggleAvailability: () => _toggleAvailability(product),
                 );
               },
+            );
+
+            return Column(
+              children: [
+                searchField,
+                Expanded(child: list),
+              ],
             );
           },
         ),

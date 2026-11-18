@@ -33,6 +33,10 @@ abstract final class FirestoreCollections {
   /// Additional services offered by a motel (`additionalServices/{id}`).
   static const additionalServices = 'additionalServices';
 
+  /// Products sold by a motel (`products/{productId}`), written by the owner
+  /// of that motel and readable by any signed-in user.
+  static const products = 'products';
+
   /// Reservations shared by client, motel owner and admin
   /// (`reservations/{reservationId}`), cached locally in SQLite.
   static const reservations = 'reservations';
