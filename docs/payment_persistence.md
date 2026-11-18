@@ -2,6 +2,27 @@
 
 ## Cancelaciones vinculadas al pago (2026-11-17)
 
+**Ampliación autorizada (2026-11-18):** el cliente que cancela una reserva
+pagada con tarjeta de crédito/débito genera `refunded`, restando ingresos y
+sumando reembolsos. Se conserva el comprobante y se actualizan reserva/pago
+atómicamente. «En el Local» aún sin cobrar se cancela con `cancelled` por
+cualquiera de los dos roles, sin ingresos ni reembolso. Sustituye la excepción
+histórica de abajo solo para tarjetas. Requiere publicar las reglas revisadas
+con autorización adicional y actualizar la app; no corrige datos históricos.
+
+Publicación autorizada y verificada el `2026-11-18T03:06:48.934Z`:
+solo Firestore Rules en `machuco`, ruleset
+`e38533e8-d373-4b3b-8f85-e15b39bb3568`.
+La comparación remota mostró exclusivamente los cambios en los dos helpers
+de cancelación; los bloques de compañeros permanecen iguales. Fuente publicada
+releída idéntica a la local, SHA-256
+`6ffd642185bf9946eb0ede987804d45e40540f8f014233e23b8adf60a6142896`.
+Respaldo en `C:/Users/juan0/AppData/Local/Temp/opencode/machuco-client-card-refund-before/`.
+Después de publicar: 1306 pruebas Flutter y 206 de reglas aprobadas; reglas
+probadas solo en `demo-machuco`. No se crearon pagos ni se modificaron datos
+reales; no se desplegaron índices ni SQL Connect. Actualización de la app y
+prueba manual con cuentas reales pendientes. No autoriza futuras publicaciones.
+
 Tras integrar develop `a664c626`, la versión conjunta es SQLite v24.
 Se conservan las migraciones de develop hasta v23 y se añade 23→24 para
 completar propietarios/tipos de documento y `cancellationActor` de forma

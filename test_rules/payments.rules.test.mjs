@@ -82,6 +82,43 @@ beforeEach(async () => {
 });
 
 describe('En el Local: reservation and payment contract', () => {
+  async function cancel(uid, status, overrides = {}) {
+    const db = as(uid);
+    const actor = uid === 'owner' ? 'owner' : 'client';
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'reservations/reservation-1'), {
+      status: 'cancelled', cancellationActor: actor,
+      cancellationReason: 'Cambio de planes', updatedAt: serverTimestamp(),
+    });
+    batch.update(doc(db, 'payments/pay-reservation-1'), {
+      status, cancellationActor: actor, updatedAt: serverTimestamp(), ...overrides,
+    });
+    return batch.commit();
+  }
+  for (const [id, name] of [[2, 'Tarjeta de crédito'], [3, 'Tarjeta de débito']]) {
+    test(`client cancelling paid ${name} refunds atomically`, async () => {
+      await simulateCard('client', { paymentMethodId: id, paymentMethodName: name });
+      await assertSucceeds(cancel('client', 'refunded'));
+      const stored = await getDoc(doc(as('owner'), 'payments/pay-reservation-1'));
+      if (stored.data().status !== 'refunded' || stored.data().amount !== 120000) throw Error('Invalid refund');
+    });
+  }
+  for (const uid of ['owner', 'client']) {
+    test(`${uid} cancelling unpaid local payment cancels without refund`, async () => {
+      await selectLocal();
+      await assertFails(cancel(uid, 'refunded'));
+      await assertSucceeds(cancel(uid, 'cancelled'));
+    });
+  }
+  test('client cannot refund cash or alter card amount while cancelling', async () => {
+    await selectLocal();
+    await receive();
+    await assertFails(cancel('client', 'refunded'));
+  });
+  test('refund cannot change the paid amount', async () => {
+    await simulateCard();
+    await assertFails(cancel('client', 'refunded', { amount: 1 }));
+  });
   test('educational credit card creates a paid receipt and reservation atomically', async () => {
     await assertSucceeds(simulateCard());
     const stored = await getDoc(doc(as('owner'), 'payments/pay-reservation-1'));
@@ -204,9 +241,7 @@ describe('En el Local: reservation and payment contract', () => {
   });
   test('a cancelled reservation cannot receive the pending payment', async () => {
     await selectLocal();
-    await assertSucceeds(updateDoc(doc(as('client'), 'reservations/reservation-1'), {
-      status: 'cancelled', cancellationReason: 'No puedo asistir', updatedAt: serverTimestamp(),
-    }));
+    await assertSucceeds(cancel('client', 'cancelled'));
     await assertFails(receive());
   });
   test('an abandoned checkout cannot select the place after 15 minutes', async () => {

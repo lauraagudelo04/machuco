@@ -2767,7 +2767,7 @@ class _$ReservationDao extends ReservationDao {
     String actor,
   ) async {
     await _queryAdapter.queryNoReturn(
-      'UPDATE payments SET status = CASE WHEN status = \'pending\' THEN \'cancelled\' WHEN status = \'paid\' AND ?2 = \'owner\' THEN \'refunded\' ELSE status END, cancellationActor = ?2 WHERE id = \'pay-\' || ?1 AND bookingId = ?1 AND (status = \'pending\' OR (status = \'paid\' AND ?2 = \'owner\') OR cancellationActor = ?2)',
+      'UPDATE payments SET status = CASE WHEN status = \'pending\' THEN \'cancelled\' WHEN status = \'paid\' AND (?2 = \'owner\' OR (?2 = \'client\' AND paymentMethodId IN (SELECT id FROM payment_method_catalog WHERE lower(name) IN (\'tarjeta de crédito\', \'tarjeta de débito\')))) THEN \'refunded\' ELSE status END, cancellationActor = ?2 WHERE id = \'pay-\' || ?1 AND bookingId = ?1 AND (status = \'pending\' OR (status = \'paid\' AND (?2 = \'owner\' OR (?2 = \'client\' AND paymentMethodId IN (SELECT id FROM payment_method_catalog WHERE lower(name) IN (\'tarjeta de crédito\', \'tarjeta de débito\'))))) OR cancellationActor = ?2)',
       arguments: [reservationId, actor],
     );
   }
