@@ -75,7 +75,8 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
         const SnackBar(content: Text('Perfil actualizado correctamente.')),
       );
     } else {
-      final error = ClientController.instance.errorMessage ?? 'Error desconocido';
+      final error =
+          ClientController.instance.errorMessage ?? 'Error desconocido';
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(error),
@@ -98,13 +99,16 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
 
             final isSubmitting = ClientController.instance.isLoading;
             final availableCodes = ClientController.instance.countryCodes;
-            final canChangePassword = ClientController.instance.canChangePassword;
+            final canChangePassword =
+                ClientController.instance.canChangePassword;
             final authProviderName = ClientController.instance.authProviderName;
 
             List<DropdownMenuItem<String>> dropdownItems = [];
 
             if (availableCodes.isNotEmpty) {
-              if (!availableCodes.any((c) => c.callingCode == _selectedCountryCode)) {
+              if (!availableCodes.any(
+                (c) => c.callingCode == _selectedCountryCode,
+              )) {
                 _selectedCountryCode = availableCodes.first.callingCode;
               }
 
@@ -119,7 +123,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                 DropdownMenuItem(
                   value: _selectedCountryCode,
                   child: Text(_selectedCountryCode),
-                )
+                ),
               ];
             }
 
@@ -163,20 +167,25 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                               decoration: InputDecoration(
                                 labelText: 'Cód.',
                                 filled: true,
-                                fillColor: Theme.of(context)
-                                    .colorScheme
-                                    .surfaceContainerHighest,
+                                fillColor: Theme.of(
+                                  context,
+                                ).colorScheme.surfaceContainerHighest,
                                 border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(AppRadius.md),
+                                  borderRadius: BorderRadius.circular(
+                                    AppRadius.md,
+                                  ),
                                   borderSide: BorderSide.none,
                                 ),
                               ),
                               items: dropdownItems,
-                              onChanged: (isSubmitting || availableCodes.isEmpty)
+                              onChanged:
+                                  (isSubmitting || availableCodes.isEmpty)
                                   ? null
                                   : (val) {
                                       if (val != null) {
-                                        setState(() => _selectedCountryCode = val);
+                                        setState(
+                                          () => _selectedCountryCode = val,
+                                        );
                                       }
                                     },
                             ),
@@ -204,7 +213,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                   ),
                 ),
                 const SizedBox(height: AppSpacing.s6),
-                
+
                 // --- SECCIÓN DE SEGURIDAD ---
                 _DetailSection(
                   title: 'Seguridad',
@@ -229,7 +238,8 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                           Expanded(
                             child: Text(
                               'Iniciaste sesión con $authProviderName. La contraseña debe gestionarse directamente en tu cuenta de $authProviderName.',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              style: Theme.of(context).textTheme.bodySmall
+                                  ?.copyWith(
                                     color: context.appColors.textSecondary,
                                   ),
                             ),
@@ -239,7 +249,7 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
                   ],
                 ),
                 const SizedBox(height: AppSpacing.s6),
-                
+
                 // --- BOTONES DE ACCIÓN ---
                 AppButton(
                   label: 'Guardar cambios',
@@ -269,19 +279,18 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Theme.of(context)
-                  .colorScheme
-                  .primary
-                  .withValues(alpha: .10),
+              color: Theme.of(
+                context,
+              ).colorScheme.primary.withValues(alpha: .10),
               borderRadius: BorderRadius.circular(AppRadius.xl),
             ),
             alignment: Alignment.center,
             child: Text(
               client.initials,
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.primary,
-                    fontWeight: FontWeight.w700,
-                  ),
+                color: Theme.of(context).colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
           const SizedBox(height: AppSpacing.s3),
@@ -294,8 +303,8 @@ class _ClientEditProfilePageState extends State<ClientEditProfilePage> {
           Text(
             client.email,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                  color: context.appColors.textSecondary,
-                ),
+              color: context.appColors.textSecondary,
+            ),
           ),
         ],
       ),

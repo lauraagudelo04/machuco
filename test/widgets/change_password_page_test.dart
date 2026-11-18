@@ -82,15 +82,11 @@ UserProfileController _controller(
 }
 
 void main() {
-  testWidgets('avisa cuando la cuenta usa contraseña temporal', (
-    tester,
-  ) async {
+  testWidgets('avisa cuando la cuenta usa contraseña temporal', (tester) async {
     final controller = _controller(_profile());
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      _wrap(ChangePasswordPage(controller: controller)),
-    );
+    await tester.pumpWidget(_wrap(ChangePasswordPage(controller: controller)));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('contraseña temporal'), findsOneWidget);
@@ -100,9 +96,7 @@ void main() {
     final controller = _controller(_profile(mustChangePassword: false));
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      _wrap(ChangePasswordPage(controller: controller)),
-    );
+    await tester.pumpWidget(_wrap(ChangePasswordPage(controller: controller)));
     await tester.pumpAndSettle();
 
     await tester.enterText(
@@ -133,9 +127,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      _wrap(ChangePasswordPage(controller: controller)),
-    );
+    await tester.pumpWidget(_wrap(ChangePasswordPage(controller: controller)));
     await tester.pumpAndSettle();
 
     await tester.enterText(

@@ -49,7 +49,7 @@ class TemporalHomePage extends StatelessWidget {
                 ),
                 const SizedBox(height: AppSpacing.s6),
                 ...profiles.map(
-                      (profile) => Padding(
+                  (profile) => Padding(
                     padding: const EdgeInsets.only(bottom: AppSpacing.s3),
                     child: AppCard(
                       onTap: () => Navigator.pushNamed(context, profile.route),
@@ -82,8 +82,8 @@ class TemporalHomePage extends StatelessWidget {
                                   profile.description,
                                   style: Theme.of(context).textTheme.bodyMedium
                                       ?.copyWith(
-                                    color: context.appColors.textSecondary,
-                                  ),
+                                        color: context.appColors.textSecondary,
+                                      ),
                                 ),
                               ],
                             ),
@@ -109,8 +109,8 @@ class TemporalHomePage extends StatelessWidget {
                           'Este acceso es temporal. No autentica roles ni persiste cambios; solo permite validar navegación y apariencia.',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                                color: context.appColors.textSecondary,
+                              ),
                         ),
                       ),
                     ],

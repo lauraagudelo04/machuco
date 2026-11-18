@@ -19,9 +19,9 @@ class ClientController extends ChangeNotifier {
   ClientController._({
     PasswordChangeService? passwordChangeService,
     Future<SharedPreferences> Function()? prefsProvider,
-  })  : _passwordChangeService =
-            passwordChangeService ?? FirebasePasswordChangeService(),
-        _prefsProvider = prefsProvider ?? SharedPreferences.getInstance;
+  }) : _passwordChangeService =
+           passwordChangeService ?? FirebasePasswordChangeService(),
+       _prefsProvider = prefsProvider ?? SharedPreferences.getInstance;
 
   static final ClientController instance = ClientController._();
 
@@ -189,8 +189,10 @@ class ClientController extends ChangeNotifier {
       final guestIds = reservationsSnapshot.docs
           .where((doc) {
             final data = doc.data();
-            final status =
-                (data['status'] ?? '').toString().toLowerCase().trim();
+            final status = (data['status'] ?? '')
+                .toString()
+                .toLowerCase()
+                .trim();
             return status != ReservationStatus.cancelled.name &&
                 status != ReservationStatus.completed.name;
           })
@@ -213,9 +215,12 @@ class ClientController extends ChangeNotifier {
           i + 30 > guestIds.length ? guestIds.length : i + 30,
         );
 
+        // `firestore.rules` solo deja a un propietario leer perfiles de
+        // clientes: la consulta debe pedirlo explícitamente o se rechaza.
         final usersSnapshot = await _firestore
             .collection('users')
             .where(FieldPath.documentId, whereIn: chunk)
+            .where('role', isEqualTo: 'client')
             .get();
 
         for (final doc in usersSnapshot.docs) {
@@ -300,9 +305,7 @@ class ClientController extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _passwordChangeService.changePassword(
-        newPassword: newPassword,
-      );
+      await _passwordChangeService.changePassword(newPassword: newPassword);
       return true;
     } on AuthFailure catch (e) {
       _errorMessage = e.message;
@@ -318,15 +321,17 @@ class ClientController extends ChangeNotifier {
 
   List<ClientModel> search(String query) {
     _lastSearchQuery = query;
-    _prefsProvider().then((prefs) {
-      if (query.trim().isEmpty) {
-        prefs.remove(_lastSearchQueryKey);
-      } else {
-        prefs.setString(_lastSearchQueryKey, query);
-      }
-    }).catchError((e) {
-      debugPrint('Error guardando búsqueda en SharedPreferences: $e');
-    });
+    _prefsProvider()
+        .then((prefs) {
+          if (query.trim().isEmpty) {
+            prefs.remove(_lastSearchQueryKey);
+          } else {
+            prefs.setString(_lastSearchQueryKey, query);
+          }
+        })
+        .catchError((e) {
+          debugPrint('Error guardando búsqueda en SharedPreferences: $e');
+        });
 
     if (query.trim().isEmpty) return allClients;
     final q = query.toLowerCase().trim();
@@ -377,9 +382,11 @@ class ClientController extends ChangeNotifier {
         await batch.commit();
       }
 
-      _allClients.removeWhere((c) =>
-          (client.id != null && c.id == client.id) ||
-          (client.uid != null && c.uid == client.uid));
+      _allClients.removeWhere(
+        (c) =>
+            (client.id != null && c.id == client.id) ||
+            (client.uid != null && c.uid == client.uid),
+      );
 
       return true;
     } catch (e) {

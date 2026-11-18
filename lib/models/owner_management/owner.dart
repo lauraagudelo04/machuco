@@ -1,4 +1,5 @@
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 
 /// Propietario de uno o varios moteles.
@@ -14,6 +15,8 @@ class Owner {
     required this.documentNumber,
     required this.email,
     required this.phone,
+    this.nit = '',
+    this.personType = PersonType.natural,
     this.countryCode,
     this.countryName,
     this.address,
@@ -27,6 +30,16 @@ class Owner {
   final DocumentType documentType;
   final String documentNumber;
   final String email;
+
+  /// NIT ante la DIAN en forma canónica `base-DV` (p. ej. `900123456-8`).
+  ///
+  /// Es un dato tributario independiente del documento de identidad
+  /// ([documentType] y [documentNumber]). Vacío en registros antiguos que aún
+  /// no lo tienen.
+  final String nit;
+
+  /// Persona natural o jurídica; se elige aparte del tipo de documento.
+  final PersonType personType;
 
   /// Número nacional, sin el indicativo del país.
   final String phone;
@@ -79,6 +92,8 @@ class Owner {
     documentNumber: documentNumber,
     email: email,
     phone: phone,
+    nit: nit,
+    personType: personType,
     countryCode: countryCode,
     countryName: countryName,
     address: address,
@@ -93,6 +108,8 @@ class Owner {
     DocumentType? documentType,
     String? documentNumber,
     String? phone,
+    String? nit,
+    PersonType? personType,
     String? countryCode,
     String? countryName,
     String? address,
@@ -106,6 +123,8 @@ class Owner {
     documentNumber: documentNumber ?? this.documentNumber,
     email: email,
     phone: phone ?? this.phone,
+    nit: nit ?? this.nit,
+    personType: personType ?? this.personType,
     countryCode: countryCode ?? this.countryCode,
     countryName: countryName ?? this.countryName,
     address: address ?? this.address,

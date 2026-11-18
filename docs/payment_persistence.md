@@ -341,12 +341,12 @@ $env:SUPABASE_URL = 'https://ogrbbuwtsyezegkpwtsl.supabase.co'
 $env:SUPABASE_PUBLISHABLE_KEY = 'PEGA_AQUI_LA_CLAVE_PUBLICABLE'
 ```
 
-Después ejecuta con una sesión Firebase real. El flavor por defecto es dev
-(`co.machuco.app.dev`); no comparte los datos de la antigua com.example.machuco.
+Después ejecuta con una sesión Firebase real. Usa el flavor dev
+(`co.machuco.app.dev`, con `--flavor dev`); no comparte los datos de la antigua com.example.machuco.
 Consulta docs/auth/android-setup.md para la firma privada de Google/GitHub:
 
 ```powershell
-flutter run -d emulator-5554 "--dart-define=SUPABASE_URL=$env:SUPABASE_URL" "--dart-define=SUPABASE_PUBLISHABLE_KEY=$env:SUPABASE_PUBLISHABLE_KEY"
+flutter run --flavor dev -d emulator-5554 "--dart-define=SUPABASE_URL=$env:SUPABASE_URL" "--dart-define=SUPABASE_PUBLISHABLE_KEY=$env:SUPABASE_PUBLISHABLE_KEY"
 ```
 
 La URL debe ser una base HTTPS sin usuario, query ni fragmento. Tras cambiar

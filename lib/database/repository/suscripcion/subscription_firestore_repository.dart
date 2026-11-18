@@ -70,14 +70,17 @@ class SubscriptionFirestoreRepository {
         .collection(FirestoreCollections.subscriptionPayments)
         .where('ownerId', isEqualTo: uid)
         .get();
-    final payments = paymentsSnapshot.docs
-        .map((payment) => _paymentFromFirestore(payment.data()))
-        .where((payment) => payment.subscriptionId == subscription.id)
-        .toList()
-      ..sort((left, right) {
-        final byDate = right.date.compareTo(left.date);
-        return byDate != 0 ? byDate : (right.id ?? 0).compareTo(left.id ?? 0);
-      });
+    final payments =
+        paymentsSnapshot.docs
+            .map((payment) => _paymentFromFirestore(payment.data()))
+            .where((payment) => payment.subscriptionId == subscription.id)
+            .toList()
+          ..sort((left, right) {
+            final byDate = right.date.compareTo(left.date);
+            return byDate != 0
+                ? byDate
+                : (right.id ?? 0).compareTo(left.id ?? 0);
+          });
 
     return (subscription: subscription, payments: payments);
   }
@@ -142,7 +145,9 @@ class SubscriptionFirestoreRepository {
   String _requireUid() {
     final uid = _auth.currentUser?.uid;
     if (uid == null || uid.isEmpty) {
-      throw StateError('No hay un usuario autenticado para consultar la suscripción.');
+      throw StateError(
+        'No hay un usuario autenticado para consultar la suscripción.',
+      );
     }
     return uid;
   }

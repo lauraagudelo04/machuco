@@ -54,8 +54,9 @@ Future<void> _onDeleteAccount(BuildContext context, LoginController controller) 
 - **Limitación**: no se comprueba si el usuario tiene reservas activas,
   moteles o si es el último administrador. Si una rama lo necesita, debe
   bloquear el acceso antes de abrir el panel.
-- Por ahora la subcolección `users/{uid}/subscriptions` queda huérfana al
-  eliminar la cuenta (rama de suscripciones).
+- Al eliminar la cuenta se borran `users/{uid}/notificationReads` y
+  `users/{uid}/subscriptions` (DA-15, ver 6.3); `payments` se conserva por
+  obligación contable, sin datos personales.
 
 ## 3. Enlazar "Solicitudes de propietarios" (menú o panel del administrador)
 
@@ -111,7 +112,74 @@ También cambia lo siguiente:
 
 | Tema | Con quién | Acción |
 | --- | --- | --- |
-| Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14. Quien agregue una migración usa la 15 |
+| Versión 14 de SQLite (`auth_user_profile`) | Todas las ramas con `app_database.dart` | `develop` usa la 13 para limpiar ejemplos de room y autenticación la 14 |
+| Versión 24 de SQLite (`owners.nit`, `owners.personType`) | Todas las ramas con `app_database.dart` | La 23 es de PQRS y la 24 separa el NIT del propietario. Quien agregue una migración usa la 25. Las pruebas de PQRS ya aceptan versiones posteriores (`>=`) |
+| `phone_min_length` y `phone_max_length` en `phone_country_codes` | Quien administre Supabase | Siguen **pendientes**: sin ellas el celular se valida con 7 a 15 dígitos. La app las lee en cuanto existan (`select=*`) |
 | Plugin `google-services` 4.4.4 → 4.5.0 y bloque FlutterFire | Quien administre la configuración de Firebase | Acordar la versión y no editar a mano el bloque `START/END: FlutterFire Configuration` |
 | `applicationId` nuevo (`co.machuco.app` y `co.machuco.app.dev`) | Todo el equipo | Ya fijado (D2 del plan). Si ya tienes instalada la misma app firmada con otra llave, desinstálala antes de ejecutarla |
 | Keystore de desarrollo compartido | Cada integrante | Copiar los dos archivos de la sección 4; no registrar huellas propias en Firebase |
+
+## 6. Cambios en `firestore.rules` (2026-11-17)
+
+### 6.1 Documento de identidad en `users/{uid}` (para la Etapa 2)
+
+Decisión 2026-11-17: Cliente y Propietario **sí** registran documento de
+identidad; el Administrador **no**. Se usan los mismos nombres y valores que
+ya exigen las reglas de propietarios (`hasValidOwnerManagementFields`):
+
+| Campo | Tipo | Regla |
+| --- | --- | --- |
+| `documentType` | `string` | Uno de `citizenshipCard`, `foreignerCard`, `taxId`, `passport`, `identityCard` |
+| `documentNumber` | `string` | De 4 a 20 caracteres |
+
+- **Registro público** (`isPublicRegistration`): ambos campos son
+  obligatorios para `client` y `owner`. La app ya los envía desde
+  "Registrarse" y "Completar perfil" (Google/GitHub): `RegistrationData`,
+  `SocialProfileData` y `UserProfile` tienen `documentType` y
+  `documentNumber`, y `ProfileFields` muestra el selector y el número.
+- **Tipos que ofrece el registro** (`registrationDocumentTypes`): cédula de
+  ciudadanía, cédula de extranjería y pasaporte. No se ofrece tarjeta de
+  identidad (el registro exige mayoría de edad) ni NIT (va en su propio
+  campo). Las reglas aceptan los 5 valores para no romper el panel de
+  propietarios.
+- **Normalización**: el número se guarda sin espacios, puntos ni guiones y en
+  mayúsculas (`1.020.304.050` → `1020304050`) y se valida con el patrón del
+  tipo (`DocumentType.pattern`). Nunca se guarda en SQLite ni en
+  SharedPreferences.
+- **Actualización**: el propio Cliente o Propietario puede agregarlos o
+  corregirlos (validados). Un perfil antiguo sin documento se puede seguir
+  editando, aprobando o deshabilitando: no se fuerza a completarlo en cada
+  escritura para no bloquear cuentas existentes.
+- **Administrador**: ni `isAdminCreation`, ni la edición de contacto, ni la
+  anonimización, ni la autoedición aceptan esos campos.
+- **NIT separado del documento (acordado con la rama de propietarios)**:
+  `hasValidOwnerManagementFields` ya no exige `nit == documentNumber`. El
+  documento usa `hasValidIdentityDocument` (4 a 20 caracteres) y el NIT el
+  mismo formato que el registro público (`^[0-9]{6,10}-[0-9]$`, base-DV).
+  El panel (`OwnerFormPage`) pide aparte el tipo de persona y el NIT
+  (validado con DV por `AuthValidators.nit`); `Owner` tiene `nit` y
+  `personType`, y la caché `owners` los guarda (migración SQLite 23→24).
+  Un propietario creado antes desde el panel tiene `nit` igual a su
+  documento, sin DV: al editarlo, el administrador debe escribir el NIT real.
+
+### 6.2 Lectura de `users` por un propietario activo
+
+Antes leía **todos** los perfiles (NIT y datos de otros propietarios y
+administradores). Ahora solo lee perfiles con `role == 'client'` (lista de
+clientes de sus reservas, `ClientController.loadAllClients`). Toda consulta de
+un propietario sobre `users` debe filtrar `where('role', isEqualTo: 'client')`
+o Firestore la rechaza.
+
+Decisión 2026-11-17: se acepta que un propietario activo lea los datos de
+los clientes (documento, celular, fecha de nacimiento) para sus
+validaciones. Firestore no filtra por campo; no se hará una proyección.
+
+### 6.3 Otros cambios
+
+| Cambio | A quién afecta |
+| --- | --- |
+| `isAdmin()` exige `accountStatus == 'active'` (vigente; no se revirtió en la Etapa 1): un admin deshabilitado, anonimizado o sin estado pierde lecturas de reservas, pagos, suscripciones, reseñas, etc. | Ramas que usan `isAdmin()` (pruebas en `test_rules/` en verde) |
+| Un propietario activo ya no crea `users/{otroUid}` | Nadie lo usaba en `lib/` |
+| **DA-15** `users/{uid}/subscriptions`: el propio usuario puede borrarlas al eliminar su cuenta. `payments` y `subscriptionPayments` siguen sin `delete` y se conservan por obligación contable | Rama de suscripciones |
+| **DA-15** `users/{uid}/notificationReads` y `devices`: lectura y borrado separados de la escritura (antes la lectura evaluaba `request.resource` y siempre se negaba); el propio usuario las borra al eliminar su cuenta | Rama de notificaciones |
+| Un admin con contraseña temporal puede leer `system/adminRegistry` y bajarlo 1 solo al anonimizar su propia cuenta | Gestión de administradores |

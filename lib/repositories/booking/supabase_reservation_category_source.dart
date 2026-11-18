@@ -44,9 +44,7 @@ class SupabaseReservationCategorySource {
       );
     }
     return rows
-        .map(
-          (row) => ReservationCategory.fromJson(row as Map<String, dynamic>),
-        )
+        .map((row) => ReservationCategory.fromJson(row as Map<String, dynamic>))
         .toList();
   }
 }

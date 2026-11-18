@@ -92,10 +92,7 @@ void main() {
 
       await controller.addReview(_review(roomId: 'room-1', rating: 2));
 
-      expect(
-        controller.getReviewsByMotelId('3').first.id,
-        'review-new',
-      );
+      expect(controller.getReviewsByMotelId('3').first.id, 'review-new');
       expect(controller.getReviewsByRoomId('room-1').single.id, 'review-new');
       expect(controller.getAverageByRoomId('room-1'), 2.0);
       expect(notified, 1);
@@ -501,24 +498,29 @@ void main() {
     expect(client.getAverageByMotelId('3'), 3.0);
   });
 
-  test('si la lista se recarga mientras se guarda, el cambio igual se ve', () async {
-    final repository = _SlowReplyRepository();
-    final controller = OwnerReviewController(
-      motelController: _FakeMotelController([_motel('1', 'Sol')]),
-      repository: repository,
-    );
-    await controller.loadReviews();
+  test(
+    'si la lista se recarga mientras se guarda, el cambio igual se ve',
+    () async {
+      final repository = _SlowReplyRepository();
+      final controller = OwnerReviewController(
+        motelController: _FakeMotelController([_motel('1', 'Sol')]),
+        repository: repository,
+      );
+      await controller.loadReviews();
 
-    final saving = controller.reply('review-owner-1', 'Gracias');
-    await controller.loadReviews();
-    repository.finishSave();
-    await saving;
+      final saving = controller.reply('review-owner-1', 'Gracias');
+      await controller.loadReviews();
+      repository.finishSave();
+      await saving;
 
-    expect(
-      controller.reviews.firstWhere((r) => r.id == 'review-owner-1').ownerReply,
-      'Gracias',
-    );
-  });
+      expect(
+        controller.reviews
+            .firstWhere((r) => r.id == 'review-owner-1')
+            .ownerReply,
+        'Gracias',
+      );
+    },
+  );
 
   group('carga con error del repositorio', () {
     const reason = 'No hay conexión con el servidor de reseñas';
@@ -554,7 +556,6 @@ void main() {
       expect(controller.errorMessage, 'No fue posible cargar las reseñas.');
     });
   });
-
 }
 
 /// Repositorio que lee de [_inner] pero rechaza las respuestas y la

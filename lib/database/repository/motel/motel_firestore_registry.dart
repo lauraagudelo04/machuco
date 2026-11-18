@@ -20,20 +20,23 @@ class FirestoreMotelRegistry implements MotelFirestoreRegistry {
 
   @override
   Future<void> save(Motel motel) {
-    return _firestore.collection(FirestoreCollections.motels).doc(motel.id).set({
-      'ownerId': motel.ownerId,
-      'name': motel.name,
-      'email': motel.email,
-      'roomCount': motel.roomCount,
-      'nit': motel.nit,
-      'address': motel.address,
-      'phone': motel.phone,
-      'description': motel.description,
-      'generalLocation': motel.generalLocation,
-      'paymentMethods': motel.paymentMethods,
-      'imageUrls': motel.imageUrls,
-      'isAvailable': motel.isAvailable,
-      'updatedAt': FieldValue.serverTimestamp(),
-    });
+    return _firestore
+        .collection(FirestoreCollections.motels)
+        .doc(motel.id)
+        .set({
+          'ownerId': motel.ownerId,
+          'name': motel.name,
+          'email': motel.email,
+          'roomCount': motel.roomCount,
+          'nit': motel.nit,
+          'address': motel.address,
+          'phone': motel.phone,
+          'description': motel.description,
+          'generalLocation': motel.generalLocation,
+          'paymentMethods': motel.paymentMethods,
+          'imageUrls': motel.imageUrls,
+          'isAvailable': motel.isAvailable,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
   }
 }

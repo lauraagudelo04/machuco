@@ -160,8 +160,8 @@ describe('listPendingOwners', () => {
     await assertFails(listPendingOwners(env.unauthenticatedContext().firestore()));
   });
 
-  test('[ADM-03] HALLAZGO: un admin sin accountStatus sí puede listar (isAdmin no exige estado)', async () => {
-    await assertSucceeds(listPendingOwners(as('adminNoStatus')));
+  test('[ADM-03] un admin sin accountStatus no puede listar (isAdmin exige estado activo)', async () => {
+    await assertFails(listPendingOwners(as('adminNoStatus')));
   });
 });
 

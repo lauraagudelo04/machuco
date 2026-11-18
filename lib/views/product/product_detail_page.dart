@@ -4,10 +4,7 @@ import '../../core/design_system/design_system.dart';
 import '../../models/product/product.dart';
 
 class ProductDetailView extends StatelessWidget {
-  const ProductDetailView({
-    super.key,
-    required this.product,
-  });
+  const ProductDetailView({super.key, required this.product});
 
   final Product product;
 
@@ -31,17 +28,13 @@ class ProductDetailView extends StatelessWidget {
     final isAvailable = product.isAvailable && product.stock > 0;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Detalle del producto'),
-      ),
+      appBar: AppBar(title: const Text('Detalle del producto')),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(AppSpacing.screen),
           child: Center(
             child: ConstrainedBox(
-              constraints: const BoxConstraints(
-                maxWidth: 560,
-              ),
+              constraints: const BoxConstraints(maxWidth: 560),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -54,24 +47,18 @@ class ProductDetailView extends StatelessWidget {
                           height: 180,
                           decoration: BoxDecoration(
                             color: context.appColors.mediaFallback,
-                            borderRadius: BorderRadius.circular(
-                              AppRadius.md,
-                            ),
+                            borderRadius: BorderRadius.circular(AppRadius.md),
                           ),
                           child: Icon(
                             Icons.inventory_2_outlined,
                             size: 64,
-                            color: Theme.of(context)
-                                .colorScheme
-                                .primary,
+                            color: Theme.of(context).colorScheme.primary,
                           ),
                         ),
                         const SizedBox(height: AppSpacing.s5),
                         Text(
                           product.name,
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineSmall,
+                          style: Theme.of(context).textTheme.headlineSmall,
                         ),
                         const SizedBox(height: AppSpacing.s2),
                         StatusBadge(
@@ -82,21 +69,17 @@ class ProductDetailView extends StatelessWidget {
                         const SizedBox(height: AppSpacing.s5),
                         Text(
                           'Descripción',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium,
+                          style: Theme.of(context).textTheme.titleMedium,
                         ),
                         const SizedBox(height: AppSpacing.s1),
                         Text(
                           product.description.isEmpty
                               ? 'Sin descripción.'
                               : product.description,
-                          style: Theme.of(context)
-                              .textTheme
-                              .bodyMedium
+                          style: Theme.of(context).textTheme.bodyMedium
                               ?.copyWith(
-                            color: context.appColors.textSecondary,
-                          ),
+                                color: context.appColors.textSecondary,
+                              ),
                         ),
                         const SizedBox(height: AppSpacing.s5),
                         const Divider(),
@@ -113,9 +96,7 @@ class ProductDetailView extends StatelessWidget {
                         const SizedBox(height: AppSpacing.s3),
                         _DetailRow(
                           label: 'Estado',
-                          value: isAvailable
-                              ? 'Disponible'
-                              : 'No disponible',
+                          value: isAvailable ? 'Disponible' : 'No disponible',
                         ),
                       ],
                     ),
@@ -131,10 +112,7 @@ class ProductDetailView extends StatelessWidget {
 }
 
 class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.label,
-    required this.value,
-  });
+  const _DetailRow({required this.label, required this.value});
 
   final String label;
   final String value;
@@ -153,9 +131,9 @@ class _DetailRow extends StatelessWidget {
         ),
         Text(
           value,
-          style: Theme.of(context).textTheme.titleSmall?.copyWith(
-            fontWeight: FontWeight.w700,
-          ),
+          style: Theme.of(
+            context,
+          ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
         ),
       ],
     );

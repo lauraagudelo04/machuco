@@ -14,9 +14,10 @@ class OwnerSubscriptionPage extends StatefulWidget {
 }
 
 class _OwnerSubscriptionPageState extends State<OwnerSubscriptionPage> {
-  late final OwnerSubscriptionController _controller = OwnerSubscriptionController(
-    firestoreRepository: SubscriptionFirestoreRepository(),
-  );
+  late final OwnerSubscriptionController _controller =
+      OwnerSubscriptionController(
+        firestoreRepository: SubscriptionFirestoreRepository(),
+      );
 
   @override
   void dispose() {

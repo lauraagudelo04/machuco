@@ -7,6 +7,7 @@ import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
 import 'package:machuco/models/auth/user_profile.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 void main() {
   group('PersonType', () {
@@ -23,6 +24,8 @@ void main() {
   group('RegistrationData', () {
     test('cliente lleva fecha de nacimiento y ningún dato de propietario', () {
       final data = RegistrationData.client(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Ana',
         lastNames: 'Pérez',
         phoneCountryCodeId: 1,
@@ -41,6 +44,8 @@ void main() {
 
     test('propietario natural descarta la razón social', () {
       final data = RegistrationData.owner(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Luz',
         lastNames: 'Mora',
         phoneCountryCodeId: 1,
@@ -60,6 +65,8 @@ void main() {
 
     test('toString no expone la contraseña', () {
       final data = RegistrationData.client(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Ana',
         lastNames: 'Pérez',
         phoneCountryCodeId: 1,
@@ -149,6 +156,37 @@ void main() {
       expect(map.containsKey('rejectionReason'), isFalse);
     });
 
+    test('escribe y lee el documento de identidad (decisión 2026-11-17)', () {
+      const client = UserProfile(
+        uid: 'u',
+        fullName: 'Ana Pérez',
+        email: 'ana@example.com',
+        phoneNumber: '+573001234567',
+        role: RegisteredUserRole.client,
+        accountStatus: AccountStatus.active,
+        documentType: DocumentType.foreignerCard,
+        documentNumber: '345678',
+      );
+      final map = client.toFirestore();
+      // Mismo nombre y valor que exige firestore.rules.
+      expect(map['documentType'], 'foreignerCard');
+      expect(map['documentNumber'], '345678');
+
+      final read = UserProfile.fromFirestore('u', {
+        ...map,
+        'createdAt': Timestamp.now(),
+      });
+      expect(read.documentType, DocumentType.foreignerCard);
+      expect(read.documentNumber, '345678');
+
+      final unknown = UserProfile.fromFirestore('u', {
+        'fullName': 'Ana',
+        'role': 'client',
+        'documentType': 'dni',
+      });
+      expect(unknown.documentType, isNull);
+    });
+
     test('el propietario escribe tipo, NIT, razón social y plan', () {
       const owner = UserProfile(
         uid: 'u',
@@ -224,11 +262,70 @@ void main() {
         SubscriptionPlanOption.tryFromJson({'id': 'x', 'name': 'A'}),
         isNull,
       );
+      expect(SubscriptionPlanOption.tryFromJson({'name': 'A'}), isNull);
+    });
+
+    test('tolera campos null: solo el id es obligatorio', () {
+      final plan = SubscriptionPlanOption.tryFromJson({
+        'id': 3,
+        'name': null,
+        'description': null,
+        'price': null,
+        'currency': null,
+        'billing_period': null,
+        'features': null,
+        'max_motels': null,
+        'sort_order': null,
+      })!;
+      expect(plan.id, 3);
+      expect(plan.name, isNull);
+      expect(plan.description, isNull);
+      expect(plan.price, isNull);
+      expect(plan.currency, isNull);
+      expect(plan.billingPeriod, isNull);
+      expect(plan.billingPeriodLabel, isNull);
+      expect(plan.features, isEmpty);
+      expect(plan.maxMotels, isNull);
+      expect(plan.sortOrder, isNull);
       expect(
-        SubscriptionPlanOption.tryFromJson({'id': 3, 'name': ' '}),
+        SubscriptionPlanOption.tryFromJson({'id': 4, 'name': ' '})!.name,
         isNull,
       );
-      expect(SubscriptionPlanOption.tryFromJson({'name': 'A'}), isNull);
+    });
+
+    test('lee todos los campos y las características vacías o mixtas', () {
+      final full = SubscriptionPlanOption.tryFromJson({
+        'id': 1,
+        'name': 'Premium',
+        'description': 'Para cadenas',
+        'price': 49900,
+        'currency': 'COP',
+        'billing_period': 'monthly',
+        'features': ['Soporte', ' ', 'Reportes'],
+        'max_motels': 5,
+        'sort_order': 2,
+      })!;
+      expect(full.price, 49900);
+      expect(full.billingPeriodLabel, 'mensual');
+      expect(full.features, ['Soporte', 'Reportes']);
+      expect(full.maxMotels, 5);
+      expect(
+        SubscriptionPlanOption.tryFromJson({
+          'id': 2,
+          'billing_period': 'yearly',
+          'features': [],
+        })!,
+        isA<SubscriptionPlanOption>()
+            .having((p) => p.billingPeriodLabel, 'label', 'anual')
+            .having((p) => p.features, 'features', isEmpty),
+      );
+      expect(
+        SubscriptionPlanOption.tryFromJson({
+          'id': 5,
+          'features': 'texto',
+        })!.features,
+        isEmpty,
+      );
     });
   });
 }

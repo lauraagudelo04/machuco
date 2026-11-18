@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/account_status.dart';
@@ -7,6 +8,7 @@ import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/widgets/account_status_chip.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
+import 'package:machuco/widgets/auth/delete_account_action.dart';
 
 import 'package:machuco/views/auth/change_password_page.dart';
 import 'package:machuco/views/auth/user_edit_profile_page.dart';
@@ -16,7 +18,10 @@ import 'package:machuco/views/auth/user_edit_profile_page.dart';
 /// Muestra sus datos reales; antes la app no tenía esta vista y el nombre del
 /// propietario se veía quemado en la pantalla de moteles.
 class OwnerProfilePage extends StatefulWidget {
-  const OwnerProfilePage({super.key, this.controller});
+  const OwnerProfilePage({super.key, this.controller, this.loginController});
+
+  /// Sesión usada por "Eliminar cuenta"; si es `null` se crea al tocarlo.
+  final LoginController? loginController;
 
   /// Controlador inyectable para los tests; si es `null` se crea uno propio.
   final UserProfileController? controller;
@@ -195,6 +200,8 @@ class _OwnerProfilePageState extends State<OwnerProfilePage> {
               tone: AuthNoticeTone.info,
             ),
           ],
+          const SizedBox(height: AppSpacing.s6),
+          DeleteAccountAction(controller: widget.loginController),
         ],
       ),
     );

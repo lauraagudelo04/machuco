@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
+import 'package:machuco/controllers/auth/validators/document_number_validator.dart';
 import 'package:machuco/database/repository/auth/administrators_repository.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
@@ -539,6 +540,12 @@ final class FirebaseSocialAuthService implements SocialAuthService {
           ? 'Ingresa tu número de celular.'
           : null,
       data.phoneCountryCodeId <= 0 ? 'Selecciona el indicativo.' : null,
+      AuthValidators.documentType(data.documentType) ??
+          // El patrón fino lo valida la vista con el maestro `document_types`.
+          DocumentNumberValidator.validate(
+            AuthInputNormalizer.documentNumber(data.documentNumber),
+            null,
+          ),
     ];
     final roleErrors = switch (data.role) {
       RegisteredUserRole.client => [
@@ -573,6 +580,8 @@ final class FirebaseSocialAuthService implements SocialAuthService {
       firstNames: firstNames,
       lastNames: lastNames,
       phoneCountryCodeId: data.phoneCountryCodeId,
+      documentType: data.documentType,
+      documentNumber: AuthInputNormalizer.documentNumber(data.documentNumber),
       birthDate: isOwner ? null : data.birthDate,
       personType: isOwner ? data.personType : null,
       nit: isOwner ? AuthInputNormalizer.nit(data.nit) : null,

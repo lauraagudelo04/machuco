@@ -5,6 +5,7 @@ import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registration_data.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/views/register/register_form.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -53,12 +54,35 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  void expectNoIdentityDocument(WidgetTester tester) {
-    final texts = tester.widgetList<Text>(find.byType(Text));
-    expect(identityDocumentTexts(texts), isEmpty);
+  /// Documento de identidad (decisión 2026-11-17): CC, CE y pasaporte, con
+  /// selector de tipo (hoja inferior) y número en una sola fila.
+  Future<void> expectIdentityDocument(WidgetTester tester) async {
+    expect(find.byKey(const ValueKey('document-field')), findsOneWidget);
+    expect(find.text('Documento de identidad'), findsOneWidget);
+    expect(find.byKey(const ValueKey('document-type-button')), findsOneWidget);
+    expect(field('Número de documento'), findsOneWidget);
+    // El hint es el ejemplo del tipo elegido (CC por defecto).
+    expect(find.text('1020304050'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('document-type-button')));
+    await tester.pumpAndSettle();
+    expect(find.text('Cédula de ciudadanía'), findsOneWidget);
+    expect(find.text('Cédula de extranjería'), findsOneWidget);
+    expect(find.text('Pasaporte'), findsOneWidget);
+    // Ni tarjeta de identidad (menores) ni NIT como documento.
+    expect(find.text('Tarjeta de identidad'), findsNothing);
+    expect(find.text('Número de identificación tributaria'), findsNothing);
+    await tester.tap(find.byKey(const ValueKey('document-type-option-CC')));
+    await tester.pumpAndSettle();
   }
 
-  testWidgets('cliente: muestra sus campos y nunca un documento', (
+  Future<void> pickPassport(WidgetTester tester) async {
+    await tester.tap(find.byKey(const ValueKey('document-type-button')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('document-type-option-PAS')));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('cliente: muestra sus campos y el documento de identidad', (
     tester,
   ) async {
     await pumpForm(tester);
@@ -68,7 +92,7 @@ void main() {
     expect(field('Fecha de nacimiento'), findsOneWidget);
     expect(field('NIT'), findsNothing);
     expect(find.text('Plan de suscripción'), findsNothing);
-    expectNoIdentityDocument(tester);
+    await expectIdentityDocument(tester);
   });
 
   testWidgets('propietario: muestra NIT y planes, sin fecha de nacimiento', (
@@ -83,7 +107,8 @@ void main() {
     expect(find.text('Básico'), findsOneWidget);
     expect(find.text('Premium'), findsOneWidget);
     expect(field('Fecha de nacimiento'), findsNothing);
-    expectNoIdentityDocument(tester);
+    // El documento de identidad va aparte del NIT.
+    await expectIdentityDocument(tester);
   });
 
   testWidgets('la razón social aparece solo en persona jurídica y el NIT se '
@@ -174,6 +199,7 @@ void main() {
     await pumpForm(tester);
     await tester.enterText(field('Nombres'), 'Ana María');
     await tester.enterText(field('Apellidos'), 'Pérez Gómez');
+    await tester.enterText(field('Número de documento'), '1.020.304.050');
     await tester.enterText(field('Celular'), '3001234567');
     await tester.enterText(field('Fecha de nacimiento'), '15/03/1990');
     await tester.enterText(field('Correo electrónico'), 'ana@example.com');
@@ -187,6 +213,43 @@ void main() {
     expect(submitted!.firstNames, 'Ana María');
     expect(submitted!.phoneNumber, '3001234567');
     expect(submitted!.birthDate, DateTime(1990, 3, 15));
+    expect(submitted!.documentType, DocumentType.citizenshipCard);
+    // La vista entrega lo escrito; el controller lo normaliza.
+    expect(submitted!.documentNumber, '1.020.304.050');
+  });
+
+  testWidgets('sin documento o con un número inválido no se envía', (
+    tester,
+  ) async {
+    await pumpForm(tester);
+    await tester.enterText(field('Nombres'), 'Ana María');
+    await tester.enterText(field('Apellidos'), 'Pérez Gómez');
+    await tester.enterText(field('Celular'), '3001234567');
+    await tester.enterText(field('Fecha de nacimiento'), '15/03/1990');
+    await tester.enterText(field('Correo electrónico'), 'ana@example.com');
+    await tester.enterText(field('Contraseña'), 'Segura12345');
+    await tester.enterText(field('Confirmar contraseña'), 'Segura12345');
+
+    await tester.tap(find.widgetWithText(AppButton, 'Crear cuenta'));
+    await tester.pumpAndSettle();
+    expect(submitted, isNull);
+    expect(find.text('Ingresa tu número de documento.'), findsOneWidget);
+
+    // Letras en una cédula: inválido para CC, válido como pasaporte.
+    await tester.enterText(field('Número de documento'), 'AV123456');
+    await tester.tap(find.widgetWithText(AppButton, 'Crear cuenta'));
+    await tester.pumpAndSettle();
+    expect(submitted, isNull);
+    expect(
+      find.textContaining('Número no válido. Ejemplo: 1020304050.'),
+      findsOneWidget,
+    );
+
+    await pickPassport(tester);
+    await tester.tap(find.widgetWithText(AppButton, 'Crear cuenta'));
+    await tester.pumpAndSettle();
+    expect(submitted?.documentType, DocumentType.passport);
+    expect(submitted?.documentNumber, 'AV123456');
   });
 
   testWidgets('envía los datos del propietario con NIT válido y plan', (
@@ -199,6 +262,7 @@ void main() {
     await tester.enterText(field('Nombres'), 'Ana María');
     await tester.enterText(field('Apellidos'), 'Pérez Gómez');
     await tester.enterText(field('Celular'), '3001234567');
+    await tester.enterText(field('Número de documento'), '43123456');
     await tester.enterText(field('NIT'), '900123456-8');
     await tester.enterText(field('Razón social'), 'Moteles del Sur SAS');
     await tester.enterText(field('Correo electrónico'), 'ana@example.com');
@@ -218,6 +282,7 @@ void main() {
 
     expect(submitted?.personType, PersonType.juridica);
     expect(submitted?.nit, '900123456-8');
+    expect(submitted?.documentNumber, '43123456');
     expect(submitted?.planId, 2);
   });
 

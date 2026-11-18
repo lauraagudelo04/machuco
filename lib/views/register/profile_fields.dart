@@ -2,16 +2,19 @@ import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/models/auth/document_type.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/views/register/client_registration_section.dart';
 import 'package:machuco/views/register/owner_registration_section.dart';
 import 'package:machuco/views/register/role_selector.dart';
+import 'package:machuco/widgets/auth/document_field.dart';
 import 'package:machuco/widgets/form/app_phone_field.dart';
 
 /// Campos de perfil por rol que comparten "Registrarse" y "Completar
-/// perfil": tipo de perfil, nombres, apellidos, celular con indicativo y el
-/// bloque propio del rol (fecha de nacimiento o datos del propietario).
+/// perfil": tipo de perfil, nombres, apellidos, documento de identidad,
+/// celular con indicativo y el bloque propio del rol (fecha de nacimiento o
+/// datos del propietario).
 ///
 /// No guarda estado: quien lo usa conserva los controladores y la selección,
 /// así los datos comunes sobreviven al cambio de rol.
@@ -23,6 +26,9 @@ class ProfileFields extends StatelessWidget {
     required this.onRoleSelected,
     required this.firstNames,
     required this.lastNames,
+    required this.documentType,
+    required this.onDocumentTypeChanged,
+    required this.documentNumber,
     required this.phone,
     required this.birthDate,
     required this.nit,
@@ -39,6 +45,11 @@ class ProfileFields extends StatelessWidget {
   final ValueChanged<RegisteredUserRole> onRoleSelected;
   final TextEditingController firstNames;
   final TextEditingController lastNames;
+
+  /// Tipo elegido del maestro `document_types`; `null` mientras no carga.
+  final DocumentTypeOption? documentType;
+  final ValueChanged<DocumentTypeOption> onDocumentTypeChanged;
+  final TextEditingController documentNumber;
   final TextEditingController phone;
   final TextEditingController birthDate;
   final TextEditingController nit;
@@ -82,6 +93,17 @@ class ProfileFields extends StatelessWidget {
           autofillHints: const [AutofillHints.familyName],
           validator: AuthValidators.lastNames,
           autovalidateMode: AutovalidateMode.onUserInteraction,
+        ),
+        const SizedBox(height: AppSpacing.s4),
+        DocumentField(
+          types: controller.documentTypes,
+          selected: documentType,
+          onSelected: onDocumentTypeChanged,
+          numberController: documentNumber,
+          loading: controller.isLoadingDocumentTypes,
+          errorMessage: controller.documentTypesError,
+          onRetry: () => controller.loadDocumentTypes(forceRefresh: true),
+          legalRepresentative: isOwner && personType == PersonType.juridica,
         ),
         const SizedBox(height: AppSpacing.s4),
         Text('Número de celular', style: theme.textTheme.bodyLarge),

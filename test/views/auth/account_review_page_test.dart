@@ -50,6 +50,20 @@ void main() {
     expect(find.text('El NIT no coincide con el RUT.'), findsOneWidget);
     expect(find.byIcon(Icons.cancel_outlined), findsOneWidget);
     expect(find.text('Cerrar sesión'), findsOneWidget);
-    expect(find.text('Eliminar cuenta'), findsNothing);
+    // DA-13: la variante rechazada también ofrece "Eliminar cuenta".
+    expect(find.text('Eliminar cuenta'), findsOneWidget);
+  });
+
+  testWidgets('"atrás" no vuelve al login con la sesión abierta', (
+    tester,
+  ) async {
+    await pumpPage(tester, const AccountReviewArgs(email: 'dueno@example.com'));
+
+    final popScope = tester.widget<PopScope>(find.byType(PopScope));
+    expect(popScope.canPop, isFalse);
+
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.text('Cuenta en revisión'), findsOneWidget);
   });
 }

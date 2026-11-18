@@ -101,10 +101,7 @@ class SubscriptionPlan {
       description: _text(json['description']),
       price: _int(json['price']),
       currency: _text(json['currency'], fallback: 'COP'),
-      billingPeriod: _text(
-        json['billing_period'],
-        fallback: 'monthly',
-      ),
+      billingPeriod: _text(json['billing_period'], fallback: 'monthly'),
       features: _features(json['features']),
       maxMotels: _int(json['max_motels']),
     );

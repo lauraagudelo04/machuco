@@ -44,15 +44,16 @@ class PhoneCountryCodeRepository {
     }
 
     try {
-      final uri = Uri.parse(
-        '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/rest/v1/phone_country_codes',
-      ).replace(
-        queryParameters: {
-          'select': 'id,country_code,country_name,calling_code,active',
-          'active': 'eq.true',
-          'order': 'country_name.asc',
-        },
-      );
+      final uri =
+          Uri.parse(
+            '${baseUrl.replaceFirst(RegExp(r'/$'), '')}/rest/v1/phone_country_codes',
+          ).replace(
+            queryParameters: {
+              'select': 'id,country_code,country_name,calling_code,active',
+              'active': 'eq.true',
+              'order': 'country_name.asc',
+            },
+          );
       final response = await _httpClient.get(
         uri,
         headers: {'apikey': apiKey, 'Accept': 'application/json'},
@@ -97,9 +98,9 @@ class PhoneCountryCodeRepository {
     throw PhoneCountryCodeRepositoryException(message);
   }
 
-  List<PhoneCountryCode> _sorted(List<PhoneCountryCode> codes) =>
-      List.of(codes)..sort(
-        (a, b) =>
-            a.countryName.toLowerCase().compareTo(b.countryName.toLowerCase()),
-      );
+  List<PhoneCountryCode> _sorted(List<PhoneCountryCode> codes) => List.of(codes)
+    ..sort(
+      (a, b) =>
+          a.countryName.toLowerCase().compareTo(b.countryName.toLowerCase()),
+    );
 }

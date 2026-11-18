@@ -72,10 +72,8 @@ void main() {
       'activos ordenados por nombre', () async {
     final client = MockClient((request) async {
       expect(request.url.path, '/rest/v1/phone_country_codes');
-      expect(
-        request.url.queryParameters['select'],
-        'id,country_code,country_name,calling_code,active',
-      );
+      // `*`: pedir una columna que aún no existe en Supabase daría HTTP 400.
+      expect(request.url.queryParameters['select'], '*');
       expect(request.headers['apikey'], 'public-key');
       return http.Response.bytes(utf8.encode(_supabaseBody), 200);
     });
@@ -131,6 +129,28 @@ void main() {
     ).getCountryPhoneCodes(forceRefresh: true);
 
     expect(result.single.isoCode, 'AR');
+  });
+
+  test('si falla la inserción, el reemplazo se revierte y la caché anterior '
+      'se conserva (transacción)', () async {
+    await database.phoneCountryCodeDao.insertCountryCodes([_cachedArgentina]);
+    // Simula un fallo de SQLite a mitad de la inserción (después del borrado).
+    await database.database.execute(
+      "CREATE TRIGGER fail_mx BEFORE INSERT ON phone_country_codes "
+      "WHEN NEW.country_code = 'MX' BEGIN SELECT RAISE(ABORT, 'fallo'); END",
+    );
+    final client = MockClient(
+      (_) async => http.Response.bytes(utf8.encode(_supabaseBody), 200),
+    );
+
+    final result = await buildRepository(
+      client,
+    ).getCountryPhoneCodes(forceRefresh: true);
+
+    expect(result.single.isoCode, 'AR');
+    final stored = await database.phoneCountryCodeDao.findAll();
+    expect(stored.map((code) => code.countryCode), ['AR']);
+    expect(await preferences.loadCatalogsSyncedAt(), isNull);
   });
 
   test('usa la caché cuando el JSON está malformado', () async {

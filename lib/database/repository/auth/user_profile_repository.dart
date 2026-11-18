@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
+import 'package:machuco/database/repository/auth/user_document_tree_removal.dart';
 import 'package:machuco/models/auth/user_profile.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
@@ -36,8 +37,11 @@ abstract interface class UserProfileRepository {
   /// password. `firestore.rules` only allows it when it was `true`.
   Future<void> clearMustChangePassword(String uid);
 
-  /// Deletes `users/{uid}`. Idempotent: succeeds if the document is already
-  /// gone. Only the owner of the profile may delete it (`firestore.rules`).
+  /// Deletes the user's own subcollections (DA-15, see
+  /// [userOwnedSubcollections]) in batches and then `users/{uid}`.
+  /// Idempotent: succeeds if everything is already gone, and a retry resumes
+  /// where it failed. Only the owner of the profile may delete it
+  /// (`firestore.rules`).
   Future<void> deleteProfile(String uid);
 }
 
@@ -101,8 +105,25 @@ class FirestoreUserProfileRepository implements UserProfileRepository {
 
   @override
   Future<void> deleteProfile(String uid) async {
+    final profile = _doc(uid);
     try {
-      await _doc(uid).delete();
+      await removeUserDocumentTree<DocumentReference<Map<String, dynamic>>>(
+        fetchPage: (subcollection, limit) async {
+          final page = await profile
+              .collection(subcollection)
+              .limit(limit)
+              .get();
+          return [for (final document in page.docs) document.reference];
+        },
+        deleteBatch: (references) async {
+          final batch = _firestore.batch();
+          for (final reference in references) {
+            batch.delete(reference);
+          }
+          await batch.commit();
+        },
+        deleteProfileDocument: profile.delete,
+      );
     } on FirebaseException catch (e) {
       throw _map(e);
     }

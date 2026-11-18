@@ -314,8 +314,7 @@ abstract final class AppRoutes {
               )
             : const OwnerApprovalsPage(),
       ),
-      adminProfile =>
-        const AdminRouteGuard(child: AdminProfilePage()),
+      adminProfile => const AdminRouteGuard(child: AdminProfilePage()),
       adminAdministrators => const AdminRouteGuard(child: AdministratorsPage()),
       adminCreateAdministrator => AdminRouteGuard(
         child: settings.arguments is AdministratorsController

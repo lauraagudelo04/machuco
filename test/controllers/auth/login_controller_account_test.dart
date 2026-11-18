@@ -17,6 +17,7 @@ import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth_preferences.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _colombia = CountryPhoneCode(
@@ -165,6 +166,35 @@ void main() {
       await controller.restoreSession();
       expect((await controller.loadCachedProfile())?.uid, 'r1');
     });
+
+    test(
+      '[SQ-09] caché pending_approval y Firestore active: ruta con Firestore '
+      'y fila actualizada',
+      () async {
+        final controller = buildController();
+        auth.nextSession = _session(
+          RegisteredUserRole.owner,
+          status: AccountStatus.pendingApproval,
+        );
+        await controller.login(email: 'ana@example.com', password: 'secret123');
+        expect(
+          (await controller.loadCachedProfile())?.accountStatus,
+          AccountStatus.pendingApproval.storageValue,
+        );
+
+        auth.restored = _session(RegisteredUserRole.owner);
+        final restored = await controller.restoreSession();
+
+        expect(
+          controller.resolvePostLoginRoute(restored!),
+          AppRoutes.ownerMotels,
+        );
+        expect(
+          (await controller.loadCachedProfile())?.accountStatus,
+          AccountStatus.active.storageValue,
+        );
+      },
+    );
 
     test('se borra al cerrar sesión', () async {
       final controller = buildController();
@@ -363,6 +393,8 @@ void main() {
 
     RegistrationData client({String phone = '300 123 4567'}) =>
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: '  Ana María ',
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -383,14 +415,42 @@ void main() {
       expect(sent.firstNames, 'Ana María');
       expect(sent.phoneNumber, '+573001234567');
       expect(sent.phoneCountryCodeId, 1);
+      expect(sent.documentType, DocumentType.citizenshipCard);
+      expect(sent.documentNumber, '1020304050');
       expect(await preferences.loadLastCountryCodeId(), 1);
     });
+
+    test(
+      'documento: se envía normalizado y uno inválido no llega al servicio',
+      () async {
+        final controller = await readyController();
+
+        await controller.registerAccount(
+          client().copyWith(documentNumber: ' 1.020.304.050 '),
+        );
+        expect(auth.registered.single.documentNumber, '1020304050');
+
+        await expectLater(
+          controller.registerAccount(client().copyWith(documentNumber: '12')),
+          throwsA(
+            isA<AuthFailure>().having(
+              (f) => f.type,
+              'type',
+              AuthFailureType.invalidInput,
+            ),
+          ),
+        );
+        expect(auth.registered, hasLength(1));
+      },
+    );
 
     test('propietario jurídico: NIT canónico y razón social', () async {
       final controller = await readyController();
 
       await controller.registerAccount(
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -413,6 +473,8 @@ void main() {
 
     test('propietario natural ignora la razón social', () {
       final data = RegistrationData.owner(
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
         firstNames: 'Luz',
         lastNames: 'Mora',
         phoneCountryCodeId: 1,
@@ -451,6 +513,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: "Robert'); DROP TABLE users;--",
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -463,6 +527,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Ana',
           lastNames: 'Pérez',
           phoneCountryCodeId: 1,
@@ -475,6 +541,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -490,6 +558,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.owner(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Luz',
           lastNames: 'Mora',
           phoneCountryCodeId: 1,
@@ -508,6 +578,8 @@ void main() {
       await expectInvalid(
         controller,
         RegistrationData.client(
+          documentType: DocumentType.citizenshipCard,
+          documentNumber: '1020304050',
           firstNames: 'Ana',
           lastNames: 'Pérez',
           phoneCountryCodeId: 999,
@@ -587,6 +659,24 @@ void main() {
         expect(controller.isDeletingAccount, isFalse);
       },
     );
+
+    test('cuenta de Google o GitHub: tras eliminarla limpia todo el namespace '
+        'auth, incluido el correo recordado', () async {
+      final controller = buildController();
+      auth.nextSession = _session(RegisteredUserRole.client);
+      await controller.login(email: 'ana@example.com', password: 'secret123');
+      await preferences.saveRememberedEmail('ana@example.com');
+
+      await controller.clearDataAfterAccountDeletion();
+
+      expect(controller.session, isNull);
+      expect(controller.currentUserEmail, isNull);
+      expect(await cache.loadCurrent(), isNull);
+      expect(await preferences.loadCurrentUserEmail(), isNull);
+      expect((await preferences.loadRememberedEmail()).email, isNull);
+      // No vuelve a llamar al servicio: la cuenta ya se eliminó.
+      expect(auth.deletedWithPasswords, isEmpty);
+    });
 
     test('si el backend falla no borra nada local', () async {
       final controller = buildController();
@@ -711,19 +801,6 @@ final class _FakeAuthService implements AuthService {
     if (failure != null) throw failure;
     return nextSession;
   }
-
-  @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async =>
-      nextSession;
-
-  @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {}
 
   @override
   Future<void> registerAccount(RegistrationData data) async {

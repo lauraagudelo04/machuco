@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:machuco/controllers/auth/auth_routes.dart';
+import 'package:machuco/controllers/auth/login_controller.dart';
 import 'package:machuco/controllers/auth/user_profile_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/account_status.dart';
@@ -8,6 +10,7 @@ import 'package:machuco/views/auth/change_password_page.dart';
 import 'package:machuco/views/auth/user_edit_profile_page.dart';
 import 'package:machuco/widgets/account_status_chip.dart';
 import 'package:machuco/widgets/auth/auth_notice.dart';
+import 'package:machuco/widgets/auth/delete_account_action.dart';
 
 /// Perfil del administrador autenticado (`users/{uid}`).
 ///
@@ -15,7 +18,10 @@ import 'package:machuco/widgets/auth/auth_notice.dart';
 /// `firestore.rules` deja autoeditar a un administrador activo) además de
 /// cambiar su contraseña.
 class AdminProfilePage extends StatefulWidget {
-  const AdminProfilePage({super.key, this.controller});
+  const AdminProfilePage({super.key, this.controller, this.loginController});
+
+  /// Sesión usada por "Eliminar cuenta"; si es `null` se crea al tocarlo.
+  final LoginController? loginController;
 
   /// Controlador inyectable para los tests; si es `null` se crea uno propio.
   final UserProfileController? controller;
@@ -147,6 +153,16 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
               ),
             ],
           ),
+          const SizedBox(height: AppSpacing.s6),
+          AppButton(
+            key: const ValueKey('admin-profile-administrators'),
+            label: 'Administradores',
+            icon: Icons.admin_panel_settings_outlined,
+            variant: AppButtonVariant.secondary,
+            size: AppButtonSize.medium,
+            onPressed: () =>
+                Navigator.of(context).pushNamed(AuthRoutes.adminAdministrators),
+          ),
           if (profile.mustChangePassword) ...[
             const SizedBox(height: AppSpacing.s6),
             const AuthNotice(
@@ -156,6 +172,11 @@ class _AdminProfilePageState extends State<AdminProfilePage> {
               tone: AuthNoticeTone.info,
             ),
           ],
+          const SizedBox(height: AppSpacing.s6),
+          DeleteAccountAction(
+            controller: widget.loginController,
+            isAdministrator: true,
+          ),
         ],
       ),
     );

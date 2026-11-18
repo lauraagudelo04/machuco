@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/controllers/auth/admin_access_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
+import 'package:machuco/database/repository/auth/admin_access_repository.dart';
 import 'package:machuco/models/auth/owner_approval_request.dart';
 import 'package:machuco/models/auth/owner_request_alert.dart';
 import 'package:machuco/models/auth/person_type.dart';
@@ -49,7 +50,9 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
     // notificar al controlador compartido mientras se construye el árbol.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final application = _application;
-      if (mounted && application != null) _controller.loadAlerts(application);
+      if (!mounted) return;
+      _controller.loadPlanNames();
+      if (application != null) _controller.loadAlerts(application);
     });
   }
 
@@ -103,13 +106,23 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
     }
     final error = _controller.error ?? 'No pudimos completar la operación.';
     final alreadyHandled = error.contains('ya fue atendida');
+    final isNetwork = _controller.errorType == AdminAccessFailureType.network;
     _controller.clearError();
+    // La solicitud sigue pendiente en pantalla hasta que llegue la
+    // confirmación; "Reintentar" repite solo la operación fallida.
     messenger
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
           content: Text(error),
           backgroundColor: alreadyHandled ? null : errorColor,
+          action: isNetwork
+              ? SnackBarAction(
+                  label: 'Reintentar',
+                  onPressed: () =>
+                      _resolve(action, successMessage: successMessage),
+                )
+              : null,
         ),
       );
     if (alreadyHandled) {
@@ -185,9 +198,17 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
     );
   }
 
+  /// Nombre del plan del catálogo; nunca el id numérico.
+  String _planLabel(int? planId) {
+    if (planId == null) return 'No indicado';
+    final name = _controller.planNameFor(planId);
+    if (name != null) return name;
+    return _controller.hasLoadedPlans ? 'Plan no disponible' : 'Cargando plan…';
+  }
+
   Widget _buildContent(BuildContext context, OwnerApplication application) {
     final busy = _controller.isSubmitting;
-    final plan = application.planId;
+    final documentType = application.documentType;
     final rows = <(String, String)>[
       ('Nombre', application.fullName),
       ('Tipo de persona', application.personType?.label ?? 'No indicado'),
@@ -195,8 +216,15 @@ class _OwnerApprovalDetailPageState extends State<OwnerApprovalDetailPage> {
       if (application.personType == PersonType.juridica)
         ('Razón social', application.companyName ?? 'No indicada'),
       ('Correo', application.email),
+      (
+        application.personType == PersonType.juridica
+            ? 'Tipo de documento (representante legal)'
+            : 'Tipo de documento',
+        documentType?.description ?? 'No indicado',
+      ),
+      ('Número de documento', application.documentNumber ?? 'No indicado'),
       ('Celular', application.phoneNumber),
-      ('Plan', plan == null ? 'No indicado' : 'Plan n.º $plan'),
+      ('Plan', _planLabel(application.planId)),
       ('Fecha de solicitud', formatApplicationDate(application.createdAt)),
     ];
     return Column(

@@ -2,12 +2,15 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
+import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/document_type/document_type_repository.dart';
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
@@ -198,7 +201,8 @@ class OwnerController extends ChangeNotifier {
   /// Moteles y propietarios disponibles cuando la eliminación quedó bloqueada.
   ///
   /// La vista lo usa para pedir a quién reasignar los moteles y reintentar.
-  OwnerAnonymizationBlocker? get lastAnonymizationBlocker => _anonymizationBlocker;
+  OwnerAnonymizationBlocker? get lastAnonymizationBlocker =>
+      _anonymizationBlocker;
 
   /// Completa cuando termina el envío en segundo plano de la última escritura.
   ///
@@ -409,6 +413,8 @@ class OwnerController extends ChangeNotifier {
     required String documentNumber,
     required String email,
     required String phone,
+    required String nit,
+    required PersonType personType,
     String? countryCode,
     String? countryName,
     String? address,
@@ -418,6 +424,9 @@ class OwnerController extends ChangeNotifier {
     _lastError = null;
     notifyListeners();
     try {
+      final nitError = validateNit(nit, personType);
+      if (nitError != null) throw StateError(nitError);
+
       final duplicate = await _service.validarDuplicado(
         documentType,
         documentNumber,
@@ -441,6 +450,8 @@ class OwnerController extends ChangeNotifier {
         documentNumber: documentNumber,
         email: email,
         phone: phone,
+        nit: AuthInputNormalizer.nit(nit) ?? nit.trim(),
+        personType: personType,
         countryCode: countryCode,
         countryName: countryName,
         address: address,
@@ -476,21 +487,38 @@ class OwnerController extends ChangeNotifier {
     required DocumentType documentType,
     required String documentNumber,
     required String phone,
+    String? nit,
+    PersonType? personType,
     String? countryCode,
     String? countryName,
     String? address,
-  }) => _runAction(
-    () => _service.actualizarPropietario(
-      ownerId: ownerId,
-      fullName: fullName,
-      documentType: documentType,
-      documentNumber: documentNumber,
-      phone: phone,
-      countryCode: countryCode,
-      countryName: countryName,
-      address: address,
-    ),
-  );
+  }) {
+    if (nit != null) {
+      final nitError = validateNit(
+        nit,
+        personType ?? _findOwner(ownerId)?.personType ?? PersonType.natural,
+      );
+      if (nitError != null) {
+        _lastError = nitError;
+        notifyListeners();
+        return Future.value();
+      }
+    }
+    return _runAction(
+      () => _service.actualizarPropietario(
+        ownerId: ownerId,
+        fullName: fullName,
+        documentType: documentType,
+        documentNumber: documentNumber,
+        phone: phone,
+        nit: nit == null ? null : AuthInputNormalizer.nit(nit) ?? nit.trim(),
+        personType: personType,
+        countryCode: countryCode,
+        countryName: countryName,
+        address: address,
+      ),
+    );
+  }
 
   /// Actualiza el teléfono de un propietario existente y devuelve cómo quedó.
   Future<Owner?> updateOwnerPhone(
@@ -894,6 +922,11 @@ class OwnerController extends ChangeNotifier {
     }
     return null;
   }
+
+  /// NIT con dígito de verificación (mismas reglas que el registro público).
+  /// Es independiente del documento de identidad.
+  static String? validateNit(String value, PersonType personType) =>
+      AuthValidators.nit(personType)(value);
 
   static String? validateEmail(String value) {
     final email = value.trim();

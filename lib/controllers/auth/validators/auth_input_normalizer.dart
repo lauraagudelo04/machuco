@@ -12,6 +12,11 @@ abstract final class AuthInputNormalizer {
   static String digits(String? value) =>
       (value ?? '').replaceAll(RegExp(r'\D'), '');
 
+  /// Número de documento sin espacios, puntos ni guiones y en mayúsculas
+  /// (`1.020.304.050` → `1020304050`, `av 123456` → `AV123456`).
+  static String documentNumber(String? value) =>
+      (value ?? '').replaceAll(RegExp(r'[\s.\-]'), '').toUpperCase();
+
   /// NIT canónico `base-DV` (p. ej. `900123456-8`), o `null` si no tiene una
   /// forma numérica reconocible. No comprueba el dígito de verificación.
   static String? nit(String? value) {

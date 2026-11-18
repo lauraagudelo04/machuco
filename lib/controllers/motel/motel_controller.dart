@@ -96,9 +96,7 @@ class MotelController {
       // Sin backend se filtra el mock por la sesión; sin sesión no hay nada.
       if (ownerId == null || ownerId.trim().isEmpty) return const [];
       await Future.delayed(const Duration(seconds: 1));
-      return _mockDatabase
-          .where((motel) => motel.ownerId == ownerId)
-          .toList();
+      return _mockDatabase.where((motel) => motel.ownerId == ownerId).toList();
     }
     return repository.getMyMotels();
   }

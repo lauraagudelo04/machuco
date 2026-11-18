@@ -211,7 +211,6 @@ class _StatusChip extends StatelessWidget {
   }
 }
 
-
 class _StarRow extends StatelessWidget {
   const _StarRow({required this.rating});
 

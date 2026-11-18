@@ -69,7 +69,9 @@ class SubscriptionRepository {
   final String _supabaseUrl;
   final String _publishableKey;
 
-  Future<List<SubscriptionPlan>> findPlans({bool includeDetails = false}) async {
+  Future<List<SubscriptionPlan>> findPlans({
+    bool includeDetails = false,
+  }) async {
     final base = Uri.tryParse(_supabaseUrl);
     if (base == null ||
         base.scheme != 'https' ||

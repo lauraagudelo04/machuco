@@ -33,7 +33,7 @@ class PhoneCountryCode {
       active: json['active'] as bool? ?? true,
     );
   }
-  
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,

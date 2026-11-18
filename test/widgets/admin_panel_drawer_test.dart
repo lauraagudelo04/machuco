@@ -10,6 +10,7 @@ void main() {
     tester,
   ) async {
     var approvals = 0;
+    var administrators = 0;
     var notifications = 0;
     var profile = 0;
     var logout = 0;
@@ -21,6 +22,7 @@ void main() {
             pendingRequests: 3,
             adminEmail: 'admin@machuco.com',
             onOpenApprovals: () => approvals++,
+            onOpenAdministrators: () => administrators++,
             onOpenNotifications: () => notifications++,
             onOpenProfile: () => profile++,
             onLogout: () => logout++,
@@ -37,12 +39,14 @@ void main() {
     expect(find.text('3'), findsOneWidget);
 
     await tester.tap(find.text('Solicitudes de propietarios'));
+    await tester.tap(find.text('Administradores'));
     await tester.tap(find.text('Notificaciones'));
     await tester.tap(find.text('Mi perfil'));
     await tester.tap(find.text('Cerrar sesión'));
     await tester.pumpAndSettle();
 
     expect(approvals, 1);
+    expect(administrators, 1);
     expect(notifications, 1);
     expect(profile, 1);
     expect(logout, 1);
@@ -56,6 +60,7 @@ void main() {
             pendingRequests: 0,
             adminEmail: null,
             onOpenApprovals: () {},
+            onOpenAdministrators: () {},
             onOpenNotifications: () {},
             onOpenProfile: () {},
             onLogout: () {},

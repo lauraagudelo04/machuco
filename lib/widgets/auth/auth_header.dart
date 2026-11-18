@@ -15,9 +15,9 @@ class AuthHeader extends StatelessWidget {
         CircleAvatar(
           radius: AppSpacing.s6 + AppSpacing.s2 / 2,
           backgroundColor: Theme.of(context).colorScheme.primary,
-          child: const Icon(
+          child: Icon(
             Icons.bed_rounded,
-            color: Colors.white,
+            color: Theme.of(context).colorScheme.onPrimary,
             size: AppSpacing.s6 + AppSpacing.s1,
           ),
         ),

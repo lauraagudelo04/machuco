@@ -71,84 +71,87 @@ class _AccountReviewPageState extends State<AccountReviewPage> {
     final color = rejected
         ? theme.colorScheme.error
         : theme.colorScheme.primary;
-    return Scaffold(
-      appBar: AppBar(
-        automaticallyImplyLeading: false,
-        title: Text(rejected ? 'Solicitud rechazada' : 'Cuenta en revisión'),
-      ),
-      body: SafeArea(
-        child: SingleChildScrollView(
-          child: ResponsiveContent(
-            maxWidth: 560,
-            padding: const EdgeInsets.all(AppSpacing.s6),
-            child: Semantics(
-              liveRegion: true,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Icon(
-                    rejected
-                        ? Icons.cancel_outlined
-                        : Icons.hourglass_top_outlined,
-                    size: AppSpacing.s12 + AppSpacing.s8,
-                    color: color,
-                  ),
-                  const SizedBox(height: AppSpacing.s4),
-                  Text(
-                    rejected
-                        ? 'Tu solicitud fue rechazada'
-                        : 'Tu cuenta está en revisión',
-                    style: theme.textTheme.headlineSmall,
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: AppSpacing.s2),
-                  Text(
-                    rejected
-                        ? 'Un administrador revisó tu solicitud de propietario '
-                              'y no pudo aprobarla.'
-                        : 'Un administrador está revisando tu solicitud de '
-                              'propietario. Podrás ingresar en cuanto sea '
-                              'aprobada.',
-                    style: theme.textTheme.bodyMedium?.copyWith(
-                      color: context.appColors.textSecondary,
+    // Con la sesión abierta no se vuelve al login con "atrás": solo con
+    // "Cerrar sesión" o "Eliminar cuenta".
+    return PopScope(
+      canPop: false,
+      child: Scaffold(
+        appBar: AppBar(
+          automaticallyImplyLeading: false,
+          title: Text(rejected ? 'Solicitud rechazada' : 'Cuenta en revisión'),
+        ),
+        body: SafeArea(
+          child: SingleChildScrollView(
+            child: ResponsiveContent(
+              maxWidth: 560,
+              padding: const EdgeInsets.all(AppSpacing.s6),
+              child: Semantics(
+                liveRegion: true,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Icon(
+                      rejected
+                          ? Icons.cancel_outlined
+                          : Icons.hourglass_top_outlined,
+                      size: AppSpacing.s12 + AppSpacing.s8,
+                      color: color,
                     ),
-                    textAlign: TextAlign.center,
-                  ),
-                  if (rejected && reason != null && reason.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.s4),
-                    AppCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Motivo', style: theme.textTheme.labelLarge),
-                          const SizedBox(height: AppSpacing.s1),
-                          Text(reason, style: theme.textTheme.bodyMedium),
-                        ],
-                      ),
-                    ),
-                  ],
-                  if (widget.args.email.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.s4),
                     Text(
-                      'Correo registrado',
-                      style: theme.textTheme.labelMedium?.copyWith(
-                        color: context.appColors.textMuted,
+                      rejected
+                          ? 'Tu solicitud fue rechazada'
+                          : 'Tu cuenta está en revisión',
+                      style: theme.textTheme.headlineSmall,
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: AppSpacing.s2),
+                    Text(
+                      rejected
+                          ? 'Un administrador revisó tu solicitud de propietario '
+                                'y no pudo aprobarla.'
+                          : 'Un administrador está revisando tu solicitud de '
+                                'propietario. Podrás ingresar en cuanto sea '
+                                'aprobada.',
+                      style: theme.textTheme.bodyMedium?.copyWith(
+                        color: context.appColors.textSecondary,
                       ),
                       textAlign: TextAlign.center,
                     ),
-                    Text(
-                      widget.args.email,
-                      style: theme.textTheme.bodyLarge,
-                      textAlign: TextAlign.center,
+                    if (rejected && reason != null && reason.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.s4),
+                      AppCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Motivo', style: theme.textTheme.labelLarge),
+                            const SizedBox(height: AppSpacing.s1),
+                            Text(reason, style: theme.textTheme.bodyMedium),
+                          ],
+                        ),
+                      ),
+                    ],
+                    if (widget.args.email.isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(
+                        'Correo registrado',
+                        style: theme.textTheme.labelMedium?.copyWith(
+                          color: context.appColors.textMuted,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                      Text(
+                        widget.args.email,
+                        style: theme.textTheme.bodyLarge,
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                    const SizedBox(height: AppSpacing.s6),
+                    AppButton(
+                      label: 'Cerrar sesión',
+                      variant: AppButtonVariant.secondary,
+                      onPressed: _logout,
                     ),
-                  ],
-                  const SizedBox(height: AppSpacing.s6),
-                  AppButton(
-                    label: 'Cerrar sesión',
-                    variant: AppButtonVariant.secondary,
-                    onPressed: _logout,
-                  ),
-                  if (!rejected) ...[
                     const SizedBox(height: AppSpacing.s2),
                     AppButton(
                       label: 'Eliminar cuenta',
@@ -158,7 +161,7 @@ class _AccountReviewPageState extends State<AccountReviewPage> {
                       onPressed: _deleteAccount,
                     ),
                   ],
-                ],
+                ),
               ),
             ),
           ),

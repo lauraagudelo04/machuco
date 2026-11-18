@@ -24,6 +24,9 @@ class AdminAccessController extends ChangeNotifier {
   bool _isLoading = false;
   bool _isSubmitting = false;
   String? _error;
+  AdminAccessFailureType? _errorType;
+  Map<int, String>? _planNames;
+  bool _isLoadingPlans = false;
   final Map<String, OwnerRequestAlerts> _alerts = {};
   final Set<String> _checkingAlerts = {};
 
@@ -37,6 +40,37 @@ class AdminAccessController extends ChangeNotifier {
 
   /// Último error legible (español) o `null`.
   String? get error => _error;
+
+  /// Tipo del último error de [approveOwner] o [rejectOwner]; permite ofrecer
+  /// "Reintentar" solo cuando fue de red.
+  AdminAccessFailureType? get errorType => _errorType;
+
+  /// Nombre del plan [planId] según el catálogo, o `null` si aún no se cargó
+  /// o el plan ya no existe (ver [loadPlanNames]).
+  String? planNameFor(int planId) => _planNames?[planId];
+
+  /// `true` mientras se consultan los nombres de los planes.
+  bool get isLoadingPlans => _isLoadingPlans;
+
+  /// `true` si el catálogo de planes ya se consultó (aunque falte algún plan).
+  bool get hasLoadedPlans => _planNames != null;
+
+  /// Consulta el catálogo de planes una sola vez para mostrar sus nombres.
+  Future<void> loadPlanNames() async {
+    final loadPlans = _loadPlans;
+    if (loadPlans == null || _planNames != null || _isLoadingPlans) return;
+    _isLoadingPlans = true;
+    notifyListeners();
+    try {
+      final plans = await loadPlans();
+      _planNames = {for (final plan in plans) plan.id: ?plan.name};
+    } catch (e) {
+      debugPrint('No se pudieron cargar los planes: ${e.runtimeType}');
+    } finally {
+      _isLoadingPlans = false;
+      notifyListeners();
+    }
+  }
 
   /// Alertas ya calculadas de la solicitud [uid], o `null` si aún no se
   /// comprueban (ver [loadAlerts]).
@@ -109,6 +143,7 @@ class AdminAccessController extends ChangeNotifier {
     final validation = AuthValidators.rejectionReason(reason);
     if (validation != null) {
       _error = validation;
+      _errorType = AdminAccessFailureType.invalidInput;
       notifyListeners();
       return Future.value(false);
     }
@@ -118,6 +153,7 @@ class AdminAccessController extends ChangeNotifier {
   void clearError() {
     if (_error == null) return;
     _error = null;
+    _errorType = null;
     notifyListeners();
   }
 
@@ -203,6 +239,7 @@ class AdminAccessController extends ChangeNotifier {
     if (_isSubmitting) return false;
     _isSubmitting = true;
     _error = null;
+    _errorType = null;
     notifyListeners();
     try {
       await action();
@@ -213,6 +250,7 @@ class AdminAccessController extends ChangeNotifier {
       return true;
     } on AdminAccessRepositoryException catch (e) {
       _error = e.message;
+      _errorType = e.type;
       if (e.type == AdminAccessFailureType.alreadyHandled) {
         // Ya la atendió otro administrador: sale de la lista local.
         _pendingOwners = [
@@ -224,6 +262,7 @@ class AdminAccessController extends ChangeNotifier {
     } catch (e) {
       debugPrint('Error inesperado al atender solicitud: ${e.runtimeType}');
       _error = 'No pudimos completar la operación. Intenta nuevamente.';
+      _errorType = AdminAccessFailureType.unknown;
       return false;
     } finally {
       _isSubmitting = false;

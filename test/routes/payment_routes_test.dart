@@ -4,7 +4,9 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/routes/routes.dart';
 
 void main() {
-  testWidgets('retired client payment routes resolve as unknown', (tester) async {
+  testWidgets('retired client payment routes resolve as unknown', (
+    tester,
+  ) async {
     for (final path in [
       '/payment/client/history',
       '/payment/client/confirmation',

@@ -12,6 +12,7 @@ import 'package:machuco/models/auth/auth_provider_kind.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/social_auth_result.dart';
 import 'package:machuco/models/auth/social_profile_data.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/routes/routes.dart';
 import 'package:machuco/service/auth/auth_service.dart';
 import 'package:machuco/service/auth/firebase_social_auth_service.dart';
@@ -396,6 +397,7 @@ void main() {
       social.completeResult = SocialAuthActive(_session());
       await pumpComplete(tester);
 
+      await tester.enterText(field('Número de documento'), '1020304050');
       await tester.enterText(field('Celular'), '3001234567');
       await tester.enterText(field('Fecha de nacimiento'), '10/05/1995');
       await tester.tap(find.byKey(const ValueKey('complete-profile-submit')));
@@ -405,6 +407,8 @@ void main() {
       expect(data.role, RegisteredUserRole.client);
       expect(data.phoneNumber, '+573001234567');
       expect(data.firstNames, 'Ana');
+      expect(data.documentType, DocumentType.citizenshipCard);
+      expect(data.documentNumber, '1020304050');
       expect(find.text('ruta:${AppRoutes.clientMotels}'), findsOneWidget);
     });
 
@@ -421,6 +425,7 @@ void main() {
       await tester.tap(find.text('Propietario'));
       await tester.pumpAndSettle();
       expect(field('Fecha de nacimiento'), findsNothing);
+      await tester.enterText(field('Número de documento'), '1020304050');
       await tester.enterText(field('Celular'), '3001234567');
       await tester.enterText(field('NIT'), '1020304050-8');
       await tester.tap(find.text('Básico'));
@@ -455,6 +460,7 @@ void main() {
       );
       await pumpComplete(tester);
 
+      await tester.enterText(field('Número de documento'), '1020304050');
       await tester.enterText(field('Celular'), '3001234567');
       await tester.enterText(field('Fecha de nacimiento'), '10/05/1995');
       await tester.tap(find.byKey(const ValueKey('complete-profile-submit')));
@@ -485,6 +491,7 @@ void main() {
         final gate = Completer<void>();
         social.completeGate = gate;
 
+        await tester.enterText(field('Número de documento'), '1020304050');
         await tester.enterText(field('Celular'), '3001234567');
         await tester.enterText(field('Fecha de nacimiento'), '10/05/1995');
         await tester.tap(find.byKey(const ValueKey('complete-profile-submit')));
@@ -550,7 +557,10 @@ void main() {
 
       expect(social.deleteCalls, 1);
       expect(auth.deletedWithPasswords, isEmpty);
-      expect(auth.logoutCalled, isTrue);
+      // Ya no pasa por logout (que conserva el correo recordado): limpia todo
+      // el namespace `auth` igual que la eliminación con contraseña.
+      expect(auth.logoutCalled, isFalse);
+      expect(controller.session, isNull);
       expect(deleted, isTrue);
     });
 

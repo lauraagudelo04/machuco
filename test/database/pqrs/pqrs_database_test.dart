@@ -93,7 +93,11 @@ void main() {
   group('migración de PQRS', () {
     test('las constantes apuntan a la versión actual de la base', () async {
       expect(pqrsMigrationToVersion, pqrsMigrationFromVersion + 1);
-      expect(await raw().getVersion(), 25);
+      // Puede haber migraciones posteriores (migraciones de propietario/facturas).
+      expect(
+        await raw().getVersion(),
+        greaterThanOrEqualTo(pqrsMigrationToVersion),
+      );
     });
 
     test('una instalación nueva trae las 6 tablas', () async {
@@ -117,7 +121,10 @@ void main() {
         await database.close();
         database = await AppDatabaseProvider.open(name: path);
 
-        expect(await raw().getVersion(), 25);
+        expect(
+          await raw().getVersion(),
+          greaterThanOrEqualTo(pqrsMigrationToVersion),
+        );
         for (final table in _pqrsTables) {
           expect(await tableExists(table), isTrue, reason: table);
         }

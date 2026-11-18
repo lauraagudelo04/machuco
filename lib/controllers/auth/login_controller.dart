@@ -4,11 +4,15 @@ import 'package:flutter/foundation.dart';
 import 'package:machuco/controllers/auth/auth_routes.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
+import 'package:machuco/controllers/auth/validators/document_number_validator.dart';
 import 'package:machuco/database/model/auth/auth_user_profile_entry.dart';
 import 'package:machuco/database/repository/auth/auth_catalog_repository.dart';
 import 'package:machuco/database/repository/auth/auth_user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/document_type.dart';
+import 'package:machuco/models/auth/identity_document.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
 import 'package:machuco/models/auth/registration_data.dart';
@@ -83,6 +87,9 @@ class LoginController extends ChangeNotifier {
   List<SubscriptionPlanOption> _subscriptionPlans = const [];
   bool _isLoadingSubscriptionPlans = false;
   String? _subscriptionPlansError;
+  List<DocumentTypeOption> _documentTypes = const [];
+  bool _isLoadingDocumentTypes = false;
+  String? _documentTypesError;
 
   bool get isAuthConfigured => _authService != null;
 
@@ -122,6 +129,22 @@ class LoginController extends ChangeNotifier {
       List.unmodifiable(_subscriptionPlans);
 
   bool get isLoadingSubscriptionPlans => _isLoadingSubscriptionPlans;
+
+  /// Tipos de documento del registro (maestro `document_types`).
+  List<DocumentTypeOption> get documentTypes =>
+      List.unmodifiable(_documentTypes);
+
+  bool get isLoadingDocumentTypes => _isLoadingDocumentTypes;
+
+  String? get documentTypesError => _documentTypesError;
+
+  /// Tipo preseleccionado: cédula de ciudadanía si existe, o el primero.
+  DocumentTypeOption? get defaultDocumentType {
+    for (final option in _documentTypes) {
+      if (option.domainType == DocumentType.citizenshipCard) return option;
+    }
+    return _documentTypes.isEmpty ? null : _documentTypes.first;
+  }
 
   String? get subscriptionPlansError => _subscriptionPlansError;
 
@@ -255,33 +278,6 @@ class LoginController extends ChangeNotifier {
     }
   }
 
-  /// Registro histórico con nombre completo, conservado por compatibilidad.
-  /// El flujo vigente por rol es [registerAccount].
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {
-    final authService = _requireAuthService();
-    _setSubmitting(true);
-    final normalizedEmail = AuthPreferences.normalizeEmail(email);
-    final fullPhoneNumber = _withDialCode(phoneNumber);
-    try {
-      await authService.register(
-        fullName: fullName,
-        email: normalizedEmail,
-        phoneNumber: fullPhoneNumber,
-        password: password,
-        role: role,
-      );
-      await _saveLastCountryPhoneCode();
-    } finally {
-      _setSubmitting(false);
-    }
-  }
-
   /// Registro por rol (cliente o propietario). Normaliza y valida los datos
   /// antes de enviarlos; lanza [AuthFailure] de tipo
   /// [AuthFailureType.invalidInput] si alguno no cumple el formato.
@@ -302,20 +298,6 @@ class LoginController extends ChangeNotifier {
           return preferences.saveLastCountryCodeId(code.id);
         });
       }
-    } finally {
-      _setSubmitting(false);
-    }
-  }
-
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async {
-    final authService = _requireAuthService();
-    _setSubmitting(true);
-    try {
-      final nextSession = await authService.loginWithGoogle(
-        preferSignup: preferSignup,
-      );
-      await _startSession(nextSession);
-      return nextSession;
     } finally {
       _setSubmitting(false);
     }
@@ -402,15 +384,28 @@ class LoginController extends ChangeNotifier {
     notifyListeners();
     try {
       await authService.deleteAccount(password: password);
-      _session = null;
-      _currentUserEmail = null;
-      _stopResetCooldown();
-      await _clearCachedProfile();
-      await _runPreference((preferences) => preferences.clearAll());
+      await _clearDeletedAccountData();
     } finally {
       _isDeletingAccount = false;
       notifyListeners();
     }
+  }
+
+  /// Limpia lo local después de que otro servicio (p. ej. el de Google o
+  /// GitHub) ya eliminó la cuenta: igual que [deleteAccount], borra el perfil
+  /// de SQLite y TODO el namespace `auth`, incluido el correo recordado.
+  Future<void> clearDataAfterAccountDeletion() async {
+    await _clearDeletedAccountData();
+    notifyListeners();
+  }
+
+  Future<void> _clearDeletedAccountData() async {
+    _session = null;
+    _currentUserEmail = null;
+    _stopResetCooldown();
+    unawaited(_analytics.setUser());
+    await _clearCachedProfile();
+    await _runPreference((preferences) => preferences.clearAll());
   }
 
   Future<List<RegisteredUser>> listRegisteredUsers() async {
@@ -479,6 +474,38 @@ class LoginController extends ChangeNotifier {
       _isLoadingSubscriptionPlans = false;
       notifyListeners();
     }
+  }
+
+  /// Carga los tipos de documento (Supabase `document_types`). Sin repositorio
+  /// (desarrollo) usa los del dominio. Permite reintentar con [forceRefresh].
+  Future<void> loadDocumentTypes({bool forceRefresh = false}) async {
+    if (_isLoadingDocumentTypes) return;
+    _isLoadingDocumentTypes = true;
+    _documentTypesError = null;
+    notifyListeners();
+    try {
+      final repository = _catalogRepository;
+      _documentTypes = repository == null
+          ? [
+              for (final type in registrationDocumentTypes)
+                DocumentTypeOption.fromDomain(type),
+            ]
+          : await repository.getDocumentTypes(forceRefresh: forceRefresh);
+    } on AuthCatalogRepositoryException catch (e) {
+      _documentTypes = const [];
+      _documentTypesError = e.message;
+    } finally {
+      _isLoadingDocumentTypes = false;
+      notifyListeners();
+    }
+  }
+
+  /// Opción del maestro que corresponde a [type], o `null` si no se cargó.
+  DocumentTypeOption? documentOptionFor(DocumentType type) {
+    for (final option in _documentTypes) {
+      if (option.domainType == type) return option;
+    }
+    return null;
   }
 
   Future<void> selectCountryPhoneCode(CountryPhoneCode code) async {
@@ -562,7 +589,8 @@ class LoginController extends ChangeNotifier {
   }
 
   /// Normaliza y valida; devuelve los datos listos para el servicio (celular
-  /// con indicativo, NIT canónico `base-DV`).
+  /// con indicativo, documento sin puntos ni espacios, NIT canónico
+  /// `base-DV`).
   RegistrationData _prepareRegistration(
     RegistrationData data,
     CountryPhoneCode? code,
@@ -583,6 +611,8 @@ class LoginController extends ChangeNotifier {
       ),
       AuthValidators.email(data.email),
       AuthValidators.password(data.password),
+      AuthValidators.documentType(data.documentType) ??
+          _validateDocumentNumber(data),
     ];
     String? nit;
     String? companyName;
@@ -616,9 +646,18 @@ class LoginController extends ChangeNotifier {
       phoneCountryCodeId: code.id,
       phoneNumber: '${code.dialCode}$phoneDigits',
       email: AuthInputNormalizer.email(data.email),
+      documentNumber: AuthInputNormalizer.documentNumber(data.documentNumber),
       nit: nit,
       companyName: companyName,
     );
+  }
+
+  /// Con el patrón del maestro si se cargó; si no, el del dominio.
+  String? _validateDocumentNumber(RegistrationData data) {
+    final option = documentOptionFor(data.documentType);
+    return option == null
+        ? AuthValidators.documentNumber(data.documentType)(data.documentNumber)
+        : DocumentNumberValidator.validate(data.documentNumber, option);
   }
 
   void _startResetCooldown() {
@@ -661,12 +700,6 @@ class LoginController extends ChangeNotifier {
       if (code.isoCode == _defaultCountryIsoCode) return code;
     }
     return _countryPhoneCodes.first;
-  }
-
-  String _withDialCode(String phoneNumber) {
-    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    final dialCode = _selectedCountryPhoneCode?.dialCode;
-    return dialCode == null ? digits : '$dialCode$digits';
   }
 
   Future<void> _saveLastCountryPhoneCode() async {

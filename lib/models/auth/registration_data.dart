@@ -1,7 +1,11 @@
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 /// Datos del formulario de registro por rol.
+///
+/// Ambos roles llevan documento de identidad ([documentType] y
+/// [documentNumber]; decisión 2026-11-17).
 ///
 /// - Cliente: [RegistrationData.client] (incluye [birthDate]).
 /// - Propietario: [RegistrationData.owner] (incluye [personType], [nit],
@@ -17,6 +21,8 @@ final class RegistrationData {
     required this.phoneNumber,
     required this.email,
     required this.password,
+    required this.documentType,
+    required this.documentNumber,
     this.birthDate,
     this.personType,
     this.nit,
@@ -31,6 +37,8 @@ final class RegistrationData {
     required String phoneNumber,
     required String email,
     required String password,
+    required DocumentType documentType,
+    required String documentNumber,
     required DateTime birthDate,
   }) => RegistrationData._(
     role: RegisteredUserRole.client,
@@ -40,6 +48,8 @@ final class RegistrationData {
     phoneNumber: phoneNumber,
     email: email,
     password: password,
+    documentType: documentType,
+    documentNumber: documentNumber,
     birthDate: birthDate,
   );
 
@@ -51,6 +61,8 @@ final class RegistrationData {
     required String phoneNumber,
     required String email,
     required String password,
+    required DocumentType documentType,
+    required String documentNumber,
     required PersonType personType,
     required String nit,
     String? companyName,
@@ -63,6 +75,8 @@ final class RegistrationData {
     phoneNumber: phoneNumber,
     email: email,
     password: password,
+    documentType: documentType,
+    documentNumber: documentNumber,
     personType: personType,
     nit: nit,
     companyName: personType == PersonType.juridica ? companyName : null,
@@ -82,6 +96,10 @@ final class RegistrationData {
   final String email;
   final String password;
 
+  /// Documento de identidad (Cliente y Propietario). Distinto del NIT.
+  final DocumentType documentType;
+  final String documentNumber;
+
   final DateTime? birthDate;
   final PersonType? personType;
   final String? nit;
@@ -96,6 +114,7 @@ final class RegistrationData {
     int? phoneCountryCodeId,
     String? phoneNumber,
     String? email,
+    String? documentNumber,
     String? nit,
     String? companyName,
   }) => RegistrationData._(
@@ -106,6 +125,8 @@ final class RegistrationData {
     phoneNumber: phoneNumber ?? this.phoneNumber,
     email: email ?? this.email,
     password: password,
+    documentType: documentType,
+    documentNumber: documentNumber ?? this.documentNumber,
     birthDate: birthDate,
     personType: personType,
     nit: nit ?? this.nit,

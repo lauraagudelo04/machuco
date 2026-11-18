@@ -14,4 +14,12 @@ abstract class PhoneCountryCodeDao {
 
   @Query('DELETE FROM phone_country_codes')
   Future<void> deleteAll();
+
+  /// Reemplaza la caché completa en una sola transacción: si la inserción
+  /// falla, se conservan los indicativos anteriores (nunca queda vacía).
+  @transaction
+  Future<void> replaceAll(List<PhoneCountryCode> codes) async {
+    await deleteAll();
+    await insertCountryCodes(codes);
+  }
 }

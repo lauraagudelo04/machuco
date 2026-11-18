@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/auth/subscription_plan_option.dart';
+import 'package:machuco/utils/currency_formatter.dart';
 
 /// Planes de suscripción como tarjetas seleccionables, con sus estados de
 /// carga, error (con "Reintentar") y vacío.
@@ -63,9 +64,10 @@ class PlanSelector extends StatelessWidget {
             AppCard(
               key: ValueKey('plan-${plan.id}'),
               selected: plan.id == selectedPlanId,
-              semanticLabel: 'Plan ${plan.name}',
+              semanticLabel: 'Plan ${plan.name ?? ''}'.trim(),
               onTap: () => onSelected(plan.id),
               child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Icon(
                     plan.id == selectedPlanId
@@ -76,14 +78,7 @@ class PlanSelector extends StatelessWidget {
                         : context.appColors.textSecondary,
                   ),
                   const SizedBox(width: AppSpacing.s3),
-                  Expanded(
-                    child: Text(
-                      plan.name,
-                      style: theme.textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
+                  Expanded(child: PlanCardDetails(plan: plan)),
                 ],
               ),
             ),
@@ -150,6 +145,88 @@ class _PlansMessage extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Contenido de la tarjeta de un plan: nombre, descripción, precio con
+/// periodicidad, máximo de moteles y características. Lo que llegue `null`
+/// (o vacío) no se pinta.
+class PlanCardDetails extends StatelessWidget {
+  const PlanCardDetails({super.key, required this.plan});
+
+  final SubscriptionPlanOption plan;
+
+  String? get _priceLabel {
+    final price = plan.price;
+    if (price == null) return null;
+    final amount = '${formatCurrencyAmount(price)} ${plan.currency ?? 'COP'}';
+    final period = plan.billingPeriodLabel;
+    return period == null ? amount : '$amount / $period';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final secondary = context.appColors.textSecondary;
+    final maxMotels = plan.maxMotels;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (plan.name case final name?)
+          Text(
+            name,
+            style: theme.textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        if (plan.description case final description?)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s1),
+            child: Text(
+              description,
+              style: theme.textTheme.bodyMedium?.copyWith(color: secondary),
+            ),
+          ),
+        if (_priceLabel case final price?)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s2),
+            child: Text(
+              price,
+              key: ValueKey('plan-${plan.id}-price'),
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ),
+        if (maxMotels != null)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s1),
+            child: Text(
+              maxMotels == 1 ? 'Hasta 1 motel' : 'Hasta $maxMotels moteles',
+              style: theme.textTheme.bodyMedium,
+            ),
+          ),
+        for (final feature in plan.features)
+          Padding(
+            padding: const EdgeInsets.only(top: AppSpacing.s1),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.check,
+                  size: AppSpacing.s4,
+                  color: theme.colorScheme.primary,
+                ),
+                const SizedBox(width: AppSpacing.s2),
+                Expanded(
+                  child: Text(feature, style: theme.textTheme.bodyMedium),
+                ),
+              ],
+            ),
+          ),
+      ],
     );
   }
 }

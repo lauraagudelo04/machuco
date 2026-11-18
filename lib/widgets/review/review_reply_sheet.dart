@@ -3,7 +3,11 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/review/review.dart';
 
 class ReviewReplySheet extends StatefulWidget {
-  const ReviewReplySheet({super.key, required this.review, required this.onSubmit});
+  const ReviewReplySheet({
+    super.key,
+    required this.review,
+    required this.onSubmit,
+  });
 
   final Review review;
   final ValueChanged<String> onSubmit;

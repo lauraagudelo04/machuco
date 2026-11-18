@@ -2,6 +2,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:machuco/controllers/auth/validators/auth_input_normalizer.dart';
 import 'package:machuco/controllers/auth/validators/auth_validators.dart';
 import 'package:machuco/models/auth/person_type.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 const _sqlInjections = <String>[
   "' OR '1'='1' --",
@@ -364,6 +365,40 @@ void main() {
         AuthValidators.rejectionReason('Documento ilegible 😀'),
         isNotNull,
       );
+    });
+  });
+
+  group('documento de identidad', () {
+    test('solo CC, CE y pasaporte en el registro', () {
+      expect(AuthValidators.documentType(DocumentType.citizenshipCard), isNull);
+      expect(AuthValidators.documentType(DocumentType.foreignerCard), isNull);
+      expect(AuthValidators.documentType(DocumentType.passport), isNull);
+      expect(AuthValidators.documentType(DocumentType.identityCard), isNotNull);
+      expect(AuthValidators.documentType(DocumentType.taxId), isNotNull);
+      expect(AuthValidators.documentType(null), isNotNull);
+    });
+
+    test('valida el número según el tipo, ya normalizado', () {
+      final cc = AuthValidators.documentNumber(DocumentType.citizenshipCard);
+      expect(cc(''), 'Ingresa tu número de documento.');
+      expect(cc('1.020.304.050'), isNull);
+      expect(cc('12345'), isNotNull);
+      expect(cc('AV123456'), isNotNull);
+      final passport = AuthValidators.documentNumber(DocumentType.passport);
+      expect(passport('av 123456'), isNull);
+      for (final attack in ["1' OR '1'='1", '<script>', '123456; DROP']) {
+        expect(cc(attack), isNotNull, reason: attack);
+        expect(passport(attack), isNotNull, reason: attack);
+      }
+    });
+
+    test('normaliza el número: sin espacios, puntos ni guiones', () {
+      expect(
+        AuthInputNormalizer.documentNumber(' 1.020.304-050 '),
+        '1020304050',
+      );
+      expect(AuthInputNormalizer.documentNumber('av 123456'), 'AV123456');
+      expect(AuthInputNormalizer.documentNumber(null), '');
     });
   });
 

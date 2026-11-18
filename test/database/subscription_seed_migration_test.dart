@@ -31,7 +31,7 @@ void main() {
     expect(subscription?.amount, 150000);
     expect(subscription?.billingPeriod, 'Mensual');
     expect(subscription?.features, ['Gestión de habitaciones', 'Reportes']);
-    expect(await database!.database.getVersion(), 25);
+    expect(await database!.database.getVersion(), 26);
     expect(
       await database!.database.rawQuery('PRAGMA foreign_key_check'),
       isEmpty,

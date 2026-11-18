@@ -44,7 +44,9 @@ class _ClientListPageState extends State<ClientListPage> {
               Navigator.pop(dialogContext);
               ClientController.instance.unlink(client);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Cliente "${client.name}" desvinculado.')),
+                SnackBar(
+                  content: Text('Cliente "${client.name}" desvinculado.'),
+                ),
               );
             },
             child: const Text('Desvincular'),
@@ -57,10 +59,7 @@ class _ClientListPageState extends State<ClientListPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Lista de Clientes'),
-        centerTitle: true,
-      ),
+      appBar: AppBar(title: const Text('Lista de Clientes'), centerTitle: true),
       body: Padding(
         padding: const EdgeInsets.symmetric(horizontal: AppSpacing.s4),
         child: Column(
@@ -90,7 +89,9 @@ class _ClientListPageState extends State<ClientListPage> {
                     return Center(
                       child: Text(
                         controller.errorMessage!,
-                        style: TextStyle(color: Theme.of(context).colorScheme.error),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.error,
+                        ),
                       ),
                     );
                   }
@@ -105,7 +106,8 @@ class _ClientListPageState extends State<ClientListPage> {
 
                   return ListView.separated(
                     itemCount: clients.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.s3),
+                    separatorBuilder: (_, __) =>
+                        const SizedBox(height: AppSpacing.s3),
                     itemBuilder: (context, index) {
                       final client = clients[index];
                       return _ClientCard(
@@ -115,7 +117,8 @@ class _ClientListPageState extends State<ClientListPage> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (context) => ClientDetailPage(client: client),
+                              builder: (context) =>
+                                  ClientDetailPage(client: client),
                             ),
                           );
                         },
@@ -150,7 +153,9 @@ class _ClientCard extends StatelessWidget {
       child: ListTile(
         contentPadding: EdgeInsets.zero,
         leading: CircleAvatar(
-          backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+          backgroundColor: Theme.of(
+            context,
+          ).colorScheme.primary.withValues(alpha: 0.1),
           child: Text(
             client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
             style: TextStyle(
@@ -161,16 +166,19 @@ class _ClientCard extends StatelessWidget {
         ),
         title: Text(
           client.name,
-          style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.bold),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const SizedBox(height: 4),
             Text(client.email, style: Theme.of(context).textTheme.bodySmall),
-            Text('${client.countryCode} ${client.phone}', style: Theme.of(context).textTheme.bodySmall),
+            Text(
+              '${client.countryCode} ${client.phone}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
           ],
         ),
         trailing: IconButton(

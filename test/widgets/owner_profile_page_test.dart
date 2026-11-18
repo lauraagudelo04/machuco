@@ -119,9 +119,7 @@ void main() {
     );
     addTearDown(controller.dispose);
 
-    await tester.pumpWidget(
-      _wrap(OwnerProfilePage(controller: controller)),
-    );
+    await tester.pumpWidget(_wrap(OwnerProfilePage(controller: controller)));
     await tester.pumpAndSettle();
 
     expect(find.text('Editar perfil'), findsOneWidget);

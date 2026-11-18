@@ -80,6 +80,7 @@ class _DeleteAccountSheetState extends State<DeleteAccountSheet> {
   final _confirmController = TextEditingController();
   bool _submitting = false;
   String? _errorMessage;
+  bool _networkError = false;
 
   bool get _canSubmit =>
       (_socialProvider != null || _passwordController.text.isNotEmpty) &&
@@ -97,14 +98,16 @@ class _DeleteAccountSheetState extends State<DeleteAccountSheet> {
     setState(() {
       _submitting = true;
       _errorMessage = null;
+      _networkError = false;
     });
     try {
       final social = widget.socialAuthService;
       if (_socialProvider != null && social != null) {
         // Reautentica con el proveedor, borra perfil y usuario; luego el
-        // controller limpia la sesión y el correo guardados en el dispositivo.
+        // controller borra el perfil local y todo el namespace `auth`
+        // (incluido el correo recordado), igual que con contraseña.
         await social.deleteAccount();
-        await widget.controller.logout();
+        await widget.controller.clearDataAfterAccountDeletion();
       } else {
         await widget.controller.deleteAccount(
           password: _passwordController.text,
@@ -117,6 +120,7 @@ class _DeleteAccountSheetState extends State<DeleteAccountSheet> {
       if (!mounted) return;
       setState(() {
         _submitting = false;
+        _networkError = failure.type == AuthFailureType.network;
         _errorMessage = failure.type == AuthFailureType.lastAdministrator
             ? 'Eres el único administrador activo. Crea otro administrador '
                   'antes de eliminar tu cuenta.'
@@ -185,7 +189,14 @@ class _DeleteAccountSheetState extends State<DeleteAccountSheet> {
         ),
         if (_errorMessage != null) ...[
           const SizedBox(height: AppSpacing.s3),
-          AuthNotice(message: _errorMessage!),
+          // "Reintentar" repite la eliminación; la hoja no cambia hasta que
+          // llegue la confirmación.
+          AuthNotice(
+            message: _errorMessage!,
+            icon: _networkError ? Icons.wifi_off_outlined : null,
+            actionLabel: _networkError ? 'Reintentar' : null,
+            onAction: _networkError ? _submit : null,
+          ),
         ],
         const SizedBox(height: AppSpacing.s4),
         AppButton(

@@ -4,6 +4,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/widgets.dart';
 import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/user_profile.dart';
 
 /// Motivo por el que [AccountSessionWatcher] terminó la sesión.
 enum AccountSessionEnd {
@@ -13,6 +14,13 @@ enum AccountSessionEnd {
   /// La sesión dejó de ser válida, p. ej. al cambiar la contraseña en otro
   /// dispositivo. La cuenta sigue existiendo.
   sessionExpired,
+
+  /// Un administrador deshabilitó la cuenta (perfil `disabled` o usuario de
+  /// Auth deshabilitado).
+  accountDisabled,
+
+  /// Un administrador rechazó la solicitud del propietario.
+  accountRejected,
 }
 
 /// Detecta, con la app abierta, que la cuenta ya no es válida (DA-17): revisa
@@ -27,24 +35,33 @@ class AccountSessionWatcher with WidgetsBindingObserver {
     required this._profiles,
     required this._clearLocalData,
     required this._onSessionEnded,
+    this._onProfileRefreshed,
     this.interval = const Duration(minutes: 15),
   });
 
   static const _deletedCodes = {'user-not-found'};
   static const _expiredCodes = {'user-token-expired', 'invalid-user-token'};
+  static const _disabledCodes = {'user-disabled'};
 
   final FirebaseAuth _auth;
   final UserProfileRepository _profiles;
   final Future<void> Function(AccountSessionEnd reason) _clearLocalData;
   final void Function(AccountSessionEnd reason) _onSessionEnded;
+
+  /// Recibe el perfil leído de Firestore cuando la cuenta sigue vigente, para
+  /// refrescar en segundo plano la caché local (`auth_user_profile`, SQ-09).
+  final Future<void> Function(UserProfile profile)? _onProfileRefreshed;
   final Duration interval;
 
   Timer? _timer;
   bool _checking = false;
 
-  void start() {
+  /// Empieza a vigilar. Con [checkNow] revisa de inmediato, sin bloquear a
+  /// quien llama (al abrir la app).
+  void start({bool checkNow = false}) {
     WidgetsBinding.instance.addObserver(this);
     _startTimer();
+    if (checkNow) unawaited(check());
   }
 
   void stop() {
@@ -79,10 +96,31 @@ class AccountSessionWatcher with WidgetsBindingObserver {
     try {
       final reason = await _findEndReason(user);
       // La sesión pudo cambiar mientras se esperaba la respuesta.
-      if (reason == null || _auth.currentUser?.uid != user.uid) return;
-      await _endSession(reason);
+      if (_auth.currentUser?.uid != user.uid) return;
+      if (reason != null) {
+        await _endSession(reason);
+        return;
+      }
+      await _refreshLocalProfile();
     } finally {
       _checking = false;
+      _freshProfile = null;
+    }
+  }
+
+  /// Perfil vigente leído en la revisión en curso (solo si no termina la
+  /// sesión).
+  UserProfile? _freshProfile;
+
+  Future<void> _refreshLocalProfile() async {
+    final profile = _freshProfile;
+    final refresh = _onProfileRefreshed;
+    if (profile == null || refresh == null) return;
+    try {
+      await refresh(profile);
+    } catch (error) {
+      // La caché solo sirve para mostrar; un fallo no afecta la sesión.
+      debugPrint('No se pudo refrescar el perfil local: ${error.runtimeType}');
     }
   }
 
@@ -96,16 +134,25 @@ class AccountSessionWatcher with WidgetsBindingObserver {
       if (_expiredCodes.contains(e.code)) {
         return AccountSessionEnd.sessionExpired;
       }
+      if (_disabledCodes.contains(e.code)) {
+        return AccountSessionEnd.accountDisabled;
+      }
       debugPrint('No se pudo revisar la sesión: ${e.code}');
       return null;
     }
     try {
       // Un administrador eliminado por otro conserva su usuario de Auth, pero
-      // su perfil queda anonimizado.
+      // su perfil queda anonimizado; deshabilitar o rechazar tampoco borra el
+      // usuario de Auth, así que se detecta por el estado del perfil.
       final profile = await _profiles.getProfile(user.uid);
-      return profile?.accountStatus == AccountStatus.anonymized
-          ? AccountSessionEnd.accountDeleted
-          : null;
+      final reason = switch (profile?.accountStatus) {
+        AccountStatus.anonymized => AccountSessionEnd.accountDeleted,
+        AccountStatus.disabled => AccountSessionEnd.accountDisabled,
+        AccountStatus.rejected => AccountSessionEnd.accountRejected,
+        _ => null,
+      };
+      if (reason == null) _freshProfile = profile;
+      return reason;
     } on UserProfileRepositoryException catch (e) {
       debugPrint('No se pudo revisar el perfil: ${e.type}');
       return null;

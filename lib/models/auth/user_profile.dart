@@ -1,12 +1,14 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:machuco/models/auth/account_status.dart';
+import 'package:machuco/models/auth/identity_document.dart';
 import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/auth/registered_user.dart';
+import 'package:machuco/models/owner_management/document_type.dart';
 
 /// Profile of a user stored in Firestore at `users/{uid}`.
 ///
-/// Single model for all roles (the role is a field). It deliberately holds no
-/// identity document or other sensitive data.
+/// Single model for all roles (the role is a field). Clients and owners carry
+/// an identity document (decision 2026-11-17); administrators never do.
 class UserProfile {
   const UserProfile({
     required this.uid,
@@ -19,6 +21,8 @@ class UserProfile {
     this.firstNames,
     this.lastNames,
     this.phoneCountryCodeId,
+    this.documentType,
+    this.documentNumber,
     this.birthDate,
     this.personType,
     this.nit,
@@ -52,6 +56,12 @@ class UserProfile {
 
   /// Id of the `phone_country_codes` master row chosen at sign-up.
   final int? phoneCountryCodeId;
+
+  /// Identity document of clients and owners (`DocumentType.name` in
+  /// Firestore). Sensitive: Firestore only, never in SQLite or
+  /// SharedPreferences. `null` in profiles written before 2026-11-17.
+  final DocumentType? documentType;
+  final String? documentNumber;
 
   /// Clients only. Sensitive: stored in Firestore, never in SQLite or
   /// SharedPreferences.
@@ -97,6 +107,8 @@ class UserProfile {
       firstNames: _textOrNull(data['firstNames']),
       lastNames: _textOrNull(data['lastNames']),
       phoneCountryCodeId: _intOrNull(data['phoneCountryCodeId']),
+      documentType: documentTypeFromStorage(data['documentType']?.toString()),
+      documentNumber: _textOrNull(data['documentNumber']),
       birthDate: _dateOrNull(data['birthDate']),
       personType: personTypeFromMetadata(data['personType']?.toString()),
       nit: _textOrNull(data['nit']),
@@ -125,6 +137,8 @@ class UserProfile {
       if (firstNames != null) 'firstNames': firstNames,
       if (lastNames != null) 'lastNames': lastNames,
       if (phoneCountryCodeId != null) 'phoneCountryCodeId': phoneCountryCodeId,
+      if (documentType != null) 'documentType': documentType!.name,
+      if (documentNumber != null) 'documentNumber': documentNumber,
       if (birth != null)
         'birthDate': Timestamp.fromDate(
           DateTime.utc(birth.year, birth.month, birth.day),

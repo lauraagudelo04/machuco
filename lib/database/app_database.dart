@@ -55,7 +55,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 25,
+  version: 26,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -147,6 +147,7 @@ class AppDatabaseProvider {
         migration22To23,
         migration23To24,
         migration24To25,
+        migration25To26,
       ])
       .addCallback(
         Callback(
@@ -660,6 +661,26 @@ final migration20To21 = Migration(20, 21, (database) async {
 final migration21To22 = Migration(21, 22, (database) async {
   await database.execute('DROP TABLE IF EXISTS clients');
 });
+
+/// Separa el NIT del documento de identidad del propietario: `owners` guarda
+/// aparte `nit` y `personType` (antes `nit` se copiaba de `documentNumber`).
+/// Las filas anteriores quedan con `NULL` y se completan al sincronizar.
+final migration25To26 = Migration(25, 26, _addOwnerNitColumns);
+
+Future<void> _addOwnerNitColumns(sqflite.DatabaseExecutor database) async {
+  final tables = await database.rawQuery(
+    "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'owners'",
+  );
+  if (tables.isEmpty) return;
+  final columns = await database.rawQuery('PRAGMA table_info(owners)');
+  final names = columns.map((column) => column['name']).toSet();
+  if (!names.contains('nit')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN nit TEXT');
+  }
+  if (!names.contains('personType')) {
+    await database.execute('ALTER TABLE owners ADD COLUMN personType TEXT');
+  }
+}
 
 /// Limpia los ejemplos de room sólo si la base tiene el esquema de habitaciones.
 ///

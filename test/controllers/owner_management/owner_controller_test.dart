@@ -10,6 +10,7 @@ import 'package:machuco/database/repository/document_type/document_type_reposito
 import 'package:machuco/database/repository/owner/owner_repository.dart';
 import 'package:machuco/models/auth/account_status.dart';
 import 'package:machuco/models/auth/country_phone_code.dart';
+import 'package:machuco/models/auth/person_type.dart';
 import 'package:machuco/models/owner_management/document_type.dart';
 import 'package:machuco/models/owner_management/owner.dart';
 import 'package:machuco/models/owner_management/owner_status_filter.dart';
@@ -18,6 +19,8 @@ import 'package:machuco/service/owner/owner_preferences.dart';
 import 'package:machuco/service/owner/owner_service.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+/// NIT válido (DV correcto) e independiente del documento de identidad.
+const _validNit = '900123456-8';
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
@@ -197,6 +200,8 @@ void main() {
         fullName: 'Camilo Torres',
         documentType: DocumentType.citizenshipCard,
         documentNumber: '79123456',
+        nit: _validNit,
+        personType: PersonType.natural,
         email: 'camilo.torres@machuco.com',
         phone: '320 555 1234',
         countryCode: '+57',
@@ -206,6 +211,10 @@ void main() {
       expect(created, isNotNull);
       expect(created!.owner.isSynchronized, isTrue);
       expect(created.owner.phoneWithDialCode, '+57 320 555 1234');
+      // NIT y documento de identidad son datos independientes.
+      expect(created.owner.documentNumber, '79123456');
+      expect(created.owner.nit, '900123456-8');
+      expect(created.owner.personType, PersonType.natural);
       expect(created.temporaryPassword, isNotEmpty);
 
       // Nueva instancia = sesión nueva: la memoria arranca vacía.
@@ -240,6 +249,8 @@ void main() {
       fullName: 'Correo Malo',
       documentType: DocumentType.citizenshipCard,
       documentNumber: '111111',
+      nit: _validNit,
+      personType: PersonType.natural,
       email: 'no-es-un-correo',
       phone: '+57 300 000 0000',
     );
@@ -247,6 +258,40 @@ void main() {
     expect(created, isNull);
     expect(controller.lastError, contains('correo'));
     expect(controller.owners, hasLength(totalBefore));
+  });
+
+  test('createOwner exige un NIT válido aparte del documento', () async {
+    final controller = buildController(
+      cloudRepository: _FakeOwnerCloudRepository(),
+    );
+    await controller.init();
+    final totalBefore = controller.owners.length;
+
+    final created = await controller.createOwner(
+      fullName: 'Sin NIT',
+      documentType: DocumentType.citizenshipCard,
+      documentNumber: '79123456',
+      nit: '',
+      personType: PersonType.natural,
+      email: 'sin.nit@machuco.com',
+      phone: '+57 300 000 0002',
+    );
+
+    expect(created, isNull);
+    expect(controller.lastError, 'Ingresa el NIT.');
+    expect(controller.owners, hasLength(totalBefore));
+  });
+
+  test('updateOwnerPhone conserva el NIT y el tipo de persona', () async {
+    final cloud = _FakeOwnerCloudRepository()
+      ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+    final controller = buildController(cloudRepository: cloud);
+    await controller.init();
+
+    final updated = await controller.updateOwnerPhone('uid-1', '311 999 8888');
+
+    expect(updated?.nit, '900123456-8');
+    expect(updated?.personType, PersonType.juridica);
   });
 
   test('createOwner rechaza un documento duplicado', () async {
@@ -260,6 +305,8 @@ void main() {
       fullName: 'Otro Laura',
       documentType: laura.documentType,
       documentNumber: laura.documentNumber,
+      nit: _validNit,
+      personType: PersonType.natural,
       email: 'otro@machuco.com',
       phone: '+57 300 000 0001',
     );
@@ -276,6 +323,8 @@ void main() {
       fullName: 'Sin Sesión',
       documentType: DocumentType.citizenshipCard,
       documentNumber: '55555555',
+      nit: _validNit,
+      personType: PersonType.natural,
       email: 'sin.sesion@machuco.com',
       phone: '300 555 5555',
       countryCode: '+57',
@@ -464,6 +513,8 @@ void main() {
           fullName: 'Camilo Torres',
           documentType: DocumentType.citizenshipCard,
           documentNumber: '79123456',
+          nit: _validNit,
+          personType: PersonType.natural,
           email: 'camilo.torres@machuco.com',
           phone: '320 555 1234',
           countryCode: '+57',
@@ -499,6 +550,8 @@ void main() {
         fullName: 'Repetido',
         documentType: DocumentType.citizenshipCard,
         documentNumber: '123456789',
+        nit: _validNit,
+        personType: PersonType.natural,
         email: 'repetido@machuco.com',
         phone: '300 111 2222',
         countryCode: '+57',
@@ -535,6 +588,52 @@ void main() {
       expect(cloud.remote['uid-1']!.documentType, DocumentType.passport);
       expect(cloud.remote['uid-1']!.documentNumber, 'AV123456');
       expect(cloud.remote['uid-1']!.address, 'Calle 1');
+      // Cambiar el documento no toca el NIT ni el tipo de persona.
+      expect(cloud.remote['uid-1']!.nit, '900123456-8');
+      expect(cloud.remote['uid-1']!.personType, PersonType.juridica);
+    });
+
+    test('editar el NIT lo normaliza y no toca el documento', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+
+      final updated = await controller.updateOwner(
+        'uid-1',
+        fullName: 'Laura Gómez Restrepo',
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
+        phone: '300 123 4567',
+        nit: '8001112227',
+        personType: PersonType.juridica,
+      );
+      await controller.pendingSync;
+
+      expect(updated, isNotNull);
+      expect(cloud.remote['uid-1']!.nit, '800111222-7');
+      expect(cloud.remote['uid-1']!.documentNumber, '1020304050');
+    });
+
+    test('un NIT con dígito de verificación inválido no se guarda', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+
+      final updated = await controller.updateOwner(
+        'uid-1',
+        fullName: 'Laura Gómez Restrepo',
+        documentType: DocumentType.citizenshipCard,
+        documentNumber: '1020304050',
+        phone: '300 123 4567',
+        nit: '900123456-1',
+        personType: PersonType.juridica,
+      );
+
+      expect(updated, isNull);
+      expect(controller.lastError, contains('dígito de verificación'));
+      expect(cloud.remote['uid-1']!.nit, '900123456-8');
     });
 
     test('cambiar el estado envía accountStatus a la nube', () async {
@@ -580,10 +679,7 @@ void main() {
       final deleted = await controller.anonymizeOwner('uid-1');
 
       expect(deleted, isNotNull);
-      expect(
-        cloud.remote['uid-1']!.accountStatus,
-        AccountStatus.anonymized,
-      );
+      expect(cloud.remote['uid-1']!.accountStatus, AccountStatus.anonymized);
       expect(cloud.remote['uid-1']!.fullName, 'Propietario eliminado');
       expect(controller.owners, hasLength(totalBefore - 1));
       expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
@@ -612,31 +708,25 @@ void main() {
       },
     );
 
-    test(
-      'el reintento elimina en Firestore los pendientes',
-      () async {
-        final cloud = _FakeOwnerCloudRepository()
-          ..remote['uid-1'] = remoteOwner(id: 'uid-1');
-        final controller = buildController(cloudRepository: cloud);
-        await controller.init();
-        cloud.failDelete = true;
-        await controller.anonymizeOwner('uid-1');
+    test('el reintento elimina en Firestore los pendientes', () async {
+      final cloud = _FakeOwnerCloudRepository()
+        ..remote['uid-1'] = remoteOwner(id: 'uid-1');
+      final controller = buildController(cloudRepository: cloud);
+      await controller.init();
+      cloud.failDelete = true;
+      await controller.anonymizeOwner('uid-1');
 
-        cloud.failDelete = false;
-        await controller.retrySynchronization();
+      cloud.failDelete = false;
+      await controller.retrySynchronization();
 
-        expect(
-          cloud.remote['uid-1']!.accountStatus,
-          AccountStatus.anonymized,
-        );
-        expect(controller.syncWarningMessage, isNull);
-        expect(controller.isAutoRetrying, isFalse);
-        expect(
-          await OwnerRepository(database: database).findPendingDeletes(),
-          isEmpty,
-        );
-      },
-    );
+      expect(cloud.remote['uid-1']!.accountStatus, AccountStatus.anonymized);
+      expect(controller.syncWarningMessage, isNull);
+      expect(controller.isAutoRetrying, isFalse);
+      expect(
+        await OwnerRepository(database: database).findPendingDeletes(),
+        isEmpty,
+      );
+    });
 
     test('no elimina un propietario con moteles vinculados', () async {
       final cloud = _FakeOwnerCloudRepository()
@@ -712,10 +802,7 @@ void main() {
 
       expect(deleted, isNotNull);
       expect(transfers, ['uid-1->${target.id}']);
-      expect(
-        cloud.remote['uid-1']!.accountStatus,
-        AccountStatus.anonymized,
-      );
+      expect(cloud.remote['uid-1']!.accountStatus, AccountStatus.anonymized);
       expect(cloud.remote['uid-1']!.fullName, 'Propietario eliminado');
       expect(controller.owners.any((owner) => owner.id == 'uid-1'), isFalse);
       expect(controller.lastAnonymizationBlocker, isNull);
@@ -886,6 +973,8 @@ Owner remoteOwner({
   documentNumber: documentNumber,
   email: email ?? '$id@machuco.com',
   phone: '300 123 4567',
+  nit: _validNit,
+  personType: PersonType.juridica,
   countryCode: '+57',
   countryName: 'Colombia',
   address: 'Calle 10',

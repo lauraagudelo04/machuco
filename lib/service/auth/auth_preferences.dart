@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:machuco/service/storage/local_preferences_service.dart';
 import 'package:machuco/service/storage/shared_preferences_local_service.dart';
 
@@ -24,6 +26,7 @@ class AuthPreferences {
   static const _currentUserEmailKey = 'currentUserEmail';
   static const _lastCountryCodeIdKey = 'lastCountryCodeId';
   static const _catalogsSyncedAtKey = 'catalogsSyncedAt';
+  static const _phoneLengthsKey = 'phoneLengths';
 
   static const _rememberEmailKey = 'rememberEmail';
   static const _rememberedEmailKey = 'rememberedEmail';
@@ -99,6 +102,39 @@ class AuthPreferences {
     final raw = await _preferences.getString(_catalogsSyncedAtKey);
     return raw == null ? null : DateTime.tryParse(raw);
   }
+
+  /// Longitud del celular por indicativo (`phone_min_length` y
+  /// `phone_max_length` de Supabase), por id de `phone_country_codes`. Datos
+  /// públicos del maestro; el SQLite compartido no tiene esas columnas.
+  Future<Map<int, ({int min, int max})>> loadPhoneLengths() async {
+    final raw = await _preferences.getString(_phoneLengthsKey);
+    if (raw == null) return const {};
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) return const {};
+      final lengths = <int, ({int min, int max})>{};
+      for (final entry in decoded.entries) {
+        final id = int.tryParse(entry.key.toString());
+        final value = entry.value;
+        if (id == null || value is! List || value.length != 2) continue;
+        final min = value[0];
+        final max = value[1];
+        if (min is int && max is int) lengths[id] = (min: min, max: max);
+      }
+      return lengths;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  Future<void> savePhoneLengths(Map<int, ({int min, int max})> lengths) =>
+      _preferences.setString(
+        _phoneLengthsKey,
+        jsonEncode({
+          for (final entry in lengths.entries)
+            '${entry.key}': [entry.value.min, entry.value.max],
+        }),
+      );
 
   Future<void> saveCatalogsSyncedAt(DateTime value) => _preferences.setString(
     _catalogsSyncedAtKey,

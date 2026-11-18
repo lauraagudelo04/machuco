@@ -204,30 +204,6 @@ void main() {
       await controller.selectCountryPhoneCode(_argentina);
       expect(controller.validatePhoneNumber('11234567890'), isNull);
     });
-
-    test('registra el celular con el indicativo seleccionado', () async {
-      final auth = _FakeAuthService(sessionEmail: 'ana@example.com');
-      final controller = LoginController(
-        authService: auth,
-        preferences: preferences,
-        catalogRepository: _FakeCatalogRepository(preferences, const [
-          _colombia,
-        ]),
-      );
-      await controller.loadCountryPhoneCodes();
-
-      await controller.register(
-        fullName: 'Ana Pérez',
-        email: ' Ana@Example.com ',
-        phoneNumber: '300 123 4567',
-        password: 'SecurePassword12345',
-        role: RegisteredUserRole.client,
-      );
-
-      expect(auth.registeredPhoneNumber, '+573001234567');
-      expect(auth.registeredEmail, 'ana@example.com');
-      expect(await preferences.loadLastCountryCodeId(), _colombia.id);
-    });
   });
 }
 
@@ -265,8 +241,6 @@ final class _FakeAuthService implements AuthService {
   _FakeAuthService({required this.sessionEmail});
 
   final String sessionEmail;
-  String? registeredPhoneNumber;
-  String? registeredEmail;
 
   AuthSession get _session => AuthSession(
     userId: 'user-1',
@@ -285,22 +259,6 @@ final class _FakeAuthService implements AuthService {
     required String email,
     required String password,
   }) async => _session;
-
-  @override
-  Future<AuthSession> loginWithGoogle({bool preferSignup = false}) async =>
-      _session;
-
-  @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {
-    registeredEmail = email;
-    registeredPhoneNumber = phoneNumber;
-  }
 
   @override
   Future<void> registerAccount(RegistrationData data) async {}
