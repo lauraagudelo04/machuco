@@ -98,13 +98,15 @@ class _$AppDatabase extends AppDatabase {
 
   ReservationDao? _reservationDaoInstance;
 
+  InvoiceDao? _invoiceDaoInstance;
+
   Future<sqflite.Database> open(
     String path,
     List<Migration> migrations, [
     Callback? callback,
   ]) async {
     final databaseOptions = sqflite.OpenDatabaseOptions(
-      version: 24,
+      version: 25,
       onConfigure: (database) async {
         await database.execute('PRAGMA foreign_keys = ON');
         await callback?.onConfigure?.call(database);
@@ -190,6 +192,9 @@ class _$AppDatabase extends AppDatabase {
           'CREATE TABLE IF NOT EXISTS `pqrs_types` (`id` INTEGER NOT NULL, `code` TEXT NOT NULL, `name` TEXT NOT NULL, `description` TEXT NOT NULL, `responseDays` INTEGER NOT NULL, `allowsPhotos` INTEGER NOT NULL, `sortOrder` INTEGER NOT NULL, `isActive` INTEGER NOT NULL, PRIMARY KEY (`id`))',
         );
         await database.execute(
+          'CREATE TABLE IF NOT EXISTS `invoices` (`id` TEXT NOT NULL, `ownerId` TEXT NOT NULL, `invoiceNumber` TEXT NOT NULL, `clientId` TEXT, `clientName` TEXT, `motelId` TEXT NOT NULL, `motelName` TEXT NOT NULL, `roomName` TEXT NOT NULL, `roomNumber` TEXT NOT NULL, `checkIn` INTEGER NOT NULL, `checkOut` INTEGER NOT NULL, `guestCount` INTEGER NOT NULL, `itemsJson` TEXT NOT NULL, `roomTotal` INTEGER NOT NULL, `total` INTEGER NOT NULL, `paymentConcept` TEXT, `paymentAmount` INTEGER, `cardHolder` TEXT, `cardLast4` TEXT, `installments` INTEGER, `paymentMethodName` TEXT, `issuedAt` INTEGER NOT NULL, PRIMARY KEY (`id`))',
+        );
+        await database.execute(
           'CREATE INDEX `index_subscription_payments_subscriptionId` ON `subscription_payments` (`subscriptionId`)',
         );
         await database.execute(
@@ -233,6 +238,12 @@ class _$AppDatabase extends AppDatabase {
         );
         await database.execute(
           'CREATE INDEX `index_pqrs_outbox_photo_outboxId` ON `pqrs_outbox_photo` (`outboxId`)',
+        );
+        await database.execute(
+          'CREATE INDEX `index_invoices_clientId` ON `invoices` (`clientId`)',
+        );
+        await database.execute(
+          'CREATE INDEX `index_invoices_ownerId` ON `invoices` (`ownerId`)',
         );
 
         await callback?.onCreate?.call(database, version);
@@ -342,6 +353,11 @@ class _$AppDatabase extends AppDatabase {
       database,
       changeListener,
     );
+  }
+
+  @override
+  InvoiceDao get invoiceDao {
+    return _invoiceDaoInstance ??= _$InvoiceDao(database, changeListener);
   }
 }
 
@@ -2767,7 +2783,7 @@ class _$ReservationDao extends ReservationDao {
     String actor,
   ) async {
     await _queryAdapter.queryNoReturn(
-      'UPDATE payments SET status = CASE WHEN status = \'pending\' THEN \'cancelled\' WHEN status = \'paid\' AND ?2 = \'owner\' THEN \'refunded\' ELSE status END, cancellationActor = ?2 WHERE id = \'pay-\' || ?1 AND bookingId = ?1 AND (status = \'pending\' OR (status = \'paid\' AND ?2 = \'owner\') OR cancellationActor = ?2)',
+      'UPDATE payments SET status = CASE WHEN status = \'pending\' THEN \'cancelled\' WHEN status = \'paid\' AND (?2 = \'owner\' OR (?2 = \'client\' AND paymentMethodId IN (SELECT id FROM payment_method_catalog WHERE lower(name) IN (\'tarjeta de crédito\', \'tarjeta de débito\')))) THEN \'refunded\' ELSE status END, cancellationActor = ?2 WHERE id = \'pay-\' || ?1 AND bookingId = ?1 AND (status = \'pending\' OR (status = \'paid\' AND (?2 = \'owner\' OR (?2 = \'client\' AND paymentMethodId IN (SELECT id FROM payment_method_catalog WHERE lower(name) IN (\'tarjeta de crédito\', \'tarjeta de débito\'))))) OR cancellationActor = ?2)',
       arguments: [reservationId, actor],
     );
   }
@@ -2857,6 +2873,159 @@ class _$ReservationDao extends ReservationDao {
         );
       });
     }
+  }
+}
+
+class _$InvoiceDao extends InvoiceDao {
+  _$InvoiceDao(this.database, this.changeListener)
+    : _queryAdapter = QueryAdapter(database),
+      _invoiceEntryInsertionAdapter = InsertionAdapter(
+        database,
+        'invoices',
+        (InvoiceEntry item) => <String, Object?>{
+          'id': item.id,
+          'ownerId': item.ownerId,
+          'invoiceNumber': item.invoiceNumber,
+          'clientId': item.clientId,
+          'clientName': item.clientName,
+          'motelId': item.motelId,
+          'motelName': item.motelName,
+          'roomName': item.roomName,
+          'roomNumber': item.roomNumber,
+          'checkIn': item.checkIn,
+          'checkOut': item.checkOut,
+          'guestCount': item.guestCount,
+          'itemsJson': item.itemsJson,
+          'roomTotal': item.roomTotal,
+          'total': item.total,
+          'paymentConcept': item.paymentConcept,
+          'paymentAmount': item.paymentAmount,
+          'cardHolder': item.cardHolder,
+          'cardLast4': item.cardLast4,
+          'installments': item.installments,
+          'paymentMethodName': item.paymentMethodName,
+          'issuedAt': item.issuedAt,
+        },
+      );
+
+  final sqflite.DatabaseExecutor database;
+
+  final StreamController<String> changeListener;
+
+  final QueryAdapter _queryAdapter;
+
+  final InsertionAdapter<InvoiceEntry> _invoiceEntryInsertionAdapter;
+
+  @override
+  Future<InvoiceEntry?> findById(String id) async {
+    return _queryAdapter.query(
+      'SELECT * FROM invoices WHERE id = ?1',
+      mapper: (Map<String, Object?> row) => InvoiceEntry(
+        id: row['id'] as String,
+        ownerId: row['ownerId'] as String,
+        invoiceNumber: row['invoiceNumber'] as String,
+        motelId: row['motelId'] as String,
+        motelName: row['motelName'] as String,
+        roomName: row['roomName'] as String,
+        roomNumber: row['roomNumber'] as String,
+        checkIn: row['checkIn'] as int,
+        checkOut: row['checkOut'] as int,
+        guestCount: row['guestCount'] as int,
+        itemsJson: row['itemsJson'] as String,
+        roomTotal: row['roomTotal'] as int,
+        total: row['total'] as int,
+        issuedAt: row['issuedAt'] as int,
+        clientId: row['clientId'] as String?,
+        clientName: row['clientName'] as String?,
+        paymentConcept: row['paymentConcept'] as String?,
+        paymentAmount: row['paymentAmount'] as int?,
+        cardHolder: row['cardHolder'] as String?,
+        cardLast4: row['cardLast4'] as String?,
+        installments: row['installments'] as int?,
+        paymentMethodName: row['paymentMethodName'] as String?,
+      ),
+      arguments: [id],
+    );
+  }
+
+  @override
+  Future<List<InvoiceEntry>> findByClient(String clientId) async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM invoices WHERE clientId = ?1 ORDER BY issuedAt DESC',
+      mapper: (Map<String, Object?> row) => InvoiceEntry(
+        id: row['id'] as String,
+        ownerId: row['ownerId'] as String,
+        invoiceNumber: row['invoiceNumber'] as String,
+        motelId: row['motelId'] as String,
+        motelName: row['motelName'] as String,
+        roomName: row['roomName'] as String,
+        roomNumber: row['roomNumber'] as String,
+        checkIn: row['checkIn'] as int,
+        checkOut: row['checkOut'] as int,
+        guestCount: row['guestCount'] as int,
+        itemsJson: row['itemsJson'] as String,
+        roomTotal: row['roomTotal'] as int,
+        total: row['total'] as int,
+        issuedAt: row['issuedAt'] as int,
+        clientId: row['clientId'] as String?,
+        clientName: row['clientName'] as String?,
+        paymentConcept: row['paymentConcept'] as String?,
+        paymentAmount: row['paymentAmount'] as int?,
+        cardHolder: row['cardHolder'] as String?,
+        cardLast4: row['cardLast4'] as String?,
+        installments: row['installments'] as int?,
+        paymentMethodName: row['paymentMethodName'] as String?,
+      ),
+      arguments: [clientId],
+    );
+  }
+
+  @override
+  Future<List<InvoiceEntry>> findByOwner(String ownerId) async {
+    return _queryAdapter.queryList(
+      'SELECT * FROM invoices WHERE ownerId = ?1 ORDER BY issuedAt DESC',
+      mapper: (Map<String, Object?> row) => InvoiceEntry(
+        id: row['id'] as String,
+        ownerId: row['ownerId'] as String,
+        invoiceNumber: row['invoiceNumber'] as String,
+        motelId: row['motelId'] as String,
+        motelName: row['motelName'] as String,
+        roomName: row['roomName'] as String,
+        roomNumber: row['roomNumber'] as String,
+        checkIn: row['checkIn'] as int,
+        checkOut: row['checkOut'] as int,
+        guestCount: row['guestCount'] as int,
+        itemsJson: row['itemsJson'] as String,
+        roomTotal: row['roomTotal'] as int,
+        total: row['total'] as int,
+        issuedAt: row['issuedAt'] as int,
+        clientId: row['clientId'] as String?,
+        clientName: row['clientName'] as String?,
+        paymentConcept: row['paymentConcept'] as String?,
+        paymentAmount: row['paymentAmount'] as int?,
+        cardHolder: row['cardHolder'] as String?,
+        cardLast4: row['cardLast4'] as String?,
+        installments: row['installments'] as int?,
+        paymentMethodName: row['paymentMethodName'] as String?,
+      ),
+      arguments: [ownerId],
+    );
+  }
+
+  @override
+  Future<void> upsert(InvoiceEntry entry) async {
+    await _invoiceEntryInsertionAdapter.insert(
+      entry,
+      OnConflictStrategy.replace,
+    );
+  }
+
+  @override
+  Future<void> upsertAll(List<InvoiceEntry> entries) async {
+    await _invoiceEntryInsertionAdapter.insertList(
+      entries,
+      OnConflictStrategy.replace,
+    );
   }
 }
 

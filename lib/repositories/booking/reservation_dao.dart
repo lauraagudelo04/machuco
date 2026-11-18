@@ -32,10 +32,16 @@ abstract class ReservationDao {
 
   @Query(
     "UPDATE payments SET status = CASE WHEN status = 'pending' THEN 'cancelled' "
-    "WHEN status = 'paid' AND :actor = 'owner' THEN 'refunded' ELSE status END, "
+    "WHEN status = 'paid' AND (:actor = 'owner' OR (:actor = 'client' AND "
+    "paymentMethodId IN (SELECT id FROM payment_method_catalog WHERE "
+    "lower(name) IN ('tarjeta de crédito', 'tarjeta de débito')))) "
+    "THEN 'refunded' ELSE status END, "
     'cancellationActor = :actor '
     "WHERE id = 'pay-' || :reservationId AND bookingId = :reservationId "
-    "AND (status = 'pending' OR (status = 'paid' AND :actor = 'owner') "
+    "AND (status = 'pending' OR (status = 'paid' AND (:actor = 'owner' OR "
+    "(:actor = 'client' AND paymentMethodId IN (SELECT id FROM "
+    "payment_method_catalog WHERE lower(name) IN "
+    "('tarjeta de crédito', 'tarjeta de débito'))))) "
     'OR cancellationActor = :actor)',
   )
   Future<void> applyPaymentCancellation(String reservationId, String actor);

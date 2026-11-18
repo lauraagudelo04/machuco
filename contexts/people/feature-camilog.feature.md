@@ -195,6 +195,23 @@ No interpretar esta autorización como permiso para futuras publicaciones.
 
 ## Alcance técnico
 
+### Ampliación autorizada (2026-11-18)
+
+Cliente cancela una reserva pagada con tarjeta de crédito/débito → pago
+`refunded`: sale de ingresos y suma en reembolsos. Reserva y pago se cancelan
+atómicamente en SQLite y Firestore; se conservan método, importe y comprobante.
+«En el Local» sin cobrar, cancelado por cliente o propietario → `cancelled`,
+sin ingresos ni reembolso. No convertir pendientes ni históricos sin método
+en tarjetas pagadas. No modificar cancelaciones históricas por cuenta propia.
+Publicación autorizada por el usuario y verificada el
+`2026-11-18T03:06:48.934Z`: solo Firestore Rules, ruleset
+`e38533e8-d373-4b3b-8f85-e15b39bb3568`. Fuente remota idéntica a la local;
+bloques de compañeros preservados. Después: 1306 pruebas Flutter y 206 de
+reglas aprobadas, estas últimas solo en demo-machuco. Sin cambios en datos
+reales ni despliegues de otros servicios. App y validación manual pendientes.
+No autoriza futuras publicaciones. Respaldo en docs/payment_persistence.md.
+Esta ampliación sustituye la excepción histórica del cliente pagado solo para tarjeta.
+
 ### Política de cancelación autorizada posteriormente (2026-11-17)
 
 Propietario cancela un pago recibido → `refunded`, resta de ingresos y suma en

@@ -79,6 +79,85 @@ void main() {
     }
   });
 
+  for (final methodId in [2, 3]) {
+    test(
+      'cliente cancela tarjeta $methodId: reembolsa sin perder comprobante',
+      () async {
+        await database.paymentDao.saveCatalogEntries(catalog);
+        final original = payment(
+          status: PaymentStatus.paid,
+          methodId: methodId,
+          paidAt: DateTime(2026, 11, 18),
+          receiptNumber: 'LOCAL-card',
+        );
+        final linked = PaymentRecord(
+          id: 'pay-${original.bookingId}',
+          bookingId: original.bookingId,
+          bookingReference: original.bookingReference,
+          clientId: original.clientId,
+          client: original.client,
+          motelId: original.motelId,
+          motel: original.motel,
+          roomId: original.roomId,
+          room: original.room,
+          reservationDate: original.reservationDate,
+          amount: original.amount,
+          status: original.status,
+          paymentMethodId: original.paymentMethodId,
+          paidAt: original.paidAt,
+          receiptNumber: original.receiptNumber,
+        );
+        await database.paymentDao.insertPayment(linked);
+        await database.reservationDao.applyPaymentCancellation(
+          linked.bookingId,
+          'client',
+        );
+        await database.reservationDao.applyPaymentCancellation(
+          linked.bookingId,
+          'client',
+        );
+        final saved = await database.paymentDao.findById(linked.id);
+        expect(saved!.status, PaymentStatus.refunded);
+        expect(saved.cancellationActor, 'client');
+        expect(saved.receiptNumber, linked.receiptNumber);
+        expect(saved.amount, linked.amount);
+      },
+    );
+  }
+
+  for (final actor in ['client', 'owner']) {
+    test(
+      '$actor cancela En el Local sin cobrar: no genera reembolso',
+      () async {
+        final original = payment();
+        final linked = PaymentRecord(
+          id: 'pay-${original.bookingId}',
+          bookingId: original.bookingId,
+          bookingReference: original.bookingReference,
+          clientId: original.clientId,
+          client: original.client,
+          motelId: original.motelId,
+          motel: original.motel,
+          roomId: original.roomId,
+          room: original.room,
+          reservationDate: original.reservationDate,
+          amount: original.amount,
+          status: PaymentStatus.pending,
+        );
+        await database.paymentDao.insertPayment(linked);
+        await database.reservationDao.applyPaymentCancellation(
+          linked.bookingId,
+          actor,
+        );
+        final saved = await database.paymentDao.findById(linked.id);
+        expect(saved!.status, PaymentStatus.cancelled);
+        expect(saved.paidAt, isNull);
+        expect(saved.receiptNumber, isNull);
+        expect(saved.cancellationActor, actor);
+      },
+    );
+  }
+
   test('conserva pagos, fechas y maestro al cerrar y reabrir SQLite', () async {
     await database.paymentDao.saveCatalogEntries(catalog);
     final paidAt = DateTime(2026, 10, 16, 21, 0, 0, 0, 456);
@@ -354,7 +433,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 24);
+        expect(await raw.getVersion(), 25);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           if (entry.key == 'clients') continue;
@@ -466,7 +545,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 24);
+    expect(await raw.getVersion(), 25);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
@@ -526,7 +605,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 24);
+    expect(await raw.getVersion(), 25);
     expect(await _columnNames(raw, 'motels'), motelsColumns);
     expect(await raw.query('country_phone_codes'), hasLength(1));
   });

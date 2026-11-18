@@ -83,6 +83,7 @@ class InvoiceModel {
     this.clientId,
     this.clientName,
     this.payment,
+    this.paymentMethodName,
   });
 
   /// Construye la factura de [reservation] tal como debe quedar guardada.
@@ -139,6 +140,33 @@ class InvoiceModel {
   final int total;
   final InvoicePayment? payment;
   final DateTime issuedAt;
+
+  /// Nombre oficial del método de pago según el maestro `payment_method` de
+  /// Supabase (consultado por REST). No se guarda en Firestore: se resuelve
+  /// al cargar la factura y se conserva en la copia local de SQLite.
+  final String? paymentMethodName;
+
+  /// Copia de la factura con el nombre del método de pago resuelto.
+  InvoiceModel withPaymentMethodName(String? name) => InvoiceModel(
+    id: id,
+    invoiceNumber: invoiceNumber,
+    reservationId: reservationId,
+    clientId: clientId,
+    clientName: clientName,
+    motelId: motelId,
+    motelName: motelName,
+    roomName: roomName,
+    roomNumber: roomNumber,
+    checkIn: checkIn,
+    checkOut: checkOut,
+    guestCount: guestCount,
+    items: items,
+    roomTotal: roomTotal,
+    total: total,
+    payment: payment,
+    issuedAt: issuedAt,
+    paymentMethodName: name,
+  );
 
   /// Número visible de la factura. Se deriva del id de la reserva, así que es
   /// único y estable aunque la emisión se reintente.

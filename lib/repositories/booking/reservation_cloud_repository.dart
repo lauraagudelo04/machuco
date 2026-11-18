@@ -72,6 +72,14 @@ class FirestoreReservationCloudRepository
             reservation,
           ).timeout(requestTimeout);
         } on FirebaseException catch (error) {
+          // Never silently cancel a paid card without its refund when the
+          // server still has older rules or rejects the atomic ledger change.
+          if (error.code == 'permission-denied' &&
+              reservation.cancellationActor == 'client' &&
+              ['Tarjeta de crédito', 'Tarjeta de débito']
+                  .contains(reservation.paymentMethod)) {
+            rethrow;
+          }
           if (!['not-found', 'permission-denied'].contains(error.code)) {
             rethrow;
           }
@@ -156,6 +164,16 @@ class FirestoreReservationCloudRepository
           if (payment['status'] == 'paid') paymentStatus = 'refunded';
           if (payment['status'] == 'pending') paymentStatus = 'cancelled';
         }
+      } else if (actor == 'client' &&
+          before['status'] == 'upcoming' &&
+          [
+            'Tarjeta de crédito',
+            'Tarjeta de débito',
+          ].contains(before['paymentMethod']) &&
+          !skipPendingPayment) {
+        // Clients cannot read Payment. Rules validate the paid card ledger and
+        // commit the refund together with this reservation's cancellation.
+        paymentStatus = 'refunded';
       } else if (actor == 'client' &&
           before['status'] == 'pending' &&
           before['paymentMethod'] == 'En el Local' &&
