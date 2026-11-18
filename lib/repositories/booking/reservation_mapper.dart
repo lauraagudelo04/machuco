@@ -26,6 +26,7 @@ class ReservationMapper {
     guestName: r.guestName,
     categoryId: r.categoryId,
     cancellationReason: r.cancellationReason,
+    cancellationActor: r.cancellationActor,
     invoiceAccessStatus: r.invoiceAccessStatus.name,
     paymentMethod: r.paymentMethod,
   );
@@ -94,6 +95,7 @@ class ReservationMapper {
       guestName: e.guestName,
       categoryId: e.categoryId,
       cancellationReason: e.cancellationReason,
+      cancellationActor: e.cancellationActor,
       invoiceAccessStatus: InvoiceAccessStatus.values.byName(
         e.invoiceAccessStatus,
       ),

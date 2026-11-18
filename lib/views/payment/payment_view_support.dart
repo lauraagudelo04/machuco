@@ -52,12 +52,13 @@ extension PaymentStatusPresentation on PaymentStatus {
 }
 
 class PaymentStatusBadge extends StatelessWidget {
-  const PaymentStatusBadge({super.key, required this.status});
+  const PaymentStatusBadge({super.key, required this.status, this.label});
   final PaymentStatus status;
+  final String? label;
 
   @override
   Widget build(BuildContext context) => Semantics(
-    label: 'Estado del pago: ${status.label}',
+    label: 'Estado del pago: ${label ?? status.label}',
     child: ExcludeSemantics(
       child: DecoratedBox(
         decoration: BoxDecoration(
@@ -74,11 +75,13 @@ class PaymentStatusBadge extends StatelessWidget {
             children: [
               Icon(status.icon, size: 16, color: status.color),
               const SizedBox(width: AppSpacing.s1),
-              Text(
-                status.label,
-                style: Theme.of(
-                  context,
-                ).textTheme.labelMedium?.copyWith(color: status.color),
+              Flexible(
+                child: Text(
+                  label ?? status.label,
+                  style: Theme.of(
+                    context,
+                  ).textTheme.labelMedium?.copyWith(color: status.color),
+                ),
               ),
             ],
           ),

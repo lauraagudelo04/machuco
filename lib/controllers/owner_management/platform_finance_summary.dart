@@ -1,4 +1,4 @@
-import 'package:machuco/controllers/payment/payment_store.dart';
+import 'package:machuco/controllers/payment/system_admin_view/system_admin_payment_controller.dart';
 import 'package:machuco/models/payment/payment.dart';
 
 /// Totales agregados de todos los moteles de la plataforma.
@@ -44,12 +44,6 @@ class PlatformFinanceTotals {
 ///
 /// Envuelve al controlador financiero para que la vista no dependa directamente
 /// del módulo de pagos ni recorra sus registros.
-class PlatformFinanceSummary {
-  PlatformFinanceSummary({PaymentStore? paymentStore})
-    : _paymentStore = paymentStore ?? PaymentStore.shared;
-
-  final PaymentStore _paymentStore;
-
-  PlatformFinanceTotals get totals =>
-      PlatformFinanceTotals.from(_paymentStore.motelFinances);
+class PlatformFinanceSummary extends SystemAdminPaymentController {
+  PlatformFinanceTotals get totals => PlatformFinanceTotals.from(motelFinances);
 }

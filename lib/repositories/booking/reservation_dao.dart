@@ -30,6 +30,24 @@ abstract class ReservationDao {
   @Query('DELETE FROM reservation_line_items WHERE reservationId = :id')
   Future<void> deleteLineItems(String id);
 
+  @Query(
+    "UPDATE payments SET status = CASE WHEN status = 'pending' THEN 'cancelled' "
+    "WHEN status = 'paid' AND :actor = 'owner' THEN 'refunded' ELSE status END, "
+    'cancellationActor = :actor '
+    "WHERE id = 'pay-' || :reservationId AND bookingId = :reservationId "
+    "AND (status = 'pending' OR (status = 'paid' AND :actor = 'owner') "
+    'OR cancellationActor = :actor)',
+  )
+  Future<void> applyPaymentCancellation(String reservationId, String actor);
+
+  Future<void> _applyCancellation(ReservationEntity reservation) async {
+    final actor = reservation.cancellationActor;
+    if (reservation.status == 'cancelled' &&
+        (actor == 'owner' || actor == 'client')) {
+      await applyPaymentCancellation(reservation.id, actor!);
+    }
+  }
+
   @Insert(onConflict: OnConflictStrategy.abort)
   Future<void> insertReservationRow(ReservationEntity reservation);
 
@@ -48,6 +66,7 @@ abstract class ReservationDao {
     await insertReservationRow(reservation);
     await deleteLineItems(reservation.id);
     await insertLineItems(items);
+    await _applyCancellation(reservation);
   }
 
   /// Updates [reservation] and replaces its line items atomically.
@@ -59,6 +78,7 @@ abstract class ReservationDao {
     await updateReservationRow(reservation);
     await deleteLineItems(reservation.id);
     await insertLineItems(items);
+    await _applyCancellation(reservation);
   }
 
   /// Inserts every reservation with its line items in one transaction, so a

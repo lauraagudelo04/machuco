@@ -46,6 +46,21 @@ async function receive(uid = 'owner') {
   });
   return batch.commit();
 }
+const simulatedAt = Timestamp.fromDate(new Date('2026-11-17T18:00:00Z'));
+async function simulateCard(uid = 'client', overrides = {}, updateReservation = true) {
+  const db = as(uid);
+  const batch = writeBatch(db);
+  const values = {
+    status: 'paid', paymentMethodId: 2, paymentMethodName: 'Tarjeta de crédito',
+    paidAt: simulatedAt, receiptNumber: 'LOCAL-pay-reservation-1', ...overrides,
+  };
+  batch.set(doc(db, 'payments/pay-reservation-1'), payment(values));
+  if (updateReservation) batch.update(doc(db, 'reservations/reservation-1'), {
+    status: 'upcoming', paymentMethod: values.paymentMethodName,
+    invoiceAccessStatus: 'pending', updatedAt: serverTimestamp(),
+  });
+  return batch.commit();
+}
 before(async () => {
   env = await initializeTestEnvironment({
     projectId: 'demo-machuco',
@@ -67,6 +82,52 @@ beforeEach(async () => {
 });
 
 describe('En el Local: reservation and payment contract', () => {
+  test('educational credit card creates a paid receipt and reservation atomically', async () => {
+    await assertSucceeds(simulateCard());
+    const stored = await getDoc(doc(as('owner'), 'payments/pay-reservation-1'));
+    const booking = await getDoc(doc(as('client'), 'reservations/reservation-1'));
+    if (stored.data().status !== 'paid' || booking.data().status !== 'upcoming') throw Error('Not paid');
+    if (stored.data().receiptNumber !== 'LOCAL-pay-reservation-1') throw Error('Invalid common receipt');
+    await assertFails(getDoc(doc(as('client'), 'payments/pay-reservation-1')));
+  });
+  test('educational debit card is also paid', async () => {
+    await assertSucceeds(simulateCard('client', { paymentMethodId: 3, paymentMethodName: 'Tarjeta de débito' }));
+  });
+  test('pending local choice can become a paid educational card receipt', async () => {
+    await selectLocal();
+    await assertSucceeds(simulateCard());
+  });
+  test('the identical educational receipt can be retried after a restart', async () => {
+    await simulateCard();
+    await assertSucceeds(simulateCard('client', {}, false));
+    await assertFails(simulateCard('client', { paidAt: Timestamp.fromMillis(1) }, false));
+    await assertFails(simulateCard('client', { amount: 1 }, false));
+  });
+  test('other users and disabled clients cannot simulate another client payment', async () => {
+    for (const uid of ['otherClient', 'otherOwner', 'disabledClient']) {
+      await assertFails(simulateCard(uid));
+    }
+  });
+  test('educational card requires its reservation update and original amount', async () => {
+    await assertFails(simulateCard('client', {}, false));
+    await assertFails(simulateCard('client', { amount: 1 }));
+    await assertFails(simulateCard('client', { paymentMethodName: 'Efectivo' }));
+    await assertFails(simulateCard('client', { receiptNumber: 'OTHER-pay-reservation-1' }));
+  });
+  test('cancelled or expired checkouts cannot create simulated paid receipts', async () => {
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'reservations/reservation-1'), {
+        createdAt: Timestamp.fromMillis(Date.now() - 16 * 60 * 1000),
+      });
+    });
+    await assertFails(simulateCard());
+    await env.withSecurityRulesDisabled(async (ctx) => {
+      await updateDoc(doc(ctx.firestore(), 'reservations/reservation-1'), {
+        status: 'cancelled',
+      });
+    });
+    await assertFails(simulateCard());
+  });
   test('client creates one pending payment and keeps the reservation unpaid', async () => {
     await assertSucceeds(selectLocal());
     const booking = await getDoc(doc(as('client'), 'reservations/reservation-1'));

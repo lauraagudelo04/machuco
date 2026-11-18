@@ -53,7 +53,7 @@ part 'app_database.g.dart';
   PaymentOptionalDateConverter,
 ])
 @Database(
-  version: 23,
+  version: 24,
   entities: [
     SubscriptionDetails,
     SubscriptionPayment,
@@ -140,6 +140,7 @@ class AppDatabaseProvider {
         migration20To21,
         migration21To22,
         migration22To23,
+        migration23To24,
       ])
       .addCallback(
         Callback(
@@ -596,6 +597,7 @@ final migration17To18 = Migration(17, 18, (database) async {
   await _addOwnerAccountStatusColumn(database);
   await _createDocumentTypeSchema(database);
   await _seedDocumentTypes(database);
+  await _addCancellationActorColumns(database);
 });
 
 /// Limpieza de filas locales heredadas de la versión anterior.
@@ -803,5 +805,31 @@ Future<void> _seedDocumentTypes(sqflite.DatabaseExecutor database) async {
       row,
       conflictAlgorithm: sqflite.ConflictAlgorithm.ignore,
     );
+  }
+}
+
+/// Reconciles both v18 variants: Payment added cancellation provenance while
+/// develop added owners. Also upgrades develop v23 without losing either module.
+final migration23To24 = Migration(23, 24, (database) async {
+  await _createOwnerSchema(database);
+  await _addOwnerCountryColumns(database);
+  await _addOwnerPendingDeleteColumn(database);
+  await _addOwnerAccountStatusColumn(database);
+  await _createDocumentTypeSchema(database);
+  await _seedDocumentTypes(database);
+  await _addCancellationActorColumns(database);
+});
+
+Future<void> _addCancellationActorColumns(
+  sqflite.DatabaseExecutor database,
+) async {
+  for (final table in ['reservations', 'payments']) {
+    final columns = await database.rawQuery('PRAGMA table_info($table)');
+    if (columns.isNotEmpty &&
+        !columns.any((column) => column['name'] == 'cancellationActor')) {
+      await database.execute(
+        'ALTER TABLE $table ADD COLUMN cancellationActor TEXT',
+      );
+    }
   }
 }

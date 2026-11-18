@@ -43,7 +43,8 @@ abstract interface class ReservationCloudRepository {
   Future<List<Reservation>> listAll();
 }
 
-class FirestoreReservationCloudRepository implements ReservationCloudRepository {
+class FirestoreReservationCloudRepository
+    implements ReservationCloudRepository {
   FirestoreReservationCloudRepository({
     FirebaseFirestore? firestore,
     this.requestTimeout = const Duration(seconds: 10),
@@ -63,6 +64,27 @@ class FirestoreReservationCloudRepository implements ReservationCloudRepository 
     _validateId(ownerId);
     _validateId(reservation.guestId);
     try {
+      if (reservation.status == ReservationStatus.cancelled &&
+          reservation.cancellationActor != null) {
+        try {
+          await _commitCancellation(
+            ownerId,
+            reservation,
+          ).timeout(requestTimeout);
+        } on FirebaseException catch (error) {
+          if (!['not-found', 'permission-denied'].contains(error.code)) {
+            rethrow;
+          }
+          // A payment removed in the console must not prevent cancellation.
+          // Rules only permit this fallback if no pending payment needs updating.
+          await _commitCancellation(
+            ownerId,
+            reservation,
+            skipPendingPayment: true,
+          ).timeout(requestTimeout);
+        }
+        return;
+      }
       await _reservations
           .doc(reservation.id)
           .set(
@@ -77,6 +99,85 @@ class FirestoreReservationCloudRepository implements ReservationCloudRepository 
     } on TimeoutException {
       throw _offline;
     }
+  }
+
+  Future<void> _commitCancellation(
+    String ownerId,
+    Reservation reservation, {
+    bool skipPendingPayment = false,
+  }) async {
+    final reservationRef = _reservations.doc(reservation.id);
+    final paymentRef = _firestore
+        .collection(FirestoreCollections.payments)
+        .doc('pay-${reservation.id}');
+    await _firestore.runTransaction((transaction) async {
+      final before = (await transaction.get(reservationRef)).data();
+      if (before == null ||
+          before['ownerId'] != ownerId ||
+          before['guestId'] != reservation.guestId ||
+          before['motelId'] != reservation.motelId) {
+        throw const ReservationCloudRepositoryException(
+          ReservationCloudFailureType.invalidData,
+          'La reserva no coincide con Firebase. Actualiza antes de cancelar.',
+        );
+      }
+      final actor = reservation.cancellationActor;
+      if (before['status'] == 'cancelled') {
+        if (before['cancellationActor'] == actor &&
+            before['cancellationReason'] == reservation.cancellationReason) {
+          return;
+        }
+        throw const ReservationCloudRepositoryException(
+          ReservationCloudFailureType.invalidData,
+          'La reserva ya fue cancelada. Actualiza para consultar su estado.',
+        );
+      }
+      if (!['pending', 'upcoming'].contains(before['status'])) {
+        throw const ReservationCloudRepositoryException(
+          ReservationCloudFailureType.invalidData,
+          'La reserva ya no se puede cancelar. Actualiza para consultar su estado.',
+        );
+      }
+      String? paymentStatus;
+      if (actor == 'owner' && !skipPendingPayment) {
+        final payment = (await transaction.get(paymentRef)).data();
+        if (payment != null) {
+          if (payment['bookingId'] != reservation.id ||
+              payment['ownerId'] != ownerId ||
+              payment['clientId'] != reservation.guestId ||
+              payment['motelId'] != reservation.motelId ||
+              payment['roomId'] != before['roomId'] ||
+              payment['amount'] != before['total']) {
+            throw const ReservationCloudRepositoryException(
+              ReservationCloudFailureType.invalidData,
+              'El pago no corresponde a esta reserva. Actualiza los datos.',
+            );
+          }
+          if (payment['status'] == 'paid') paymentStatus = 'refunded';
+          if (payment['status'] == 'pending') paymentStatus = 'cancelled';
+        }
+      } else if (actor == 'client' &&
+          before['status'] == 'pending' &&
+          before['paymentMethod'] == 'En el Local' &&
+          !skipPendingPayment) {
+        // Client has no Payment read access. The rules validate the existing
+        // pending record and both changes together.
+        paymentStatus = 'cancelled';
+      }
+      transaction.update(reservationRef, {
+        'status': 'cancelled',
+        'cancellationReason': reservation.cancellationReason,
+        'cancellationActor': actor,
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      if (paymentStatus != null) {
+        transaction.update(paymentRef, {
+          'status': paymentStatus,
+          'cancellationActor': actor,
+          'updatedAt': FieldValue.serverTimestamp(),
+        });
+      }
+    });
   }
 
   @override
@@ -105,7 +206,12 @@ class FirestoreReservationCloudRepository implements ReservationCloudRepository 
     bool Function(ReservationFirestoreDocument document) inScope,
   ) async {
     try {
-      final snapshot = await query.get().timeout(requestTimeout);
+      final snapshot = await query
+          .get(const GetOptions(source: Source.server))
+          .timeout(requestTimeout);
+      if (snapshot.metadata.isFromCache || snapshot.metadata.hasPendingWrites) {
+        throw _offline;
+      }
       return List.unmodifiable(
         snapshot.docs.map((snapshotDocument) {
           final document = ReservationFirestoreDocument.fromFirestore(

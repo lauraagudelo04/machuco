@@ -37,7 +37,7 @@ void main() {
         );
         await tester.pumpAndSettle();
 
-        expect(find.text('Pagar en efectivo'), findsOneWidget);
+        expect(find.text('Gestionar'), findsOneWidget);
         expect(find.text('Cancelar reserva'), findsOneWidget);
       },
     );

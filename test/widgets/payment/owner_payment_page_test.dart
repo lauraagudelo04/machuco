@@ -7,6 +7,7 @@ import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
+import 'package:machuco/repositories/payment/payment_cloud_repository.dart';
 import 'package:machuco/views/payment/owner_view/owner_payment_page.dart';
 import 'package:machuco/views/payment/owner_view/register_local_payment_sheet.dart';
 
@@ -274,6 +275,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text('Registrar pago en efectivo'), findsNothing);
       await tester.ensureVisible(find.text('Registrar pago'));
+      await tester.pumpAndSettle();
       await tester.tap(find.text('Registrar pago'));
       await tester.pumpAndSettle();
       await selectMethod(tester, 'Tarjeta de débito');
@@ -292,6 +294,71 @@ void main() {
       expect(tester.takeException(), isNull);
     },
   );
+
+  testWidgets('Firebase vacío muestra cero confirmado, no datos locales', (
+    tester,
+  ) async {
+    final repository = _PageRepository([_paid(1)]);
+    final controller = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: repository,
+      cloudRepository: _PageCloudRepository(),
+      currentUserId: () => 'owner-1',
+    );
+    addTearDown(controller.dispose);
+    await controller.ready;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.light,
+        home: OwnerPaymentsPage(
+          motelId: 'motel-1',
+          motelName: 'Motel real',
+          controller: controller,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Resumen confirmado en Firebase'), findsNothing);
+    expect(
+      find.byKey(const ValueKey('payment-unconfirmed-count')),
+      findsNothing,
+    );
+    expect(find.text(r'$ 0'), findsNWidgets(3));
+    expect(find.text('Reembolsado'), findsOneWidget);
+    expect(find.text('Comisiones'), findsNothing);
+    expect(controller.totalIncome, 0);
+  });
+
+  testWidgets('sin servidor no presenta un resumen financiero en cero', (
+    tester,
+  ) async {
+    final controller = OwnerPaymentController(
+      motelId: 'motel-1',
+      repository: _PageRepository([]),
+      cloudRepository: _PageCloudRepository()..failRead = true,
+      currentUserId: () => 'owner-1',
+    );
+    addTearDown(controller.dispose);
+    await controller.ready;
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: AppTheme.dark,
+        home: OwnerPaymentsPage(
+          motelId: 'motel-1',
+          motelName: 'Motel real',
+          controller: controller,
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const ValueKey('payment-finance-unavailable')),
+      findsOneWidget,
+    );
+    expect(find.text(r'$ 0'), findsNothing);
+    expect(find.text('—'), findsNWidgets(4));
+    expect(find.text('Sin conexión con Firebase.'), findsOneWidget);
+  });
 
   testWidgets('la vista muestra una carga fallida y permite reintentar', (
     tester,
@@ -361,6 +428,17 @@ class _PageRepository extends PaymentRepository {
   Future<List<PaymentCatalogEntry>> findPaymentMethods() async => _methods;
 
   @override
+  Future<void> mergeRemotePayments({
+    required String motelId,
+    required List<PaymentRecord> payments,
+  }) async {
+    for (final payment in payments) {
+      records.removeWhere((record) => record.id == payment.id);
+      records.add(payment);
+    }
+  }
+
+  @override
   Future<PaymentRecord> registerLocalPayment({
     required String paymentId,
     required String motelId,
@@ -373,4 +451,29 @@ class _PageRepository extends PaymentRepository {
     records[index] = saved;
     return saved;
   }
+}
+
+class _PageCloudRepository implements PaymentCloudRepository {
+  bool failRead = false;
+
+  @override
+  Future<List<PaymentRecord>> listForOwnerAndMotel({
+    required String ownerId,
+    required String motelId,
+  }) async {
+    if (failRead) {
+      throw const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.network,
+        'Sin conexión con Firebase.',
+      );
+    }
+    return [];
+  }
+
+  @override
+  Future<void> savePayment({
+    required String ownerId,
+    required PaymentRecord payment,
+    String? paymentMethodName,
+  }) async {}
 }

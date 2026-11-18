@@ -8,17 +8,21 @@ import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/service/firebase/current_user.dart';
 
 class PaymentCheckoutResult {
-  const PaymentCheckoutResult({required this.payment, this.syncWarning});
+  const PaymentCheckoutResult({
+    required this.payment,
+    this.syncWarning,
+    this.reservationUpdated = false,
+  });
 
   final PaymentRecord payment;
 
   /// Presente cuando el pago quedó guardado en el dispositivo pero no se pudo
   /// sincronizar con Firebase.
   final String? syncWarning;
+  final bool reservationUpdated;
 }
 
-/// Real checkout: only an authenticated client's pay-at-property request.
-/// The card form remains a sandbox and cannot create receipts.
+/// Local payment selection and educational (non-banking) card checkout.
 class PaymentCheckoutController {
   PaymentCheckoutController({
     PaymentRepository? repository,
@@ -47,13 +51,12 @@ class PaymentCheckoutController {
   Future<PaymentCheckoutResult> registerCardPayment(
     Reservation reservation, {
     required CardPaymentKind kind,
-  }) async => throw const PaymentRepositoryException(
-    PaymentRepositoryError.invalidPayment,
-    'Tarjeta es una simulación: no se ha realizado un cobro. '
-    'Elige «En el Local» para registrar una reserva real.',
-  );
+  }) => _register(reservation, cardKind: kind);
 
-  Future<PaymentCheckoutResult> _register(Reservation reservation) async {
+  Future<PaymentCheckoutResult> _register(
+    Reservation reservation, {
+    CardPaymentKind? cardKind,
+  }) async {
     final paymentId = ReservationPaymentTerms.paymentId(reservation.id);
     final uid = _currentUserId();
     if (uid == null || uid.trim().isEmpty || reservation.guestId != uid) {
@@ -81,11 +84,36 @@ class PaymentCheckoutController {
       amount: reservation.total,
       status: PaymentStatus.pending,
     );
-    final saved = await _repository.createPendingReservationPayment(payment);
+    String? methodName;
+    late PaymentRecord saved;
+    if (cardKind == null) {
+      saved = await _repository.createPendingReservationPayment(payment);
+    } else {
+      final expected = cardKind == CardPaymentKind.credit
+          ? 'tarjeta de crédito'
+          : 'tarjeta de débito';
+      final methods = await _repository.findPaymentMethods();
+      final matches = methods.where(
+        (method) => method.name.trim().toLowerCase() == expected,
+      );
+      if (matches.length != 1) {
+        throw const PaymentRepositoryException(
+          PaymentRepositoryError.invalidCatalog,
+          'No se encontró el método de tarjeta seleccionado en el maestro.',
+        );
+      }
+      final method = matches.single;
+      methodName = method.name;
+      saved = await _repository.registerSimulatedCardPayment(
+        payment,
+        paymentMethodId: method.id,
+      );
+    }
 
     return PaymentCheckoutResult(
       payment: saved,
-      syncWarning: await _synchronize(saved, uid: uid, methodName: null),
+      syncWarning: await _synchronize(saved, uid: uid, methodName: methodName),
+      reservationUpdated: cardKind != null,
     );
   }
 

@@ -43,6 +43,7 @@ class PaymentRecord {
     this.paymentMethodId,
     this.paidAt,
     this.receiptNumber,
+    this.cancellationActor,
   });
 
   @primaryKey
@@ -62,6 +63,7 @@ class PaymentRecord {
   final int? paymentMethodId;
   final DateTime? paidAt;
   final String? receiptNumber;
+  final String? cancellationActor;
 
   PaymentRecord copyWith({
     PaymentStatus? status,
@@ -69,6 +71,7 @@ class PaymentRecord {
     int? paymentMethodId,
     DateTime? paidAt,
     String? receiptNumber,
+    String? cancellationActor,
   }) => PaymentRecord(
     id: id,
     bookingId: bookingId,
@@ -86,6 +89,7 @@ class PaymentRecord {
     paymentMethodId: paymentMethodId ?? this.paymentMethodId,
     paidAt: paidAt ?? this.paidAt,
     receiptNumber: receiptNumber ?? this.receiptNumber,
+    cancellationActor: cancellationActor ?? this.cancellationActor,
   );
 }
 
@@ -142,6 +146,7 @@ class MotelFinance {
     required this.paymentsReceived,
     required this.pendingAmount,
     required this.commissions,
+    this.refundedAmount = 0,
   });
 
   final String motelId;
@@ -151,4 +156,5 @@ class MotelFinance {
   final int paymentsReceived;
   final int pendingAmount;
   final int commissions;
+  final int refundedAmount;
 }

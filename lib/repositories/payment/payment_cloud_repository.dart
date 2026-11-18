@@ -33,7 +33,52 @@ abstract interface class PaymentCloudRepository {
   });
 }
 
-class FirestorePaymentCloudRepository implements PaymentCloudRepository {
+/// A complete query result, including whether Firebase confirmed its contents.
+class PaymentCloudSnapshot {
+  PaymentCloudSnapshot({
+    required List<PaymentRecord> payments,
+    Map<String, String> methodNames = const {},
+    this.isFromCache = false,
+    this.hasPendingWrites = false,
+  }) : payments = List.unmodifiable(
+         payments.where((payment) => !legacyDemoIds.contains(payment.id)),
+       ),
+       methodNames = Map.unmodifiable(methodNames);
+
+  static const legacyDemoIds = {
+    'pay-001',
+    'pay-002',
+    'pay-003',
+    'owner-pay-001',
+    'owner-pay-002',
+    'owner-pay-003',
+  };
+
+  final List<PaymentRecord> payments;
+  final Map<String, String> methodNames;
+  final bool isFromCache;
+  final bool hasPendingWrites;
+
+  bool get isConfirmed => !isFromCache && !hasPendingWrites;
+}
+
+/// Optional live updates; the existing checkout contract remains unchanged.
+abstract interface class PaymentCloudWatchRepository {
+  Stream<PaymentCloudSnapshot> watchForOwnerAndMotel({
+    required String ownerId,
+    required String motelId,
+  });
+}
+
+abstract interface class PlatformPaymentCloudRepository {
+  Stream<PaymentCloudSnapshot> watchPlatformPayments();
+}
+
+class FirestorePaymentCloudRepository
+    implements
+        PaymentCloudRepository,
+        PaymentCloudWatchRepository,
+        PlatformPaymentCloudRepository {
   FirestorePaymentCloudRepository({
     FirebaseFirestore? firestore,
     this.requestTimeout = const Duration(seconds: 10),
@@ -44,6 +89,32 @@ class FirestorePaymentCloudRepository implements PaymentCloudRepository {
 
   CollectionReference<Map<String, dynamic>> get _payments =>
       _firestore.collection(FirestoreCollections.payments);
+
+  @override
+  Stream<PaymentCloudSnapshot> watchPlatformPayments() async* {
+    try {
+      await for (final snapshot in _payments.snapshots(
+        includeMetadataChanges: true,
+      )) {
+        yield _decodeSnapshot(snapshot);
+      }
+    } on FirebaseException catch (error) {
+      debugPrint('Firestore platform payments error: ${error.code}');
+      throw PaymentCloudRepositoryException(
+        error.code == 'permission-denied' || error.code == 'unauthenticated'
+            ? PaymentCloudFailureType.permissionDenied
+            : PaymentCloudFailureType.network,
+        error.code == 'permission-denied' || error.code == 'unauthenticated'
+            ? 'No tienes permisos para consultar las finanzas globales.'
+            : 'No se pudieron consultar las finanzas en Firebase. Reintenta.',
+      );
+    } on FormatException {
+      throw const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.invalidData,
+        'Firebase devolvió pagos inválidos. No se actualizó el resumen.',
+      );
+    }
+  }
 
   @override
   Future<void> savePayment({
@@ -165,22 +236,16 @@ class FirestorePaymentCloudRepository implements PaymentCloudRepository {
       final snapshot = await _payments
           .where('ownerId', isEqualTo: ownerId)
           .where('motelId', isEqualTo: motelId)
-          .get()
+          .get(const GetOptions(source: Source.server))
           .timeout(requestTimeout);
-      return List.unmodifiable(
-        snapshot.docs.map((document) {
-          final remote = PaymentFirestoreDocument.fromFirestore(
-            document.id,
-            document.data(),
-          );
-          if (remote.ownerId != ownerId || remote.payment.motelId != motelId) {
-            throw const FormatException(
-              'Pago remoto fuera del alcance solicitado.',
-            );
-          }
-          return remote.payment;
-        }),
-      );
+      final result = _decodeSnapshot(snapshot, ownerId, motelId);
+      if (!result.isConfirmed) {
+        throw const PaymentCloudRepositoryException(
+          PaymentCloudFailureType.network,
+          'Firebase todavía no confirmó los movimientos. Actualiza para reintentar.',
+        );
+      }
+      return result.payments;
     } on FirebaseException catch (error) {
       throw _map(error);
     } on TimeoutException {
@@ -194,6 +259,63 @@ class FirestorePaymentCloudRepository implements PaymentCloudRepository {
         'Firebase devolvió pagos con datos inválidos. Inténtalo nuevamente.',
       );
     }
+  }
+
+  @override
+  Stream<PaymentCloudSnapshot> watchForOwnerAndMotel({
+    required String ownerId,
+    required String motelId,
+  }) async* {
+    _validateId(ownerId);
+    _validateId(motelId);
+    try {
+      await for (final snapshot
+          in _payments
+              .where('ownerId', isEqualTo: ownerId)
+              .where('motelId', isEqualTo: motelId)
+              .snapshots(includeMetadataChanges: true)) {
+        yield _decodeSnapshot(snapshot, ownerId, motelId);
+      }
+    } on FirebaseException catch (error) {
+      throw _map(error);
+    } on FormatException {
+      throw const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.invalidData,
+        'Firebase devolvió pagos con datos inválidos. No se actualizó el resumen.',
+      );
+    }
+  }
+
+  PaymentCloudSnapshot _decodeSnapshot(
+    QuerySnapshot<Map<String, dynamic>> snapshot, [
+    String? ownerId,
+    String? motelId,
+  ]) {
+    final payments = <PaymentRecord>[];
+    final methodNames = <String, String>{};
+    for (final document in snapshot.docs) {
+      if (PaymentCloudSnapshot.legacyDemoIds.contains(document.id)) continue;
+      final remote = PaymentFirestoreDocument.fromFirestore(
+        document.id,
+        document.data(),
+      );
+      if ((ownerId != null && remote.ownerId != ownerId) ||
+          (motelId != null && remote.payment.motelId != motelId)) {
+        throw const FormatException(
+          'Pago remoto fuera del alcance solicitado.',
+        );
+      }
+      payments.add(remote.payment);
+      if (remote.paymentMethodName case final name?) {
+        methodNames[document.id] = name;
+      }
+    }
+    return PaymentCloudSnapshot(
+      payments: payments,
+      methodNames: methodNames,
+      isFromCache: snapshot.metadata.isFromCache,
+      hasPendingWrites: snapshot.metadata.hasPendingWrites,
+    );
   }
 
   void _validateId(String value) {
