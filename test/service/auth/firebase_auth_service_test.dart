@@ -288,31 +288,6 @@ void main() {
       expect(firebase.createdUser?.deleteCalls, 1);
     });
 
-    test('el registro histórico sigue funcionando', () async {
-      await service.register(
-        fullName: 'Ana Pérez',
-        email: 'ANA@example.com',
-        phoneNumber: '+573001234567',
-        password: 'secreto123',
-        role: RegisteredUserRole.client,
-      );
-      expect(profiles.created.single.fullName, 'Ana Pérez');
-      expect(profiles.created.single.email, 'ana@example.com');
-    });
-
-    test('nunca crea administradores', () async {
-      await expectLater(
-        service.register(
-          fullName: 'Eve',
-          email: 'eve@example.com',
-          phoneNumber: '+573001234567',
-          password: 'secreto123',
-          role: RegisteredUserRole.admin,
-        ),
-        failureOf(AuthFailureType.unknown),
-      );
-      expect(firebase.createdUser, isNull);
-    });
   });
 
   group('eliminación de cuenta', () {

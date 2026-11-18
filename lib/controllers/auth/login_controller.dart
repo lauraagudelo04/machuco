@@ -255,33 +255,6 @@ class LoginController extends ChangeNotifier {
     }
   }
 
-  /// Registro histórico con nombre completo, conservado por compatibilidad.
-  /// El flujo vigente por rol es [registerAccount].
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {
-    final authService = _requireAuthService();
-    _setSubmitting(true);
-    final normalizedEmail = AuthPreferences.normalizeEmail(email);
-    final fullPhoneNumber = _withDialCode(phoneNumber);
-    try {
-      await authService.register(
-        fullName: fullName,
-        email: normalizedEmail,
-        phoneNumber: fullPhoneNumber,
-        password: password,
-        role: role,
-      );
-      await _saveLastCountryPhoneCode();
-    } finally {
-      _setSubmitting(false);
-    }
-  }
-
   /// Registro por rol (cliente o propietario). Normaliza y valida los datos
   /// antes de enviarlos; lanza [AuthFailure] de tipo
   /// [AuthFailureType.invalidInput] si alguno no cumple el formato.
@@ -664,12 +637,6 @@ class LoginController extends ChangeNotifier {
       if (code.isoCode == _defaultCountryIsoCode) return code;
     }
     return _countryPhoneCodes.first;
-  }
-
-  String _withDialCode(String phoneNumber) {
-    final digits = phoneNumber.replaceAll(RegExp(r'\D'), '');
-    final dialCode = _selectedCountryPhoneCode?.dialCode;
-    return dialCode == null ? digits : '$dialCode$digits';
   }
 
   Future<void> _saveLastCountryPhoneCode() async {

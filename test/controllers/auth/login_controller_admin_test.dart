@@ -269,15 +269,6 @@ final class _FakeAuthService implements AuthService {
   }
 
   @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {}
-
-  @override
   Future<void> registerAccount(RegistrationData data) async {}
 
   @override

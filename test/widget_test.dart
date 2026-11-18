@@ -65,22 +65,6 @@ void main() {
     expect(find.text('Continuar con GitHub'), findsOneWidget);
   });
 
-  test('guarda el rol seleccionado al registrar', () async {
-    final auth = _FakeAuthService();
-    final controller = LoginController(authService: auth);
-
-    await controller.register(
-      fullName: 'Ana Perez',
-      email: 'ana@example.com',
-      phoneNumber: '+573001234567',
-      password: 'SecurePassword12345',
-      role: RegisteredUserRole.owner,
-    );
-
-    expect(auth.registerRole, RegisteredUserRole.owner);
-    // La persistencia del perfil la hace el AuthService (Firestore).
-  });
-
   test('redirige a la ruta correcta por rol', () {
     final controller = LoginController(
       authService: _FakeAuthService(),
@@ -141,7 +125,6 @@ final class _FakeAuthService implements AuthService {
   _FakeAuthService({this.loginRole = RegisteredUserRole.client});
 
   final RegisteredUserRole loginRole;
-  RegisteredUserRole? registerRole;
   bool logoutCalled = false;
 
   @override
@@ -160,17 +143,6 @@ final class _FakeAuthService implements AuthService {
       accessToken: 'access',
       idToken: 'header.payload.signature',
     );
-  }
-
-  @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) async {
-    registerRole = role;
   }
 
   @override

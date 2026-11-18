@@ -92,33 +92,6 @@ final class FirebaseAuthService implements AuthService {
     }
   }
 
-  /// Registro histórico con nombre completo. Se conserva por compatibilidad;
-  /// el flujo vigente es [registerAccount].
-  @override
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  }) {
-    final normalizedEmail = AuthInputNormalizer.email(email);
-    return _createAccount(
-      role: role,
-      email: normalizedEmail,
-      password: password,
-      displayName: fullName.trim(),
-      profile: (uid) => UserProfile(
-        uid: uid,
-        fullName: fullName.trim(),
-        email: normalizedEmail,
-        phoneNumber: phoneNumber,
-        role: role,
-        accountStatus: initialAccountStatusFor(role),
-      ),
-    );
-  }
-
   /// Registro por rol: guarda en `users/{uid}` nombres, apellidos, indicativo,
   /// documento de identidad y los campos propios del rol (fecha de nacimiento para el cliente;
   /// tipo de persona, NIT, razón social y plan para el propietario). Esos

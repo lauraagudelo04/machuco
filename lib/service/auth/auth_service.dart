@@ -118,14 +118,6 @@ abstract interface class AuthService {
 
   Future<AuthSession> login({required String email, required String password});
 
-  Future<void> register({
-    required String fullName,
-    required String email,
-    required String phoneNumber,
-    required String password,
-    required RegisteredUserRole role,
-  });
-
   /// Registro por rol. Cliente queda `active`; propietario
   /// `pending_approval`. No deja sesión abierta.
   Future<void> registerAccount(RegistrationData data);
