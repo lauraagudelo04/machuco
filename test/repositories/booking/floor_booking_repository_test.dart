@@ -11,6 +11,7 @@ import 'package:machuco/repositories/booking/reservation_mapper.dart';
 class FakeReservationDao extends ReservationDao {
   final Map<String, ReservationEntity> reservations = {};
   final List<ReservationLineItemEntity> lineItems = [];
+  final List<({String reservationId, String actor})> paymentCancellations = [];
   int insertCalls = 0;
   int bulkInsertCalls = 0;
   bool failBulkInsert = false;
@@ -67,6 +68,14 @@ class FakeReservationDao extends ReservationDao {
   @override
   Future<void> deleteLineItems(String id) async =>
       lineItems.removeWhere((i) => i.reservationId == id);
+
+  @override
+  Future<void> applyPaymentCancellation(
+    String reservationId,
+    String actor,
+  ) async {
+    paymentCancellations.add((reservationId: reservationId, actor: actor));
+  }
 
   @override
   Future<void> insertReservationRow(ReservationEntity reservation) async =>

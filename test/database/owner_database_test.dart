@@ -368,7 +368,7 @@ void main() {
       addTearDown(migrated.close);
       final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 24);
+      expect(await raw.getVersion(), 26);
       final columns = await raw.rawQuery('PRAGMA table_info(owners)');
       expect(
         columns.map((column) => column['name']),
@@ -450,7 +450,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 24);
+    expect(await raw.getVersion(), 26);
     expect(
       await raw.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table' "
@@ -516,7 +516,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 24);
+    expect(await raw.getVersion(), 26);
     final ids = (await raw.query('owners')).map((r) => r['id']).toList();
     expect(ids, ['AbCdEfGhIjKlMnOpQrStUvWxYz12']);
   });
@@ -536,7 +536,7 @@ void main() {
   });
 
   test(
-    'la migración 23->24 agrega nit y personType sin perder filas',
+    'la migración 23->26 agrega nit y personType sin perder filas',
     () async {
       final legacyPath = '${directory.path}${Platform.pathSeparator}v23.db';
       sqfliteFfiInit();
@@ -585,7 +585,7 @@ void main() {
       addTearDown(migrated.close);
       final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 24);
+      expect(await raw.getVersion(), 26);
       final columns = (await raw.rawQuery(
         'PRAGMA table_info(owners)',
       )).map((column) => column['name']).toSet();

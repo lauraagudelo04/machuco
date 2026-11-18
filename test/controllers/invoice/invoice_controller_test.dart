@@ -46,8 +46,14 @@ class _FakeInvoiceRepository implements InvoiceRepository {
   int issueCalls = 0;
   bool fail = false;
 
+  final List<String?> hints = [];
+
   @override
-  Future<InvoiceModel?> findByReservation(String reservationId) async {
+  Future<InvoiceModel?> findByReservation(
+    String reservationId, {
+    String? paymentMethodHint,
+  }) async {
+    hints.add(paymentMethodHint);
     if (fail) throw const InvoiceRepositoryException('Sin conexión');
     return stored[reservationId];
   }
@@ -148,6 +154,23 @@ void main() {
 
       expect(controller.status, InvoiceLoadStatus.available);
     });
+
+    test(
+      'pasa al repositorio el método de pago a buscar en el maestro',
+      () async {
+        final controller = newController();
+        final card = PaymentMethodModel(amount: 100000, concept: 'Reserva')
+          ..cardNumber = '4111 1111 1111 1111'
+          ..cardKind = CardPaymentKind.debit;
+
+        await controller.loadForReservation(
+          _reservation('res-1', status: ReservationStatus.pending),
+          paymentMethod: card,
+        );
+
+        expect(repository.hints, ['Tarjeta de débito']);
+      },
+    );
 
     test('error del repositorio se expone como estado de error', () async {
       repository.fail = true;

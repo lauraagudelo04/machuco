@@ -145,21 +145,41 @@ void main() {
   );
 
   for (final kind in CardPaymentKind.values) {
-    test('el sandbox $kind no crea pagos reales', () async {
-      final cloud = _FakeCloud();
-      await expectLater(
-        controller(cloud: cloud).registerCardPayment(reservation, kind: kind),
-        throwsA(isA<PaymentRepositoryException>()),
-      );
-      expect(await repository.findAllPayments(), isEmpty);
-      expect(cloud.saved, isEmpty);
-      expect(
-        (await database.reservationDao.findReservationById(
-          reservation.id,
-        ))!.status,
-        'pending',
-      );
-    });
+    test(
+      'tarjeta educativa $kind guarda Pagado y actualiza la reserva',
+      () async {
+        final cloud = _FakeCloud();
+        final result = await controller(
+          cloud: cloud,
+        ).registerCardPayment(reservation, kind: kind);
+        expect(result.payment.status, PaymentStatus.paid);
+        expect(result.reservationUpdated, isTrue);
+        expect(result.syncWarning, isNull);
+        expect(
+          result.payment.paymentMethodId,
+          kind == CardPaymentKind.credit ? 2 : 3,
+        );
+        expect(result.payment.paidAt, now);
+        expect(result.payment.receiptNumber, 'LOCAL-pay-res-1');
+        expect(
+          (await repository.findAllPayments()).single.status,
+          PaymentStatus.paid,
+        );
+        expect(cloud.saved.single.payment.status, PaymentStatus.paid);
+        expect(
+          cloud.saved.single.name,
+          kind == CardPaymentKind.credit
+              ? 'Tarjeta de crédito'
+              : 'Tarjeta de débito',
+        );
+        expect(
+          (await database.reservationDao.findReservationById(
+            reservation.id,
+          ))!.status,
+          'upcoming',
+        );
+      },
+    );
   }
 
   test(
@@ -254,22 +274,76 @@ void main() {
     expect(await repository.findAllPayments(), isEmpty);
   });
 
-  test('pagar con tarjeta una reserva ya pendiente se rechaza', () async {
-    final checkout = controller();
-    await checkout.registerPendingLocalPayment(reservation);
+  test(
+    'puede cambiar En el Local pendiente por tarjeta pagada sin duplicar',
+    () async {
+      final checkout = controller();
+      await checkout.registerPendingLocalPayment(reservation);
 
-    expect(
-      () => checkout.registerCardPayment(
+      final result = await checkout.registerCardPayment(
+        reservation,
+        kind: CardPaymentKind.credit,
+      );
+      expect(result.payment.status, PaymentStatus.paid);
+      expect(await repository.findAllPayments(), hasLength(1));
+    },
+  );
+
+  test(
+    'reintentar tarjeta conserva el comprobante y no duplica el ingreso',
+    () async {
+      final cloud = _FakeCloud();
+      final first = await controller(
+        cloud: cloud,
+      ).registerCardPayment(reservation, kind: CardPaymentKind.credit);
+      final second = await controller(
+        cloud: cloud,
+      ).registerCardPayment(reservation, kind: CardPaymentKind.credit);
+      expect(second.payment.receiptNumber, first.payment.receiptNumber);
+      expect(second.payment.paidAt, first.payment.paidAt);
+      expect(await repository.findAllPayments(), hasLength(1));
+      expect(cloud.saved, hasLength(2));
+    },
+  );
+
+  test('una reserva cancelada no genera pago de tarjeta', () async {
+    await database.database.update(
+      'reservations',
+      {'status': 'cancelled'},
+      where: 'id = ?',
+      whereArgs: [reservation.id],
+    );
+    await expectLater(
+      controller().registerCardPayment(
         reservation,
         kind: CardPaymentKind.credit,
       ),
-      throwsA(
-        isA<PaymentRepositoryException>().having(
-          (error) => error.kind,
-          'kind',
-          PaymentRepositoryError.invalidPayment,
-        ),
+      throwsA(isA<PaymentRepositoryException>()),
+    );
+    expect(await repository.findAllPayments(), isEmpty);
+  });
+
+  test('sin red conserva el pago educativo pagado para reintentar', () async {
+    final cloud = _FakeCloud(
+      failure: const PaymentCloudRepositoryException(
+        PaymentCloudFailureType.network,
+        'Sin conexión',
       ),
     );
+    final result = await controller(
+      cloud: cloud,
+    ).registerCardPayment(reservation, kind: CardPaymentKind.debit);
+    expect(result.syncWarning, 'Sin conexión');
+    expect(result.payment.status, PaymentStatus.paid);
+    expect(
+      (await repository.findAllPayments()).single.status,
+      PaymentStatus.paid,
+    );
+    cloud.failure = null;
+    final retry = await controller(
+      cloud: cloud,
+    ).registerCardPayment(reservation, kind: CardPaymentKind.debit);
+    expect(retry.syncWarning, isNull);
+    expect(await repository.findAllPayments(), hasLength(1));
   });
 }

@@ -42,6 +42,36 @@ service cloud.firestore {
             && !('receiptNumber' in data);
     }
 
+    function hasValidReservationReceipt(data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      let receipt = data.get('receiptNumber', '');
+      return receipt == 'LOCAL-pay-' + data.bookingId
+        || (receipt.matches('booking.*') && receipt == reservation.requestId);
+    }
+
+    // Pago de tarjeta del ejercicio educativo, vinculado a la reserva propia.
+    function isSimulatedCard(data) {
+      return data.status == 'paid'
+        && data.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']
+        && 'paymentMethodId' in data && 'paidAt' in data
+        && !('method' in data)
+        && hasValidReservationReceipt(data);
+    }
+
+    function isClientSimulatedCard(data) {
+      return isActiveClient()
+        && data.clientId == request.auth.uid
+        && data.ownerId != request.auth.uid
+        && isSimulatedCard(data);
+    }
+
+    function isSimulatedCheckoutOpen(data) {
+      let reservation = get(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return reservation.status == 'pending'
+        && (reservation.get('paymentMethod', '') == 'En el Local'
+          || request.time < reservation.createdAt + duration.value(15, 'm'));
+    }
+
     function paymentMatchesReservation(paymentId, data) {
       let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
       return paymentId == 'pay-' + data.bookingId
@@ -62,7 +92,7 @@ service cloud.firestore {
           && reservation.get('paymentMethod', '') == 'En el Local')
         || (data.status == 'paid'
           && 'paymentMethodId' in data && 'paymentMethodName' in data
-          && 'paidAt' in data && data.get('receiptNumber', '') == 'LOCAL-pay-' + data.bookingId
+          && 'paidAt' in data && hasValidReservationReceipt(data)
           && reservation.status in ['upcoming', 'active', 'completed', 'cancelled']
           && reservation.get('paymentMethod', '') == data.paymentMethodName)
         || (data.status == 'cancelled' && reservation.status == 'cancelled')
@@ -102,6 +132,80 @@ service cloud.firestore {
         || ((selection || receipt) && hasBackedReservationPayment(reservationId, after));
     }
 
+    function isCancellationActor(actor, reservation) {
+      return (actor == 'owner' && isActiveOwner()
+          && reservation.ownerId == request.auth.uid)
+        || (actor == 'client' && isActiveClient()
+          && reservation.guestId == request.auth.uid);
+    }
+
+    function isCancellationPaymentChange(paymentId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let reservationPath = /databases/$(database)/documents/reservations/$(after.bookingId);
+      let reservationBefore = get(reservationPath).data;
+      let reservationAfter = getAfter(reservationPath).data;
+      let actor = after.get('cancellationActor', '');
+      return reservationBefore.status in ['pending', 'upcoming']
+        && reservationAfter.status == 'cancelled'
+        && reservationAfter.get('cancellationActor', '') == actor
+        && isCancellationActor(actor, reservationAfter)
+        && after.diff(before).affectedKeys().hasOnly([
+          'status', 'cancellationActor', 'updatedAt'])
+        && ((before.status == 'pending' && after.status == 'cancelled')
+          || (before.status == 'paid' && after.status == 'refunded'
+            && (actor == 'owner' || (actor == 'client'
+              && before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']))))
+        && paymentMatchesReservation(paymentId, after)
+        && hasValidPaymentFields(after);
+    }
+
+    function existingCancellationLedgerMatches(reservationId, actor) {
+      let paymentPath = /databases/$(database)/documents/payments/$('pay-' + reservationId);
+      let before = get(paymentPath).data;
+      let after = getAfter(paymentPath).data;
+      let metadataOnly = after.diff(before).affectedKeys().hasOnly([
+        'status', 'cancellationActor', 'updatedAt']);
+      return paymentMatchesReservation('pay-' + reservationId, before)
+        && ((before.status == 'pending'
+            && after.status == 'cancelled'
+            && after.get('cancellationActor', '') == actor && metadataOnly)
+          || (before.status == 'paid' && (actor == 'owner'
+              || (actor == 'client' && before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']))
+            && after.status == 'refunded'
+            && after.get('cancellationActor', '') == actor && metadataOnly)
+          || (before.status == 'paid' && actor == 'client'
+            && !(before.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito'])
+            && after == before)
+          || (before.status in ['cancelled', 'refunded'] && after == before));
+    }
+
+    function cancellationLedgerMatches(reservationId, actor) {
+      return !exists(/databases/$(database)/documents/payments/$('pay-' + reservationId))
+        || existingCancellationLedgerMatches(reservationId, actor);
+    }
+
+    function isReservationCancellationUpdate(reservationId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let actor = after.get('cancellationActor', '');
+      let oldActor = before.get('cancellationActor', '');
+      return (after.status != 'cancelled' && actor == oldActor)
+        || (before.status == 'cancelled' && after.status == 'cancelled' && actor == oldActor)
+        // Preserve the pre-existing administrator flow; this change only
+        // attributes explicit owner/client cancellations.
+        || (isAdmin() && actor == '' && oldActor == '')
+        || (before.status in ['pending', 'upcoming'] && after.status == 'cancelled'
+          && after.get('cancellationReason', '').size() > 0
+          && isCancellationActor(actor, after)
+          && cancellationLedgerMatches(reservationId, actor))
+        // Keep automatic expiration of an unpaid, unselected checkout.
+        || (before.status == 'pending' && after.status == 'cancelled' && actor == ''
+          && before.get('paymentMethod', '') != 'En el Local'
+          && request.time >= before.createdAt + duration.value(15, 'm')
+          && !exists(/databases/$(database)/documents/payments/$('pay-' + reservationId)));
+    }
+
     function hasValidPaymentFields(data) {
       return data.keys().hasAll([
           'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
@@ -112,7 +216,7 @@ service cloud.firestore {
           'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
           'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
           'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
-          'paymentMethodName', 'updatedAt'
+          'paymentMethodName', 'updatedAt', 'cancellationActor'
         ])
         && data.ownerId is string && data.ownerId.size() > 0
         && data.bookingId is string && data.bookingId.size() > 0
@@ -126,6 +230,9 @@ service cloud.firestore {
         && data.reservationDate is timestamp
         && data.amount is int && data.amount > 0
         && data.status in ['pending', 'paid', 'refunded', 'cancelled']
+        && (!('cancellationActor' in data)
+          || (data.cancellationActor in ['owner', 'client']
+            && data.status in ['refunded', 'cancelled']))
         && (!('method' in data) || data.method in ['online', 'cash'])
         && (!('paymentMethodId' in data)
           || (data.paymentMethodId is int && data.paymentMethodId > 0))
@@ -235,7 +342,7 @@ service cloud.firestore {
           'motelName', 'roomId', 'roomName', 'roomNumber', 'checkIn',
           'checkOut', 'stayMode', 'guestCount', 'services', 'products',
           'roomTotal', 'total', 'status', 'createdAt', 'categoryId',
-          'cancellationReason', 'invoiceAccessStatus', 'paymentMethod',
+          'cancellationReason', 'cancellationActor', 'invoiceAccessStatus', 'paymentMethod',
           'updatedAt'
         ])
         && data.ownerId is string && data.ownerId.size() > 0
@@ -258,6 +365,9 @@ service cloud.firestore {
         && data.total is int && data.total >= data.roomTotal
         && data.status in
           ['pending', 'active', 'upcoming', 'completed', 'cancelled']
+        && (!('cancellationActor' in data)
+          || (data.cancellationActor in ['owner', 'client']
+            && data.status == 'cancelled'))
         && data.createdAt is timestamp
         && (!('categoryId' in data) || data.categoryId is int)
         && (!('cancellationReason' in data)
@@ -825,6 +935,8 @@ service cloud.firestore {
           (isActiveOwner()
             && request.resource.data.ownerId == request.auth.uid)
           || isClientPaymentCreate(request.resource.data)
+          || (isClientSimulatedCard(request.resource.data)
+            && isSimulatedCheckoutOpen(request.resource.data))
         );
 
       // A client can replay exactly the same pending request after a timeout,
@@ -835,6 +947,25 @@ service cloud.firestore {
         && paymentMatchesReservation(paymentId, request.resource.data)
         && hasLinkedPaymentState(request.resource.data)
         && hasValidPaymentFields(request.resource.data);
+
+      // Allow converting one's own pending payment, or replaying precisely the
+      // same simulated receipt after a timeout/restart. No Payment read access.
+      allow update: if isClientSimulatedCard(request.resource.data)
+        && resource.data.clientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'paymentMethodId', 'paymentMethodName', 'paidAt',
+          'receiptNumber', 'updatedAt'
+        ])
+        && ((resource.data.status == 'pending'
+            && isSimulatedCheckoutOpen(request.resource.data)
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active'])
+          || (isSimulatedCard(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])))
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && hasValidPaymentFields(request.resource.data);
+
+      allow update: if isCancellationPaymentChange(paymentId);
 
       allow update: if isActiveOwner()
         && !isLegacyDemoPaymentId(paymentId)
@@ -994,7 +1125,7 @@ service cloud.firestore {
 
       allow update: if isReservationParticipant(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'cancellationReason', 'invoiceAccessStatus',
+          'status', 'cancellationReason', 'cancellationActor', 'invoiceAccessStatus',
           'paymentMethod', 'updatedAt'
         ])
         && isValidReservationTransition(
@@ -1002,6 +1133,7 @@ service cloud.firestore {
           request.resource.data.status
         )
         && isReservationPaymentUpdate(reservationId)
+        && isReservationCancellationUpdate(reservationId)
         && hasValidReservationFields(request.resource.data);
 
       allow delete: if false;

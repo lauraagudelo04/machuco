@@ -537,7 +537,7 @@ class ClientBookingController extends ChangeNotifier {
   Future<void> cancelReservation(String id, String reason) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     try {
-      await _service.cancelReservation(id, reason);
+      await _service.cancelReservation(id, reason, actor: 'client');
     } finally {
       await refresh();
     }

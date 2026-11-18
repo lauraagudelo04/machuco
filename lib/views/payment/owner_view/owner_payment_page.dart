@@ -83,14 +83,14 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                         widget.motelName,
                         style: Theme.of(context).textTheme.headlineMedium,
                       ),
-                      const SizedBox(height: AppSpacing.s2),
-                      Text(
-                        'Pagos guardados en este dispositivo y sincronizados '
-                        'con Firebase.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: context.appColors.textSecondary,
+                      if (_controller.lastFinanceUpdate case final update?) ...[
+                        const SizedBox(height: AppSpacing.s2),
+                        Text(
+                          'Última verificación: ${formatPaymentDate(update.toLocal())}'
+                          ' · ${TimeOfDay.fromDateTime(update.toLocal()).format(context)}',
+                          style: Theme.of(context).textTheme.bodySmall,
                         ),
-                      ),
+                      ],
                       if (_controller.isSyncing) ...[
                         const SizedBox(height: AppSpacing.s3),
                         const LinearProgressIndicator(
@@ -118,6 +118,26 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                           ),
                         ),
                       ],
+                      if (_controller.usesFirebase &&
+                          !_controller.hasFinanceSnapshot &&
+                          !_controller.isSyncing) ...[
+                        const SizedBox(height: AppSpacing.s3),
+                        const Text(
+                          'Resumen no disponible. No se muestran saldos en cero '
+                          'sin una consulta confirmada a Firebase.',
+                          key: ValueKey('payment-finance-unavailable'),
+                        ),
+                      ],
+                      if (_controller.unconfirmedPayments > 0) ...[
+                        const SizedBox(height: AppSpacing.s3),
+                        Text(
+                          '${_controller.unconfirmedPayments} movimientos locales '
+                          'pendientes de confirmar en Firebase. Sus cambios no '
+                          'se incluyen en el resumen confirmado.',
+                          key: const ValueKey('payment-unconfirmed-count'),
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                       const SizedBox(height: AppSpacing.s4),
                       LayoutBuilder(
                         builder: (context, constraints) {
@@ -134,40 +154,43 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                                 width: width,
                                 icon: Icons.trending_up_outlined,
                                 label: 'Ingresos',
-                                value: formatPaymentMoney(
-                                  _controller.totalIncome,
-                                ),
+                                value: _controller.hasFinanceSnapshot
+                                    ? formatPaymentMoney(
+                                        _controller.totalIncome,
+                                      )
+                                    : '—',
                               ),
                               PaymentMetricCard(
                                 width: width,
                                 icon: Icons.receipt_long_outlined,
                                 label: 'Pagos recibidos',
-                                value: '${_controller.paymentsReceived}',
+                                value: _controller.hasFinanceSnapshot
+                                    ? '${_controller.paymentsReceived}'
+                                    : '—',
                               ),
                               PaymentMetricCard(
                                 width: width,
                                 icon: Icons.schedule_outlined,
                                 label: 'Por recaudar',
-                                value: formatPaymentMoney(
-                                  _controller.pendingAmount,
-                                ),
+                                value: _controller.hasFinanceSnapshot
+                                    ? formatPaymentMoney(
+                                        _controller.pendingAmount,
+                                      )
+                                    : '—',
                               ),
                               PaymentMetricCard(
                                 width: width,
-                                icon: Icons.percent_outlined,
-                                label: 'Comisiones',
-                                value: '—',
+                                icon: Icons.undo_outlined,
+                                label: 'Reembolsado',
+                                value: _controller.hasFinanceSnapshot
+                                    ? formatPaymentMoney(
+                                        _controller.refundedAmount,
+                                      )
+                                    : '—',
                               ),
                             ],
                           );
                         },
-                      ),
-                      const SizedBox(height: AppSpacing.s2),
-                      Text(
-                        'Comisiones no calculadas en esta etapa.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
                       ),
                       const SizedBox(height: AppSpacing.s6),
                       _SectionTitle(
@@ -179,10 +202,19 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                         AppEmptyState(
                           icon: Icons.check_circle_outline,
                           title: _controller.payments.isEmpty
-                              ? 'Sin pagos guardados'
+                              ? _controller.usesFirebase
+                                    ? _controller.hasFinanceSnapshot
+                                          ? 'Sin movimientos confirmados'
+                                          : 'Sin movimientos verificados'
+                                    : 'Sin pagos guardados'
                               : 'Pagos al día',
                           message: _controller.payments.isEmpty
-                              ? 'Aún no hay pagos en SQLite para este motel.'
+                              ? _controller.usesFirebase
+                                    ? _controller.hasFinanceSnapshot
+                                          ? ''
+                                          : 'Actualiza para consultar los pagos '
+                                                'reales de este motel en Firebase.'
+                                    : 'Aún no hay pagos guardados para este motel.'
                               : 'No hay pagos pendientes de registrar.',
                         )
                       else
@@ -194,7 +226,16 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                             child: _OwnerPaymentCard(
                               key: ValueKey('payment-${payment.id}'),
                               payment: payment,
-                              onRegister: () => _registerPayment(payment),
+                              clientName: _controller.clientName(payment),
+                              pendingSync: !_controller.isPaymentConfirmed(
+                                payment,
+                              ),
+                              onRegister:
+                                  _controller.isLoading ||
+                                      _controller.isSaving ||
+                                      _controller.isSyncing
+                                  ? null
+                                  : () => _registerPayment(payment),
                             ),
                           ),
                         ),
@@ -210,7 +251,11 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                           child: _OwnerPaymentCard(
                             key: ValueKey('payment-${payment.id}'),
                             payment: payment,
+                            clientName: _controller.clientName(payment),
                             methodName: _controller.methodName(payment),
+                            pendingSync: !_controller.isPaymentConfirmed(
+                              payment,
+                            ),
                           ),
                         ),
                       ),
@@ -229,7 +274,11 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                             child: _OwnerPaymentCard(
                               key: ValueKey('payment-${payment.id}'),
                               payment: payment,
+                              clientName: _controller.clientName(payment),
                               methodName: _controller.methodName(payment),
+                              pendingSync: !_controller.isPaymentConfirmed(
+                                payment,
+                              ),
                             ),
                           ),
                         ),
@@ -238,13 +287,6 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
                       Text(
                         'Clientes frecuentes',
                         style: Theme.of(context).textTheme.headlineSmall,
-                      ),
-                      const SizedBox(height: AppSpacing.s2),
-                      Text(
-                        'Según los pagos guardados para este motel.',
-                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
                       ),
                       const SizedBox(height: AppSpacing.s3),
                       ..._controller.frequentClients.map(
@@ -269,6 +311,7 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
       enableDrag: false,
       builder: (_) => RegisterLocalPaymentSheet(
         payment: payment,
+        clientName: _controller.clientName(payment),
         loadPaymentMethods: _controller.loadPaymentMethods,
         onSave: (methodId) => _controller.registerLocalPayment(
           paymentId: payment.id,
@@ -280,7 +323,9 @@ class _OwnerPaymentsPageState extends State<OwnerPaymentsPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
-          'Pago registrado. Comprobante ${saved.receiptNumber ?? saved.id}.',
+          'Pago guardado en este dispositivo. '
+          'Comprobante ${saved.receiptNumber ?? saved.id}. '
+          'El resumen se actualizará cuando Firebase lo confirme.',
         ),
         behavior: SnackBarBehavior.floating,
       ),
@@ -307,12 +352,16 @@ class _OwnerPaymentCard extends StatelessWidget {
   const _OwnerPaymentCard({
     super.key,
     required this.payment,
+    required this.clientName,
     this.onRegister,
     this.methodName,
+    this.pendingSync = false,
   });
   final PaymentRecord payment;
+  final String clientName;
   final VoidCallback? onRegister;
   final String? methodName;
+  final bool pendingSync;
 
   @override
   Widget build(BuildContext context) => AppCard(
@@ -327,7 +376,7 @@ class _OwnerPaymentCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    payment.client,
+                    clientName,
                     style: Theme.of(context).textTheme.titleLarge,
                   ),
                   Text(
@@ -340,10 +389,27 @@ class _OwnerPaymentCard extends StatelessWidget {
               ),
             ),
             const SizedBox(width: AppSpacing.s2),
-            PaymentStatusBadge(status: payment.status),
+            if (payment.cancellationActor == null)
+              PaymentStatusBadge(status: payment.status),
           ],
         ),
+        if (payment.cancellationActor != null) ...[
+          const SizedBox(height: AppSpacing.s2),
+          PaymentStatusBadge(
+            status: payment.status,
+            label: payment.cancellationActor == 'owner'
+                ? 'Cancelado por propietario'
+                : 'Cancelado por el usuario',
+          ),
+        ],
         const SizedBox(height: AppSpacing.s3),
+        if (pendingSync) ...[
+          Text(
+            'Pendiente de confirmar en Firebase',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: AppSpacing.s2),
+        ],
         Row(
           children: [
             Expanded(

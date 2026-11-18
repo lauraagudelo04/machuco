@@ -93,7 +93,7 @@ void main() {
   group('migración de PQRS', () {
     test('las constantes apuntan a la versión actual de la base', () async {
       expect(pqrsMigrationToVersion, pqrsMigrationFromVersion + 1);
-      // Puede haber migraciones posteriores (23->24: NIT del propietario).
+      // Puede haber migraciones posteriores (migraciones de propietario/facturas).
       expect(
         await raw().getVersion(),
         greaterThanOrEqualTo(pqrsMigrationToVersion),

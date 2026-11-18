@@ -10,9 +10,13 @@ import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/service/firebase/firestore_collections.dart';
 
 class InvoiceRepositoryException implements Exception {
-  const InvoiceRepositoryException(this.message);
+  const InvoiceRepositoryException(this.message, {this.offline = false});
 
   final String message;
+
+  /// `true` cuando Firebase no respondió (sin conexión o tiempo agotado). En
+  /// ese caso se puede recurrir a la copia local de SQLite.
+  final bool offline;
 
   @override
   String toString() => message;
@@ -21,7 +25,13 @@ class InvoiceRepositoryException implements Exception {
 /// Acceso a las facturas, independiente del origen de datos concreto.
 abstract interface class InvoiceRepository {
   /// Factura de una reserva, o `null` si todavía no se ha emitido.
-  Future<InvoiceModel?> findByReservation(String reservationId);
+  ///
+  /// [paymentMethodHint] es el método de pago que se buscará en el maestro
+  /// para mostrar su nombre oficial (ver `invoicePaymentMethodHint`).
+  Future<InvoiceModel?> findByReservation(
+    String reservationId, {
+    String? paymentMethodHint,
+  });
 
   /// Facturas de un cliente, de la más reciente a la más antigua.
   Future<List<InvoiceModel>> findByClient(String clientId);
@@ -66,7 +76,31 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
       _firestore.collection(FirestoreCollections.reservations);
 
   @override
-  Future<InvoiceModel?> findByReservation(String reservationId) async {
+  Future<InvoiceModel?> findByReservation(
+    String reservationId, {
+    String? paymentMethodHint,
+  }) async => (await findDocument(reservationId))?.invoice;
+
+  @override
+  Future<List<InvoiceModel>> findByClient(String clientId) async => [
+    for (final document in await findDocumentsByClient(clientId))
+      document.invoice,
+  ];
+
+  @override
+  Future<List<InvoiceModel>> findByOwner(String ownerId) async => [
+    for (final document in await findDocumentsByOwner(ownerId))
+      document.invoice,
+  ];
+
+  @override
+  Future<InvoiceModel> issue(
+    Reservation reservation,
+    PaymentMethodModel? paymentMethod,
+  ) async => (await issueDocument(reservation, paymentMethod)).invoice;
+
+  /// Documento de la factura (incluye `ownerId`), o `null` si no existe.
+  Future<InvoiceFirestoreDocument?> findDocument(String reservationId) async {
     _validateId(reservationId);
     try {
       final snapshot = await _invoices
@@ -82,8 +116,9 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
     }
   }
 
-  @override
-  Future<List<InvoiceModel>> findByClient(String clientId) {
+  Future<List<InvoiceFirestoreDocument>> findDocumentsByClient(
+    String clientId,
+  ) {
     _validateId(clientId);
     return _list(
       _invoices.where('clientId', isEqualTo: clientId),
@@ -91,8 +126,7 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
     );
   }
 
-  @override
-  Future<List<InvoiceModel>> findByOwner(String ownerId) {
+  Future<List<InvoiceFirestoreDocument>> findDocumentsByOwner(String ownerId) {
     _validateId(ownerId);
     return _list(
       _invoices.where('ownerId', isEqualTo: ownerId),
@@ -100,8 +134,8 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
     );
   }
 
-  @override
-  Future<InvoiceModel> issue(
+  /// Emite la factura y devuelve el documento guardado (incluye `ownerId`).
+  Future<InvoiceFirestoreDocument> issueDocument(
     Reservation reservation,
     PaymentMethodModel? paymentMethod,
   ) async {
@@ -158,13 +192,13 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
     }
   }
 
-  Future<List<InvoiceModel>> _list(
+  Future<List<InvoiceFirestoreDocument>> _list(
     Query<Map<String, dynamic>> query,
     bool Function(InvoiceFirestoreDocument document) inScope,
   ) async {
     try {
       final snapshot = await query.get().timeout(requestTimeout);
-      final invoices = snapshot.docs.map((snapshotDocument) {
+      final documents = snapshot.docs.map((snapshotDocument) {
         final document = InvoiceFirestoreDocument.fromFirestore(
           snapshotDocument.id,
           snapshotDocument.data(),
@@ -172,11 +206,13 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
         if (!inScope(document)) {
           throw const FormatException('Factura fuera del alcance solicitado.');
         }
-        return document.invoice;
+        return document;
       }).toList();
       // Se ordena en el cliente para no requerir un índice compuesto.
-      invoices.sort((a, b) => b.issuedAt.compareTo(a.issuedAt));
-      return List.unmodifiable(invoices);
+      documents.sort(
+        (a, b) => b.invoice.issuedAt.compareTo(a.invoice.issuedAt),
+      );
+      return List.unmodifiable(documents);
     } on FirebaseException catch (error) {
       throw _map(error);
     } on TimeoutException {
@@ -186,9 +222,12 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
     }
   }
 
-  InvoiceModel _parse(String documentId, Map<String, dynamic> data) {
+  InvoiceFirestoreDocument _parse(
+    String documentId,
+    Map<String, dynamic> data,
+  ) {
     try {
-      return InvoiceFirestoreDocument.fromFirestore(documentId, data).invoice;
+      return InvoiceFirestoreDocument.fromFirestore(documentId, data);
     } on FormatException {
       throw _invalidData;
     }
@@ -196,6 +235,7 @@ class FirestoreInvoiceRepository implements InvoiceRepository {
 
   static const _offline = InvoiceRepositoryException(
     'No se pudo conectar con el servicio de facturas.',
+    offline: true,
   );
 
   static const _invalidData = InvoiceRepositoryException(

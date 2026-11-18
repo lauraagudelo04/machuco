@@ -9,11 +9,13 @@ class RegisterLocalPaymentSheet extends StatefulWidget {
   const RegisterLocalPaymentSheet({
     super.key,
     required this.payment,
+    this.clientName,
     required this.loadPaymentMethods,
     required this.onSave,
   });
 
   final PaymentRecord payment;
+  final String? clientName;
   final Future<List<PaymentCatalogEntry>> Function() loadPaymentMethods;
   final Future<PaymentRecord> Function(int methodId) onSave;
 
@@ -126,7 +128,10 @@ class _RegisterLocalPaymentSheetState extends State<RegisterLocalPaymentSheet> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      payment.client,
+                      widget.clientName ??
+                          (payment.client.contains('@')
+                              ? 'Nombre no disponible'
+                              : payment.client),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
                     const SizedBox(height: AppSpacing.s1),

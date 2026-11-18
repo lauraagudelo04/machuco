@@ -3,6 +3,7 @@ import 'package:machuco/controllers/booking/client_view/client_booking_controlle
 import 'package:machuco/controllers/payment_method/payment_method_checkout_controller.dart';
 import 'package:machuco/core/design_system/design_system.dart';
 import 'package:machuco/models/booking/booking.dart';
+import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment_method/payment_method_model.dart';
 import 'package:machuco/repositories/payment/payment_repository.dart';
 import 'package:machuco/routes/routes.dart';
@@ -114,8 +115,7 @@ class _PaymentMethodSelectionPageState
   Future<void> _continueAfterCard(PaymentMethodModel model) async {
     final reservation = _reservation;
     if (reservation != null) {
-      // The real checkout rejects the sandbox before Booking can mark a
-      // reservation paid. Tests may inject an actual payment implementation.
+      // Educational checkout persists both the paid receipt and reservation.
       final registered = await _registerPayment(
         () => _checkout.registerCardPayment(reservation, kind: model.cardKind),
       );
@@ -163,7 +163,7 @@ class _PaymentMethodSelectionPageState
     // Choosing where to pay is not a receipt or an invoice for money received.
     Navigator.of(
       context,
-    ).pushNamedAndRemoveUntil(AppRoutes.clientReservations, (_) => false);
+    ).pushNamedAndRemoveUntil(AppRoutes.clientMotels, (_) => false);
   }
 
   Future<bool> _registerPayment(
@@ -174,8 +174,14 @@ class _PaymentMethodSelectionPageState
     String? notice;
     var registered = false;
     try {
-      notice = (await register()).syncWarning;
-      registered = true;
+      final result = await register();
+      notice = result.syncWarning;
+      _reservationConfirmed |= result.reservationUpdated;
+      // A paid card receipt must reach Firebase before issuing its invoice.
+      // The pending at-property choice can still be retained offline.
+      registered =
+          result.syncWarning == null ||
+          result.payment.status != PaymentStatus.paid;
     } on PaymentRepositoryException catch (error) {
       notice = error.message;
     } catch (_) {

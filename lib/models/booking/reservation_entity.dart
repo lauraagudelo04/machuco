@@ -34,6 +34,7 @@ class ReservationEntity {
     required this.cancellationReason,
     required this.invoiceAccessStatus,
     required this.paymentMethod,
+    this.cancellationActor,
   });
 
   @PrimaryKey()
@@ -66,6 +67,7 @@ class ReservationEntity {
   final String guestName;
   final int? categoryId;
   final String? cancellationReason;
+  final String? cancellationActor;
 
   /// `InvoiceAccessStatus.name`.
   final String invoiceAccessStatus;
