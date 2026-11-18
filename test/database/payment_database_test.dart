@@ -354,7 +354,7 @@ void main() {
         database = await AppDatabaseProvider.open(name: path);
         raw = database.database as sqflite.Database;
 
-        expect(await raw.getVersion(), 23);
+        expect(await raw.getVersion(), 24);
         expect(await _moduleSchema(raw), freshSchema);
         for (final entry in previousData.entries) {
           if (entry.key == 'clients') continue;
@@ -466,7 +466,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 23);
+    expect(await raw.getVersion(), 24);
     expect(await _moduleSchema(raw), freshSchema);
     for (final table in previousSchema) {
       final name = table['name'] as String;
@@ -526,7 +526,7 @@ void main() {
     database = await AppDatabaseProvider.open(name: path);
     raw = database.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 23);
+    expect(await raw.getVersion(), 24);
     expect(await _columnNames(raw, 'motels'), motelsColumns);
     expect(await raw.query('country_phone_codes'), hasLength(1));
   });

@@ -318,13 +318,10 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(
-      find.textContaining('Resumen confirmado en Firebase'),
-      findsOneWidget,
-    );
+    expect(find.textContaining('Resumen confirmado en Firebase'), findsNothing);
     expect(
       find.byKey(const ValueKey('payment-unconfirmed-count')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(find.text(r'$ 0'), findsNWidgets(3));
     expect(find.text('Reembolsado'), findsOneWidget);

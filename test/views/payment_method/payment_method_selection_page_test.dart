@@ -218,10 +218,7 @@ void main() {
       await tester.tap(find.text('Finalizar'));
       await tester.pumpAndSettle();
       expect(checkout.registeredLocalPayments, [pending.id]);
-      expect(
-        find.text('route:${AppRoutes.clientReservations}'),
-        findsOneWidget,
-      );
+      expect(find.text('route:${AppRoutes.clientMotels}'), findsOneWidget);
       expect(find.text('route:${AppRoutes.invoice}'), findsNothing);
     },
   );

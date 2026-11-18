@@ -99,8 +99,9 @@ void main() {
     await owner.ready;
 
     expect(await repository.findPayment('pay-001'), isNull);
-    expect(owner.payments.single.id, 'real-payment');
-    expect(cloud.saved.map((record) => record.payment.id), ['real-payment']);
+    expect(owner.payments, isEmpty);
+    expect((await repository.findPayment('real-payment'))!.id, 'real-payment');
+    expect(cloud.saved, isEmpty);
   });
 
   test(
@@ -138,14 +139,15 @@ void main() {
     controllers.add(owner);
     await owner.ready;
 
-    expect(cloud.saved.map((record) => record.payment.id), ['local-pay']);
-    expect(cloud.saved.single.paymentMethodName, 'Efectivo');
+    // Missing remote documents must not be recreated by refreshing finance.
+    expect(cloud.saved, isEmpty);
+    expect(
+      (await repository.findPayment('local-pay'))!.receiptNumber,
+      'LOCAL-local-pay',
+    );
     expect(cloud.requestedOwnerId, 'firebase-owner');
     expect(cloud.requestedMotelId, 'motel-1');
-    expect(owner.payments.map((record) => record.id).toSet(), {
-      'local-pay',
-      'remote-pay',
-    });
+    expect(owner.payments.map((record) => record.id).toSet(), {'remote-pay'});
     expect(owner.syncWarningMessage, isNull);
   });
 
@@ -153,7 +155,8 @@ void main() {
     'un fallo de Firebase no elimina ni invalida los pagos locales',
     () async {
       await repository.createPayment(payment());
-      final cloud = _FakePaymentCloudRepository(failSave: true);
+      final cloud = _FakePaymentCloudRepository(failSave: true)
+        ..failRead = true;
       final owner = OwnerPaymentController(
         motelId: 'motel-1',
         repository: repository,
@@ -211,8 +214,12 @@ void main() {
     expect(owner.totalIncome, 0);
     expect(owner.paymentsReceived, 0);
     expect(owner.frequentClients, isEmpty);
-    expect(owner.unconfirmedPayments, 1);
-    expect(owner.completedPayments, hasLength(1));
+    expect(owner.unconfirmedPayments, 0);
+    expect(owner.completedPayments, isEmpty);
+    expect(
+      (await repository.findPayment('offline-receipt'))!.status,
+      PaymentStatus.paid,
+    );
   });
 
   test(
