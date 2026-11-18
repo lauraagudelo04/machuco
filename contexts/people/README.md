@@ -9,6 +9,11 @@ Un archivo por persona/rama: `<nombre-exacto-de-la-rama>.feature.md`.
 - Ver `ejemplo-reserva-habitacion.feature.md` en esta misma carpeta para un
   caso ya completado, a modo de referencia.
 
+Archivos de esta carpeta que ya existen: `feature_daniel`, `feature_marco`,
+`feature_quiroz`, `feature-camilog`, `feature-juan_pablo` y
+`feature_josemanuelpavas` (PQRS: análisis de spec vs. código, modelo
+Firestore, máquina de estados y escenarios).
+
 Reglas:
 
 - No dupliques aquí lo que ya está en `project-context` (arquitectura,

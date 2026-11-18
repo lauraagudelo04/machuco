@@ -199,25 +199,30 @@ void main() {
     },
   );
 
-  test('mergeRemoteOwners quita la fila local si la nube la anonimizó', () async {
-    await repository.insert(buildOwner(id: 'uid-1'));
-    await repository.markSynchronized('uid-1');
-    await repository.insert(buildOwner(id: 'uid-2', documentNumber: '555555'));
-    await repository.markSynchronized('uid-2');
+  test(
+    'mergeRemoteOwners quita la fila local si la nube la anonimizó',
+    () async {
+      await repository.insert(buildOwner(id: 'uid-1'));
+      await repository.markSynchronized('uid-1');
+      await repository.insert(
+        buildOwner(id: 'uid-2', documentNumber: '555555'),
+      );
+      await repository.markSynchronized('uid-2');
 
-    await repository.mergeRemoteOwners([
-      buildOwner(
-        id: 'uid-1',
-        fullName: 'Propietario eliminado',
-        accountStatus: AccountStatus.anonymized,
-        isActive: false,
-      ),
-      buildOwner(id: 'uid-2', documentNumber: '555555'),
-    ]);
+      await repository.mergeRemoteOwners([
+        buildOwner(
+          id: 'uid-1',
+          fullName: 'Propietario eliminado',
+          accountStatus: AccountStatus.anonymized,
+          isActive: false,
+        ),
+        buildOwner(id: 'uid-2', documentNumber: '555555'),
+      ]);
 
-    expect(await repository.findById('uid-1'), isNull);
-    expect(await repository.findById('uid-2'), isNotNull);
-  });
+      expect(await repository.findById('uid-1'), isNull);
+      expect(await repository.findById('uid-2'), isNotNull);
+    },
+  );
 
   test('mergeRemoteOwners inserta nuevos y respeta los pendientes', () async {
     // owner-1 sigue pendiente de envío; owner-2 ya fue confirmado.
@@ -362,7 +367,7 @@ void main() {
       addTearDown(migrated.close);
       final raw = migrated.database as sqflite.Database;
 
-      expect(await raw.getVersion(), 22);
+      expect(await raw.getVersion(), 24);
       final columns = await raw.rawQuery('PRAGMA table_info(owners)');
       expect(
         columns.map((column) => column['name']),
@@ -444,7 +449,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 22);
+    expect(await raw.getVersion(), 24);
     expect(
       await raw.rawQuery(
         "SELECT name FROM sqlite_master WHERE type = 'table' "
@@ -510,7 +515,7 @@ void main() {
     addTearDown(migrated.close);
     final raw = migrated.database as sqflite.Database;
 
-    expect(await raw.getVersion(), 22);
+    expect(await raw.getVersion(), 24);
     final ids = (await raw.query('owners')).map((r) => r['id']).toList();
     expect(ids, ['AbCdEfGhIjKlMnOpQrStUvWxYz12']);
   });

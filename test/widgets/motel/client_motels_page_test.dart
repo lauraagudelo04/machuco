@@ -169,4 +169,45 @@ void main() {
       expect(controller.calls, 2);
     },
   );
+
+  testWidgets('the client reservations route opens the shell on Mis Reservas', (
+    tester,
+  ) async {
+    await tester.pumpWidget(const SizedBox());
+    final route =
+        AppRoutes.onGenerateRoute(
+              const RouteSettings(name: AppRoutes.clientReservations),
+            )
+            as MaterialPageRoute<dynamic>;
+    final page = route.builder(tester.element(find.byType(SizedBox)));
+    expect(page, isA<ClientMotelsPage>());
+    expect((page as ClientMotelsPage).initialIndex, 1);
+  });
+
+  testWidgets(
+    'opened on Mis Reservas it keeps the bottom menu and its back arrow '
+    'returns to Moteles',
+    (tester) async {
+      final controller = _CatalogController()..records = [_motel()];
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: AppTheme.light,
+          home: ClientMotelsPage(controller: controller, initialIndex: 1),
+        ),
+      );
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Mis reservas'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+      expect(find.text('Motel del catálogo real'), findsNothing);
+
+      await tester.tap(find.byTooltip('Volver'));
+      await tester.pump(const Duration(seconds: 2));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Motel del catálogo real'), findsOneWidget);
+      expect(find.byType(NavigationBar), findsOneWidget);
+    },
+  );
 }

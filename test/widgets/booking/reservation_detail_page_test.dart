@@ -135,7 +135,7 @@ void main() {
       expect(find.text('Completar pago'), findsNothing);
       expect(find.text('Cancelar reserva'), findsNothing);
       expect(find.text('Descargar factura'), findsNothing);
-      expect(_buttonWithLabel(tester, 'Añadir reseña').onPressed, isNotNull);
+      expect(find.text('Añadir reseña'), findsNothing);
 
       // La reserva de seed cancelada no trae `cancellationReason`, así que
       // la tarjeta de motivo no debería aparecer para ella.

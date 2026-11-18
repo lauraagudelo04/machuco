@@ -38,6 +38,36 @@ service cloud.firestore {
             && !('receiptNumber' in data);
     }
 
+    function hasValidReservationReceipt(data) {
+      let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      let receipt = data.get('receiptNumber', '');
+      return receipt == 'LOCAL-pay-' + data.bookingId
+        || (receipt.matches('booking.*') && receipt == reservation.requestId);
+    }
+
+    // Pago de tarjeta del ejercicio educativo, vinculado a la reserva propia.
+    function isSimulatedCard(data) {
+      return data.status == 'paid'
+        && data.get('paymentMethodName', '') in ['Tarjeta de crédito', 'Tarjeta de débito']
+        && 'paymentMethodId' in data && 'paidAt' in data
+        && !('method' in data)
+        && hasValidReservationReceipt(data);
+    }
+
+    function isClientSimulatedCard(data) {
+      return isActiveClient()
+        && data.clientId == request.auth.uid
+        && data.ownerId != request.auth.uid
+        && isSimulatedCard(data);
+    }
+
+    function isSimulatedCheckoutOpen(data) {
+      let reservation = get(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
+      return reservation.status == 'pending'
+        && (reservation.get('paymentMethod', '') == 'En el Local'
+          || request.time < reservation.createdAt + duration.value(15, 'm'));
+    }
+
     function paymentMatchesReservation(paymentId, data) {
       let reservation = getAfter(/databases/$(database)/documents/reservations/$(data.bookingId)).data;
       return paymentId == 'pay-' + data.bookingId
@@ -58,7 +88,7 @@ service cloud.firestore {
           && reservation.get('paymentMethod', '') == 'En el Local')
         || (data.status == 'paid'
           && 'paymentMethodId' in data && 'paymentMethodName' in data
-          && 'paidAt' in data && data.get('receiptNumber', '') == 'LOCAL-pay-' + data.bookingId
+          && 'paidAt' in data && hasValidReservationReceipt(data)
           && reservation.status in ['upcoming', 'active', 'completed', 'cancelled']
           && reservation.get('paymentMethod', '') == data.paymentMethodName)
         || (data.status == 'cancelled' && reservation.status == 'cancelled')
@@ -98,6 +128,75 @@ service cloud.firestore {
         || ((selection || receipt) && hasBackedReservationPayment(reservationId, after));
     }
 
+    function isCancellationActor(actor, reservation) {
+      return (actor == 'owner' && isActiveOwner()
+          && reservation.ownerId == request.auth.uid)
+        || (actor == 'client' && isActiveClient()
+          && reservation.guestId == request.auth.uid);
+    }
+
+    function isCancellationPaymentChange(paymentId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let reservationPath = /databases/$(database)/documents/reservations/$(after.bookingId);
+      let reservationBefore = get(reservationPath).data;
+      let reservationAfter = getAfter(reservationPath).data;
+      let actor = after.get('cancellationActor', '');
+      return reservationBefore.status in ['pending', 'upcoming']
+        && reservationAfter.status == 'cancelled'
+        && reservationAfter.get('cancellationActor', '') == actor
+        && isCancellationActor(actor, reservationAfter)
+        && after.diff(before).affectedKeys().hasOnly([
+          'status', 'cancellationActor', 'updatedAt'])
+        && ((before.status == 'pending' && after.status == 'cancelled')
+          || (actor == 'owner' && before.status == 'paid' && after.status == 'refunded'))
+        && paymentMatchesReservation(paymentId, after)
+        && hasValidPaymentFields(after);
+    }
+
+    function existingCancellationLedgerMatches(reservationId, actor) {
+      let paymentPath = /databases/$(database)/documents/payments/$('pay-' + reservationId);
+      let before = get(paymentPath).data;
+      let after = getAfter(paymentPath).data;
+      let metadataOnly = after.diff(before).affectedKeys().hasOnly([
+        'status', 'cancellationActor', 'updatedAt']);
+      return paymentMatchesReservation('pay-' + reservationId, before)
+        && ((before.status == 'pending'
+            && after.status == 'cancelled'
+            && after.get('cancellationActor', '') == actor && metadataOnly)
+          || (before.status == 'paid' && actor == 'owner'
+            && after.status == 'refunded'
+            && after.get('cancellationActor', '') == actor && metadataOnly)
+          || (before.status == 'paid' && actor == 'client' && after == before)
+          || (before.status in ['cancelled', 'refunded'] && after == before));
+    }
+
+    function cancellationLedgerMatches(reservationId, actor) {
+      return !exists(/databases/$(database)/documents/payments/$('pay-' + reservationId))
+        || existingCancellationLedgerMatches(reservationId, actor);
+    }
+
+    function isReservationCancellationUpdate(reservationId) {
+      let before = resource.data;
+      let after = request.resource.data;
+      let actor = after.get('cancellationActor', '');
+      let oldActor = before.get('cancellationActor', '');
+      return (after.status != 'cancelled' && actor == oldActor)
+        || (before.status == 'cancelled' && after.status == 'cancelled' && actor == oldActor)
+        // Preserve the pre-existing administrator flow; this change only
+        // attributes explicit owner/client cancellations.
+        || (isAdmin() && actor == '' && oldActor == '')
+        || (before.status in ['pending', 'upcoming'] && after.status == 'cancelled'
+          && after.get('cancellationReason', '').size() > 0
+          && isCancellationActor(actor, after)
+          && cancellationLedgerMatches(reservationId, actor))
+        // Keep automatic expiration of an unpaid, unselected checkout.
+        || (before.status == 'pending' && after.status == 'cancelled' && actor == ''
+          && before.get('paymentMethod', '') != 'En el Local'
+          && request.time >= before.createdAt + duration.value(15, 'm')
+          && !exists(/databases/$(database)/documents/payments/$('pay-' + reservationId)));
+    }
+
     function hasValidPaymentFields(data) {
       return data.keys().hasAll([
           'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
@@ -108,7 +207,7 @@ service cloud.firestore {
           'ownerId', 'bookingId', 'bookingReference', 'clientId', 'client',
           'motelId', 'motel', 'roomId', 'room', 'reservationDate', 'amount',
           'status', 'method', 'paymentMethodId', 'paidAt', 'receiptNumber',
-          'paymentMethodName', 'updatedAt'
+          'paymentMethodName', 'updatedAt', 'cancellationActor'
         ])
         && data.ownerId is string && data.ownerId.size() > 0
         && data.bookingId is string && data.bookingId.size() > 0
@@ -122,6 +221,9 @@ service cloud.firestore {
         && data.reservationDate is timestamp
         && data.amount is int && data.amount > 0
         && data.status in ['pending', 'paid', 'refunded', 'cancelled']
+        && (!('cancellationActor' in data)
+          || (data.cancellationActor in ['owner', 'client']
+            && data.status in ['refunded', 'cancelled']))
         && (!('method' in data) || data.method in ['online', 'cash'])
         && (!('paymentMethodId' in data)
           || (data.paymentMethodId is int && data.paymentMethodId > 0))
@@ -231,7 +333,7 @@ service cloud.firestore {
           'motelName', 'roomId', 'roomName', 'roomNumber', 'checkIn',
           'checkOut', 'stayMode', 'guestCount', 'services', 'products',
           'roomTotal', 'total', 'status', 'createdAt', 'categoryId',
-          'cancellationReason', 'invoiceAccessStatus', 'paymentMethod',
+          'cancellationReason', 'cancellationActor', 'invoiceAccessStatus', 'paymentMethod',
           'updatedAt'
         ])
         && data.ownerId is string && data.ownerId.size() > 0
@@ -254,6 +356,9 @@ service cloud.firestore {
         && data.total is int && data.total >= data.roomTotal
         && data.status in
           ['pending', 'active', 'upcoming', 'completed', 'cancelled']
+        && (!('cancellationActor' in data)
+          || (data.cancellationActor in ['owner', 'client']
+            && data.status == 'cancelled'))
         && data.createdAt is timestamp
         && (!('categoryId' in data) || data.categoryId is int)
         && (!('cancellationReason' in data)
@@ -766,6 +871,8 @@ service cloud.firestore {
           (isActiveOwner()
             && request.resource.data.ownerId == request.auth.uid)
           || isClientPaymentCreate(request.resource.data)
+          || (isClientSimulatedCard(request.resource.data)
+            && isSimulatedCheckoutOpen(request.resource.data))
         );
 
       // A client can replay exactly the same pending request after a timeout,
@@ -776,6 +883,25 @@ service cloud.firestore {
         && paymentMatchesReservation(paymentId, request.resource.data)
         && hasLinkedPaymentState(request.resource.data)
         && hasValidPaymentFields(request.resource.data);
+
+      // Allow converting one's own pending payment, or replaying precisely the
+      // same simulated receipt after a timeout/restart. No Payment read access.
+      allow update: if isClientSimulatedCard(request.resource.data)
+        && resource.data.clientId == request.auth.uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'paymentMethodId', 'paymentMethodName', 'paidAt',
+          'receiptNumber', 'updatedAt'
+        ])
+        && ((resource.data.status == 'pending'
+            && isSimulatedCheckoutOpen(request.resource.data)
+            && getAfter(/databases/$(database)/documents/reservations/$(request.resource.data.bookingId)).data.status in ['upcoming', 'active'])
+          || (isSimulatedCard(resource.data)
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['updatedAt'])))
+        && paymentMatchesReservation(paymentId, request.resource.data)
+        && hasLinkedPaymentState(request.resource.data)
+        && hasValidPaymentFields(request.resource.data);
+
+      allow update: if isCancellationPaymentChange(paymentId);
 
       allow update: if isActiveOwner()
         && !isLegacyDemoPaymentId(paymentId)
@@ -937,7 +1063,7 @@ service cloud.firestore {
 
       allow update: if isReservationParticipant(resource.data)
         && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-          'status', 'cancellationReason', 'invoiceAccessStatus',
+          'status', 'cancellationReason', 'cancellationActor', 'invoiceAccessStatus',
           'paymentMethod', 'updatedAt'
         ])
         && isValidReservationTransition(
@@ -945,6 +1071,7 @@ service cloud.firestore {
           request.resource.data.status
         )
         && isReservationPaymentUpdate(reservationId)
+        && isReservationCancellationUpdate(reservationId)
         && hasValidReservationFields(request.resource.data);
 
       allow delete: if false;
@@ -1238,6 +1365,239 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow create: if isActiveClient()
         && hasValidReviewCreate(reviewId, request.resource.data);
+    }
+
+    // ---------------------------------------------------------------------
+    // PQRS: pqrs/{pqrsId} con las subcolecciones traces y photos.
+    //
+    // Reglas escritas a mano que duplican valores configurables en Supabase
+    // (decisiones D14 y D17 del modulo): las reglas no pueden consultar
+    // Supabase, asi que cambiar uno de estos valores exige editar ambos lados.
+    //   - Formatos de imagen permitidos: image/jpeg, image/png, image/webp
+    //     (tabla allowed_image_formats; ver pqrs_image_format.dart).
+    //   - Tamano maximo por foto: 921600 bytes = 900 KiB (pqrs_settings;
+    //     ver pqrsDefaultImageMaxBytes). El limite de Firestore es 1 MiB.
+    //   - Plazo de confirmacion del cliente: 7 dias (pqrsConfirmationDeadline).
+    // La validacion de la app es solo comodidad; estas reglas son la defensa.
+    //
+    // Limite conocido: una regla de update no puede exigir que el mismo lote
+    // incluya una traza (no conoce su id). La traza si exige que el estado
+    // resultante del lote (getAfter) sea el que declara. Un cliente o
+    // propietario podria cambiar el estado sin traza, pero solo por una
+    // transicion valida de su rol.
+    // ---------------------------------------------------------------------
+
+    function pqrsPath(pqrsId) {
+      return /databases/$(database)/documents/pqrs/$(pqrsId);
+    }
+
+    // Rol con el que el solicitante actua sobre una PQRS: cliente dueno,
+    // propietario del motel (ambos activos) o ninguno. El admin solo lee.
+    function pqrsActorRole(data) {
+      return (isActiveClient() && data.clientId == request.auth.uid)
+        ? 'client'
+        : ((isActiveOwner() && data.ownerId == request.auth.uid)
+          ? 'owner'
+          : 'none');
+    }
+
+    function canReadPqrs(data) {
+      return isAdmin() || pqrsActorRole(data) != 'none';
+    }
+
+    // Misma tabla que PqrsController. 'role' es 'client' u 'owner'.
+    //  - Propietario: pending e in_progress avanzan a in_progress (comentario),
+    //    resolved o rejected; resolved pasa a closed solo por vencimiento
+    //    (el plazo se exige aparte). No comenta sobre resolved.
+    //  - Cliente: comenta sin cambiar pending o in_progress; sobre resolved
+    //    confirma (closed) o reabre (in_progress).
+    //  - closed y rejected son finales: ninguna transicion sale de ellos.
+    function isValidPqrsTransition(prev, next, role) {
+      return (role == 'owner'
+          && ((prev in ['pending', 'in_progress']
+              && next in ['in_progress', 'resolved', 'rejected'])
+            || (prev == 'resolved' && next == 'closed')))
+        || (role == 'client'
+          && ((prev in ['pending', 'in_progress'] && next == prev)
+            || (prev == 'resolved' && next in ['closed', 'in_progress'])));
+    }
+
+    // Fechas y cierre coherentes con el estado nuevo y con quien escribe.
+    function hasValidPqrsResolution(prev, next, role) {
+      let resolvedBefore = prev.get('resolvedAt', null);
+      return
+        // Solucionar: resolvedAt es la hora del servidor.
+        (next.status == 'resolved'
+          && next.get('resolvedAt', null) == request.time
+          && !('closedBy' in next))
+        // Cerrar: se conserva resolvedAt. El cliente confirma; el propietario
+        // solo cuando vencieron los 7 dias desde resolvedAt.
+        || (next.status == 'closed'
+          && next.get('resolvedAt', null) == resolvedBefore
+          && (role == 'client'
+            ? next.get('closedBy', '') == 'client'
+            : (next.get('closedBy', '') == 'owner_timeout'
+              && resolvedBefore != null
+              && request.time > resolvedBefore + duration.value(7, 'd'))))
+        // Reabrir o seguir abierta o rechazar: no queda resolvedAt ni closedBy.
+        || (next.status in ['pending', 'in_progress', 'rejected']
+          && !('resolvedAt' in next)
+          && !('closedBy' in next));
+    }
+
+    function hasValidPqrsCreate(pqrsId, data) {
+      let motel = /databases/$(database)/documents/motels/$(data.motelId);
+      return data.keys().hasOnly([
+          'clientId', 'clientName', 'motelId', 'motelName', 'ownerId', 'type',
+          'subject', 'description', 'status', 'photoCount', 'createdAt',
+          'updatedAt'
+        ])
+        && data.keys().hasAll([
+          'clientId', 'clientName', 'motelId', 'motelName', 'ownerId', 'type',
+          'subject', 'description', 'status', 'photoCount', 'createdAt',
+          'updatedAt'
+        ])
+        && data.clientId == request.auth.uid
+        && data.clientName is string
+        && data.clientName.size() >= 1 && data.clientName.size() <= 100
+        && data.motelId is string && data.motelId.size() > 0
+        && data.motelName is string
+        && data.motelName.size() >= 1 && data.motelName.size() <= 200
+        && data.ownerId is string && data.ownerId != data.clientId
+        && exists(motel)
+        && data.ownerId == get(motel).data.ownerId
+        && get(motel).data.get('isAvailable', true) != false
+        && data.type in ['peticion', 'queja', 'reclamo', 'sugerencia']
+        && data.subject is string
+        && data.subject.size() >= 3 && data.subject.size() <= 100
+        && data.description is string
+        && data.description.size() >= 10 && data.description.size() <= 1000
+        && data.status == 'pending'
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
+        && data.createdAt == request.time
+        && data.updatedAt == request.time
+        // La PQRS nace con su primera entrada (lleva las fotos de apertura).
+        && existsAfter(
+          /databases/$(database)/documents/pqrs/$(pqrsId)/traces/$(pqrsId + '-open')
+        );
+    }
+
+    // Una traza nueva debe declarar el estado que deja el lote y respetar la
+    // tabla. Si la PQRS aun no existe, es la entrada de apertura del cliente.
+    function pqrsTraceFitsParent(pqrsId, traceId, data) {
+      let parent = pqrsPath(pqrsId);
+      return (!exists(parent)
+          && traceId == pqrsId + '-open'
+          && data.authorRole == 'client'
+          && !('statusChange' in data)
+          && getAfter(parent).data.status == 'pending')
+        || (exists(parent)
+          && isValidPqrsTransition(
+            get(parent).data.status,
+            getAfter(parent).data.status,
+            data.authorRole
+          )
+          && (!('statusChange' in data)
+            ? getAfter(parent).data.status == get(parent).data.status
+            : data.statusChange == getAfter(parent).data.status)
+          // Cierre por vencimiento: mensaje fijo (PqrsController).
+          && (data.authorRole != 'owner'
+            || get(parent).data.status != 'resolved'
+            || data.message == 'Cerrada por vencimiento del plazo de confirmación'));
+    }
+
+    function hasValidPqrsTrace(pqrsId, traceId, data) {
+      let parent = pqrsPath(pqrsId);
+      return data.keys().hasOnly([
+          'authorId', 'authorRole', 'authorName', 'message', 'statusChange',
+          'photoCount', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'authorId', 'authorRole', 'authorName', 'message', 'photoCount',
+          'createdAt'
+        ])
+        && data.authorId == request.auth.uid
+        && data.authorRole in ['client', 'owner']
+        && existsAfter(parent)
+        && pqrsActorRole(getAfter(parent).data) == data.authorRole
+        && data.authorName is string
+        && data.authorName.size() >= 1 && data.authorName.size() <= 100
+        && data.message is string
+        && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.photoCount is int && data.photoCount >= 0 && data.photoCount <= 10
+        && data.createdAt == request.time
+        && pqrsTraceFitsParent(pqrsId, traceId, data);
+    }
+
+    function hasValidPqrsPhoto(pqrsId, photoId, data) {
+      let trace = /databases/$(database)/documents/pqrs/$(pqrsId)/traces/$(data.traceId);
+      return data.keys().hasOnly([
+          'bytes', 'mimeType', 'traceId', 'authorId', 'authorRole', 'createdAt'
+        ])
+        && data.keys().hasAll([
+          'bytes', 'mimeType', 'traceId', 'authorId', 'authorRole', 'createdAt'
+        ])
+        && data.authorId == request.auth.uid
+        && data.authorRole in ['client', 'owner']
+        && data.bytes is bytes
+        && data.bytes.size() > 0 && data.bytes.size() <= 921600
+        && data.mimeType in ['image/jpeg', 'image/png', 'image/webp']
+        && data.createdAt == request.time
+        && data.traceId is string
+        && existsAfter(trace)
+        && getAfter(trace).data.authorId == request.auth.uid
+        && getAfter(trace).data.authorRole == data.authorRole
+        // Ids fijos <traceId>_<n> con n de 1 a photoCount de la traza (maximo
+        // 10). El limite real lo configura Supabase (pqrs_settings.max_photos,
+        // D14) y la app lo valida; las reglas solo fijan este tope duro. Si n
+        // no es numerico, int() falla y la regla deniega.
+        && photoId[0:data.traceId.size() + 1] == data.traceId + '_'
+        && int(photoId[data.traceId.size() + 1:]) >= 1
+        && int(photoId[data.traceId.size() + 1:])
+          <= getAfter(trace).data.photoCount;
+    }
+
+    match /pqrs/{pqrsId} {
+      // Cliente dueno, propietario del motel o admin. Las consultas deben
+      // filtrar por clientId u ownerId (el admin lista todo).
+      allow read: if canReadPqrs(resource.data);
+
+      allow create: if isActiveClient()
+        && hasValidPqrsCreate(pqrsId, request.resource.data);
+
+      // Solo status, updatedAt, resolvedAt y closedBy; nunca los datos de
+      // radicacion. Sin borrado.
+      allow update: if pqrsActorRole(resource.data) != 'none'
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'status', 'updatedAt', 'resolvedAt', 'closedBy'
+        ])
+        && request.resource.data.updatedAt == request.time
+        && isValidPqrsTransition(
+          resource.data.status,
+          request.resource.data.status,
+          pqrsActorRole(resource.data)
+        )
+        && hasValidPqrsResolution(
+          resource.data,
+          request.resource.data,
+          pqrsActorRole(resource.data)
+        );
+
+      allow delete: if false;
+
+      // Trazabilidad inmutable: solo se agregan entradas.
+      match /traces/{traceId} {
+        allow read: if canReadPqrs(get(pqrsPath(pqrsId)).data);
+        allow create: if hasValidPqrsTrace(pqrsId, traceId, request.resource.data);
+        allow update, delete: if false;
+      }
+
+      // Fotos como bytes (decision D1, sin Storage). Inmutables.
+      match /photos/{photoId} {
+        allow read: if canReadPqrs(get(pqrsPath(pqrsId)).data);
+        allow create: if hasValidPqrsPhoto(pqrsId, photoId, request.resource.data);
+        allow update, delete: if false;
+      }
     }
 
     // Denegado por defecto. Cada rama debe agregar su coleccion de forma

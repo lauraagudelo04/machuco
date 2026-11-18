@@ -41,6 +41,11 @@ class PaymentFirestoreDocument {
 
     final amount = _requiredInt(data, 'amount');
     final paymentMethodId = _optionalInt(data, 'paymentMethodId');
+    final cancellationActor = _optionalString(data, 'cancellationActor');
+    if (cancellationActor != null &&
+        !['owner', 'client'].contains(cancellationActor)) {
+      throw const FormatException('Autor de cancelación remoto inválido.');
+    }
     if (amount <= 0 || (paymentMethodId != null && paymentMethodId <= 0)) {
       throw const FormatException('Valores de pago remoto inválidos.');
     }
@@ -65,6 +70,7 @@ class PaymentFirestoreDocument {
         paymentMethodId: paymentMethodId,
         paidAt: _optionalDate(data, 'paidAt'),
         receiptNumber: _optionalString(data, 'receiptNumber'),
+        cancellationActor: cancellationActor,
       ),
     );
   }
@@ -89,6 +95,8 @@ class PaymentFirestoreDocument {
     if (payment.paidAt != null)
       'paidAt': Timestamp.fromDate(payment.paidAt!.toUtc()),
     if (payment.receiptNumber != null) 'receiptNumber': payment.receiptNumber,
+    if (payment.cancellationActor != null)
+      'cancellationActor': payment.cancellationActor,
     'updatedAt': FieldValue.serverTimestamp(),
   };
 

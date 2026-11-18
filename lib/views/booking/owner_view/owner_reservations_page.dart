@@ -201,6 +201,11 @@ class _OwnerReservationsPageState extends State<OwnerReservationsPage> {
                   label: 'Pendientes de pago',
                   value: '${summary['pendingPayment']}',
                 ),
+                ReservationSummaryMetric(
+                  icon: Icons.cancel_outlined,
+                  label: 'Canceladas',
+                  value: '${summary['cancelled']}',
+                ),
               ],
             ),
             const SizedBox(height: AppSpacing.s4),

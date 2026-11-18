@@ -1,10 +1,12 @@
 import 'package:flutter/foundation.dart';
 
 import 'package:machuco/service/firebase/current_user.dart';
+import 'package:machuco/database/repository/auth/user_profile_repository.dart';
 import 'package:machuco/controllers/motel/motel_controller.dart';
 import 'package:machuco/models/booking/booking.dart';
 import 'package:machuco/models/booking/reservation_category.dart';
 import 'package:machuco/repositories/booking/reservation_category_repository.dart';
+import 'package:machuco/repositories/booking/reservation_cloud_repository.dart';
 import 'package:machuco/models/motel/motel_model.dart';
 import 'package:machuco/service/booking/booking_service.dart';
 import 'package:machuco/service/booking/reservation_cancellation_notifier.dart';
@@ -34,6 +36,7 @@ class OwnerBookingController extends ChangeNotifier {
     MotelController? motelController,
     ReservationCategoryRepository? categoryRepository,
     BookingService? bookingService,
+    UserProfileRepository? profileRepository,
     ReservationCancellationNotifier? cancellationNotifier,
   }) : ownerId = ownerId ?? CurrentUser.uidOrNull ?? demoOwnerId,
        _motelController =
@@ -44,6 +47,7 @@ class OwnerBookingController extends ChangeNotifier {
        _categoryRepository =
            categoryRepository ?? ReservationCategoryRepositoryProvider.instance,
        _service = bookingService ?? BookingService(),
+       _profileRepository = profileRepository,
        _cancellationNotifier =
            cancellationNotifier ??
            ReservationCancellationNotifierProvider.instance;
@@ -59,6 +63,54 @@ class OwnerBookingController extends ChangeNotifier {
   final MotelController _motelController;
   final ReservationCategoryRepository _categoryRepository;
   final BookingService _service;
+  final UserProfileRepository? _profileRepository;
+
+  Future<Map<String, int>> activeReservationCounts() async {
+    final reservations = await FirestoreReservationCloudRepository()
+        .listForOwner(ownerId);
+    final now = DateTime.now();
+    final counts = <String, int>{};
+    for (final reservation in reservations) {
+      if ((reservation.status == ReservationStatus.active ||
+              reservation.status == ReservationStatus.upcoming) &&
+          reservation.checkOut.isAfter(now)) {
+        counts.update(
+          reservation.motelId,
+          (count) => count + 1,
+          ifAbsent: () => 1,
+        );
+      }
+    }
+    return counts;
+  }
+
+  Future<String> guestNameFor(Reservation reservation) async {
+    final storedName = reservation.guestName.trim();
+    final fallback = storedName.isNotEmpty && !storedName.contains('@')
+        ? storedName
+        : 'Nombre no disponible';
+    if (reservation.guestId.isEmpty ||
+        (_profileRepository == null && CurrentUser.uidOrNull == null)) {
+      return fallback;
+    }
+    try {
+      final profile =
+          await (_profileRepository ?? FirestoreUserProfileRepository())
+              .getProfile(reservation.guestId)
+              .timeout(const Duration(seconds: 10));
+      final name = profile?.fullName.trim();
+      if (name != null && name.isNotEmpty && !name.contains('@')) return name;
+    } catch (_) {
+      debugPrint('No se pudo consultar el nombre del huésped de la reserva.');
+    }
+    return fallback;
+  }
+
+  String referenceFor(Reservation reservation) {
+    final start = reservation.id.indexOf('booking');
+    return start >= 0 ? reservation.id.substring(start) : reservation.id;
+  }
+
   final ReservationCancellationNotifier _cancellationNotifier;
 
   bool _lastCancellationNotified = false;
@@ -273,13 +325,20 @@ class OwnerBookingController extends ChangeNotifier {
   /// cacheado por [loadReservations]; se recalcula en cada llamada (no
   /// cachea el resultado) para que refleje filtros aplicados en vivo.
   Map<String, int> operationalSummary({String? motelId}) {
-    final summary = _service.operationalSummary(
-      _service.filterReservations(_ownedReservations, motelId: motelId),
+    final reservations = _service.filterReservations(
+      _ownedReservations,
+      motelId: motelId,
     );
+    final summary = _service.operationalSummary(reservations);
     return {
       'total': summary.total,
       'activeOrUpcoming': summary.activeOrUpcoming,
       'pendingPayment': summary.pendingPayment,
+      'cancelled': reservations
+          .where(
+            (reservation) => reservation.status == ReservationStatus.cancelled,
+          )
+          .length,
     };
   }
 
@@ -295,7 +354,11 @@ class OwnerBookingController extends ChangeNotifier {
   /// queda reflejado en [lastCancellationNotified].
   Future<void> cancelReservation(String id, String reason) async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
-    final cancelled = await _service.cancelReservation(id, reason);
+    final cancelled = await _service.cancelReservation(
+      id,
+      reason,
+      actor: 'owner',
+    );
     await _reloadOwnedReservations();
 
     try {

@@ -32,6 +32,7 @@ class _OwnerReservationDetailPageState
   late final OwnerBookingController _controller;
   bool _isLoading = true;
   Reservation? _reservation;
+  String _guestName = 'Consultando nombre…';
 
   @override
   void initState() {
@@ -52,8 +53,14 @@ class _OwnerReservationDetailPageState
     if (!mounted) return;
     setState(() {
       _reservation = reservation;
+      _guestName = 'Consultando nombre…';
       _isLoading = false;
     });
+    if (reservation != null) {
+      final name = await _controller.guestNameFor(reservation);
+      if (!mounted || _reservation?.id != reservation.id) return;
+      setState(() => _guestName = name);
+    }
   }
 
   Future<void> _goToCashPayment() async {
@@ -177,15 +184,13 @@ class _OwnerReservationDetailPageState
                 ReservationInfoRow(
                   icon: Icons.tag_outlined,
                   label: 'Referencia',
-                  value: reservation.id,
+                  value: _controller.referenceFor(reservation),
                 ),
                 const Divider(height: AppSpacing.s5),
                 ReservationInfoRow(
                   icon: Icons.person_outline,
                   label: 'Huésped',
-                  value: reservation.guestName.isEmpty
-                      ? 'Sin registrar'
-                      : reservation.guestName,
+                  value: _guestName,
                 ),
                 const Divider(height: AppSpacing.s5),
                 ReservationInfoRow(
@@ -243,7 +248,7 @@ class _OwnerReservationDetailPageState
           if (canPay || canCancel) const SizedBox(height: AppSpacing.s5),
           if (canPay)
             AppButton(
-              label: 'Pagar en efectivo',
+              label: 'Gestionar',
               icon: Icons.payments_outlined,
               onPressed: _goToCashPayment,
             ),

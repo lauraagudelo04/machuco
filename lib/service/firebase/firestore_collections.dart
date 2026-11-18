@@ -43,4 +43,14 @@ abstract final class FirestoreCollections {
 
   /// Client reviews of motels and rooms, one document per review id.
   static const reviews = 'reviews';
+
+  /// PQRS requests (`pqrs/{pqrsId}`), readable by the client, the owner of the
+  /// motel and the system administrator.
+  static const pqrs = 'pqrs';
+
+  /// Trace entries, subcollection of `pqrs/{pqrsId}`.
+  static const traces = 'traces';
+
+  /// Photos (bytes) of a PQRS, subcollection of `pqrs/{pqrsId}`.
+  static const photos = 'photos';
 }
