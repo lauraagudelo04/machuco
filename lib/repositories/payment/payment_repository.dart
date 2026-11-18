@@ -7,6 +7,7 @@ import 'package:machuco/models/booking/reservation_payment_terms.dart';
 import 'package:machuco/models/payment/payment.dart';
 import 'package:machuco/models/payment/payment_catalog_entry.dart';
 import 'package:machuco/repositories/payment/payment_dao.dart';
+import 'package:machuco/service/room/supabase_room_config.dart';
 
 enum PaymentRepositoryError {
   configuration,
@@ -40,11 +41,21 @@ class PaymentRepository {
     DateTime Function()? now,
   }) : _database = database == null ? null : Future.value(database),
        _get = client?.get ?? http.get,
+       // Mismos valores por defecto que el resto de repositorios (proyecto
+       // Supabase de desarrollo), para que `flutter run` sin `--dart-define`
+       // pueda leer el maestro `payment_method`.
        _supabaseUrl =
-           supabaseUrl ?? const String.fromEnvironment('SUPABASE_URL'),
+           supabaseUrl ??
+           const String.fromEnvironment(
+             'SUPABASE_URL',
+             defaultValue: SupabaseRoomConfig.baseUrl,
+           ),
        _publishableKey =
            publishableKey ??
-           const String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY'),
+           const String.fromEnvironment(
+             'SUPABASE_PUBLISHABLE_KEY',
+             defaultValue: SupabaseRoomConfig.apiKey,
+           ),
        _requestTimeout = requestTimeout,
        _now = now ?? DateTime.now {
     if (requestTimeout <= Duration.zero) {
