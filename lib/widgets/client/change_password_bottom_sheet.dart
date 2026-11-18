@@ -17,7 +17,8 @@ class ChangePasswordBottomSheet extends StatefulWidget {
   }
 
   @override
-  State<ChangePasswordBottomSheet> createState() => _ChangePasswordBottomSheetState();
+  State<ChangePasswordBottomSheet> createState() =>
+      _ChangePasswordBottomSheetState();
 }
 
 class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
@@ -61,7 +62,9 @@ class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(controller.errorMessage ?? 'Error al cambiar la contraseña.'),
+          content: Text(
+            controller.errorMessage ?? 'Error al cambiar la contraseña.',
+          ),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -98,9 +101,9 @@ class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
             ),
             Text(
               'Cambiar contraseña',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.s4),
 
@@ -111,8 +114,11 @@ class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
               decoration: InputDecoration(
                 labelText: 'Contraseña actual',
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureCurrent ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscureCurrent = !_obscureCurrent),
+                  icon: Icon(
+                    _obscureCurrent ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureCurrent = !_obscureCurrent),
                 ),
               ),
               validator: (value) {
@@ -131,7 +137,9 @@ class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
               decoration: InputDecoration(
                 labelText: 'Nueva contraseña',
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureNew ? Icons.visibility_off : Icons.visibility),
+                  icon: Icon(
+                    _obscureNew ? Icons.visibility_off : Icons.visibility,
+                  ),
                   onPressed: () => setState(() => _obscureNew = !_obscureNew),
                 ),
               ),
@@ -154,8 +162,11 @@ class _ChangePasswordBottomSheetState extends State<ChangePasswordBottomSheet> {
               decoration: InputDecoration(
                 labelText: 'Confirmar nueva contraseña',
                 suffixIcon: IconButton(
-                  icon: Icon(_obscureConfirm ? Icons.visibility_off : Icons.visibility),
-                  onPressed: () => setState(() => _obscureConfirm = !_obscureConfirm),
+                  icon: Icon(
+                    _obscureConfirm ? Icons.visibility_off : Icons.visibility,
+                  ),
+                  onPressed: () =>
+                      setState(() => _obscureConfirm = !_obscureConfirm),
                 ),
               ),
               validator: (value) {

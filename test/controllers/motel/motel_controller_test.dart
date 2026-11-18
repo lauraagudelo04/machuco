@@ -24,25 +24,31 @@ class _Repository implements MotelRepository {
 }
 
 void main() {
-  test('consulta del propietario conectado evita la operación de admin', () async {
-    final repository = _Repository();
-    final controller = MotelController(
-      repository: repository,
-      currentUserId: () => 'owner',
-    );
-    await controller.getMotelsByOwnerId('owner');
-    expect(repository.queriedMine, isTrue);
-    expect(repository.queriedAll, isFalse);
-  });
+  test(
+    'consulta del propietario conectado evita la operación de admin',
+    () async {
+      final repository = _Repository();
+      final controller = MotelController(
+        repository: repository,
+        currentUserId: () => 'owner',
+      );
+      await controller.getMotelsByOwnerId('owner');
+      expect(repository.queriedMine, isTrue);
+      expect(repository.queriedAll, isFalse);
+    },
+  );
 
-  test('consulta de otro propietario conserva el flujo administrativo', () async {
-    final repository = _Repository();
-    final controller = MotelController(
-      repository: repository,
-      currentUserId: () => 'admin',
-    );
-    await controller.getMotelsByOwnerId('owner');
-    expect(repository.queriedAll, isTrue);
-    expect(repository.queriedMine, isFalse);
-  });
+  test(
+    'consulta de otro propietario conserva el flujo administrativo',
+    () async {
+      final repository = _Repository();
+      final controller = MotelController(
+        repository: repository,
+        currentUserId: () => 'admin',
+      );
+      await controller.getMotelsByOwnerId('owner');
+      expect(repository.queriedAll, isTrue);
+      expect(repository.queriedMine, isFalse);
+    },
+  );
 }

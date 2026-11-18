@@ -115,7 +115,7 @@ void main() {
       expect((await repository.getCategoryById(3))?.name, 'Suite');
       expect(await repository.getCategoryById(999), isNull);
     });
-  
+
     group('with the Supabase master', () {
       test('refreshes the cache with the remote categories', () async {
         final dao = _FakeDao(const [ReservationCategory(id: 3, name: 'Old')]);
@@ -165,7 +165,9 @@ void main() {
       });
 
       test('keeps the cache when offline', () async {
-        final dao = _FakeDao(const [ReservationCategory(id: 9, name: 'Custom')]);
+        final dao = _FakeDao(const [
+          ReservationCategory(id: 9, name: 'Custom'),
+        ]);
         final repository = FloorReservationCategoryRepository(
           dao,
           fetchRemote: () async => throw StateError('offline'),

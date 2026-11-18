@@ -206,7 +206,7 @@ El ingreso con Google y GitHub está definido pero todavía no implementado.
 
 ### Android: flavors y firma
 
-La app Android tiene dos flavors: `dev` (`co.machuco.app.dev`) y `prod` (`co.machuco.app`). `flutter run` sin argumentos usa `dev` (`default-flavor` en `pubspec.yaml`); para producción use `--flavor prod`. La firma compartida, Java y `google-services.json` se configuran según [docs/auth/android-setup.md](docs/auth/android-setup.md).
+La app Android tiene dos flavors: `dev` (`co.machuco.app.dev`) y `prod` (`co.machuco.app`). Siempre hay que indicar el flavor: `flutter run --flavor dev` para desarrollo o `flutter run --flavor prod` para producción. `pubspec.yaml` no define `default-flavor` (Flutter lo aplicaría también a macOS, que solo tiene el esquema `Runner`), y sin `--flavor` el build falla con "Gradle build failed to produce an .apk file". La firma compartida, Java y `google-services.json` se configuran según [docs/auth/android-setup.md](docs/auth/android-setup.md).
 
 ### Cuentas para probar la app
 

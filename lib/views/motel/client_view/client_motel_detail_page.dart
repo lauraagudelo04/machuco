@@ -3,7 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import './../../../models/motel/motel_model.dart';
 import './../../../routes/routes.dart';
 import './../../../controllers/additional_service/system_admin_view/additional_service_system_administrator_controller.dart';
-import './../../review/add_review_page.dart'; 
+import './../../review/add_review_page.dart';
 import './../../../widgets/additional_service/additional_services_section.dart';
 
 class ClientMotelDetailPage extends StatelessWidget {
@@ -17,7 +17,7 @@ class ClientMotelDetailPage extends StatelessWidget {
 
   /// Permite inyectar el controller en pruebas; por defecto se crea uno.
   final AdditionalServiceSystemAdministratorController?
-      additionalServiceController;
+  additionalServiceController;
 
   @override
   Widget build(BuildContext context) {
@@ -66,8 +66,8 @@ class ClientMotelDetailPage extends StatelessWidget {
                   Text(
                     motel.address,
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
@@ -75,8 +75,10 @@ class ClientMotelDetailPage extends StatelessWidget {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      Text('Descripción',
-                          style: Theme.of(context).textTheme.headlineSmall),
+                      Text(
+                        'Descripción',
+                        style: Theme.of(context).textTheme.headlineSmall,
+                      ),
                       AppButton(
                         label: 'Ver habitaciones',
                         size: AppButtonSize.medium,
@@ -88,7 +90,7 @@ class ClientMotelDetailPage extends StatelessWidget {
                             arguments: motel,
                           );
                         },
-                      )
+                      ),
                     ],
                   ),
                   const SizedBox(height: AppSpacing.s2),
@@ -97,47 +99,56 @@ class ClientMotelDetailPage extends StatelessWidget {
                     motel.description ??
                         'Sin descripción disponible para este establecimiento.',
                     style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                          color: context.appColors.textSecondary,
-                        ),
+                      color: context.appColors.textSecondary,
+                    ),
                   ),
                   const SizedBox(height: AppSpacing.s5),
 
-                  Text('Información y Contacto',
-                      style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    'Información y Contacto',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: AppSpacing.s3),
                   _InfoRow(
-                      icon: Icons.phone_outlined,
-                      label: 'Teléfono',
-                      value: motel.phone),
+                    icon: Icons.phone_outlined,
+                    label: 'Teléfono',
+                    value: motel.phone,
+                  ),
                   const SizedBox(height: AppSpacing.s2),
                   _InfoRow(
-                      icon: Icons.email_outlined,
-                      label: 'Correo',
-                      value: motel.email),
+                    icon: Icons.email_outlined,
+                    label: 'Correo',
+                    value: motel.email,
+                  ),
                   const SizedBox(height: AppSpacing.s2),
                   _InfoRow(
-                      icon: Icons.domain_outlined,
-                      label: 'NIT',
-                      value: motel.nit),
+                    icon: Icons.domain_outlined,
+                    label: 'NIT',
+                    value: motel.nit,
+                  ),
                   const SizedBox(height: AppSpacing.s2),
                   _InfoRow(
-                      icon: Icons.bed_outlined,
-                      label: 'Capacidad',
-                      value: '${motel.roomCount} habitaciones en total'),
+                    icon: Icons.bed_outlined,
+                    label: 'Capacidad',
+                    value: '${motel.roomCount} habitaciones en total',
+                  ),
 
                   if (motel.generalLocation != null &&
                       motel.generalLocation!.isNotEmpty) ...[
                     const SizedBox(height: AppSpacing.s2),
                     _InfoRow(
-                        icon: Icons.location_on_outlined,
-                        label: 'Ubicación',
-                        value: motel.generalLocation!),
+                      icon: Icons.location_on_outlined,
+                      label: 'Ubicación',
+                      value: motel.generalLocation!,
+                    ),
                   ],
 
                   const SizedBox(height: AppSpacing.s5),
 
-                  Text('Métodos de Pago',
-                      style: Theme.of(context).textTheme.headlineSmall),
+                  Text(
+                    'Métodos de Pago',
+                    style: Theme.of(context).textTheme.headlineSmall,
+                  ),
                   const SizedBox(height: AppSpacing.s3),
                   Wrap(
                     spacing: AppSpacing.s2,
@@ -158,11 +169,8 @@ class ClientMotelDetailPage extends StatelessWidget {
                   const SizedBox(height: AppSpacing.s4),
 
                   // Aquí implementamos tu nuevo componente de reseñas
-                  ReviewsSection(
-                    motel: motel,
-                    isComplete: true,
-                  ),
-                  
+                  ReviewsSection(motel: motel, isComplete: true),
+
                   const SizedBox(height: AppSpacing.s4),
                 ],
               ),
@@ -175,8 +183,11 @@ class ClientMotelDetailPage extends StatelessWidget {
 }
 
 class _InfoRow extends StatelessWidget {
-  const _InfoRow(
-      {required this.icon, required this.label, required this.value});
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
 
   final IconData icon;
   final String label;
@@ -190,18 +201,16 @@ class _InfoRow extends StatelessWidget {
         const SizedBox(width: AppSpacing.s2),
         Text(
           '$label: ',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(fontWeight: FontWeight.bold),
+          style: Theme.of(
+            context,
+          ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.bold),
         ),
         Expanded(
           child: Text(
             value,
-            style: Theme.of(context)
-                .textTheme
-                .bodyMedium
-                ?.copyWith(color: context.appColors.textSecondary),
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: context.appColors.textSecondary,
+            ),
           ),
         ),
       ],
@@ -217,16 +226,15 @@ class _ServiceChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(
-          horizontal: AppSpacing.s3, vertical: AppSpacing.s1),
+        horizontal: AppSpacing.s3,
+        vertical: AppSpacing.s1,
+      ),
       decoration: BoxDecoration(
         color: context.appColors.elevated,
         borderRadius: BorderRadius.circular(100.0),
         border: Border.all(color: context.appColors.border),
       ),
-      child: Text(
-        label,
-        style: Theme.of(context).textTheme.bodySmall,
-      ),
+      child: Text(label, style: Theme.of(context).textTheme.bodySmall),
     );
   }
 }

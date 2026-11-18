@@ -4,16 +4,29 @@ class ListReviewsByMotelVariablesBuilder {
   String motelId;
 
   final FirebaseDataConnect _dataConnect;
-  ListReviewsByMotelVariablesBuilder(this._dataConnect, {required  this.motelId,});
-  Deserializer<ListReviewsByMotelData> dataDeserializer = (dynamic json)  => ListReviewsByMotelData.fromJson(jsonDecode(json));
-  Serializer<ListReviewsByMotelVariables> varsSerializer = (ListReviewsByMotelVariables vars) => jsonEncode(vars.toJson());
-  Future<QueryResult<ListReviewsByMotelData, ListReviewsByMotelVariables>> execute() {
+  ListReviewsByMotelVariablesBuilder(
+    this._dataConnect, {
+    required this.motelId,
+  });
+  Deserializer<ListReviewsByMotelData> dataDeserializer = (dynamic json) =>
+      ListReviewsByMotelData.fromJson(jsonDecode(json));
+  Serializer<ListReviewsByMotelVariables> varsSerializer =
+      (ListReviewsByMotelVariables vars) => jsonEncode(vars.toJson());
+  Future<QueryResult<ListReviewsByMotelData, ListReviewsByMotelVariables>>
+  execute() {
     return ref().execute();
   }
 
   QueryRef<ListReviewsByMotelData, ListReviewsByMotelVariables> ref() {
-    ListReviewsByMotelVariables vars= ListReviewsByMotelVariables(motelId: motelId,);
-    return _dataConnect.query("ListReviewsByMotel", dataDeserializer, varsSerializer, vars);
+    ListReviewsByMotelVariables vars = ListReviewsByMotelVariables(
+      motelId: motelId,
+    );
+    return _dataConnect.query(
+      "ListReviewsByMotel",
+      dataDeserializer,
+      varsSerializer,
+      vars,
+    );
   }
 }
 
@@ -33,51 +46,73 @@ class ListReviewsByMotelReviews {
   final String? adminReply;
   final String? ownerReply;
   final Timestamp createdAt;
-  ListReviewsByMotelReviews.fromJson(dynamic json):
-  
-  id = nativeFromJson<String>(json['id']),
-  authorId = nativeFromJson<String>(json['authorId']),
-  authorName = nativeFromJson<String>(json['authorName']),
-  title = nativeFromJson<String>(json['title']),
-  body = nativeFromJson<String>(json['body']),
-  rating = nativeFromJson<int>(json['rating']),
-  motelId = nativeFromJson<String>(json['motelId']),
-  roomId = json['roomId'] == null ? null : nativeFromJson<String>(json['roomId']),
-  typeId = nativeFromJson<int>(json['typeId']),
-  status = nativeFromJson<String>(json['status']),
-  reportReason = json['reportReason'] == null ? null : nativeFromJson<String>(json['reportReason']),
-  adminReply = json['adminReply'] == null ? null : nativeFromJson<String>(json['adminReply']),
-  ownerReply = json['ownerReply'] == null ? null : nativeFromJson<String>(json['ownerReply']),
-  createdAt = Timestamp.fromJson(json['createdAt']);
+  ListReviewsByMotelReviews.fromJson(dynamic json)
+    : id = nativeFromJson<String>(json['id']),
+      authorId = nativeFromJson<String>(json['authorId']),
+      authorName = nativeFromJson<String>(json['authorName']),
+      title = nativeFromJson<String>(json['title']),
+      body = nativeFromJson<String>(json['body']),
+      rating = nativeFromJson<int>(json['rating']),
+      motelId = nativeFromJson<String>(json['motelId']),
+      roomId = json['roomId'] == null
+          ? null
+          : nativeFromJson<String>(json['roomId']),
+      typeId = nativeFromJson<int>(json['typeId']),
+      status = nativeFromJson<String>(json['status']),
+      reportReason = json['reportReason'] == null
+          ? null
+          : nativeFromJson<String>(json['reportReason']),
+      adminReply = json['adminReply'] == null
+          ? null
+          : nativeFromJson<String>(json['adminReply']),
+      ownerReply = json['ownerReply'] == null
+          ? null
+          : nativeFromJson<String>(json['ownerReply']),
+      createdAt = Timestamp.fromJson(json['createdAt']);
   @override
   bool operator ==(Object other) {
-    if(identical(this, other)) {
+    if (identical(this, other)) {
       return true;
     }
-    if(other.runtimeType != runtimeType) {
+    if (other.runtimeType != runtimeType) {
       return false;
     }
 
-    final ListReviewsByMotelReviews otherTyped = other as ListReviewsByMotelReviews;
-    return id == otherTyped.id && 
-    authorId == otherTyped.authorId && 
-    authorName == otherTyped.authorName && 
-    title == otherTyped.title && 
-    body == otherTyped.body && 
-    rating == otherTyped.rating && 
-    motelId == otherTyped.motelId && 
-    roomId == otherTyped.roomId && 
-    typeId == otherTyped.typeId && 
-    status == otherTyped.status && 
-    reportReason == otherTyped.reportReason && 
-    adminReply == otherTyped.adminReply && 
-    ownerReply == otherTyped.ownerReply && 
-    createdAt == otherTyped.createdAt;
-    
+    final ListReviewsByMotelReviews otherTyped =
+        other as ListReviewsByMotelReviews;
+    return id == otherTyped.id &&
+        authorId == otherTyped.authorId &&
+        authorName == otherTyped.authorName &&
+        title == otherTyped.title &&
+        body == otherTyped.body &&
+        rating == otherTyped.rating &&
+        motelId == otherTyped.motelId &&
+        roomId == otherTyped.roomId &&
+        typeId == otherTyped.typeId &&
+        status == otherTyped.status &&
+        reportReason == otherTyped.reportReason &&
+        adminReply == otherTyped.adminReply &&
+        ownerReply == otherTyped.ownerReply &&
+        createdAt == otherTyped.createdAt;
   }
+
   @override
-  int get hashCode => Object.hashAll([id.hashCode, authorId.hashCode, authorName.hashCode, title.hashCode, body.hashCode, rating.hashCode, motelId.hashCode, roomId.hashCode, typeId.hashCode, status.hashCode, reportReason.hashCode, adminReply.hashCode, ownerReply.hashCode, createdAt.hashCode]);
-  
+  int get hashCode => Object.hashAll([
+    id.hashCode,
+    authorId.hashCode,
+    authorName.hashCode,
+    title.hashCode,
+    body.hashCode,
+    rating.hashCode,
+    motelId.hashCode,
+    roomId.hashCode,
+    typeId.hashCode,
+    status.hashCode,
+    reportReason.hashCode,
+    adminReply.hashCode,
+    ownerReply.hashCode,
+    createdAt.hashCode,
+  ]);
 
   Map<String, dynamic> toJson() {
     Map<String, dynamic> json = {};
@@ -127,27 +162,25 @@ class ListReviewsByMotelReviews {
 @immutable
 class ListReviewsByMotelData {
   final List<ListReviewsByMotelReviews> reviews;
-  ListReviewsByMotelData.fromJson(dynamic json):
-  
-  reviews = (json['reviews'] as List<dynamic>)
-        .map((e) => ListReviewsByMotelReviews.fromJson(e))
-        .toList();
+  ListReviewsByMotelData.fromJson(dynamic json)
+    : reviews = (json['reviews'] as List<dynamic>)
+          .map((e) => ListReviewsByMotelReviews.fromJson(e))
+          .toList();
   @override
   bool operator ==(Object other) {
-    if(identical(this, other)) {
+    if (identical(this, other)) {
       return true;
     }
-    if(other.runtimeType != runtimeType) {
+    if (other.runtimeType != runtimeType) {
       return false;
     }
 
     final ListReviewsByMotelData otherTyped = other as ListReviewsByMotelData;
     return reviews == otherTyped.reviews;
-    
   }
+
   @override
   int get hashCode => reviews.hashCode;
-  
 
   Map<String, dynamic> toJson() {
     Map<String, dynamic> json = {};
@@ -155,34 +188,33 @@ class ListReviewsByMotelData {
     return json;
   }
 
-  ListReviewsByMotelData({
-    required this.reviews,
-  });
+  ListReviewsByMotelData({required this.reviews});
 }
 
 @immutable
 class ListReviewsByMotelVariables {
   final String motelId;
-  @Deprecated('fromJson is deprecated for Variable classes as they are no longer required for deserialization.')
-  ListReviewsByMotelVariables.fromJson(Map<String, dynamic> json):
-  
-  motelId = nativeFromJson<String>(json['motelId']);
+  @Deprecated(
+    'fromJson is deprecated for Variable classes as they are no longer required for deserialization.',
+  )
+  ListReviewsByMotelVariables.fromJson(Map<String, dynamic> json)
+    : motelId = nativeFromJson<String>(json['motelId']);
   @override
   bool operator ==(Object other) {
-    if(identical(this, other)) {
+    if (identical(this, other)) {
       return true;
     }
-    if(other.runtimeType != runtimeType) {
+    if (other.runtimeType != runtimeType) {
       return false;
     }
 
-    final ListReviewsByMotelVariables otherTyped = other as ListReviewsByMotelVariables;
+    final ListReviewsByMotelVariables otherTyped =
+        other as ListReviewsByMotelVariables;
     return motelId == otherTyped.motelId;
-    
   }
+
   @override
   int get hashCode => motelId.hashCode;
-  
 
   Map<String, dynamic> toJson() {
     Map<String, dynamic> json = {};
@@ -190,8 +222,5 @@ class ListReviewsByMotelVariables {
     return json;
   }
 
-  ListReviewsByMotelVariables({
-    required this.motelId,
-  });
+  ListReviewsByMotelVariables({required this.motelId});
 }
-

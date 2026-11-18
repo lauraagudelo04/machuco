@@ -43,7 +43,8 @@ abstract interface class ReservationCloudRepository {
   Future<List<Reservation>> listAll();
 }
 
-class FirestoreReservationCloudRepository implements ReservationCloudRepository {
+class FirestoreReservationCloudRepository
+    implements ReservationCloudRepository {
   FirestoreReservationCloudRepository({
     FirebaseFirestore? firestore,
     this.requestTimeout = const Duration(seconds: 10),

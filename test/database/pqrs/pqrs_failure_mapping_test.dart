@@ -27,12 +27,15 @@ void main() {
       expect(failure.isRetryable, isFalse);
     });
 
-    test('failed-precondition is told apart from connection and permission', () {
-      final failure = _map('failed-precondition');
-      expect(failure.kind, PqrsFailureKind.validation);
-      expect(failure.isRetryable, isFalse);
-      expect(failure.message, isNot(contains('conexión')));
-    });
+    test(
+      'failed-precondition is told apart from connection and permission',
+      () {
+        final failure = _map('failed-precondition');
+        expect(failure.kind, PqrsFailureKind.validation);
+        expect(failure.isRetryable, isFalse);
+        expect(failure.message, isNot(contains('conexión')));
+      },
+    );
 
     test('not-found, unknown codes and odd errors are classified', () {
       expect(_map('not-found').kind, PqrsFailureKind.notFound);

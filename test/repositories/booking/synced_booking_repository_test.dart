@@ -94,8 +94,7 @@ void main() {
       roleLookups++;
       return role;
     },
-    ownerIdForMotel: (motelId) async =>
-        motelId == '2' ? 'uid-owner' : null,
+    ownerIdForMotel: (motelId) async => motelId == '2' ? 'uid-owner' : null,
   );
 
   setUp(() {
@@ -107,34 +106,38 @@ void main() {
   });
 
   group('without a session', () {
-    test('behaves like the local repository and never calls Firebase',
-        () async {
-      final synced = repository();
+    test(
+      'behaves like the local repository and never calls Firebase',
+      () async {
+        final synced = repository();
 
-      final all = await synced.getAll();
-      await synced.add(_reservation('res-new'));
-      await synced.waitForPendingSync();
+        final all = await synced.getAll();
+        await synced.add(_reservation('res-new'));
+        await synced.waitForPendingSync();
 
-      expect(all.map((r) => r.id).where(isSeedReservationId), isNotEmpty);
-      expect(all.every((r) => isSeedReservationId(r.id)), isTrue);
-      expect(cloud.reads, isEmpty);
-      expect(cloud.saved, isEmpty);
-      expect(await local.getById('res-new'), isNotNull);
-    });
+        expect(all.map((r) => r.id).where(isSeedReservationId), isNotEmpty);
+        expect(all.every((r) => isSeedReservationId(r.id)), isTrue);
+        expect(cloud.reads, isEmpty);
+        expect(cloud.saved, isEmpty);
+        expect(await local.getById('res-new'), isNotNull);
+      },
+    );
   });
 
   group('with a session', () {
-    test('a client pulls only their reservations and the seed is hidden',
-        () async {
-      uid = 'uid-client';
-      role = RegisteredUserRole.client;
+    test(
+      'a client pulls only their reservations and the seed is hidden',
+      () async {
+        uid = 'uid-client';
+        role = RegisteredUserRole.client;
 
-      final all = await repository().getAll();
+        final all = await repository().getAll();
 
-      expect(cloud.reads, ['guest:uid-client']);
-      expect(all.map((r) => r.id), ['res-remote']);
-      expect(await local.getById('res-remote'), isNotNull);
-    });
+        expect(cloud.reads, ['guest:uid-client']);
+        expect(all.map((r) => r.id), ['res-remote']);
+        expect(await local.getById('res-remote'), isNotNull);
+      },
+    );
 
     test('an owner pulls the reservations of their motels', () async {
       uid = 'uid-owner';
@@ -161,9 +164,7 @@ void main() {
       await local.add(_reservation('res-remote'));
       cloud.remote
         ..clear()
-        ..add(
-          _reservation('res-remote', status: ReservationStatus.cancelled),
-        );
+        ..add(_reservation('res-remote', status: ReservationStatus.cancelled));
 
       final all = await repository().getAll();
 
@@ -221,8 +222,14 @@ void main() {
       );
       await synced.waitForPendingSync();
 
-      expect(cloud.saved.single.reservation.status, ReservationStatus.cancelled);
-      expect((await local.getById('res-1'))?.status, ReservationStatus.cancelled);
+      expect(
+        cloud.saved.single.reservation.status,
+        ReservationStatus.cancelled,
+      );
+      expect(
+        (await local.getById('res-1'))?.status,
+        ReservationStatus.cancelled,
+      );
     });
 
     test('a failed push keeps the local reservation', () async {
@@ -260,7 +267,10 @@ void main() {
 
       expect(cloud.saved, isEmpty);
       expect(all.single.status, ReservationStatus.upcoming);
-      expect((await local.getById('res-1'))?.status, ReservationStatus.upcoming);
+      expect(
+        (await local.getById('res-1'))?.status,
+        ReservationStatus.upcoming,
+      );
     });
 
     test('the next read retries a failed push before pulling', () async {

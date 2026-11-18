@@ -7,10 +7,7 @@ void main() {
 
   test('sin correo devuelve null sin escribir preferencias', () async {
     SharedPreferences.setMockInitialValues({});
-    expect(
-      await SubscriptionPreferencesService().getUserEmail(),
-      isNull,
-    );
+    expect(await SubscriptionPreferencesService().getUserEmail(), isNull);
     expect((await SharedPreferences.getInstance()).getKeys(), isEmpty);
   });
 
@@ -26,9 +23,6 @@ void main() {
 
   test('un correo vacío devuelve null', () async {
     SharedPreferences.setMockInitialValues({'auth.currentUserEmail': '  '});
-    expect(
-      await SubscriptionPreferencesService().getUserEmail(),
-      isNull,
-    );
+    expect(await SubscriptionPreferencesService().getUserEmail(), isNull);
   });
 }

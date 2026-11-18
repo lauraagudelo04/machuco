@@ -3,10 +3,7 @@ import '../../../core/design_system/design_system.dart';
 import '../../../models/client/client_model.dart';
 
 class ClientDetailPage extends StatelessWidget {
-  const ClientDetailPage({
-    super.key,
-    required this.client,
-  });
+  const ClientDetailPage({super.key, required this.client});
 
   final ClientModel client;
 
@@ -27,9 +24,13 @@ class ClientDetailPage extends StatelessWidget {
                 children: [
                   CircleAvatar(
                     radius: 40,
-                    backgroundColor: Theme.of(context).colorScheme.primary.withValues(alpha: 0.1),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primary.withValues(alpha: 0.1),
                     child: Text(
-                      client.name.isNotEmpty ? client.name[0].toUpperCase() : 'C',
+                      client.name.isNotEmpty
+                          ? client.name[0].toUpperCase()
+                          : 'C',
                       style: TextStyle(
                         fontSize: 32,
                         fontWeight: FontWeight.bold,
@@ -44,8 +45,13 @@ class ClientDetailPage extends StatelessWidget {
                   ),
                   const SizedBox(height: AppSpacing.s1),
                   Chip(
-                    label: const Text('Cliente', style: TextStyle(fontSize: 12)),
-                    backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+                    label: const Text(
+                      'Cliente',
+                      style: TextStyle(fontSize: 12),
+                    ),
+                    backgroundColor: Theme.of(
+                      context,
+                    ).colorScheme.primaryContainer,
                   ),
                 ],
               ),
@@ -53,9 +59,9 @@ class ClientDetailPage extends StatelessWidget {
             const SizedBox(height: AppSpacing.s5),
             Text(
               'Información personal',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: AppSpacing.s3),
             AppCard(
@@ -123,15 +129,15 @@ class _DetailTile extends StatelessWidget {
                 Text(
                   label,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: context.appColors.textSecondary,
-                      ),
+                    color: context.appColors.textSecondary,
+                  ),
                 ),
                 const SizedBox(height: 2),
                 Text(
                   value,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
             ),

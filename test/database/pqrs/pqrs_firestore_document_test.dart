@@ -193,7 +193,10 @@ void main() {
       final update = PqrsFirestoreDocument.updateToFirestore(
         PqrsTraceAppend(
           requestId: 'p1',
-          entry: _entry(change: PqrsStatus.inProgress, author: PqrsActor.client),
+          entry: _entry(
+            change: PqrsStatus.inProgress,
+            author: PqrsActor.client,
+          ),
           clearResolvedAt: true,
         ),
       )!;

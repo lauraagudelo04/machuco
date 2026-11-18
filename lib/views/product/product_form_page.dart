@@ -20,11 +20,7 @@ class ProductViewData {
 }
 
 class ProductFormView extends StatefulWidget {
-  const ProductFormView({
-    super.key,
-    this.product,
-    required this.motelId,
-  });
+  const ProductFormView({super.key, this.product, required this.motelId});
 
   final Product? product;
   final String motelId;
@@ -78,9 +74,7 @@ class _ProductFormViewState extends State<ProductFormView> {
     final stock = int.tryParse(_stockController.text.trim());
 
     setState(() {
-      _nameError = name.isEmpty
-          ? 'El nombre es obligatorio'
-          : null;
+      _nameError = name.isEmpty ? 'El nombre es obligatorio' : null;
 
       _priceError = price == null || price < 0
           ? 'Ingresa un precio válido'
@@ -91,14 +85,13 @@ class _ProductFormViewState extends State<ProductFormView> {
           : null;
     });
 
-    if (_nameError != null ||
-        _priceError != null ||
-        _stockError != null) {
+    if (_nameError != null || _priceError != null || _stockError != null) {
       return;
     }
 
     final product = Product(
-      id: widget.product?.id ??
+      id:
+          widget.product?.id ??
           'product-${DateTime.now().millisecondsSinceEpoch}',
       motelId: widget.motelId,
       name: name,
@@ -143,8 +136,8 @@ class _ProductFormViewState extends State<ProductFormView> {
                             ? 'Actualiza la información del producto.'
                             : 'Agrega un producto al catálogo del motel.',
                         style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: context.appColors.textSecondary,
-                            ),
+                          color: context.appColors.textSecondary,
+                        ),
                       ),
                       const SizedBox(height: AppSpacing.s5),
                       AppTextField(
@@ -208,7 +201,9 @@ class _ProductFormViewState extends State<ProductFormView> {
                         label: widget.isEditing
                             ? 'Guardar cambios'
                             : 'Crear producto',
-                        icon: widget.isEditing ? Icons.save_outlined : Icons.add,
+                        icon: widget.isEditing
+                            ? Icons.save_outlined
+                            : Icons.add,
                         onPressed: _saveProduct,
                       ),
                     ],

@@ -23,7 +23,16 @@ final class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   final Color borderStrong;
 
   @override
-  AppSemanticColors copyWith({Color? canvas, Color? elevated, Color? mediaFallback, Color? textSecondary, Color? textMuted, Color? textDisabled, Color? border, Color? borderStrong}) => AppSemanticColors(
+  AppSemanticColors copyWith({
+    Color? canvas,
+    Color? elevated,
+    Color? mediaFallback,
+    Color? textSecondary,
+    Color? textMuted,
+    Color? textDisabled,
+    Color? border,
+    Color? borderStrong,
+  }) => AppSemanticColors(
     canvas: canvas ?? this.canvas,
     elevated: elevated ?? this.elevated,
     mediaFallback: mediaFallback ?? this.mediaFallback,
@@ -38,14 +47,19 @@ final class AppSemanticColors extends ThemeExtension<AppSemanticColors> {
   AppSemanticColors lerp(covariant AppSemanticColors? other, double t) {
     if (other == null) return this;
     return AppSemanticColors(
-      canvas: Color.lerp(canvas, other.canvas, t)!, elevated: Color.lerp(elevated, other.elevated, t)!,
-      mediaFallback: Color.lerp(mediaFallback, other.mediaFallback, t)!, textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
-      textMuted: Color.lerp(textMuted, other.textMuted, t)!, textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,
-      border: Color.lerp(border, other.border, t)!, borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
+      canvas: Color.lerp(canvas, other.canvas, t)!,
+      elevated: Color.lerp(elevated, other.elevated, t)!,
+      mediaFallback: Color.lerp(mediaFallback, other.mediaFallback, t)!,
+      textSecondary: Color.lerp(textSecondary, other.textSecondary, t)!,
+      textMuted: Color.lerp(textMuted, other.textMuted, t)!,
+      textDisabled: Color.lerp(textDisabled, other.textDisabled, t)!,
+      border: Color.lerp(border, other.border, t)!,
+      borderStrong: Color.lerp(borderStrong, other.borderStrong, t)!,
     );
   }
 }
 
 extension AppThemeContext on BuildContext {
-  AppSemanticColors get appColors => Theme.of(this).extension<AppSemanticColors>()!;
+  AppSemanticColors get appColors =>
+      Theme.of(this).extension<AppSemanticColors>()!;
 }

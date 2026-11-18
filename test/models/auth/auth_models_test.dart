@@ -287,8 +287,10 @@ void main() {
       expect(plan.features, isEmpty);
       expect(plan.maxMotels, isNull);
       expect(plan.sortOrder, isNull);
-      expect(SubscriptionPlanOption.tryFromJson({'id': 4, 'name': ' '})!.name,
-          isNull);
+      expect(
+        SubscriptionPlanOption.tryFromJson({'id': 4, 'name': ' '})!.name,
+        isNull,
+      );
     });
 
     test('lee todos los campos y las características vacías o mixtas', () {
@@ -318,8 +320,10 @@ void main() {
             .having((p) => p.features, 'features', isEmpty),
       );
       expect(
-        SubscriptionPlanOption.tryFromJson({'id': 5, 'features': 'texto'})!
-            .features,
+        SubscriptionPlanOption.tryFromJson({
+          'id': 5,
+          'features': 'texto',
+        })!.features,
         isEmpty,
       );
     });

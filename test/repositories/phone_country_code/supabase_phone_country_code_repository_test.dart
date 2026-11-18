@@ -25,10 +25,7 @@ class _FakeHttpClient extends http.BaseClient {
     calls++;
     lastUrl = request.url;
     lastHeaders = request.headers;
-    return http.StreamedResponse(
-      Stream.value(response.codeUnits),
-      statusCode,
-    );
+    return http.StreamedResponse(Stream.value(response.codeUnits), statusCode);
   }
 }
 

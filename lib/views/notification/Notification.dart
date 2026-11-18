@@ -18,24 +18,15 @@ class NotificationPage extends StatelessWidget {
       length: 2,
       child: Scaffold(
         body: const TabBarView(
-          children: [
-            ClientNotificationView(),
-            SystemAdminNotificationView(),
-          ],
+          children: [ClientNotificationView(), SystemAdminNotificationView()],
         ),
         bottomNavigationBar: Material(
           color: Theme.of(context).cardColor,
           elevation: 8,
           child: const TabBar(
             tabs: [
-              Tab(
-                icon: Icon(Icons.person),
-                text: 'Cliente',
-              ),
-              Tab(
-                icon: Icon(Icons.admin_panel_settings),
-                text: 'System Admin',
-              ),
+              Tab(icon: Icon(Icons.person), text: 'Cliente'),
+              Tab(icon: Icon(Icons.admin_panel_settings), text: 'System Admin'),
             ],
           ),
         ),

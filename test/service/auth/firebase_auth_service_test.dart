@@ -287,7 +287,6 @@ void main() {
       );
       expect(firebase.createdUser?.deleteCalls, 1);
     });
-
   });
 
   group('eliminación de cuenta', () {

@@ -51,9 +51,8 @@ class OwnerSubscriptionController extends ChangeNotifier {
       );
       final email = await _preferences.getUserEmail();
       final firestoreRepository = _firestoreRepository;
-      final cloudData = firestoreRepository == null ||
-              email == null ||
-              email.isEmpty
+      final cloudData =
+          firestoreRepository == null || email == null || email.isEmpty
           ? null
           : await firestoreRepository.findByEmail(email, plans: _plans);
       final subscription = firestoreRepository != null
